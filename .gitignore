@@ -1,0 +1,6 @@
+target/
+.DS_Store
+.cargo/config.toml
+.env
+.env.*
+!.env.example
