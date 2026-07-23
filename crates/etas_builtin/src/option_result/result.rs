@@ -18,6 +18,20 @@ pub fn err(args: &[BuiltinValue]) -> Result<BuiltinValue, BuiltinError> {
     Ok(BuiltinValue::ResultErr(Box::new(args[0].clone())))
 }
 
+pub fn unwrap(args: &[BuiltinValue]) -> Result<BuiltinValue, BuiltinError> {
+    expect_arity(args, 1)?;
+    match &args[0] {
+        BuiltinValue::ResultOk(value) => Ok((**value).clone()),
+        BuiltinValue::ResultErr(_) => Err(BuiltinError::Abort {
+            message: "unwrap encountered Err".to_owned(),
+        }),
+        other => Err(BuiltinError::TypeMismatch {
+            expected: BuiltinTypeTag::Result,
+            actual: other.type_tag(),
+        }),
+    }
+}
+
 fn expect_result(args: &[BuiltinValue]) -> Result<&BuiltinValue, BuiltinError> {
     expect_arity(args, 1)?;
     match &args[0] {

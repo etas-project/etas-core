@@ -106,10 +106,37 @@ fn dispatches_bytes_list_option_and_result_helpers() {
     );
     assert_eq!(
         call_pure_intrinsic(
-            StdIntrinsicId(intrinsic::pure::OPTION_UNWRAP),
+            StdIntrinsicId(intrinsic::pure::RESULT_UNWRAP),
             &[BuiltinValue::ResultOk(Box::new(BuiltinValue::I32(7)))],
         ),
         Ok(BuiltinValue::I32(7))
+    );
+    assert_eq!(
+        call_pure_intrinsic(
+            StdIntrinsicId(intrinsic::pure::OPTION_SOME),
+            &[BuiltinValue::I32(1)],
+        ),
+        Ok(BuiltinValue::OptionSome(Box::new(BuiltinValue::I32(1))))
+    );
+    assert_eq!(
+        call_pure_intrinsic(StdIntrinsicId(intrinsic::pure::OPTION_NONE), &[]),
+        Ok(BuiltinValue::OptionNone)
+    );
+    assert_eq!(
+        call_pure_intrinsic(
+            StdIntrinsicId(intrinsic::pure::RESULT_OK),
+            &[BuiltinValue::I32(2)],
+        ),
+        Ok(BuiltinValue::ResultOk(Box::new(BuiltinValue::I32(2))))
+    );
+    assert_eq!(
+        call_pure_intrinsic(
+            StdIntrinsicId(intrinsic::pure::RESULT_ERR),
+            &[BuiltinValue::String("err".to_owned())],
+        ),
+        Ok(BuiltinValue::ResultErr(Box::new(BuiltinValue::String(
+            "err".to_owned(),
+        ))))
     );
     assert_eq!(
         call_pure_intrinsic(

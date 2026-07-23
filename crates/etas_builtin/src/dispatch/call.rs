@@ -38,12 +38,14 @@ pub fn call_pure_intrinsic(
         intrinsic::pure::CRYPTO_CONSTANT_TIME_EQ => crypto::constant_time_eq(args),
         intrinsic::pure::OPTION_IS_SOME => option_result::option::is_some(args),
         intrinsic::pure::OPTION_SOME => option_result::option::some(args),
+        intrinsic::pure::OPTION_NONE => option_result::option::none(args),
         intrinsic::pure::OPTION_IS_NONE => option_result::option::is_none(args),
         intrinsic::pure::OPTION_UNWRAP => option_result::option::unwrap(args),
         intrinsic::pure::RESULT_OK => option_result::result::ok(args),
         intrinsic::pure::RESULT_ERR => option_result::result::err(args),
         intrinsic::pure::RESULT_IS_OK => option_result::result::is_ok(args),
         intrinsic::pure::RESULT_IS_ERR => option_result::result::is_err(args),
+        intrinsic::pure::RESULT_UNWRAP => option_result::result::unwrap(args),
         _ => Err(BuiltinError::UnsupportedIntrinsic { intrinsic }),
     }
 }

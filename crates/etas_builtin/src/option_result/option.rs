@@ -10,6 +10,11 @@ pub fn some(args: &[BuiltinValue]) -> Result<BuiltinValue, BuiltinError> {
     Ok(BuiltinValue::OptionSome(Box::new(args[0].clone())))
 }
 
+pub fn none(args: &[BuiltinValue]) -> Result<BuiltinValue, BuiltinError> {
+    expect_arity(args, 0)?;
+    Ok(BuiltinValue::OptionNone)
+}
+
 pub fn is_none(args: &[BuiltinValue]) -> Result<BuiltinValue, BuiltinError> {
     expect_option(args).map(|value| BuiltinValue::Bool(matches!(value, BuiltinValue::OptionNone)))
 }

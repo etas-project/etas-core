@@ -35,8 +35,14 @@ impl PureIntrinsicRegistry {
                 | intrinsic::pure::OPTION_IS_SOME
                 | intrinsic::pure::OPTION_IS_NONE
                 | intrinsic::pure::OPTION_UNWRAP
+                | intrinsic::pure::OPTION_SOME
+                | intrinsic::pure::OPTION_NONE
                 | intrinsic::pure::RESULT_IS_OK
                 | intrinsic::pure::RESULT_IS_ERR
+                | intrinsic::pure::RESULT_OK
+                | intrinsic::pure::RESULT_ERR
+                | intrinsic::pure::RESULT_UNWRAP
+                | intrinsic::pure::HTTP_DECODE_RESPONSE
         )
     }
 }
