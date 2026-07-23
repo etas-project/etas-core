@@ -5,7 +5,7 @@ pub enum TraceEvent {
     HostRequestStarted {
         id: HostRequestId,
         kind: HostRequestKind,
-        authority: AuthorityContext,
+        authority: Box<AuthorityContext>,
     },
     HostRequestFinished {
         id: HostRequestId,

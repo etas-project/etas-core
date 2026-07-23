@@ -2,6 +2,12 @@ use std::{future::Future, pin::Pin};
 
 use crate::{AuthorityContext, Budget, HostError, HostErrorCode, HostRequestId, TraceContext};
 
+mod local;
+pub(crate) mod store;
+
+pub use local::LocalStreamClient;
+pub use store::ByteStreamStore;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ByteStreamRef {
     pub id: String,
@@ -157,5 +163,19 @@ impl StreamClient for UnavailableStreamClient {
                 )),
             })
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{HostError, StreamClient};
+
+    use super::LocalStreamClient;
+
+    fn assert_stream_client<T: StreamClient<Error = HostError>>() {}
+
+    #[test]
+    fn local_stream_client_implements_service_trait() {
+        assert_stream_client::<LocalStreamClient>();
     }
 }

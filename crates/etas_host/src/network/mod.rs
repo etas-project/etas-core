@@ -1,7 +1,7 @@
-pub mod local;
+mod local;
 pub mod tcp;
 
-pub use local::LocalTcpStreamClient;
+pub use local::LocalTcpClient;
 pub use tcp::{
     TcpClient, TcpConnectOperation, TcpConnectRequest, TcpConnectResponse, TcpEndpoint,
     TcpStreamRef, UnavailableTcpClient,

@@ -89,7 +89,6 @@ impl NetworkSandbox {
         port: u16,
     ) -> Result<Vec<SocketAddr>, HostError> {
         self.check_endpoint(scheme, host, port)?;
-        let canonical_ip = host.parse::<IpAddr>().ok();
         let addresses = (host, port)
             .to_socket_addrs()
             .map_err(|error| {
@@ -102,7 +101,20 @@ impl NetworkSandbox {
                 .with_detail("port", port.to_string())
                 .with_detail("error", error.to_string())
             })?
-            .collect::<BTreeSet<_>>();
+            .collect::<Vec<_>>();
+        self.validate_resolved_addresses(scheme, host, port, addresses)
+    }
+
+    pub(crate) fn validate_resolved_addresses(
+        &self,
+        scheme: &str,
+        host: &str,
+        port: u16,
+        addresses: impl IntoIterator<Item = SocketAddr>,
+    ) -> Result<Vec<SocketAddr>, HostError> {
+        self.check_endpoint(scheme, host, port)?;
+        let canonical_ip = host.parse::<IpAddr>().ok();
+        let addresses = addresses.into_iter().collect::<BTreeSet<_>>();
         if addresses.is_empty() {
             return Err(HostError::new(
                 HostErrorCode::ProviderUnavailable,

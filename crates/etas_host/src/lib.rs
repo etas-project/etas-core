@@ -47,7 +47,7 @@ pub use model::{
     ModelUsage, OpenAiProtocolAdapter, OpenAiProviderRequest, OpenAiProviderResponse,
 };
 pub use network::{
-    LocalTcpStreamClient, TcpClient, TcpConnectOperation, TcpConnectRequest, TcpConnectResponse,
+    LocalTcpClient, TcpClient, TcpConnectOperation, TcpConnectRequest, TcpConnectResponse,
     TcpEndpoint, TcpStreamRef, UnavailableTcpClient,
 };
 pub use policy::{
@@ -71,13 +71,14 @@ pub use session::{
     SessionRequest, SessionResponse, SessionResult, SessionSummary, SqliteSessionClient,
 };
 pub use stream::{
-    ByteStreamOrigin, ByteStreamRef, StreamClient, StreamOperation, StreamPayload, StreamRead,
-    StreamRequest, StreamResponse, UnavailableStreamClient,
+    ByteStreamOrigin, ByteStreamRef, ByteStreamStore, LocalStreamClient, StreamClient,
+    StreamOperation, StreamPayload, StreamRead, StreamRequest, StreamResponse,
+    UnavailableStreamClient,
 };
 pub use testing::{TestWorkspace, assert_host_error_code};
 pub use tls::{
-    TlsClient, TlsConnectOperation, TlsConnectRequest, TlsConnectResponse, TlsStreamRef,
-    UnavailableTlsClient,
+    LocalTlsClient, TlsClient, TlsConnectOperation, TlsConnectRequest, TlsConnectResponse,
+    TlsStreamRef, UnavailableTlsClient,
 };
 pub use tool::{
     HttpToolProtocolAdapter, HttpToolRequestEnvelope, HttpToolResponseEnvelope,

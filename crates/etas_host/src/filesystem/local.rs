@@ -39,12 +39,11 @@ fn execute_local_filesystem(request: FilesystemRequest) -> Result<FilesystemEntr
             contents,
             create_dirs,
         } => {
-            if create_dirs {
-                if let Some(parent) = path.relative.parent()
-                    && !parent.as_os_str().is_empty()
-                {
-                    broker.create_dir_all(&path.root, parent)?;
-                }
+            if create_dirs
+                && let Some(parent) = path.relative.parent()
+                && !parent.as_os_str().is_empty()
+            {
+                broker.create_dir_all(&path.root, parent)?;
             }
             broker.atomic_write(&path.root, &path.relative, &contents)?;
             Ok(FilesystemEntry::Unit)

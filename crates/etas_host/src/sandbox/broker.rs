@@ -97,6 +97,18 @@ impl SandboxBroker {
         self.network.resolve_endpoint(scheme, host, port)
     }
 
+    pub(crate) fn validate_resolved_network_addresses(
+        &self,
+        scheme: &str,
+        host: &str,
+        port: u16,
+        addresses: impl IntoIterator<Item = std::net::SocketAddr>,
+    ) -> Result<Vec<std::net::SocketAddr>, HostError> {
+        self.ensure_not_deny_all()?;
+        self.network
+            .validate_resolved_addresses(scheme, host, port, addresses)
+    }
+
     pub fn check_command(&self, program: &str) -> Result<(), HostError> {
         self.ensure_not_deny_all()?;
         self.command.check_program(program)

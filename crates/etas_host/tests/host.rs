@@ -221,12 +221,12 @@ fn schemas_describe_host_boundaries_without_engine_values() {
     let event = TraceEvent::HostRequestStarted {
         id: HostRequestId(6),
         kind: HostRequestKind::Tool,
-        authority: AuthorityContext {
+        authority: Box::new(AuthorityContext {
             grants: vec![HostActionGrant::allow("Tool", "host.echo")],
             approvals: Vec::new(),
             sandbox: SandboxPolicy::deny_all(),
             policy: Default::default(),
-        },
+        }),
     };
     assert!(matches!(
         event,

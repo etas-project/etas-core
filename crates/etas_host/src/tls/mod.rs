@@ -5,6 +5,10 @@ use crate::{
     TcpStreamRef, TraceContext,
 };
 
+pub(crate) mod local;
+
+pub use local::LocalTlsClient;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TlsStreamRef {
     pub id: String,
@@ -61,5 +65,19 @@ impl TlsClient for UnavailableTlsClient {
                 )),
             })
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{HostError, TlsClient};
+
+    use super::LocalTlsClient;
+
+    fn assert_tls_client<T: TlsClient<Error = HostError>>() {}
+
+    #[test]
+    fn local_tls_client_implements_service_trait() {
+        assert_tls_client::<LocalTlsClient>();
     }
 }
