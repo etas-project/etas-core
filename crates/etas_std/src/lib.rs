@@ -13,7 +13,8 @@ pub use decl::{
 };
 pub use intrinsic::{
     IntrinsicDescriptor, IntrinsicDispatch, IntrinsicLatentEffect, IntrinsicMemoryAccess,
-    IntrinsicPurity, IntrinsicRuntimeRequirement, LoweringHint, StdIntrinsicId,
+    IntrinsicPurity, IntrinsicRuntimeRequirement, IntrinsicStaticStringSemantics, LoweringHint,
+    StaticStringTransform, StdIntrinsicId, intrinsic_static_string_semantics,
 };
 pub use metadata::{CompletionMetadata, DocsMetadata, StdManifest};
 pub use modules::standard_registry;

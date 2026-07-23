@@ -88,6 +88,26 @@ impl StdRegistry {
     }
 
     pub(crate) fn push_intrinsic(&mut self, descriptor: IntrinsicDescriptor) {
+        if let Some(existing) = self.intrinsics.get(&descriptor.id) {
+            assert!(
+                intrinsic_semantics_match(existing, &descriptor),
+                "standard intrinsic id {} has conflicting descriptors for `{}` and `{}`",
+                descriptor.id.0,
+                existing.qualified_path.join("."),
+                descriptor.qualified_path.join(".")
+            );
+            return;
+        }
         self.intrinsics.insert(descriptor.id, descriptor);
     }
+}
+
+fn intrinsic_semantics_match(left: &IntrinsicDescriptor, right: &IntrinsicDescriptor) -> bool {
+    left.id == right.id
+        && left.purity == right.purity
+        && left.dispatch == right.dispatch
+        && left.lowering == right.lowering
+        && left.latent_effect == right.latent_effect
+        && left.memory_access == right.memory_access
+        && left.runtime_requirement == right.runtime_requirement
 }

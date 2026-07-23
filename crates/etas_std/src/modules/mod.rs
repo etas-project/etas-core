@@ -16,6 +16,8 @@ pub mod security;
 pub mod stream;
 pub mod tls;
 
+mod registration;
+
 use crate::{StdRegistry, StdRegistryBuilder, StdRegistryVersion};
 
 pub fn standard_registry() -> StdRegistry {

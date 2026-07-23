@@ -1,4 +1,7 @@
-use crate::{FlowDecl, StdDecl, StdRegistryBuilder, StdSymbolKind, TypeDecl, TypeDeclKind};
+use crate::{
+    FlowDecl, IntrinsicDescriptor, IntrinsicDispatch, IntrinsicPurity, LoweringHint, StdDecl,
+    StdIntrinsicId, StdRegistryBuilder, StdSymbolKind, TypeDecl, TypeDeclKind, intrinsic,
+};
 
 pub fn register(builder: &mut StdRegistryBuilder) {
     let module = builder.module(&["std", "host", "command"], "Host command support types.");
@@ -12,7 +15,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         );
     }
 
-    builder.symbol(
+    builder.symbol_with_intrinsic(
         module,
         "run",
         StdSymbolKind::Flow,
@@ -24,5 +27,15 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             &["Command.run[_]"],
         )),
         "Run a command through the checked command host boundary.",
+        Some(IntrinsicDescriptor {
+            id: StdIntrinsicId(intrinsic::runtime::COMMAND_RUN),
+            qualified_path: vec!["std".into(), "host".into(), "command".into(), "run".into()],
+            purity: IntrinsicPurity::Host,
+            dispatch: IntrinsicDispatch::Host,
+            lowering: LoweringHint::RuntimeCall,
+            latent_effect: crate::IntrinsicLatentEffect::None,
+            memory_access: crate::IntrinsicMemoryAccess::None,
+            runtime_requirement: crate::IntrinsicRuntimeRequirement::None,
+        }),
     );
 }

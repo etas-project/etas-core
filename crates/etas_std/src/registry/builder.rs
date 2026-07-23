@@ -54,6 +54,10 @@ impl StdRegistryBuilder {
         let mut qualified_path = module_path;
         qualified_path.push(name.to_owned());
         if let Some(descriptor) = &intrinsic {
+            assert_eq!(
+                descriptor.qualified_path, qualified_path,
+                "standard intrinsic descriptor path must match its registered symbol"
+            );
             self.registry.push_intrinsic(descriptor.clone());
         }
         self.registry.push_symbol(StdSymbol {

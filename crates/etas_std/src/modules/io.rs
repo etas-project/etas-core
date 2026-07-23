@@ -1,7 +1,9 @@
 use crate::{
-    FlowDecl, IntrinsicDescriptor, IntrinsicDispatch, IntrinsicPurity, LoweringHint, StdDecl,
-    StdIntrinsicId, StdRegistryBuilder, StdSymbolKind, TypeDecl, TypeDeclKind, intrinsic,
+    IntrinsicDispatch, IntrinsicPurity, LoweringHint, StdDecl, StdRegistryBuilder, StdSymbolKind,
+    TypeDecl, TypeDeclKind, intrinsic,
 };
+
+use crate::modules::registration::{IntrinsicFlowRegistration, register_intrinsic_flow};
 
 pub fn register(builder: &mut StdRegistryBuilder) {
     let module = builder.module(
@@ -16,89 +18,94 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         "Standard error type for console and standard-stream failures.",
     );
     builder.prelude("IOError", io_error);
-    io_flow(
+    register_intrinsic_flow(
         builder,
         module,
-        "read_all",
-        &[],
-        "string",
-        "Console.stdin_read_all",
-        intrinsic::runtime::IO_READ_ALL,
-        "Read all standard input through the future runtime boundary.",
-    );
-    io_flow(
-        builder,
-        module,
-        "read_line",
-        &[],
-        "string",
-        "Console.stdin_read_line",
-        intrinsic::runtime::IO_READ_LINE,
-        "Read one input line through the future runtime boundary.",
-    );
-    io_flow(
-        builder,
-        module,
-        "print",
-        &["string"],
-        "unit",
-        "Console.stdout_write",
-        intrinsic::runtime::IO_PRINT,
-        "Write text without a trailing newline through the future runtime boundary.",
-    );
-    io_flow(
-        builder,
-        module,
-        "println",
-        &["string"],
-        "unit",
-        "Console.stdout_write",
-        intrinsic::runtime::IO_PRINTLN,
-        "Write text with a trailing newline through the future runtime boundary.",
-    );
-    io_flow(
-        builder,
-        module,
-        "eprintln",
-        &["string"],
-        "unit",
-        "Console.stderr_write",
-        intrinsic::runtime::IO_EPRINTLN,
-        "Write error text with a trailing newline through the future runtime boundary.",
-    );
-}
-
-fn io_flow(
-    builder: &mut StdRegistryBuilder,
-    module: crate::StdModuleId,
-    name: &str,
-    params: &[&str],
-    output: &str,
-    action: &str,
-    id: u32,
-    summary: &str,
-) {
-    builder.symbol_with_intrinsic(
-        module,
-        name,
-        StdSymbolKind::Flow,
-        StdDecl::Flow(FlowDecl::with_actions(
-            name,
-            params,
-            output,
-            &["Error[IOError]"],
-            &[action],
-        )),
-        summary,
-        Some(IntrinsicDescriptor {
-            id: StdIntrinsicId(id),
-            qualified_path: vec!["std".into(), "io".into(), name.into()],
+        &["std", "io"],
+        IntrinsicFlowRegistration {
+            name: "read_all",
+            type_params: &[],
+            params: &[],
+            output: "string",
+            public_effects: &["Error[IOError]"],
+            requested_actions: &["Console.stdin_read_all"],
+            intrinsic_id: intrinsic::runtime::IO_READ_ALL,
+            summary: "Read all standard input through the future runtime boundary.",
             purity: IntrinsicPurity::Runtime,
             dispatch: IntrinsicDispatch::Runtime,
             lowering: LoweringHint::RuntimeCall,
-            latent_effect: crate::IntrinsicLatentEffect::None,
-            memory_access: crate::IntrinsicMemoryAccess::None,
-            runtime_requirement: crate::IntrinsicRuntimeRequirement::None,
-        }),
+        },
+    );
+    register_intrinsic_flow(
+        builder,
+        module,
+        &["std", "io"],
+        IntrinsicFlowRegistration {
+            name: "read_line",
+            type_params: &[],
+            params: &[],
+            output: "string",
+            public_effects: &["Error[IOError]"],
+            requested_actions: &["Console.stdin_read_line"],
+            intrinsic_id: intrinsic::runtime::IO_READ_LINE,
+            summary: "Read one input line through the future runtime boundary.",
+            purity: IntrinsicPurity::Runtime,
+            dispatch: IntrinsicDispatch::Runtime,
+            lowering: LoweringHint::RuntimeCall,
+        },
+    );
+    register_intrinsic_flow(
+        builder,
+        module,
+        &["std", "io"],
+        IntrinsicFlowRegistration {
+            name: "print",
+            type_params: &[],
+            params: &["string"],
+            output: "unit",
+            public_effects: &["Error[IOError]"],
+            requested_actions: &["Console.stdout_write"],
+            intrinsic_id: intrinsic::runtime::IO_PRINT,
+            summary: "Write text without a trailing newline through the future runtime boundary.",
+            purity: IntrinsicPurity::Runtime,
+            dispatch: IntrinsicDispatch::Runtime,
+            lowering: LoweringHint::RuntimeCall,
+        },
+    );
+    register_intrinsic_flow(
+        builder,
+        module,
+        &["std", "io"],
+        IntrinsicFlowRegistration {
+            name: "println",
+            type_params: &[],
+            params: &["string"],
+            output: "unit",
+            public_effects: &["Error[IOError]"],
+            requested_actions: &["Console.stdout_write"],
+            intrinsic_id: intrinsic::runtime::IO_PRINTLN,
+            summary: "Write text with a trailing newline through the future runtime boundary.",
+            purity: IntrinsicPurity::Runtime,
+            dispatch: IntrinsicDispatch::Runtime,
+            lowering: LoweringHint::RuntimeCall,
+        },
+    );
+    register_intrinsic_flow(
+        builder,
+        module,
+        &["std", "io"],
+        IntrinsicFlowRegistration {
+            name: "eprintln",
+            type_params: &[],
+            params: &["string"],
+            output: "unit",
+            public_effects: &["Error[IOError]"],
+            requested_actions: &["Console.stderr_write"],
+            intrinsic_id: intrinsic::runtime::IO_EPRINTLN,
+            summary: "Write error text with a trailing newline through the future runtime boundary.",
+            purity: IntrinsicPurity::Runtime,
+            dispatch: IntrinsicDispatch::Runtime,
+            lowering: LoweringHint::RuntimeCall,
+        },
     );
 }

@@ -23,12 +23,13 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         &["std", "option", "Some"],
     );
     builder.prelude("Some", some);
-    let none = builder.symbol(
+    let none = transparent_constructor(
+        builder,
         option,
         "None",
-        StdSymbolKind::Constructor,
-        StdDecl::Type(TypeDecl::generic("None", &["T"], TypeDeclKind::Enum)),
-        "Standard option declaration.",
+        &["T"],
+        intrinsic::pure::OPTION_NONE,
+        &["std", "option", "None"],
     );
     builder.prelude("None", none);
     pure_helper(
@@ -92,7 +93,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         "unwrap",
         &["Result[T, E]"],
         "T",
-        intrinsic::pure::OPTION_UNWRAP,
+        intrinsic::pure::RESULT_UNWRAP,
         &["std", "result", "unwrap"],
     );
     pure_helper(

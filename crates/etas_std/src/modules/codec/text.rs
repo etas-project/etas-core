@@ -14,7 +14,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             module,
             name,
             StdSymbolKind::Type,
-            StdDecl::Type(TypeDecl::generic(name, &[], TypeDeclKind::Support)),
+            StdDecl::Type(TypeDecl::generic(name, &[], TypeDeclKind::Enum)),
             "Text codec support type.",
         );
     }

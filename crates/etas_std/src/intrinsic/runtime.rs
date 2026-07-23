@@ -41,3 +41,7 @@ pub const BROWSER_RECV: u32 = 1_115;
 pub const BROWSER_CLOSE: u32 = 1_116;
 pub const SECRET_HMAC_SHA256: u32 = 1_117;
 pub const BROWSER_SCREENSHOT: u32 = 1_118;
+pub const COMMAND_RUN: u32 = 1_119;
+pub const STREAM_READ_UNTIL_LIMIT: u32 = 1_120;
+pub const MEMORY_PUT_VERSIONED: u32 = 1_121;
+pub const MEMORY_DELETE_VERSIONED: u32 = 1_122;

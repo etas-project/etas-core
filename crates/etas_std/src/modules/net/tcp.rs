@@ -1,8 +1,9 @@
 use crate::{
-    FlowDecl, IntrinsicDescriptor, IntrinsicDispatch, IntrinsicPurity, LoweringHint, StdDecl,
-    StdIntrinsicId, StdRecordField, StdRegistryBuilder, StdSymbolKind, StdType, TypeDecl,
-    TypeDeclKind, intrinsic,
+    IntrinsicDispatch, IntrinsicPurity, LoweringHint, StdDecl, StdRecordField, StdRegistryBuilder,
+    StdSymbolKind, StdType, TypeDecl, TypeDeclKind, intrinsic,
 };
+
+use crate::modules::registration::{IntrinsicFlowRegistration, register_intrinsic_flow};
 
 pub fn register(builder: &mut StdRegistryBuilder) {
     let module = builder.module(
@@ -28,20 +29,27 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             "TCP substrate support type.",
         );
     }
-    substrate_flow(
+    register_intrinsic_flow(
         builder,
         module,
-        "connect",
-        &[
-            "std.net.tcp.Host",
-            "std.net.tcp.Port",
-            "std.net.tcp.TcpOptions",
-        ],
-        "std.net.tcp.TcpStream",
-        &["Error[std.net.tcp.NetworkError]"],
-        &["Net.tcp_connect[host, port]"],
-        intrinsic::runtime::NET_TCP_CONNECT,
-        "Open a host-mediated TCP connection.",
+        &["std", "net", "tcp"],
+        IntrinsicFlowRegistration {
+            name: "connect",
+            type_params: &[],
+            params: &[
+                "std.net.tcp.Host",
+                "std.net.tcp.Port",
+                "std.net.tcp.TcpOptions",
+            ],
+            output: "std.net.tcp.TcpStream",
+            public_effects: &["Error[std.net.tcp.NetworkError]"],
+            requested_actions: &["Net.tcp_connect[host, port]"],
+            intrinsic_id: intrinsic::runtime::NET_TCP_CONNECT,
+            summary: "Open a host-mediated TCP connection.",
+            purity: IntrinsicPurity::Host,
+            dispatch: IntrinsicDispatch::Host,
+            lowering: LoweringHint::RuntimeCall,
+        },
     );
 }
 
@@ -52,40 +60,4 @@ fn record(fields: &[(&str, &str)]) -> StdType {
             .map(|(name, ty)| StdRecordField::new(name, StdType::parse(ty)))
             .collect(),
     )
-}
-
-fn substrate_flow(
-    builder: &mut StdRegistryBuilder,
-    module: crate::StdModuleId,
-    name: &str,
-    params: &[&str],
-    output: &str,
-    public_effects: &[&str],
-    requested_actions: &[&str],
-    id: u32,
-    summary: &str,
-) {
-    builder.symbol_with_intrinsic(
-        module,
-        name,
-        StdSymbolKind::Flow,
-        StdDecl::Flow(FlowDecl::with_actions(
-            name,
-            params,
-            output,
-            public_effects,
-            requested_actions,
-        )),
-        summary,
-        Some(IntrinsicDescriptor {
-            id: StdIntrinsicId(id),
-            qualified_path: vec!["std".into(), "net".into(), "tcp".into(), name.into()],
-            purity: IntrinsicPurity::Host,
-            dispatch: IntrinsicDispatch::Host,
-            lowering: LoweringHint::RuntimeCall,
-            latent_effect: crate::IntrinsicLatentEffect::None,
-            memory_access: crate::IntrinsicMemoryAccess::None,
-            runtime_requirement: crate::IntrinsicRuntimeRequirement::None,
-        }),
-    );
 }

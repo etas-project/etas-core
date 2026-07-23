@@ -42,7 +42,12 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         ),
         ("HttpCodecError", None),
     ] {
-        let mut decl = TypeDecl::generic(name, &[], TypeDeclKind::Support);
+        let kind = if name == "HttpCodecError" {
+            TypeDeclKind::Enum
+        } else {
+            TypeDeclKind::Support
+        };
+        let mut decl = TypeDecl::generic(name, &[], kind);
         if let Some(representation) = representation {
             decl = decl.with_representation(representation);
         }

@@ -108,7 +108,15 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             ),
             _ => FlowDecl::pure(name, params, output),
         };
-        let symbol = builder.symbol(module, name, StdSymbolKind::Flow, StdDecl::Flow(decl), docs);
+        let descriptor = session_policy_intrinsic(name);
+        let symbol = builder.symbol_with_intrinsic(
+            module,
+            name,
+            StdSymbolKind::Flow,
+            StdDecl::Flow(decl),
+            docs,
+            descriptor,
+        );
         builder.prelude(name, symbol);
     }
     let current_session = builder.symbol_with_intrinsic(
@@ -139,6 +147,31 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         }),
     );
     builder.prelude("current_session", current_session);
+}
+
+fn session_policy_intrinsic(name: &str) -> Option<IntrinsicDescriptor> {
+    let id = match name {
+        "LastTurns" => intrinsic::pure::SESSION_LAST_TURNS,
+        "SummaryPlusRecent" => intrinsic::pure::SESSION_SUMMARY_PLUS_RECENT,
+        "Days" => intrinsic::pure::SESSION_DAYS,
+        "SummarizeWhen" => intrinsic::pure::SESSION_SUMMARIZE_WHEN,
+        _ => return None,
+    };
+    Some(IntrinsicDescriptor {
+        id: StdIntrinsicId(id),
+        qualified_path: vec![
+            "std".into(),
+            "agent".into(),
+            "session".into(),
+            name.to_owned(),
+        ],
+        purity: IntrinsicPurity::Pure,
+        dispatch: IntrinsicDispatch::Runtime,
+        lowering: LoweringHint::RuntimeCall,
+        latent_effect: crate::IntrinsicLatentEffect::None,
+        memory_access: crate::IntrinsicMemoryAccess::None,
+        runtime_requirement: crate::IntrinsicRuntimeRequirement::None,
+    })
 }
 
 fn record(fields: &[(&str, &str)]) -> StdType {

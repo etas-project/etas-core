@@ -4,6 +4,8 @@ use crate::{
     TypeDeclKind, TypeParam, ValueDecl, intrinsic,
 };
 
+use crate::modules::registration::{IntrinsicFlowRegistration, register_intrinsic_flow};
+
 pub fn register(builder: &mut StdRegistryBuilder) {
     let module = builder.module(
         &["std", "stream"],
@@ -48,62 +50,112 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             "Standard stream error variant.",
         );
     }
-    builder.symbol(
+    builder.symbol_with_intrinsic(
         module,
         "Host",
         StdSymbolKind::Constructor,
         StdDecl::Flow(FlowDecl::pure("Host", &["string"], "StreamError")),
         "Standard stream host-failure error variant.",
+        Some(IntrinsicDescriptor {
+            id: StdIntrinsicId(intrinsic::pure::STREAM_ERROR_HOST),
+            qualified_path: vec!["std".into(), "stream".into(), "Host".into()],
+            purity: IntrinsicPurity::Pure,
+            dispatch: IntrinsicDispatch::Runtime,
+            lowering: LoweringHint::RuntimeCall,
+            latent_effect: crate::IntrinsicLatentEffect::None,
+            memory_access: crate::IntrinsicMemoryAccess::None,
+            runtime_requirement: crate::IntrinsicRuntimeRequirement::None,
+        }),
     );
-    stream_flow(
+    register_intrinsic_flow(
         builder,
         module,
-        "read",
-        &["S", "usize", "Option[std.stream.Timeout]"],
-        "std.stream.StreamRead",
-        "Stream.read[stream]",
-        intrinsic::runtime::STREAM_READ,
-        "Read at most the requested byte count from a host-mediated stream.",
+        &["std", "stream"],
+        IntrinsicFlowRegistration {
+            name: "read",
+            type_params: &[TypeParam::bounded("S", &["std.stream.ByteStream"])],
+            params: &["S", "usize", "Option[std.stream.Timeout]"],
+            output: "std.stream.StreamRead",
+            public_effects: &["Error[std.stream.StreamError]"],
+            requested_actions: &["Stream.read[stream]"],
+            intrinsic_id: intrinsic::runtime::STREAM_READ,
+            summary: "Read at most the requested byte count from a host-mediated stream.",
+            purity: IntrinsicPurity::Host,
+            dispatch: IntrinsicDispatch::Host,
+            lowering: LoweringHint::RuntimeCall,
+        },
     );
-    stream_flow(
+    register_intrinsic_flow(
         builder,
         module,
-        "read_until_limit",
-        &["S", "std.stream.ByteLimit", "Option[std.stream.Timeout]"],
-        "bytes",
-        "Stream.read[stream]",
-        intrinsic::runtime::STREAM_READ,
-        "Read from a host-mediated stream until EOF or the requested byte limit.",
+        &["std", "stream"],
+        IntrinsicFlowRegistration {
+            name: "read_until_limit",
+            type_params: &[TypeParam::bounded("S", &["std.stream.ByteStream"])],
+            params: &["S", "std.stream.ByteLimit", "Option[std.stream.Timeout]"],
+            output: "bytes",
+            public_effects: &["Error[std.stream.StreamError]"],
+            requested_actions: &["Stream.read[stream]"],
+            intrinsic_id: intrinsic::runtime::STREAM_READ_UNTIL_LIMIT,
+            summary: "Read from a host-mediated stream until EOF or the requested byte limit.",
+            purity: IntrinsicPurity::Host,
+            dispatch: IntrinsicDispatch::Host,
+            lowering: LoweringHint::RuntimeCall,
+        },
     );
-    stream_flow(
+    register_intrinsic_flow(
         builder,
         module,
-        "write_all",
-        &["S", "bytes"],
-        "unit",
-        "Stream.write[stream]",
-        intrinsic::runtime::STREAM_WRITE_ALL,
-        "Write all bytes to a host-mediated stream.",
+        &["std", "stream"],
+        IntrinsicFlowRegistration {
+            name: "write_all",
+            type_params: &[TypeParam::bounded("S", &["std.stream.ByteStream"])],
+            params: &["S", "bytes"],
+            output: "unit",
+            public_effects: &["Error[std.stream.StreamError]"],
+            requested_actions: &["Stream.write[stream]"],
+            intrinsic_id: intrinsic::runtime::STREAM_WRITE_ALL,
+            summary: "Write all bytes to a host-mediated stream.",
+            purity: IntrinsicPurity::Host,
+            dispatch: IntrinsicDispatch::Host,
+            lowering: LoweringHint::RuntimeCall,
+        },
     );
-    stream_flow(
+    register_intrinsic_flow(
         builder,
         module,
-        "flush",
-        &["S"],
-        "unit",
-        "Stream.flush[stream]",
-        intrinsic::runtime::STREAM_FLUSH,
-        "Flush a host-mediated stream.",
+        &["std", "stream"],
+        IntrinsicFlowRegistration {
+            name: "flush",
+            type_params: &[TypeParam::bounded("S", &["std.stream.ByteStream"])],
+            params: &["S"],
+            output: "unit",
+            public_effects: &["Error[std.stream.StreamError]"],
+            requested_actions: &["Stream.flush[stream]"],
+            intrinsic_id: intrinsic::runtime::STREAM_FLUSH,
+            summary: "Flush a host-mediated stream.",
+            purity: IntrinsicPurity::Host,
+            dispatch: IntrinsicDispatch::Host,
+            lowering: LoweringHint::RuntimeCall,
+        },
     );
-    stream_flow(
+    register_intrinsic_flow(
         builder,
         module,
-        "close",
-        &["S"],
-        "unit",
-        "Stream.close[stream]",
-        intrinsic::runtime::STREAM_CLOSE,
-        "Close a host-mediated stream.",
+        &["std", "stream"],
+        IntrinsicFlowRegistration {
+            name: "close",
+            type_params: &[TypeParam::bounded("S", &["std.stream.ByteStream"])],
+            params: &["S"],
+            output: "unit",
+            public_effects: &["Error[std.stream.StreamError]"],
+            requested_actions: &["Stream.close[stream]"],
+            intrinsic_id: intrinsic::runtime::STREAM_CLOSE,
+            summary: "Close a host-mediated stream.",
+            purity: IntrinsicPurity::Host,
+            dispatch: IntrinsicDispatch::Host,
+            lowering: LoweringHint::RuntimeCall,
+        },
     );
 }
 
@@ -114,40 +166,4 @@ fn record(fields: &[(&str, &str)]) -> StdType {
             .map(|(name, ty)| StdRecordField::new(name, StdType::parse(ty)))
             .collect(),
     )
-}
-
-fn stream_flow(
-    builder: &mut StdRegistryBuilder,
-    module: crate::StdModuleId,
-    name: &str,
-    params: &[&str],
-    output: &str,
-    action: &str,
-    id: u32,
-    summary: &str,
-) {
-    builder.symbol_with_intrinsic(
-        module,
-        name,
-        StdSymbolKind::Flow,
-        StdDecl::Flow(FlowDecl::with_type_params_actions(
-            name,
-            &[TypeParam::bounded("S", &["std.stream.ByteStream"])],
-            params,
-            output,
-            &["Error[std.stream.StreamError]"],
-            &[action],
-        )),
-        summary,
-        Some(IntrinsicDescriptor {
-            id: StdIntrinsicId(id),
-            qualified_path: vec!["std".into(), "stream".into(), name.into()],
-            purity: IntrinsicPurity::Host,
-            dispatch: IntrinsicDispatch::Host,
-            lowering: LoweringHint::RuntimeCall,
-            latent_effect: crate::IntrinsicLatentEffect::None,
-            memory_access: crate::IntrinsicMemoryAccess::None,
-            runtime_requirement: crate::IntrinsicRuntimeRequirement::None,
-        }),
-    );
 }

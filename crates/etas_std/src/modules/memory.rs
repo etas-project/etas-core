@@ -94,12 +94,22 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             runtime_requirement: crate::IntrinsicRuntimeRequirement::None,
         }),
     );
-    builder.symbol(
+    builder.symbol_with_intrinsic(
         module,
         "version",
         StdSymbolKind::Flow,
         StdDecl::Flow(FlowDecl::pure("version", &["string"], "MemoryVersion")),
         "Construct an opaque memory version token for compare-and-set operations.",
+        Some(IntrinsicDescriptor {
+            id: StdIntrinsicId(intrinsic::pure::MEMORY_VERSION),
+            qualified_path: vec!["std".into(), "memory".into(), "version".into()],
+            purity: IntrinsicPurity::Pure,
+            dispatch: IntrinsicDispatch::Runtime,
+            lowering: LoweringHint::RuntimeCall,
+            latent_effect: crate::IntrinsicLatentEffect::None,
+            memory_access: crate::IntrinsicMemoryAccess::None,
+            runtime_requirement: crate::IntrinsicRuntimeRequirement::None,
+        }),
     );
 
     register_store_flow(
@@ -201,7 +211,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         ],
         StdType::Primitive(crate::StdPrimitiveType::Unit),
         "Write a typed value if the persistent store entry still has the expected version.",
-        intrinsic::runtime::MEMORY_PUT,
+        intrinsic::runtime::MEMORY_PUT_VERSIONED,
     );
     register_store_flow(
         builder,
@@ -262,7 +272,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         ],
         StdType::Primitive(crate::StdPrimitiveType::Unit),
         "Delete a typed value if the persistent store entry still has the expected version.",
-        intrinsic::runtime::MEMORY_DELETE,
+        intrinsic::runtime::MEMORY_DELETE_VERSIONED,
     );
     register_store_flow(
         builder,
