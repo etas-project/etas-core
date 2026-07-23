@@ -7,7 +7,7 @@ use std::{
 use super::{
     io::write_profile_report,
     model::{ProfileReport, ProfileSpanStatus},
-    recorder::ProfileRecorder,
+    recorder::{CompletedSpanTiming, ProfileRecorder},
 };
 
 #[derive(Clone, Debug, Default)]
@@ -82,8 +82,10 @@ impl ProfileHandle {
                 category.into(),
                 None,
                 BTreeMap::new(),
-                start_ns,
-                duration_ns,
+                CompletedSpanTiming {
+                    start_ns,
+                    duration_ns,
+                },
                 ProfileSpanStatus::Ok,
             );
         }

@@ -5,6 +5,12 @@ use std::{
 
 use super::model::{ProfileCounter, ProfileReport, ProfileSpan, ProfileSpanStatus};
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct CompletedSpanTiming {
+    pub(crate) start_ns: u64,
+    pub(crate) duration_ns: u64,
+}
+
 #[derive(Clone, Debug)]
 pub struct ProfileRecorder {
     command: String,
@@ -49,14 +55,13 @@ impl ProfileRecorder {
         id
     }
 
-    pub fn record_completed_span(
+    pub(crate) fn record_completed_span(
         &mut self,
         name: String,
         category: String,
         parent: Option<u64>,
         attrs: BTreeMap<String, String>,
-        start_ns: u64,
-        duration_ns: u64,
+        timing: CompletedSpanTiming,
         status: ProfileSpanStatus,
     ) -> u64 {
         let id = self.next_span_id;
@@ -66,8 +71,8 @@ impl ProfileRecorder {
             parent,
             name,
             category,
-            start_ns,
-            duration_ns: Some(duration_ns),
+            start_ns: timing.start_ns,
+            duration_ns: Some(timing.duration_ns),
             status,
             attrs,
         });
