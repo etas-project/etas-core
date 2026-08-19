@@ -1,8 +1,13 @@
 pub mod cost;
+mod execution;
 pub mod time;
 pub mod token;
 
 pub use cost::CostBudget;
+pub use execution::{
+    CostReservation, ExecutionBudget, ExecutionBudgetSnapshot, ExecutionBudgetState,
+    TokenReservation,
+};
 pub use time::TimeBudget;
 pub use token::TokenBudget;
 

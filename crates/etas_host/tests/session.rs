@@ -1,5 +1,5 @@
 use etas_host::{
-    AuthorityContext, Budget, CompactionPolicy, ContextPolicy, HostRequestId, HostValue,
+    AuthorityContext, CompactionPolicy, ContextPolicy, HostRequestId, HostValue,
     InMemorySessionClient, RetentionPolicy, SessionClient, SessionConfig, SessionCursor,
     SessionMessage, SessionMessageRole, SessionOperation, SessionRef, SessionRequest,
     SessionResult, SqliteSessionClient, TraceContext, TraceId,
@@ -500,7 +500,7 @@ fn request(operation: SessionOperation) -> SessionRequest {
         operation,
         authority: AuthorityContext::deny_all(),
         trace: TraceContext::root(TraceId(1)),
-        budget: Budget::default(),
+        budget: etas_host::ExecutionBudget::default(),
     }
 }
 

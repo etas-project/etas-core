@@ -1,6 +1,8 @@
-use std::{future::Future, pin::Pin};
+use std::{fmt, future::Future, pin::Pin};
 
-use crate::{AuthorityContext, Budget, HostError, HostErrorCode, HostRequestId, TraceContext};
+use crate::{
+    AuthorityContext, ExecutionBudget, HostError, HostErrorCode, HostRequestId, TraceContext,
+};
 
 mod local;
 pub(crate) mod store;
@@ -8,22 +10,68 @@ pub(crate) mod store;
 pub use local::LocalStreamClient;
 pub use store::ByteStreamStore;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ByteStreamRef {
-    pub id: String,
-    pub origin: ByteStreamOrigin,
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct StreamHandleRef {
+    token: String,
+    generation: u64,
 }
 
-impl ByteStreamRef {
-    pub fn new(id: impl Into<String>, origin: ByteStreamOrigin) -> Self {
+impl StreamHandleRef {
+    pub fn issued(token: impl Into<String>, generation: u64) -> Self {
         Self {
-            id: id.into(),
-            origin,
+            token: token.into(),
+            generation,
         }
     }
 
-    pub fn opaque(id: impl Into<String>) -> Self {
-        Self::new(id, ByteStreamOrigin::Opaque)
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    pub fn identity_fingerprint(&self) -> String {
+        let mut input = self.token.as_bytes().to_vec();
+        input.extend_from_slice(&self.generation.to_le_bytes());
+        blake3::hash(&input).to_hex().to_string()
+    }
+
+    pub(crate) fn token(&self) -> &str {
+        &self.token
+    }
+}
+
+impl fmt::Debug for StreamHandleRef {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("StreamHandleRef")
+            .field("generation", &self.generation)
+            .finish_non_exhaustive()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ByteStreamRef {
+    handle: StreamHandleRef,
+    origin: ByteStreamOrigin,
+}
+
+impl ByteStreamRef {
+    pub fn issued(handle: StreamHandleRef, origin: ByteStreamOrigin) -> Self {
+        Self { handle, origin }
+    }
+
+    pub fn opaque_for_testing(token: impl Into<String>, generation: u64) -> Self {
+        Self::issued(
+            StreamHandleRef::issued(token, generation),
+            ByteStreamOrigin::Opaque,
+        )
+    }
+
+    pub fn handle(&self) -> &StreamHandleRef {
+        &self.handle
+    }
+
+    pub fn origin(&self) -> &ByteStreamOrigin {
+        &self.origin
     }
 }
 
@@ -53,7 +101,7 @@ pub struct StreamRequest {
     pub operation: StreamOperation,
     pub authority: AuthorityContext,
     pub trace: TraceContext,
-    pub budget: Budget,
+    pub budget: ExecutionBudget,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -83,7 +131,7 @@ pub enum StreamOperation {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StreamResponse {
     pub id: HostRequestId,
-    pub result: Result<StreamPayload, HostError>,
+    pub result: Result<StreamPayload, StreamFailure>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -96,6 +144,28 @@ pub enum StreamPayload {
 pub enum StreamRead {
     Data(Vec<u8>),
     Eof,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum StreamFailure {
+    TimedOut,
+    Cancelled,
+    Closed,
+    Interrupted,
+    LimitExceeded { limit_bytes: usize },
+    Host(HostError),
+}
+
+impl StreamFailure {
+    pub(crate) fn from_host(error: HostError) -> Self {
+        match error.code {
+            HostErrorCode::TimedOut => Self::TimedOut,
+            HostErrorCode::Cancelled => Self::Cancelled,
+            HostErrorCode::Closed => Self::Closed,
+            HostErrorCode::Interrupted => Self::Interrupted,
+            _ => Self::Host(error),
+        }
+    }
 }
 
 pub trait StreamClient {
@@ -138,29 +208,23 @@ impl StreamClient for UnavailableStreamClient {
                 StreamOperation::Read { max_bytes, .. } if *max_bytes > max => {
                     return Ok(StreamResponse {
                         id: request.id,
-                        result: Err(HostError::new(
-                            HostErrorCode::BudgetExceeded,
-                            "stream read exceeds configured maximum",
-                        )),
+                        result: Err(StreamFailure::LimitExceeded { limit_bytes: max }),
                     });
                 }
                 StreamOperation::ReadUntilLimit { limit_bytes, .. } if *limit_bytes > max => {
                     return Ok(StreamResponse {
                         id: request.id,
-                        result: Err(HostError::new(
-                            HostErrorCode::BudgetExceeded,
-                            "stream read-until-limit exceeds configured maximum",
-                        )),
+                        result: Err(StreamFailure::LimitExceeded { limit_bytes: max }),
                     });
                 }
                 _ => {}
             }
             Ok(StreamResponse {
                 id: request.id,
-                result: Err(HostError::new(
+                result: Err(StreamFailure::Host(HostError::new(
                     HostErrorCode::ProviderUnavailable,
                     "stream client is not configured",
-                )),
+                ))),
             })
         })
     }

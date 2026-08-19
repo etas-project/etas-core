@@ -75,11 +75,11 @@ fn model_protocol_adapter_preserves_boundary_context() {
         trace_id: TraceId(7),
         parent_span: Some(TraceSpanId(3)),
     };
-    let budget = Budget {
+    let budget = etas_host::ExecutionBudget::start(Budget {
         tokens: Some(TokenBudget { max_tokens: 128 }),
         time: Some(TimeBudget { max_millis: 250 }),
         cost: None,
-    };
+    });
     let request = ModelRequest {
         id: HostRequestId(1),
         provider: None,
@@ -123,6 +123,7 @@ fn model_protocol_adapter_preserves_boundary_context() {
         usage: Some(ModelUsage {
             input_tokens: 2,
             output_tokens: 1,
+            cost: None,
         }),
     };
     let decoded = OpenAiProtocolAdapter::decode_response(etas_host::OpenAiProviderResponse {
@@ -148,7 +149,7 @@ fn tool_protocol_adapter_preserves_request_and_result() {
             policy: Default::default(),
         },
         trace: TraceContext::root(TraceId(9)),
-        budget: Budget::default(),
+        budget: etas_host::ExecutionBudget::default(),
     };
 
     let adapter = McpToolProtocolAdapter::new("http://example.com")
@@ -227,6 +228,7 @@ fn schemas_describe_host_boundaries_without_engine_values() {
             sandbox: SandboxPolicy::deny_all(),
             policy: Default::default(),
         }),
+        trace: TraceContext::root(TraceId(6)),
     };
     assert!(matches!(
         event,

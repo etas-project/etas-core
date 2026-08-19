@@ -1,4 +1,6 @@
-use crate::{AuthorityContext, Budget, HostError, HostRequestId, TraceContext, WorkspacePath};
+use crate::{
+    AuthorityContext, ExecutionBudget, HostError, HostRequestId, TraceContext, WorkspacePath,
+};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FilesystemRequest {
@@ -6,7 +8,7 @@ pub struct FilesystemRequest {
     pub operation: FilesystemOperation,
     pub authority: AuthorityContext,
     pub trace: TraceContext,
-    pub budget: Budget,
+    pub budget: ExecutionBudget,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

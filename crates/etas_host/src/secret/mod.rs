@@ -1,6 +1,8 @@
 use std::{future::Future, pin::Pin};
 
-use crate::{AuthorityContext, Budget, HostError, HostErrorCode, HostRequestId, TraceContext};
+use crate::{
+    AuthorityContext, ExecutionBudget, HostError, HostErrorCode, HostRequestId, TraceContext,
+};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SecretRequest {
@@ -8,7 +10,7 @@ pub struct SecretRequest {
     pub operation: SecretOperation,
     pub authority: AuthorityContext,
     pub trace: TraceContext,
-    pub budget: Budget,
+    pub budget: ExecutionBudget,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

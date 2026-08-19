@@ -1,5 +1,5 @@
 use etas_host::{
-    AuthorityContext, Budget, CommandClient, CommandOutput, CommandPolicy, CommandRequest,
+    AuthorityContext, CommandClient, CommandOutput, CommandPolicy, CommandRequest,
     DestructiveOpPolicy, FilesystemPolicy, HostActionGrant, HostErrorCode, HostRequestId,
     LocalCommandClient, NetworkPolicy, PolicyContext, SandboxPolicy, TraceContext, TraceId,
 };
@@ -71,6 +71,6 @@ fn command_request(
             policy: PolicyContext::default(),
         },
         trace: TraceContext::root(TraceId(1)),
-        budget: Budget::default(),
+        budget: etas_host::ExecutionBudget::default(),
     }
 }

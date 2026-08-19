@@ -1,5 +1,6 @@
 use crate::{
-    AuthorityContext, Budget, HostRequestId, HostSchema, HostValue, ToolSchema, TraceContext,
+    AuthorityContext, ExecutionBudget, HostRequestId, HostSchema, HostValue, ToolSchema,
+    TraceContext,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -30,7 +31,7 @@ pub struct ModelRequest {
     pub options: ModelOptions,
     pub authority: AuthorityContext,
     pub trace: TraceContext,
-    pub budget: Budget,
+    pub budget: ExecutionBudget,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -85,8 +86,15 @@ pub struct ModelOptions {
     pub metadata: Vec<(String, HostValue)>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ModelUsage {
     pub input_tokens: u64,
     pub output_tokens: u64,
+    pub cost: Option<ModelCostUsage>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ModelCostUsage {
+    pub micros: u128,
+    pub currency: String,
 }

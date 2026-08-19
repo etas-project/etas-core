@@ -376,6 +376,7 @@ fn decode_anthropic_usage(value: &Value) -> Result<Option<ModelUsage>, HostError
     Ok(Some(ModelUsage {
         input_tokens: required_u64(usage, "input_tokens")?,
         output_tokens: required_u64(usage, "output_tokens")?,
+        cost: None,
     }))
 }
 
@@ -406,8 +407,8 @@ fn required_u64(object: &Value, field: &'static str) -> Result<u64, HostError> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        AuthorityContext, Budget, HostFieldSchema, HostRequestId, HostSchema, HostValue, ModelName,
-        ModelOptions, SandboxPolicy, ToolSchema, TraceContext, TraceId,
+        AuthorityContext, ExecutionBudget, HostFieldSchema, HostRequestId, HostSchema, HostValue,
+        ModelName, ModelOptions, SandboxPolicy, ToolSchema, TraceContext, TraceId,
     };
 
     use super::*;
@@ -550,7 +551,7 @@ mod tests {
                 policy: Default::default(),
             },
             trace: TraceContext::root(TraceId(1)),
-            budget: Budget::default(),
+            budget: ExecutionBudget::default(),
         }
     }
 }

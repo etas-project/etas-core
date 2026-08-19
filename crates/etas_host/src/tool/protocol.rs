@@ -1,7 +1,8 @@
 use etas_std::StdSymbolId;
 
 use crate::{
-    AuthorityContext, Budget, HostError, HostRequestId, HostSchema, HostValue, TraceContext,
+    AuthorityContext, ExecutionBudget, HostError, HostRequestId, HostSchema, HostValue,
+    TraceContext,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -63,7 +64,7 @@ pub struct ToolRequest {
     pub args: HostValue,
     pub authority: AuthorityContext,
     pub trace: TraceContext,
-    pub budget: Budget,
+    pub budget: ExecutionBudget,
 }
 
 #[derive(Clone, Debug, PartialEq)]

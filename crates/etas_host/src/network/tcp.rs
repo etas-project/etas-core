@@ -1,8 +1,8 @@
 use std::{future::Future, pin::Pin};
 
 use crate::{
-    AuthorityContext, Budget, ByteStreamOrigin, HostError, HostErrorCode, HostRequestId,
-    SandboxBroker, TraceContext,
+    AuthorityContext, ByteStreamOrigin, ExecutionBudget, HostError, HostErrorCode, HostRequestId,
+    SandboxBroker, StreamHandleRef, TraceContext,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -13,8 +13,26 @@ pub struct TcpEndpoint {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TcpStreamRef {
-    pub id: String,
-    pub origin: ByteStreamOrigin,
+    handle: StreamHandleRef,
+    origin: ByteStreamOrigin,
+}
+
+impl TcpStreamRef {
+    pub fn issued(handle: StreamHandleRef, origin: ByteStreamOrigin) -> Self {
+        Self { handle, origin }
+    }
+
+    pub fn handle(&self) -> &StreamHandleRef {
+        &self.handle
+    }
+
+    pub fn origin(&self) -> &ByteStreamOrigin {
+        &self.origin
+    }
+
+    pub fn as_byte_stream(&self) -> crate::ByteStreamRef {
+        crate::ByteStreamRef::issued(self.handle.clone(), self.origin.clone())
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -23,7 +41,7 @@ pub struct TcpConnectRequest {
     pub operation: TcpConnectOperation,
     pub authority: AuthorityContext,
     pub trace: TraceContext,
-    pub budget: Budget,
+    pub budget: ExecutionBudget,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

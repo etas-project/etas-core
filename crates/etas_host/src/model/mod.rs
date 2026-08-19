@@ -10,7 +10,7 @@ pub use anthropic::{
 pub use client::ModelClient;
 pub use openai::{OpenAiProtocolAdapter, OpenAiProviderRequest, OpenAiProviderResponse};
 pub use protocol::{
-    ModelContent, ModelMessage, ModelName, ModelOptions, ModelProviderCapabilities,
+    ModelContent, ModelCostUsage, ModelMessage, ModelName, ModelOptions, ModelProviderCapabilities,
     ModelProviderId, ModelRequest, ModelResponse, ModelRole, ModelToolCall, ModelToolChoice,
     ModelUsage,
 };

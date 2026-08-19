@@ -588,6 +588,7 @@ fn decode_openai_usage(value: &Value) -> Result<Option<ModelUsage>, HostError> {
     Ok(Some(ModelUsage {
         input_tokens,
         output_tokens,
+        cost: None,
     }))
 }
 
@@ -618,8 +619,8 @@ fn required_u64(object: &Value, field: &'static str) -> Result<u64, HostError> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        AuthorityContext, Budget, HostFieldSchema, HostRequestId, HostSchema, HostValue, ModelName,
-        ModelOptions, SandboxPolicy, TraceContext, TraceId,
+        AuthorityContext, ExecutionBudget, HostFieldSchema, HostRequestId, HostSchema, HostValue,
+        ModelName, ModelOptions, SandboxPolicy, TraceContext, TraceId,
     };
 
     use super::*;
@@ -652,7 +653,7 @@ mod tests {
                 policy: Default::default(),
             },
             trace: TraceContext::root(TraceId(1)),
-            budget: Budget::default(),
+            budget: ExecutionBudget::default(),
         };
 
         let body =
@@ -714,7 +715,7 @@ mod tests {
                 policy: Default::default(),
             },
             trace: TraceContext::root(TraceId(1)),
-            budget: Budget::default(),
+            budget: ExecutionBudget::default(),
         };
 
         let body =
@@ -761,7 +762,7 @@ mod tests {
                 policy: Default::default(),
             },
             trace: TraceContext::root(TraceId(1)),
-            budget: Budget::default(),
+            budget: ExecutionBudget::default(),
         };
 
         let body = encode_openai_chat_request_with_dialect(

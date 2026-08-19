@@ -1,4 +1,4 @@
-use crate::{AuthorityContext, Budget, HostRequestId, TraceContext};
+use crate::{AuthorityContext, ExecutionBudget, HostRequestId, TraceContext};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ConsoleRequest {
@@ -6,7 +6,7 @@ pub struct ConsoleRequest {
     pub operation: ConsoleOperation,
     pub authority: AuthorityContext,
     pub trace: TraceContext,
-    pub budget: Budget,
+    pub budget: ExecutionBudget,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -1,4 +1,6 @@
-use crate::{ApprovalRequest, AuthorityContext, HostError, HostRequestId, HostRequestKind};
+use crate::{
+    ApprovalRequest, AuthorityContext, HostError, HostRequestId, HostRequestKind, TraceContext,
+};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TraceEvent {
@@ -6,6 +8,7 @@ pub enum TraceEvent {
         id: HostRequestId,
         kind: HostRequestKind,
         authority: Box<AuthorityContext>,
+        trace: TraceContext,
     },
     HostRequestFinished {
         id: HostRequestId,

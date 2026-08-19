@@ -27,9 +27,10 @@ pub use command::{
 };
 pub use context::{
     ActionArgPattern, ActionInstance, ActionPattern, ApprovalDecision, ApprovalGrant,
-    ApprovalRequest, AuthorityContext, Budget, CostBudget, HostActionGrant, HostError,
-    HostErrorCode, HostErrorDetail, HostOutcome, HostRequestId, HostRequestKind, PolicyContext,
-    TimeBudget, TokenBudget, TraceContext, TraceEvent, TraceId, TraceSpanId,
+    ApprovalRequest, AuthorityContext, Budget, CostBudget, CostReservation, ExecutionBudget,
+    ExecutionBudgetSnapshot, ExecutionBudgetState, HostActionGrant, HostError, HostErrorCode,
+    HostErrorDetail, HostOutcome, HostRequestId, HostRequestKind, PolicyContext, TimeBudget,
+    TokenBudget, TokenReservation, TraceContext, TraceEvent, TraceId, TraceSpanId,
 };
 pub use filesystem::{
     FilesystemClient, FilesystemEntry, FilesystemOperation, FilesystemRequest, FilesystemResponse,
@@ -42,7 +43,7 @@ pub use memory::{
 };
 pub use model::{
     AnthropicProtocolAdapter, AnthropicProviderRequest, AnthropicProviderResponse, ModelClient,
-    ModelContent, ModelMessage, ModelName, ModelOptions, ModelProviderCapabilities,
+    ModelContent, ModelCostUsage, ModelMessage, ModelName, ModelOptions, ModelProviderCapabilities,
     ModelProviderId, ModelRequest, ModelResponse, ModelRole, ModelToolCall, ModelToolChoice,
     ModelUsage, OpenAiProtocolAdapter, OpenAiProviderRequest, OpenAiProviderResponse,
 };
@@ -72,8 +73,8 @@ pub use session::{
 };
 pub use stream::{
     ByteStreamOrigin, ByteStreamRef, ByteStreamStore, LocalStreamClient, StreamClient,
-    StreamOperation, StreamPayload, StreamRead, StreamRequest, StreamResponse,
-    UnavailableStreamClient,
+    StreamFailure, StreamHandleRef, StreamOperation, StreamPayload, StreamRead, StreamRequest,
+    StreamResponse, UnavailableStreamClient,
 };
 pub use testing::{TestWorkspace, assert_host_error_code};
 pub use tls::{

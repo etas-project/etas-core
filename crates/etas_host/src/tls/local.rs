@@ -10,7 +10,7 @@ use crate::{
     TlsConnectRequest, TlsConnectResponse, TlsStreamRef,
     stream::{
         ByteStreamStore,
-        store::{ManagedStream, OperationDeadlines, await_io, unknown_stream},
+        store::{OperationDeadlines, await_io, unknown_stream},
     },
 };
 
@@ -36,7 +36,7 @@ impl LocalTlsClient {
                 let ByteStreamOrigin::Tcp {
                     host: tcp_host,
                     port: tcp_port,
-                } = &stream.origin
+                } = stream.origin()
                 else {
                     return Ok(TlsConnectResponse {
                         id: request.id,
@@ -44,7 +44,7 @@ impl LocalTlsClient {
                             HostErrorCode::InvalidRequest,
                             "TLS handshake requires a TCP stream with typed TCP origin",
                         )
-                        .with_detail("stream", stream.id.clone())),
+                        .with_detail("stream", stream.handle().identity_fingerprint())),
                     });
                 };
                 if let Err(error) = SandboxBroker::new(request.authority.sandbox.clone())
@@ -69,54 +69,36 @@ impl LocalTlsClient {
                     }
                 };
                 let tcp_stream = {
-                    let Some(slot) = self.streams.remove_stream(&stream.id).await else {
+                    let Some(slot) = self.streams.stream_slot(stream.handle()).await else {
                         return Ok(TlsConnectResponse {
                             id: request.id,
-                            result: Err(unknown_stream(&stream.id)),
+                            result: Err(unknown_stream(stream.handle())),
                         });
                     };
-                    let mut state = match slot.state.try_lock() {
-                        Ok(state) => state,
-                        Err(_) => {
-                            self.streams
-                                .insert_slot(stream.id.clone(), Arc::clone(&slot))
-                                .await;
+                    match slot.begin_tls_upgrade(stream.handle()) {
+                        Ok(tcp_stream) => (slot, tcp_stream),
+                        Err(error) => {
                             return Ok(TlsConnectResponse {
                                 id: request.id,
-                                result: Err(HostError::new(
-                                    HostErrorCode::InvalidRequest,
-                                    "TLS handshake requires an idle TCP stream",
-                                )
-                                .with_detail("stream", stream.id.clone())),
-                            });
-                        }
-                    };
-                    let Some(managed) = state.take() else {
-                        return Ok(TlsConnectResponse {
-                            id: request.id,
-                            result: Err(unknown_stream(&stream.id)),
-                        });
-                    };
-                    slot.cancellation.cancel();
-                    match managed {
-                        ManagedStream::Tcp(stream) => stream,
-                        ManagedStream::Tls(_) => {
-                            return Ok(TlsConnectResponse {
-                                id: request.id,
-                                result: Err(HostError::new(
-                                    HostErrorCode::InvalidRequest,
-                                    "TLS handshake requires a plain TCP stream",
-                                )
-                                .with_detail("stream", stream.id.clone())),
+                                result: Err(error
+                                    .with_detail("stream", stream.handle().identity_fingerprint())),
                             });
                         }
                     }
                 };
                 let deadlines = OperationDeadlines::new(&request.budget, None);
-                let tls_stream = match tls_handshake(tcp_stream, server_name_value, deadlines).await
+                let (slot, tcp_stream) = tcp_stream;
+                let tls_stream = match tls_handshake(
+                    tcp_stream,
+                    server_name_value,
+                    &slot.cancellation,
+                    deadlines,
+                )
+                .await
                 {
                     Ok(stream) => stream,
                     Err(error) => {
+                        slot.fail_tls_upgrade().await;
                         return Ok(TlsConnectResponse {
                             id: request.id,
                             result: Err(error
@@ -126,26 +108,28 @@ impl LocalTlsClient {
                         });
                     }
                 };
-                let id = format!(
-                    "tls:{}:{}:{}:{}",
-                    tcp_host,
-                    tcp_port,
-                    server_name,
-                    self.streams.next_stream_id()
-                );
-                self.streams
-                    .insert_stream(id.clone(), ManagedStream::Tls(Box::new(tls_stream)))
-                    .await;
+                let generation = match slot.finish_tls_upgrade(tls_stream).await {
+                    Ok(generation) => generation,
+                    Err(error) => {
+                        return Ok(TlsConnectResponse {
+                            id: request.id,
+                            result: Err(error),
+                        });
+                    }
+                };
                 Ok(TlsConnectResponse {
                     id: request.id,
-                    result: Ok(TlsStreamRef {
-                        id,
-                        origin: ByteStreamOrigin::Tls {
+                    result: Ok(TlsStreamRef::issued(
+                        crate::StreamHandleRef::issued(
+                            stream.handle().token().to_owned(),
+                            generation,
+                        ),
+                        ByteStreamOrigin::Tls {
                             host: tcp_host.clone(),
                             port: *tcp_port,
                             server_name: Some(server_name.clone()),
                         },
-                    }),
+                    )),
                 })
             }
         }
@@ -165,13 +149,14 @@ impl TlsClient for LocalTlsClient {
 async fn tls_handshake(
     tcp_stream: TcpStream,
     server_name: ServerName<'static>,
+    cancellation: &tokio_util::sync::CancellationToken,
     deadlines: OperationDeadlines,
 ) -> Result<TlsStream<TcpStream>, HostError> {
     let config = tls_client_config();
     let connector = TlsConnector::from(Arc::new(config));
     await_io(
         connector.connect(server_name, tcp_stream),
-        None,
+        Some(cancellation),
         deadlines,
         "TLS handshake failed",
     )

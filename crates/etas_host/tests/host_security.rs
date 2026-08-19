@@ -13,7 +13,7 @@ use std::{
 use etas_host::console::{ConsoleClient, ConsoleOperation, ConsoleRequest, LocalStdioClient};
 use etas_host::{
     AnthropicProtocolAdapter, AuthorityContext, BrowserProtocolClient, BrowserProtocolOperation,
-    BrowserProtocolRequest, Budget, FilesystemClient, FilesystemEntry, FilesystemOperation,
+    BrowserProtocolRequest, FilesystemClient, FilesystemEntry, FilesystemOperation,
     FilesystemRequest, HostActionGrant, HostErrorCode, HostRequestId, HttpToolProtocolAdapter,
     HttpTransport, InMemoryMemoryClient, LocalFilesystemClient, MemoryClient, MemoryOperation,
     MemoryRequest, MemoryResult, MemoryVersion, ModelClient, ModelContent, ModelMessage, ModelName,
@@ -85,7 +85,7 @@ async fn local_stdio_client_rejects_console_without_action_grant() {
                 policy: Default::default(),
             },
             trace: TraceContext::root(TraceId(5)),
-            budget: Budget::default(),
+            budget: etas_host::ExecutionBudget::default(),
         })
         .await
         .expect_err("console client should reject before local IO");
@@ -109,7 +109,7 @@ async fn local_stdio_client_rejects_mismatched_console_action_grant() {
                 policy: Default::default(),
             },
             trace: TraceContext::root(TraceId(6)),
-            budget: Budget::default(),
+            budget: etas_host::ExecutionBudget::default(),
         })
         .await
         .expect_err("console client should reject mismatched action grant");
@@ -152,7 +152,7 @@ async fn local_filesystem_client_rejects_path_escape() {
                 policy: Default::default(),
             },
             trace: TraceContext::root(TraceId(7)),
-            budget: Budget::default(),
+            budget: etas_host::ExecutionBudget::default(),
         })
         .await
         .expect("client should return response");
@@ -197,7 +197,7 @@ async fn local_filesystem_client_writes_root_file_with_create_dirs() {
                 policy: Default::default(),
             },
             trace: TraceContext::root(TraceId(8)),
-            budget: Budget::default(),
+            budget: etas_host::ExecutionBudget::default(),
         })
         .await
         .expect("client should return response");
@@ -229,7 +229,7 @@ async fn local_filesystem_client_stats_and_atomic_replaces_under_workspace_polic
             },
             authority: fs_authority(root.clone()),
             trace: TraceContext::root(TraceId(9)),
-            budget: Budget::default(),
+            budget: etas_host::ExecutionBudget::default(),
         })
         .await
         .expect("filesystem response");
@@ -252,7 +252,7 @@ async fn local_filesystem_client_stats_and_atomic_replaces_under_workspace_polic
             },
             authority: fs_authority(root.clone()),
             trace: TraceContext::root(TraceId(10)),
-            budget: Budget::default(),
+            budget: etas_host::ExecutionBudget::default(),
         })
         .await
         .expect("filesystem response");
@@ -290,7 +290,7 @@ async fn tcp_client_rejects_unallowlisted_endpoint_before_provider_lookup() {
                 policy: Default::default(),
             },
             trace: TraceContext::root(TraceId(11)),
-            budget: Budget::default(),
+            budget: etas_host::ExecutionBudget::default(),
         })
         .await
         .expect("tcp response");
@@ -310,7 +310,7 @@ async fn stream_read_is_bounded_before_unavailable_provider_error() {
         .execute(StreamRequest {
             id: HostRequestId(12),
             operation: StreamOperation::Read {
-                stream: etas_host::ByteStreamRef::opaque("s1"),
+                stream: etas_host::ByteStreamRef::opaque_for_testing("s1", 0),
                 max_bytes: 8,
                 timeout_ms: None,
             },
@@ -321,16 +321,15 @@ async fn stream_read_is_bounded_before_unavailable_provider_error() {
                 policy: Default::default(),
             },
             trace: TraceContext::root(TraceId(12)),
-            budget: Budget::default(),
+            budget: etas_host::ExecutionBudget::default(),
         })
         .await
         .expect("stream response");
     assert_eq!(
         response
             .result
-            .expect_err("over-limit stream read should be rejected")
-            .code,
-        HostErrorCode::BudgetExceeded
+            .expect_err("over-limit stream read should be rejected"),
+        etas_host::StreamFailure::LimitExceeded { limit_bytes: 4 }
     );
 }
 
@@ -341,7 +340,7 @@ async fn stream_read_until_limit_is_bounded_before_unavailable_provider_error() 
         .execute(StreamRequest {
             id: HostRequestId(13),
             operation: StreamOperation::ReadUntilLimit {
-                stream: etas_host::ByteStreamRef::opaque("s1"),
+                stream: etas_host::ByteStreamRef::opaque_for_testing("s1", 0),
                 limit_bytes: 8,
                 timeout_ms: None,
             },
@@ -352,16 +351,15 @@ async fn stream_read_until_limit_is_bounded_before_unavailable_provider_error() 
                 policy: Default::default(),
             },
             trace: TraceContext::root(TraceId(13)),
-            budget: Budget::default(),
+            budget: etas_host::ExecutionBudget::default(),
         })
         .await
         .expect("stream response");
     assert_eq!(
         response
             .result
-            .expect_err("over-limit stream read-until-limit should be rejected")
-            .code,
-        HostErrorCode::BudgetExceeded
+            .expect_err("over-limit stream read-until-limit should be rejected"),
+        etas_host::StreamFailure::LimitExceeded { limit_bytes: 4 }
     );
 }
 
@@ -393,7 +391,7 @@ async fn secret_hmac_fails_closed_when_provider_is_unavailable() {
                 policy: Default::default(),
             },
             trace: TraceContext::root(TraceId(14)),
-            budget: Budget::default(),
+            budget: etas_host::ExecutionBudget::default(),
         })
         .await
         .expect("secret response");
@@ -423,7 +421,7 @@ async fn browser_screenshot_fails_closed_when_provider_is_unavailable() {
                 policy: Default::default(),
             },
             trace: TraceContext::root(TraceId(15)),
-            budget: Budget::default(),
+            budget: etas_host::ExecutionBudget::default(),
         })
         .await
         .expect("browser response");
@@ -611,7 +609,7 @@ fn model_request(id: HostRequestId, sandbox: SandboxPolicy) -> ModelRequest {
             policy: Default::default(),
         },
         trace: TraceContext::root(TraceId(id.0)),
-        budget: Budget::default(),
+        budget: etas_host::ExecutionBudget::default(),
     }
 }
 
@@ -627,7 +625,7 @@ fn tool_request(id: HostRequestId, sandbox: SandboxPolicy) -> ToolRequest {
             policy: Default::default(),
         },
         trace: TraceContext::root(TraceId(id.0)),
-        budget: Budget::default(),
+        budget: etas_host::ExecutionBudget::default(),
     }
 }
 
@@ -643,7 +641,7 @@ fn memory_request(id: HostRequestId, store: StoreRef, operation: MemoryOperation
             policy: Default::default(),
         },
         trace: TraceContext::root(TraceId(id.0)),
-        budget: Budget::default(),
+        budget: etas_host::ExecutionBudget::default(),
     }
 }
 

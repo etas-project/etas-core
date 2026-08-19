@@ -40,7 +40,7 @@ impl LocalTcpClient {
                 let resolved = await_io(
                     tokio::net::lookup_host((endpoint.host.as_str(), endpoint.port)),
                     None,
-                    deadlines,
+                    deadlines.clone(),
                     "TCP endpoint resolution failed",
                 )
                 .await;
@@ -66,7 +66,7 @@ impl LocalTcpClient {
                     match await_io(
                         TcpStream::connect(address),
                         None,
-                        deadlines,
+                        deadlines.clone(),
                         "TCP connect failed",
                     )
                     .await
@@ -103,24 +103,24 @@ impl LocalTcpClient {
                         result: Err(stream_io_error("failed to configure TCP stream", error)),
                     });
                 }
-                let id = format!(
-                    "tcp:{}:{}:{}",
-                    endpoint.host,
-                    endpoint.port,
-                    self.streams.next_stream_id()
-                );
-                self.streams
-                    .insert_stream(id.clone(), ManagedStream::Tcp(stream))
-                    .await;
+                let handle = match self.streams.insert_stream(ManagedStream::tcp(stream)).await {
+                    Ok(handle) => handle,
+                    Err(error) => {
+                        return Ok(TcpConnectResponse {
+                            id: request.id,
+                            result: Err(error),
+                        });
+                    }
+                };
                 Ok(TcpConnectResponse {
                     id: request.id,
-                    result: Ok(TcpStreamRef {
-                        id,
-                        origin: ByteStreamOrigin::Tcp {
+                    result: Ok(TcpStreamRef::issued(
+                        handle,
+                        ByteStreamOrigin::Tcp {
                             host: endpoint.host.clone(),
                             port: endpoint.port,
                         },
-                    }),
+                    )),
                 })
             }
         }

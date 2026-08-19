@@ -1,4 +1,4 @@
-use crate::{AuthorityContext, Budget, HostError, HostRequestId, HostValue, TraceContext};
+use crate::{AuthorityContext, ExecutionBudget, HostError, HostRequestId, HostValue, TraceContext};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SessionRef {
@@ -59,7 +59,7 @@ pub struct SessionRequest {
     pub operation: SessionOperation,
     pub authority: AuthorityContext,
     pub trace: TraceContext,
-    pub budget: Budget,
+    pub budget: ExecutionBudget,
 }
 
 #[derive(Clone, Debug, PartialEq)]
