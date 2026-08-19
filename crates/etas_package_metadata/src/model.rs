@@ -494,6 +494,7 @@ pub enum EffectArgKind {
     Type,
     Path,
     String,
+    Int,
     #[default]
     Wildcard,
 }

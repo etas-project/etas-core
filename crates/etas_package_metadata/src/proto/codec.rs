@@ -1448,9 +1448,10 @@ fn effect_arg_matches_action_arg_kind(arg: &EffectArg, kind: &ActionArgKind) -> 
         ActionArgKind::Type => matches!(arg.kind, EffectArgKind::Type),
         ActionArgKind::MemoryPlace => matches!(arg.kind, EffectArgKind::Path),
         ActionArgKind::StaticResourcePath { .. } => matches!(arg.kind, EffectArgKind::Path),
-        ActionArgKind::StringPattern => {
-            matches!(arg.kind, EffectArgKind::String | EffectArgKind::Path)
-        }
+        ActionArgKind::StringPattern => matches!(
+            arg.kind,
+            EffectArgKind::String | EffectArgKind::Int | EffectArgKind::Path
+        ),
     }
 }
 
@@ -2082,6 +2083,7 @@ fn effect_arg_kind_to_wire(kind: EffectArgKind) -> &'static str {
         EffectArgKind::Type => "type",
         EffectArgKind::Path => "path",
         EffectArgKind::String => "string",
+        EffectArgKind::Int => "int",
         EffectArgKind::Wildcard => "wildcard",
     }
 }
@@ -2091,6 +2093,7 @@ fn effect_arg_kind_from_wire(value: &str) -> Result<EffectArgKind, MetadataArtif
         "type" => Ok(EffectArgKind::Type),
         "path" => Ok(EffectArgKind::Path),
         "string" => Ok(EffectArgKind::String),
+        "int" => Ok(EffectArgKind::Int),
         "wildcard" => Ok(EffectArgKind::Wildcard),
         other => Err(invalid(format!(
             "effect arg kind `{other}` is not supported"
