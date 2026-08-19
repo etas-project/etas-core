@@ -1,6 +1,7 @@
 use crate::{
     FlowDecl, IntrinsicDescriptor, IntrinsicDispatch, IntrinsicPurity, LoweringHint, StdDecl,
-    StdIntrinsicId, StdRegistryBuilder, StdSymbolKind, TypeDecl, TypeDeclKind, intrinsic,
+    StdEffectRef, StdIntrinsicId, StdRegistryBuilder, StdSymbolKind, StdType, TypeDecl,
+    TypeDeclKind, intrinsic,
 };
 
 use crate::modules::registration::{IntrinsicFlowRegistration, register_intrinsic_flow};
@@ -28,8 +29,11 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             type_params: &[],
             params: &["SecretValue", "bytes"],
             output: "Digest",
-            public_effects: &["Error[CryptoError]"],
-            requested_actions: &["Secret.use[key]"],
+            public_effects: &[StdEffectRef::typed(
+                &["Error"],
+                StdType::parse("CryptoError"),
+            )],
+            requested_actions: &[StdEffectRef::wildcard(&["Secret", "use"], 1)],
             intrinsic_id: intrinsic::runtime::SECRET_HMAC_SHA256,
             summary: "Compute HMAC-SHA256 using a host-mediated opaque secret.",
             purity: IntrinsicPurity::Host,

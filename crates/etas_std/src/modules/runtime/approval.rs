@@ -1,7 +1,7 @@
 use crate::{
     EffectActionDecl, FlowDecl, IntrinsicDescriptor, IntrinsicDispatch, IntrinsicPurity,
-    LoweringHint, StdDecl, StdIntrinsicId, StdRegistryBuilder, StdSymbolKind, TypeDecl,
-    TypeDeclKind, intrinsic,
+    LoweringHint, StdDecl, StdEffectRef, StdIntrinsicId, StdRegistryBuilder, StdSymbolKind,
+    TypeDecl, TypeDeclKind, intrinsic,
 };
 
 pub fn register(builder: &mut StdRegistryBuilder) {
@@ -38,7 +38,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             "approve",
             &["string", "T", "Risk"],
             "bool",
-            &["Approval"],
+            &[StdEffectRef::new(&["Approval"])],
         )),
         "Request human approval through the future runtime boundary.",
         Some(IntrinsicDescriptor {

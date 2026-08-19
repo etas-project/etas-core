@@ -1,7 +1,7 @@
 use crate::{
     FlowDecl, IntrinsicDescriptor, IntrinsicDispatch, IntrinsicPurity, LoweringHint, StdDecl,
-    StdIntrinsicId, StdModuleId, StdRegistryBuilder, StdSymbolKind, TypeDecl, TypeDeclKind,
-    intrinsic,
+    StdImplFact, StdIntrinsicId, StdModuleId, StdRegistryBuilder, StdSpecRef, StdSymbolKind,
+    StdType, TypeDecl, TypeDeclKind, intrinsic,
 };
 
 const PRIMITIVES: &[&str] = &[
@@ -29,6 +29,14 @@ pub fn register(builder: &mut StdRegistryBuilder, module: StdModuleId) {
         "Compiler-known spec for checked sequence and range indexing.",
     );
     builder.prelude("Index", index);
+    for primitive in [
+        "i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize",
+    ] {
+        builder.spec_impl(StdImplFact::new(
+            StdType::parse(primitive),
+            StdSpecRef::new(&["std", "core", "Index"]),
+        ));
+    }
 
     let assert = builder.symbol_with_intrinsic(
         module,

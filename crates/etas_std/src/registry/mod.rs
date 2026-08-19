@@ -2,16 +2,18 @@ pub mod builder;
 pub mod lookup;
 pub mod module;
 pub mod prelude;
+mod validation;
 
 pub use builder::StdRegistryBuilder;
 pub use module::{
     StdModule, StdModuleId, StdRegistryVersion, StdSymbol, StdSymbolId, StdSymbolKind,
 };
 pub use prelude::{StdPrelude, StdSymbolRef};
+pub use validation::StdRegistryValidationError;
 
 use std::collections::BTreeMap;
 
-use crate::{IntrinsicDescriptor, StdIntrinsicId};
+use crate::{IntrinsicDescriptor, StdImplFact, StdIntrinsicId};
 
 #[derive(Clone, Debug, Default)]
 pub struct StdRegistry {
@@ -21,6 +23,7 @@ pub struct StdRegistry {
     prelude: StdPrelude,
     qualified: BTreeMap<Vec<String>, StdSymbolId>,
     intrinsics: BTreeMap<StdIntrinsicId, IntrinsicDescriptor>,
+    spec_impls: Vec<StdImplFact>,
 }
 
 impl StdRegistry {
@@ -73,6 +76,14 @@ impl StdRegistry {
         self.intrinsics.get(&id)
     }
 
+    pub fn spec_impls(&self) -> impl Iterator<Item = &StdImplFact> {
+        self.spec_impls.iter()
+    }
+
+    pub fn validate(&self) -> Result<(), StdRegistryValidationError> {
+        validation::validate_registry(self)
+    }
+
     pub(crate) fn push_module(&mut self, module: StdModule) {
         self.modules.push(module);
     }
@@ -99,6 +110,16 @@ impl StdRegistry {
             return;
         }
         self.intrinsics.insert(descriptor.id, descriptor);
+    }
+
+    pub(crate) fn push_spec_impl(&mut self, implementation: StdImplFact) {
+        assert!(
+            !self.spec_impls.contains(&implementation),
+            "duplicate standard spec implementation for {:?} ~ {}",
+            implementation.self_type,
+            implementation.spec.path.join(".")
+        );
+        self.spec_impls.push(implementation);
     }
 }
 

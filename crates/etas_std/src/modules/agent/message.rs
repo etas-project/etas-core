@@ -1,6 +1,6 @@
 use crate::{
-    FlowDecl, StdDecl, StdRecordField, StdRegistryBuilder, StdSymbolKind, StdType, TypeDecl,
-    TypeDeclKind,
+    FlowDecl, StdDecl, StdEffectRef, StdRecordField, StdRegistryBuilder, StdStaticArg,
+    StdSymbolKind, StdType, TypeDecl, TypeDeclKind,
 };
 
 pub fn register(builder: &mut StdRegistryBuilder) {
@@ -65,7 +65,15 @@ pub fn register(builder: &mut StdRegistryBuilder) {
                 params,
                 output,
                 &[],
-                &["Memory.write[std.agent.session.SessionId]"],
+                &[StdEffectRef::with_args(
+                    &["Memory", "write"],
+                    vec![StdStaticArg::path(&[
+                        "std",
+                        "agent",
+                        "session",
+                        "SessionId",
+                    ])],
+                )],
             )
         } else {
             FlowDecl::pure(name, params, output)

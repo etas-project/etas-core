@@ -1,6 +1,7 @@
 use crate::{
-    CompletionMetadata, DocsMetadata, IntrinsicDescriptor, StdDecl, StdModule, StdModuleId,
-    StdRegistry, StdRegistryVersion, StdSymbol, StdSymbolId, StdSymbolKind,
+    CompletionMetadata, DocsMetadata, IntrinsicDescriptor, StdDecl, StdImplFact, StdModule,
+    StdModuleId, StdRegistry, StdRegistryValidationError, StdRegistryVersion, StdSymbol,
+    StdSymbolId, StdSymbolKind,
 };
 
 pub struct StdRegistryBuilder {
@@ -78,7 +79,16 @@ impl StdRegistryBuilder {
         self.registry.prelude_mut().insert(name, symbol);
     }
 
+    pub fn spec_impl(&mut self, implementation: StdImplFact) {
+        self.registry.push_spec_impl(implementation);
+    }
+
     pub fn finish(self) -> StdRegistry {
-        self.registry
+        self.try_finish().unwrap_or_else(|error| panic!("{error}"))
+    }
+
+    pub fn try_finish(self) -> Result<StdRegistry, StdRegistryValidationError> {
+        self.registry.validate()?;
+        Ok(self.registry)
     }
 }

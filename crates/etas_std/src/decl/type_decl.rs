@@ -3,7 +3,7 @@ use super::std_type::StdType;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TypeDecl {
     pub name: String,
-    pub params: Vec<TypeParam>,
+    pub params: Vec<StdGenericParam>,
     pub kind: TypeDeclKind,
     pub representation: Option<StdType>,
     pub derivable: bool,
@@ -23,7 +23,10 @@ impl TypeDecl {
     pub fn generic(name: &str, params: &[&str], kind: TypeDeclKind) -> Self {
         Self {
             name: name.to_owned(),
-            params: params.iter().map(|name| TypeParam::new(name)).collect(),
+            params: params
+                .iter()
+                .map(|name| StdGenericParam::new(name))
+                .collect(),
             kind,
             representation: None,
             derivable: false,
@@ -42,12 +45,12 @@ impl TypeDecl {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TypeParam {
+pub struct StdGenericParam {
     pub name: String,
-    pub bounds: Vec<String>,
+    pub bounds: Vec<StdSpecRef>,
 }
 
-impl TypeParam {
+impl StdGenericParam {
     pub fn new(name: &str) -> Self {
         Self {
             name: name.to_owned(),
@@ -55,10 +58,32 @@ impl TypeParam {
         }
     }
 
-    pub fn bounded(name: &str, bounds: &[&str]) -> Self {
+    pub fn bounded(name: &str, bounds: &[StdSpecRef]) -> Self {
         Self {
             name: name.to_owned(),
-            bounds: bounds.iter().map(|bound| (*bound).to_owned()).collect(),
+            bounds: bounds.to_vec(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StdSpecRef {
+    pub path: Vec<String>,
+    pub args: Vec<StdType>,
+}
+
+impl StdSpecRef {
+    pub fn new(path: &[&str]) -> Self {
+        Self {
+            path: path.iter().map(|segment| (*segment).to_owned()).collect(),
+            args: Vec::new(),
+        }
+    }
+
+    pub fn with_args(path: &[&str], args: Vec<StdType>) -> Self {
+        Self {
+            path: path.iter().map(|segment| (*segment).to_owned()).collect(),
+            args,
         }
     }
 }

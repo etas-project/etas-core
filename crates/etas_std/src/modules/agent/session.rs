@@ -1,7 +1,7 @@
 use crate::{
     FlowDecl, IntrinsicDescriptor, IntrinsicDispatch, IntrinsicPurity, LoweringHint, StdDecl,
-    StdIntrinsicId, StdRecordField, StdRegistryBuilder, StdSymbolKind, StdType, TypeDecl,
-    TypeDeclKind, intrinsic,
+    StdEffectRef, StdIntrinsicId, StdRecordField, StdRegistryBuilder, StdStaticArg, StdSymbolKind,
+    StdType, TypeDecl, TypeDeclKind, intrinsic,
 };
 
 pub fn register(builder: &mut StdRegistryBuilder) {
@@ -92,20 +92,12 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         ),
     ] {
         let decl = match name {
-            "load" => FlowDecl::with_actions(
-                name,
-                params,
-                output,
-                &[],
-                &["Memory.read[std.agent.session.SessionId]"],
-            ),
-            "compact" => FlowDecl::with_actions(
-                name,
-                params,
-                output,
-                &[],
-                &["Memory.write[std.agent.session.SessionId]"],
-            ),
+            "load" => {
+                FlowDecl::with_actions(name, params, output, &[], &[session_memory_action("read")])
+            }
+            "compact" => {
+                FlowDecl::with_actions(name, params, output, &[], &[session_memory_action("write")])
+            }
             _ => FlowDecl::pure(name, params, output),
         };
         let descriptor = session_policy_intrinsic(name);
@@ -123,11 +115,12 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         module,
         "current_session",
         StdSymbolKind::Flow,
-        StdDecl::Flow(FlowDecl::effectful(
+        StdDecl::Flow(FlowDecl::with_actions(
             "current_session",
             &[],
             "SessionId",
-            &["Memory.read[std.agent.session.SessionId]"],
+            &[],
+            &[session_memory_action("read")],
         )),
         "Read the current runtime session identifier.",
         Some(IntrinsicDescriptor {
@@ -147,6 +140,18 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         }),
     );
     builder.prelude("current_session", current_session);
+}
+
+fn session_memory_action(action: &str) -> StdEffectRef {
+    StdEffectRef::with_args(
+        &["Memory", action],
+        vec![StdStaticArg::path(&[
+            "std",
+            "agent",
+            "session",
+            "SessionId",
+        ])],
+    )
 }
 
 fn session_policy_intrinsic(name: &str) -> Option<IntrinsicDescriptor> {

@@ -6,10 +6,10 @@ pub mod registry;
 
 pub use decl::{
     EffectActionArgKind, EffectActionDecl, EffectDecl, FlowDecl, FlowSourceMethod,
-    FlowSourceMethodKind, ImplDecl, RequirementDecl, RequirementKind, RequirementSemantics,
-    StdDecl, StdLimitKind, StdPrimitiveType, StdRecordField, StdRuntimeRequirement,
-    StdSupportConstraint, StdTrustWrapper, StdType, ToolDecl, TypeDecl, TypeDeclKind, TypeParam,
-    ValueDecl,
+    FlowSourceMethodKind, RequirementDecl, RequirementKind, RequirementSemantics, StdDecl,
+    StdEffectRef, StdGenericParam, StdImplFact, StdLimitKind, StdPrimitiveType, StdRecordField,
+    StdRuntimeRequirement, StdSpecRef, StdStaticArg, StdSupportConstraint, StdTrustWrapper,
+    StdType, ToolDecl, TypeDecl, TypeDeclKind, ValueDecl,
 };
 pub use intrinsic::{
     IntrinsicDescriptor, IntrinsicDispatch, IntrinsicLatentEffect, IntrinsicMemoryAccess,
@@ -19,6 +19,7 @@ pub use intrinsic::{
 pub use metadata::{CompletionMetadata, DocsMetadata, StdManifest};
 pub use modules::standard_registry;
 pub use registry::{
-    StdModule, StdModuleId, StdPrelude, StdRegistry, StdRegistryBuilder, StdRegistryVersion,
-    StdSymbol, StdSymbolId, StdSymbolKind, StdSymbolRef,
+    StdModule, StdModuleId, StdPrelude, StdRegistry, StdRegistryBuilder,
+    StdRegistryValidationError, StdRegistryVersion, StdSymbol, StdSymbolId, StdSymbolKind,
+    StdSymbolRef,
 };

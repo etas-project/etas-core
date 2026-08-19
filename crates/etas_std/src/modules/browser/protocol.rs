@@ -1,6 +1,6 @@
 use crate::{
-    IntrinsicDispatch, IntrinsicPurity, LoweringHint, StdDecl, StdRegistryBuilder, StdSymbolKind,
-    TypeDecl, TypeDeclKind, intrinsic,
+    IntrinsicDispatch, IntrinsicPurity, LoweringHint, StdDecl, StdEffectRef, StdRegistryBuilder,
+    StdSymbolKind, StdType, TypeDecl, TypeDeclKind, intrinsic,
 };
 
 use crate::modules::registration::{IntrinsicFlowRegistration, register_intrinsic_flow};
@@ -34,8 +34,8 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             type_params: &[],
             params: &["BrowserProfile"],
             output: "BrowserSession",
-            public_effects: &["Error[BrowserError]"],
-            requested_actions: &["Browser.attach[profile]"],
+            public_effects: &[browser_error_effect()],
+            requested_actions: &[StdEffectRef::wildcard(&["Browser", "attach"], 1)],
             intrinsic_id: intrinsic::runtime::BROWSER_ATTACH,
             summary: "Attach to an existing browser protocol session.",
             purity: IntrinsicPurity::Host,
@@ -52,8 +52,8 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             type_params: &[],
             params: &["BrowserProfile"],
             output: "BrowserSession",
-            public_effects: &["Error[BrowserError]"],
-            requested_actions: &["Browser.attach[profile]"],
+            public_effects: &[browser_error_effect()],
+            requested_actions: &[StdEffectRef::wildcard(&["Browser", "attach"], 1)],
             intrinsic_id: intrinsic::runtime::BROWSER_CREATE,
             summary: "Create a new browser protocol session.",
             purity: IntrinsicPurity::Host,
@@ -70,8 +70,8 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             type_params: &[],
             params: &["BrowserSession", "BrowserMessage"],
             output: "unit",
-            public_effects: &["Error[BrowserError]"],
-            requested_actions: &["Browser.send[session]"],
+            public_effects: &[browser_error_effect()],
+            requested_actions: &[StdEffectRef::wildcard(&["Browser", "send"], 1)],
             intrinsic_id: intrinsic::runtime::BROWSER_SEND,
             summary: "Send a browser protocol message.",
             purity: IntrinsicPurity::Host,
@@ -88,8 +88,8 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             type_params: &[],
             params: &["BrowserSession"],
             output: "BrowserMessage",
-            public_effects: &["Error[BrowserError]"],
-            requested_actions: &["Browser.recv[session]"],
+            public_effects: &[browser_error_effect()],
+            requested_actions: &[StdEffectRef::wildcard(&["Browser", "recv"], 1)],
             intrinsic_id: intrinsic::runtime::BROWSER_RECV,
             summary: "Receive a browser protocol message.",
             purity: IntrinsicPurity::Host,
@@ -106,8 +106,8 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             type_params: &[],
             params: &["BrowserSession"],
             output: "unit",
-            public_effects: &["Error[BrowserError]"],
-            requested_actions: &["Browser.close[session]"],
+            public_effects: &[browser_error_effect()],
+            requested_actions: &[StdEffectRef::wildcard(&["Browser", "close"], 1)],
             intrinsic_id: intrinsic::runtime::BROWSER_CLOSE,
             summary: "Close a browser protocol session.",
             purity: IntrinsicPurity::Host,
@@ -124,8 +124,8 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             type_params: &[],
             params: &["BrowserSession"],
             output: "BrowserScreenshot",
-            public_effects: &["Error[BrowserError]"],
-            requested_actions: &["Browser.screenshot[session]"],
+            public_effects: &[browser_error_effect()],
+            requested_actions: &[StdEffectRef::wildcard(&["Browser", "screenshot"], 1)],
             intrinsic_id: intrinsic::runtime::BROWSER_SCREENSHOT,
             summary: "Capture a screenshot payload for a browser protocol session.",
             purity: IntrinsicPurity::Host,
@@ -133,4 +133,8 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             lowering: LoweringHint::RuntimeCall,
         },
     );
+}
+
+fn browser_error_effect() -> StdEffectRef {
+    StdEffectRef::typed(&["Error"], StdType::parse("BrowserError"))
 }

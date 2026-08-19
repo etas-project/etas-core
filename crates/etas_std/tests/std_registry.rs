@@ -1,8 +1,9 @@
 use etas_std::{
-    EffectActionArgKind, IntrinsicDispatch, IntrinsicLatentEffect, IntrinsicMemoryAccess,
-    IntrinsicPurity, IntrinsicRuntimeRequirement, RequirementSemantics, StdDecl, StdIntrinsicId,
-    StdLimitKind, StdPrimitiveType, StdSupportConstraint, StdSymbolKind, StdType, intrinsic,
-    standard_registry,
+    EffectActionArgKind, EffectActionDecl, EffectDecl, FlowDecl, IntrinsicDispatch,
+    IntrinsicLatentEffect, IntrinsicMemoryAccess, IntrinsicPurity, IntrinsicRuntimeRequirement,
+    RequirementSemantics, StdDecl, StdEffectRef, StdIntrinsicId, StdLimitKind, StdPrimitiveType,
+    StdRegistryBuilder, StdRegistryVersion, StdStaticArg, StdSupportConstraint, StdSymbolKind,
+    StdType, intrinsic, standard_registry,
 };
 
 #[test]
@@ -52,6 +53,30 @@ fn registry_exposes_core_qualified_symbols_and_prelude() {
         prompt.qualified_path,
         vec!["std", "agent", "prompt", "Prompt"]
     );
+}
+
+#[test]
+fn registry_exposes_structured_generic_spec_bounds_and_impl_facts() {
+    let registry = standard_registry();
+    let write_all = registry
+        .lookup_qualified(&["std", "stream", "write_all"])
+        .expect("write_all should be registered");
+    let StdDecl::Flow(write_all) = &write_all.decl else {
+        panic!("write_all should be a flow");
+    };
+    assert_eq!(write_all.type_params.len(), 1);
+    assert_eq!(write_all.type_params[0].name, "S");
+    assert_eq!(
+        write_all.type_params[0].bounds[0].path,
+        vec!["std", "stream", "ByteStream"]
+    );
+
+    for stream in ["std.net.tcp.TcpStream", "std.tls.TlsStream"] {
+        assert!(registry.spec_impls().any(|implementation| {
+            implementation.self_type == StdType::parse(stream)
+                && implementation.spec.path == vec!["std", "stream", "ByteStream"]
+        }));
+    }
 }
 
 #[test]
@@ -151,10 +176,7 @@ fn registry_marks_memory_intrinsic_access_footprints() {
     };
     assert_eq!(
         upsert_flow.requested_actions,
-        vec![
-            "Memory.read[Store]".to_owned(),
-            "Memory.write[Store]".to_owned()
-        ]
+        vec![store_action("read"), store_action("write")]
     );
 }
 
@@ -672,10 +694,10 @@ fn registry_stores_structured_std_flow_types() {
     };
     assert!(flow.params.is_empty());
     assert_eq!(flow.output, StdType::Primitive(StdPrimitiveType::String));
-    assert_eq!(flow.public_effects, vec!["Error[IOError]".to_owned()]);
+    assert_eq!(flow.public_effects, vec![error_effect("IOError")]);
     assert_eq!(
         flow.requested_actions,
-        vec!["Console.stdin_read_all".to_owned()]
+        vec![StdEffectRef::new(&["Console", "stdin_read_all"])]
     );
 
     let command_run = registry
@@ -684,8 +706,11 @@ fn registry_stores_structured_std_flow_types() {
     let StdDecl::Flow(flow) = &command_run.decl else {
         panic!("std.host.command.run should be a flow");
     };
-    assert_eq!(flow.public_effects, Vec::<String>::new());
-    assert_eq!(flow.requested_actions, vec!["Command.run[_]".to_owned()]);
+    assert!(flow.public_effects.is_empty());
+    assert_eq!(
+        flow.requested_actions,
+        vec![StdEffectRef::wildcard(&["Command", "run"], 1)]
+    );
 
     let prompt_new = registry
         .lookup_qualified(&["std", "agent", "prompt", "new"])
@@ -726,10 +751,7 @@ fn registry_stores_structured_std_flow_types() {
         StdType::List(Box::new(StdType::Var("K".to_owned())))
     );
     assert!(flow.public_effects.is_empty());
-    assert_eq!(
-        flow.requested_actions,
-        vec!["Memory.read[Store]".to_owned()]
-    );
+    assert_eq!(flow.requested_actions, vec![store_action("read")]);
 
     let memory_select = registry
         .lookup_qualified(&["std", "memory", "select"])
@@ -742,10 +764,7 @@ fn registry_stores_structured_std_flow_types() {
         StdType::MemorySelection(Box::new(StdType::Var("V".to_owned())))
     );
     assert!(flow.public_effects.is_empty());
-    assert_eq!(
-        flow.requested_actions,
-        vec!["Memory.read[Store]".to_owned()]
-    );
+    assert_eq!(flow.requested_actions, vec![store_action("read")]);
 
     let memory_put = registry
         .lookup_qualified(&["std", "memory", "put"])
@@ -754,10 +773,7 @@ fn registry_stores_structured_std_flow_types() {
         panic!("std.memory.put should be a flow");
     };
     assert!(flow.public_effects.is_empty());
-    assert_eq!(
-        flow.requested_actions,
-        vec!["Memory.write[Store]".to_owned()]
-    );
+    assert_eq!(flow.requested_actions, vec![store_action("write")]);
 
     let len = registry
         .lookup_qualified(&["std", "collections", "len"])
@@ -870,101 +886,121 @@ fn registry_declares_edk_facing_substrate_modules() {
     );
     assert_eq!(flow.output, StdType::Named("StreamError".to_owned()));
 
-    for (path, action, public_effect) in [
+    for (path, action_owner, action_name, selector_arity, error_type) in [
         (
             &["std", "net", "tcp", "connect"][..],
-            "Net.tcp_connect[host, port]",
-            "Error[std.net.tcp.NetworkError]",
+            "Net",
+            "tcp_connect",
+            2,
+            "std.net.tcp.NetworkError",
         ),
         (
             &["std", "stream", "read"][..],
-            "Stream.read[stream]",
-            "Error[std.stream.StreamError]",
+            "Stream",
+            "read",
+            1,
+            "std.stream.StreamError",
         ),
         (
             &["std", "stream", "read_until_limit"][..],
-            "Stream.read[stream]",
-            "Error[std.stream.StreamError]",
+            "Stream",
+            "read",
+            1,
+            "std.stream.StreamError",
         ),
         (
             &["std", "stream", "write_all"][..],
-            "Stream.write[stream]",
-            "Error[std.stream.StreamError]",
+            "Stream",
+            "write",
+            1,
+            "std.stream.StreamError",
         ),
         (
             &["std", "stream", "flush"][..],
-            "Stream.flush[stream]",
-            "Error[std.stream.StreamError]",
+            "Stream",
+            "flush",
+            1,
+            "std.stream.StreamError",
         ),
         (
             &["std", "stream", "close"][..],
-            "Stream.close[stream]",
-            "Error[std.stream.StreamError]",
+            "Stream",
+            "close",
+            1,
+            "std.stream.StreamError",
         ),
         (
             &["std", "tls", "connect"][..],
-            "Tls.handshake[server_name]",
-            "Error[std.tls.TlsError]",
+            "Tls",
+            "handshake",
+            1,
+            "std.tls.TlsError",
         ),
-        (
-            &["std", "fs", "read_bytes"][..],
-            "Fs.read[path]",
-            "Error[IOError]",
-        ),
+        (&["std", "fs", "read_bytes"][..], "Fs", "read", 1, "IOError"),
         (
             &["std", "fs", "write_bytes"][..],
-            "Fs.write[path]",
-            "Error[IOError]",
+            "Fs",
+            "write",
+            1,
+            "IOError",
         ),
-        (
-            &["std", "fs", "list"][..],
-            "Fs.list[path]",
-            "Error[IOError]",
-        ),
-        (
-            &["std", "fs", "stat"][..],
-            "Fs.stat[path]",
-            "Error[IOError]",
-        ),
+        (&["std", "fs", "list"][..], "Fs", "list", 1, "IOError"),
+        (&["std", "fs", "stat"][..], "Fs", "stat", 1, "IOError"),
         (
             &["std", "fs", "atomic_replace"][..],
-            "Fs.atomic_replace[path]",
-            "Error[IOError]",
+            "Fs",
+            "atomic_replace",
+            1,
+            "IOError",
         ),
         (
             &["std", "secret", "read"][..],
-            "Secret.read[key]",
-            "Error[SecretError]",
+            "Secret",
+            "read",
+            1,
+            "SecretError",
         ),
         (
             &["std", "browser", "protocol", "attach"][..],
-            "Browser.attach[profile]",
-            "Error[BrowserError]",
+            "Browser",
+            "attach",
+            1,
+            "BrowserError",
         ),
         (
             &["std", "browser", "protocol", "create"][..],
-            "Browser.attach[profile]",
-            "Error[BrowserError]",
+            "Browser",
+            "attach",
+            1,
+            "BrowserError",
         ),
         (
             &["std", "browser", "protocol", "send"][..],
-            "Browser.send[session]",
-            "Error[BrowserError]",
+            "Browser",
+            "send",
+            1,
+            "BrowserError",
         ),
         (
             &["std", "browser", "protocol", "recv"][..],
-            "Browser.recv[session]",
-            "Error[BrowserError]",
+            "Browser",
+            "recv",
+            1,
+            "BrowserError",
         ),
         (
             &["std", "browser", "protocol", "screenshot"][..],
-            "Browser.screenshot[session]",
-            "Error[BrowserError]",
+            "Browser",
+            "screenshot",
+            1,
+            "BrowserError",
         ),
         (
             &["std", "browser", "protocol", "close"][..],
-            "Browser.close[session]",
-            "Error[BrowserError]",
+            "Browser",
+            "close",
+            1,
+            "BrowserError",
         ),
     ] {
         let symbol = registry
@@ -974,8 +1010,14 @@ fn registry_declares_edk_facing_substrate_modules() {
         let StdDecl::Flow(flow) = &symbol.decl else {
             panic!("{} should be a flow", path.join("."));
         };
-        assert_eq!(flow.public_effects, vec![public_effect.to_owned()]);
-        assert_eq!(flow.requested_actions, vec![action.to_owned()]);
+        assert_eq!(flow.public_effects, vec![error_effect(error_type)]);
+        assert_eq!(
+            flow.requested_actions,
+            vec![StdEffectRef::wildcard(
+                &[action_owner, action_name],
+                selector_arity,
+            )]
+        );
         let intrinsic = symbol
             .intrinsic
             .as_ref()
@@ -1016,8 +1058,11 @@ fn registry_declares_edk_facing_substrate_modules() {
     let StdDecl::Flow(hmac_flow) = &hmac.decl else {
         panic!("std.crypto.hmac_sha256 should be a flow");
     };
-    assert_eq!(hmac_flow.public_effects, vec!["Error[CryptoError]"]);
-    assert_eq!(hmac_flow.requested_actions, vec!["Secret.use[key]"]);
+    assert_eq!(hmac_flow.public_effects, vec![error_effect("CryptoError")]);
+    assert_eq!(
+        hmac_flow.requested_actions,
+        vec![StdEffectRef::wildcard(&["Secret", "use"], 1)]
+    );
     let hmac_intrinsic = hmac.intrinsic.as_ref().expect("hmac intrinsic metadata");
     assert_eq!(hmac_intrinsic.purity, IntrinsicPurity::Host);
     assert_eq!(hmac_intrinsic.dispatch, IntrinsicDispatch::Host);
@@ -1059,4 +1104,87 @@ fn registry_declares_substrate_effect_action_metadata() {
             "{owner}.{action} should carry runtime metadata"
         );
     }
+}
+
+#[test]
+fn registry_rejects_runtime_payload_names_as_static_action_selectors() {
+    let mut builder = StdRegistryBuilder::new(StdRegistryVersion::phase1());
+    let actions = builder.module(&["std", "effects", "actions", "Probe"], "probe actions");
+    builder.symbol(
+        actions,
+        "read",
+        StdSymbolKind::EffectAction,
+        StdDecl::EffectAction(
+            EffectActionDecl::new("Probe", "read", &["string"], "unit")
+                .with_effect_args(&[EffectActionArgKind::StringPattern]),
+        ),
+        "probe action",
+    );
+    let module = builder.module(&["std", "probe"], "probe module");
+    builder.symbol(
+        module,
+        "read",
+        StdSymbolKind::Flow,
+        StdDecl::Flow(FlowDecl::with_actions(
+            "read",
+            &["string"],
+            "unit",
+            &[],
+            &[StdEffectRef::with_args(
+                &["Probe", "read"],
+                vec![StdStaticArg::path(&["path"])],
+            )],
+        )),
+        "invalid probe flow",
+    );
+
+    let error = builder
+        .try_finish()
+        .expect_err("unresolved runtime payload selector must be rejected");
+    assert!(error.reason.contains("unknown static resource `path`"));
+}
+
+#[test]
+fn registry_rejects_undeclared_generic_effect_selectors() {
+    let mut builder = StdRegistryBuilder::new(StdRegistryVersion::phase1());
+    let effects = builder.module(&["std", "effects"], "effects");
+    builder.symbol(
+        effects,
+        "Error",
+        StdSymbolKind::Effect,
+        StdDecl::Effect(EffectDecl::generic_core("Error", &["E"])),
+        "typed error",
+    );
+    let module = builder.module(&["std", "probe"], "probe module");
+    builder.symbol(
+        module,
+        "bad",
+        StdSymbolKind::Flow,
+        StdDecl::Flow(FlowDecl::effectful(
+            "bad",
+            &[],
+            "unit",
+            &[StdEffectRef::typed(
+                &["Error"],
+                StdType::Var("T".to_owned()),
+            )],
+        )),
+        "invalid probe flow",
+    );
+
+    let error = builder
+        .try_finish()
+        .expect_err("undeclared generic selector must be rejected");
+    assert!(error.reason.contains("undeclared generic `T`"));
+}
+
+fn error_effect(error_type: &str) -> StdEffectRef {
+    StdEffectRef::typed(&["Error"], StdType::parse(error_type))
+}
+
+fn store_action(action: &str) -> StdEffectRef {
+    StdEffectRef::with_args(
+        &["Memory", action],
+        vec![StdStaticArg::path(&["std", "memory", "Store"])],
+    )
 }

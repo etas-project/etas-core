@@ -1,6 +1,7 @@
 use crate::{
-    IntrinsicDispatch, IntrinsicPurity, LoweringHint, StdDecl, StdRecordField, StdRegistryBuilder,
-    StdSymbolKind, StdType, TypeDecl, TypeDeclKind, intrinsic,
+    IntrinsicDispatch, IntrinsicPurity, LoweringHint, StdDecl, StdEffectRef, StdImplFact,
+    StdRecordField, StdRegistryBuilder, StdSpecRef, StdSymbolKind, StdType, TypeDecl, TypeDeclKind,
+    intrinsic,
 };
 
 use crate::modules::registration::{IntrinsicFlowRegistration, register_intrinsic_flow};
@@ -29,6 +30,10 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             "TCP substrate support type.",
         );
     }
+    builder.spec_impl(StdImplFact::new(
+        StdType::parse("std.net.tcp.TcpStream"),
+        StdSpecRef::new(&["std", "stream", "ByteStream"]),
+    ));
     register_intrinsic_flow(
         builder,
         module,
@@ -42,8 +47,11 @@ pub fn register(builder: &mut StdRegistryBuilder) {
                 "std.net.tcp.TcpOptions",
             ],
             output: "std.net.tcp.TcpStream",
-            public_effects: &["Error[std.net.tcp.NetworkError]"],
-            requested_actions: &["Net.tcp_connect[host, port]"],
+            public_effects: &[StdEffectRef::typed(
+                &["Error"],
+                StdType::parse("std.net.tcp.NetworkError"),
+            )],
+            requested_actions: &[StdEffectRef::wildcard(&["Net", "tcp_connect"], 2)],
             intrinsic_id: intrinsic::runtime::NET_TCP_CONNECT,
             summary: "Open a host-mediated TCP connection.",
             purity: IntrinsicPurity::Host,

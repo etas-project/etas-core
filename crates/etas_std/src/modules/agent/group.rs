@@ -1,4 +1,4 @@
-use crate::{FlowDecl, StdDecl, StdRegistryBuilder, StdSymbolKind};
+use crate::{FlowDecl, StdDecl, StdEffectRef, StdRegistryBuilder, StdSymbolKind};
 
 pub fn register(builder: &mut StdRegistryBuilder) {
     let module = builder.module(
@@ -13,7 +13,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             "round_robin",
             &["List[T]"],
             "T",
-            &["Agentic"],
+            &[StdEffectRef::new(&["Agentic"])],
         )),
         "Round-robin agent group combinator descriptor.",
     );

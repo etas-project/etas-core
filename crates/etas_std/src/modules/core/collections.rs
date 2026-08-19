@@ -1,7 +1,7 @@
 use crate::{
     FlowDecl, IntrinsicDescriptor, IntrinsicDispatch, IntrinsicPurity, LoweringHint, StdDecl,
-    StdIntrinsicId, StdRegistryBuilder, StdSymbolKind, TypeDecl, TypeDeclKind, TypeParam,
-    intrinsic,
+    StdEffectRef, StdGenericParam, StdIntrinsicId, StdRegistryBuilder, StdSpecRef, StdSymbolKind,
+    StdType, TypeDecl, TypeDeclKind, intrinsic,
 };
 
 pub fn register(builder: &mut StdRegistryBuilder) {
@@ -102,110 +102,114 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         }),
     );
 
-    for (name, params, output, effects, docs) in [
+    for (name, params, output, error_type, docs) in [
         (
             "get",
             &["Array[T]", "Index"][..],
             "Option[T]",
-            &[][..],
+            None,
             "Return an array element when the checked index is in range.",
         ),
         (
             "get",
             &["List[T]", "Index"][..],
             "Option[T]",
-            &[][..],
+            None,
             "Return a list element when the checked index is in range.",
         ),
         (
             "at",
             &["Array[T]", "Index"][..],
             "T",
-            &["Error[IndexError]"][..],
+            Some("IndexError"),
             "Return an array element or raise Error[IndexError] when out of range.",
         ),
         (
             "at",
             &["List[T]", "Index"][..],
             "T",
-            &["Error[IndexError]"][..],
+            Some("IndexError"),
             "Return a list element or raise Error[IndexError] when out of range.",
         ),
         (
             "push",
             &["Array[T]", "T"][..],
             "Array[T]",
-            &[][..],
+            None,
             "Return a new array with the value appended.",
         ),
         (
             "push",
             &["List[T]", "T"][..],
             "List[T]",
-            &[][..],
+            None,
             "Return a new list with the value prepended.",
         ),
         (
             "pop",
             &["Array[T]"][..],
             "(Array[T], Option[T])",
-            &[][..],
+            None,
             "Return a new array without the last value and the removed value.",
         ),
         (
             "pop",
             &["List[T]"][..],
             "(List[T], Option[T])",
-            &[][..],
+            None,
             "Return a new list without the head value and the removed value.",
         ),
         (
             "extend",
             &["Array[T]", "Array[T]"][..],
             "Array[T]",
-            &[][..],
+            None,
             "Return a new array with another array appended.",
         ),
         (
             "extend",
             &["List[T]", "List[T]"][..],
             "List[T]",
-            &[][..],
+            None,
             "Return a new list with another list prepended in order.",
         ),
         (
             "slice_get",
             &["Slice[T]", "Index"][..],
             "Option[T]",
-            &[][..],
+            None,
             "Return a slice element when the checked index is in range.",
         ),
         (
             "slice_at",
             &["Slice[T]", "Index"][..],
             "T",
-            &["Error[IndexError]"][..],
+            Some("IndexError"),
             "Return a slice element or raise Error[IndexError] when out of range.",
         ),
         (
             "to_array",
             &["Slice[T]"][..],
             "Array[T]",
-            &[][..],
+            None,
             "Materialize a slice as an array.",
         ),
         (
             "map_get",
             &["Map[K, V]", "K"][..],
             "Option[V]",
-            &[][..],
+            None,
             "Return a map value when the key exists.",
         ),
     ] {
-        let decl = if effects.is_empty() {
-            FlowDecl::pure(name, params, output)
-        } else {
-            FlowDecl::effectful(name, params, output, effects)
+        let decl = match error_type {
+            None => FlowDecl::pure(name, params, output),
+            Some(error_type) => FlowDecl::effectful(
+                name,
+                params,
+                output,
+                &[StdEffectRef::typed(&["Error"], StdType::parse(error_type))],
+            ),
         };
         builder.symbol(module, name, StdSymbolKind::Flow, StdDecl::Flow(decl), docs);
     }
@@ -215,7 +219,10 @@ pub fn register(builder: &mut StdRegistryBuilder) {
     ] {
         let decl = FlowDecl::with_type_params_actions(
             name,
-            &[TypeParam::bounded("T", &["Index"])],
+            &[StdGenericParam::bounded(
+                "T",
+                &[StdSpecRef::new(&["std", "core", "Index"])],
+            )],
             &["T", "T"],
             "Range[T]",
             &[],

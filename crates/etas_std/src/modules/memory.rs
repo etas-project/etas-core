@@ -1,7 +1,7 @@
 use crate::{
     FlowDecl, IntrinsicDescriptor, IntrinsicDispatch, IntrinsicMemoryAccess, IntrinsicPurity,
-    LoweringHint, StdDecl, StdIntrinsicId, StdRecordField, StdRegistryBuilder, StdSymbolKind,
-    StdType, TypeDecl, TypeDeclKind, intrinsic,
+    LoweringHint, StdDecl, StdEffectRef, StdIntrinsicId, StdRecordField, StdRegistryBuilder,
+    StdStaticArg, StdSymbolKind, StdType, TypeDecl, TypeDeclKind, intrinsic,
 };
 
 pub fn register(builder: &mut StdRegistryBuilder) {
@@ -72,7 +72,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         StdSymbolKind::Flow,
         StdDecl::Flow(FlowDecl {
             name: "region".to_owned(),
-            type_params: vec![crate::TypeParam::new("S")],
+            type_params: vec![crate::StdGenericParam::new("S")],
             params: vec![
                 StdType::Primitive(crate::StdPrimitiveType::String),
                 StdType::Primitive(crate::StdPrimitiveType::String),
@@ -307,7 +307,10 @@ fn register_store_flow(
         StdSymbolKind::Flow,
         StdDecl::Flow(FlowDecl {
             name: name.to_owned(),
-            type_params: vec![crate::TypeParam::new("K"), crate::TypeParam::new("V")],
+            type_params: vec![
+                crate::StdGenericParam::new("K"),
+                crate::StdGenericParam::new("V"),
+            ],
             params,
             output,
             public_effects: Vec::new(),
@@ -328,20 +331,24 @@ fn register_store_flow(
     );
 }
 
-fn memory_effects(name: &str) -> Vec<String> {
+fn memory_effects(name: &str) -> Vec<StdEffectRef> {
     match name {
         "get" | "contains" | "keys" | "select" | "query" | "scan" | "related_to" => {
-            vec!["Memory.read[Store]".to_owned()]
+            vec![store_action("read")]
         }
         "put" | "put_versioned" | "insert" | "delete" | "delete_versioned" | "update" | "clear" => {
-            vec!["Memory.write[Store]".to_owned()]
+            vec![store_action("write")]
         }
-        "upsert" => vec![
-            "Memory.read[Store]".to_owned(),
-            "Memory.write[Store]".to_owned(),
-        ],
+        "upsert" => vec![store_action("read"), store_action("write")],
         _ => unreachable!("unknown std.memory flow `{name}`"),
     }
+}
+
+fn store_action(action: &str) -> StdEffectRef {
+    StdEffectRef::with_args(
+        &["Memory", action],
+        vec![StdStaticArg::path(&["std", "memory", "Store"])],
+    )
 }
 
 fn memory_access(name: &str) -> IntrinsicMemoryAccess {

@@ -1,13 +1,13 @@
-use super::{StdType, TypeParam};
+use super::{StdEffectRef, StdGenericParam, StdType};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FlowDecl {
     pub name: String,
-    pub type_params: Vec<TypeParam>,
+    pub type_params: Vec<StdGenericParam>,
     pub params: Vec<StdType>,
     pub output: StdType,
-    pub public_effects: Vec<String>,
-    pub requested_actions: Vec<String>,
+    pub public_effects: Vec<StdEffectRef>,
+    pub requested_actions: Vec<StdEffectRef>,
     pub source_method: Option<FlowSourceMethod>,
 }
 
@@ -37,7 +37,12 @@ impl FlowDecl {
         }
     }
 
-    pub fn effectful(name: &str, params: &[&str], output: &str, public_effects: &[&str]) -> Self {
+    pub fn effectful(
+        name: &str,
+        params: &[&str],
+        output: &str,
+        public_effects: &[StdEffectRef],
+    ) -> Self {
         Self::with_actions(name, params, output, public_effects, &[])
     }
 
@@ -45,33 +50,27 @@ impl FlowDecl {
         name: &str,
         params: &[&str],
         output: &str,
-        public_effects: &[&str],
-        requested_actions: &[&str],
+        public_effects: &[StdEffectRef],
+        requested_actions: &[StdEffectRef],
     ) -> Self {
         Self::with_type_params_actions(name, &[], params, output, public_effects, requested_actions)
     }
 
     pub fn with_type_params_actions(
         name: &str,
-        type_params: &[TypeParam],
+        type_params: &[StdGenericParam],
         params: &[&str],
         output: &str,
-        public_effects: &[&str],
-        requested_actions: &[&str],
+        public_effects: &[StdEffectRef],
+        requested_actions: &[StdEffectRef],
     ) -> Self {
         Self {
             name: name.to_owned(),
             type_params: type_params.to_vec(),
             params: params.iter().map(|param| StdType::parse(param)).collect(),
             output: StdType::parse(output),
-            public_effects: public_effects
-                .iter()
-                .map(|effect| (*effect).to_owned())
-                .collect(),
-            requested_actions: requested_actions
-                .iter()
-                .map(|action| (*action).to_owned())
-                .collect(),
+            public_effects: public_effects.to_vec(),
+            requested_actions: requested_actions.to_vec(),
             source_method: None,
         }
     }

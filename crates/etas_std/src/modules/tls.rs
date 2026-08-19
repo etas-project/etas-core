@@ -1,7 +1,7 @@
 use crate::{
     FlowDecl, IntrinsicDescriptor, IntrinsicDispatch, IntrinsicPurity, LoweringHint, StdDecl,
-    StdIntrinsicId, StdRecordField, StdRegistryBuilder, StdSymbolKind, StdType, TypeDecl,
-    TypeDeclKind, intrinsic,
+    StdEffectRef, StdImplFact, StdIntrinsicId, StdRecordField, StdRegistryBuilder, StdSpecRef,
+    StdSymbolKind, StdType, TypeDecl, TypeDeclKind, intrinsic,
 };
 
 pub fn register(builder: &mut StdRegistryBuilder) {
@@ -25,6 +25,10 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             "TLS substrate support type.",
         );
     }
+    builder.spec_impl(StdImplFact::new(
+        StdType::parse("std.tls.TlsStream"),
+        StdSpecRef::new(&["std", "stream", "ByteStream"]),
+    ));
     builder.symbol_with_intrinsic(
         module,
         "connect",
@@ -33,8 +37,11 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             "connect",
             &["std.net.tcp.TcpStream", "std.tls.Host", "std.tls.TlsConfig"],
             "std.tls.TlsStream",
-            &["Error[std.tls.TlsError]"],
-            &["Tls.handshake[server_name]"],
+            &[StdEffectRef::typed(
+                &["Error"],
+                StdType::parse("std.tls.TlsError"),
+            )],
+            &[StdEffectRef::wildcard(&["Tls", "handshake"], 1)],
         )),
         "Open a host-mediated TLS client session over a TCP stream.",
         Some(IntrinsicDescriptor {

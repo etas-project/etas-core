@@ -1,7 +1,7 @@
 use crate::{
     FlowDecl, IntrinsicDescriptor, IntrinsicDispatch, IntrinsicPurity, LoweringHint, StdDecl,
-    StdIntrinsicId, StdRecordField, StdRegistryBuilder, StdSymbolKind, StdType, TypeDecl,
-    TypeDeclKind, TypeParam, ValueDecl, intrinsic,
+    StdEffectRef, StdGenericParam, StdIntrinsicId, StdRecordField, StdRegistryBuilder, StdSpecRef,
+    StdSymbolKind, StdType, TypeDecl, TypeDeclKind, ValueDecl, intrinsic,
 };
 
 use crate::modules::registration::{IntrinsicFlowRegistration, register_intrinsic_flow};
@@ -73,11 +73,11 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         &["std", "stream"],
         IntrinsicFlowRegistration {
             name: "read",
-            type_params: &[TypeParam::bounded("S", &["std.stream.ByteStream"])],
+            type_params: &[byte_stream_param()],
             params: &["S", "usize", "Option[std.stream.Timeout]"],
             output: "std.stream.StreamRead",
-            public_effects: &["Error[std.stream.StreamError]"],
-            requested_actions: &["Stream.read[stream]"],
+            public_effects: &[stream_error_effect()],
+            requested_actions: &[StdEffectRef::wildcard(&["Stream", "read"], 1)],
             intrinsic_id: intrinsic::runtime::STREAM_READ,
             summary: "Read at most the requested byte count from a host-mediated stream.",
             purity: IntrinsicPurity::Host,
@@ -91,11 +91,11 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         &["std", "stream"],
         IntrinsicFlowRegistration {
             name: "read_until_limit",
-            type_params: &[TypeParam::bounded("S", &["std.stream.ByteStream"])],
+            type_params: &[byte_stream_param()],
             params: &["S", "std.stream.ByteLimit", "Option[std.stream.Timeout]"],
             output: "bytes",
-            public_effects: &["Error[std.stream.StreamError]"],
-            requested_actions: &["Stream.read[stream]"],
+            public_effects: &[stream_error_effect()],
+            requested_actions: &[StdEffectRef::wildcard(&["Stream", "read"], 1)],
             intrinsic_id: intrinsic::runtime::STREAM_READ_UNTIL_LIMIT,
             summary: "Read from a host-mediated stream until EOF or the requested byte limit.",
             purity: IntrinsicPurity::Host,
@@ -109,11 +109,11 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         &["std", "stream"],
         IntrinsicFlowRegistration {
             name: "write_all",
-            type_params: &[TypeParam::bounded("S", &["std.stream.ByteStream"])],
+            type_params: &[byte_stream_param()],
             params: &["S", "bytes"],
             output: "unit",
-            public_effects: &["Error[std.stream.StreamError]"],
-            requested_actions: &["Stream.write[stream]"],
+            public_effects: &[stream_error_effect()],
+            requested_actions: &[StdEffectRef::wildcard(&["Stream", "write"], 1)],
             intrinsic_id: intrinsic::runtime::STREAM_WRITE_ALL,
             summary: "Write all bytes to a host-mediated stream.",
             purity: IntrinsicPurity::Host,
@@ -127,11 +127,11 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         &["std", "stream"],
         IntrinsicFlowRegistration {
             name: "flush",
-            type_params: &[TypeParam::bounded("S", &["std.stream.ByteStream"])],
+            type_params: &[byte_stream_param()],
             params: &["S"],
             output: "unit",
-            public_effects: &["Error[std.stream.StreamError]"],
-            requested_actions: &["Stream.flush[stream]"],
+            public_effects: &[stream_error_effect()],
+            requested_actions: &[StdEffectRef::wildcard(&["Stream", "flush"], 1)],
             intrinsic_id: intrinsic::runtime::STREAM_FLUSH,
             summary: "Flush a host-mediated stream.",
             purity: IntrinsicPurity::Host,
@@ -145,11 +145,11 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         &["std", "stream"],
         IntrinsicFlowRegistration {
             name: "close",
-            type_params: &[TypeParam::bounded("S", &["std.stream.ByteStream"])],
+            type_params: &[byte_stream_param()],
             params: &["S"],
             output: "unit",
-            public_effects: &["Error[std.stream.StreamError]"],
-            requested_actions: &["Stream.close[stream]"],
+            public_effects: &[stream_error_effect()],
+            requested_actions: &[StdEffectRef::wildcard(&["Stream", "close"], 1)],
             intrinsic_id: intrinsic::runtime::STREAM_CLOSE,
             summary: "Close a host-mediated stream.",
             purity: IntrinsicPurity::Host,
@@ -157,6 +157,14 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             lowering: LoweringHint::RuntimeCall,
         },
     );
+}
+
+fn byte_stream_param() -> StdGenericParam {
+    StdGenericParam::bounded("S", &[StdSpecRef::new(&["std", "stream", "ByteStream"])])
+}
+
+fn stream_error_effect() -> StdEffectRef {
+    StdEffectRef::typed(&["Error"], StdType::parse("std.stream.StreamError"))
 }
 
 fn record(fields: &[(&str, &str)]) -> StdType {

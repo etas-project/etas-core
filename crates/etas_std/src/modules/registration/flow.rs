@@ -1,15 +1,15 @@
 use crate::{
     FlowDecl, IntrinsicDescriptor, IntrinsicDispatch, IntrinsicPurity, LoweringHint, StdDecl,
-    StdIntrinsicId, StdModuleId, StdRegistryBuilder, StdSymbolKind, TypeParam,
+    StdEffectRef, StdGenericParam, StdIntrinsicId, StdModuleId, StdRegistryBuilder, StdSymbolKind,
 };
 
 pub(crate) struct IntrinsicFlowRegistration<'a> {
     pub name: &'a str,
-    pub type_params: &'a [TypeParam],
+    pub type_params: &'a [StdGenericParam],
     pub params: &'a [&'a str],
     pub output: &'a str,
-    pub public_effects: &'a [&'a str],
-    pub requested_actions: &'a [&'a str],
+    pub public_effects: &'a [StdEffectRef],
+    pub requested_actions: &'a [StdEffectRef],
     pub intrinsic_id: u32,
     pub summary: &'a str,
     pub purity: IntrinsicPurity,

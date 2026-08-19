@@ -1,6 +1,7 @@
 use crate::{
     FlowDecl, IntrinsicDescriptor, IntrinsicDispatch, IntrinsicPurity, LoweringHint, StdDecl,
-    StdIntrinsicId, StdRegistryBuilder, StdSymbolKind, TypeDecl, TypeDeclKind, intrinsic,
+    StdEffectRef, StdIntrinsicId, StdRegistryBuilder, StdSymbolKind, TypeDecl, TypeDeclKind,
+    intrinsic,
 };
 
 pub fn register(builder: &mut StdRegistryBuilder) {
@@ -18,7 +19,12 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         module,
         "now",
         StdSymbolKind::Flow,
-        StdDecl::Flow(FlowDecl::effectful("now", &[], "Time", &["Time"])),
+        StdDecl::Flow(FlowDecl::effectful(
+            "now",
+            &[],
+            "Time",
+            &[StdEffectRef::new(&["Time"])],
+        )),
         "Read the runtime clock through the future runtime boundary.",
         Some(IntrinsicDescriptor {
             id: StdIntrinsicId(intrinsic::runtime::TIME_NOW),

@@ -1,6 +1,7 @@
 use crate::{
     FlowDecl, IntrinsicDescriptor, IntrinsicDispatch, IntrinsicPurity, LoweringHint, StdDecl,
-    StdIntrinsicId, StdRegistryBuilder, StdSymbolKind, TypeDecl, TypeDeclKind, intrinsic,
+    StdEffectRef, StdIntrinsicId, StdRegistryBuilder, StdSymbolKind, StdType, TypeDecl,
+    TypeDeclKind, intrinsic,
 };
 
 pub fn register(builder: &mut StdRegistryBuilder) {
@@ -23,8 +24,11 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             "read",
             &["SecretKey"],
             "SecretValue",
-            &["Error[SecretError]"],
-            &["Secret.read[key]"],
+            &[StdEffectRef::typed(
+                &["Error"],
+                StdType::parse("SecretError"),
+            )],
+            &[StdEffectRef::wildcard(&["Secret", "read"], 1)],
         )),
         "Read a redaction-safe secret value from the host secret provider.",
         Some(IntrinsicDescriptor {
