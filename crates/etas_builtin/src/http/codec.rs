@@ -1,5 +1,12 @@
 use crate::{BuiltinError, BuiltinTypeTag, BuiltinValue, error::expect_arity};
 
+mod incremental;
+
+pub use incremental::{
+    DecodeStatus, HttpCodecFailureKind, HttpHeader, HttpWireResponse, HttpWireResponseHead,
+    decode_response_head_incremental, decode_response_incremental,
+};
+
 pub fn encode_request(args: &[BuiltinValue]) -> Result<BuiltinValue, BuiltinError> {
     expect_arity(args, 1)?;
     let request = HttpWireRequest::from_value(&args[0])?;
@@ -17,13 +24,12 @@ pub fn decode_response_head(args: &[BuiltinValue]) -> Result<BuiltinValue, Built
             actual: args[0].type_tag(),
         });
     };
-    let Some(end) = response_head_end(bytes) else {
-        return Ok(codec_error());
-    };
-    let Ok(head) = HttpWireResponseHead::decode(&bytes[..end]) else {
-        return Ok(codec_error());
-    };
-    Ok(BuiltinValue::ResultOk(Box::new(head.into_value())))
+    match decode_response_head_incremental(bytes, true) {
+        DecodeStatus::Complete { value, .. } => {
+            Ok(BuiltinValue::ResultOk(Box::new(value.into_value())))
+        }
+        DecodeStatus::NeedMore | DecodeStatus::Malformed { .. } => Ok(codec_error()),
+    }
 }
 
 pub fn decode_response(args: &[BuiltinValue]) -> Result<BuiltinValue, BuiltinError> {
@@ -34,132 +40,14 @@ pub fn decode_response(args: &[BuiltinValue]) -> Result<BuiltinValue, BuiltinErr
             actual: args[0].type_tag(),
         });
     };
-    let Some(end) = response_head_end(bytes) else {
-        return Ok(codec_error());
-    };
-    let Ok(head) = HttpWireResponseHead::decode(&bytes[..end]) else {
-        return Ok(codec_error());
-    };
-    let Ok(body) = decode_response_body(&head, &bytes[end..]) else {
-        return Ok(codec_error());
-    };
-    Ok(BuiltinValue::ResultOk(Box::new(BuiltinValue::Record(
-        vec![
-            ("head".to_owned(), head.into_value()),
-            ("body".to_owned(), BuiltinValue::Bytes(body)),
-        ],
-    ))))
-}
-
-fn response_head_end(bytes: &[u8]) -> Option<usize> {
-    bytes
-        .windows(4)
-        .position(|window| window == b"\r\n\r\n")
-        .map(|index| index + 4)
-        .or_else(|| {
-            bytes
-                .windows(2)
-                .position(|window| window == b"\n\n")
-                .map(|index| index + 2)
-        })
-}
-
-fn decode_response_body(head: &HttpWireResponseHead, body: &[u8]) -> Result<Vec<u8>, ()> {
-    let encodings = transfer_encodings(&head.headers);
-    if encodings.is_empty() {
-        return Ok(body.to_vec());
-    }
-    if encodings.iter().all(|encoding| encoding == "chunked") {
-        return decode_chunked_body(body);
-    }
-    Err(())
-}
-
-fn transfer_encodings(headers: &[HttpHeader]) -> Vec<String> {
-    headers
-        .iter()
-        .filter(|header| header.name.eq_ignore_ascii_case("transfer-encoding"))
-        .flat_map(|header| header.value.split(','))
-        .map(|encoding| {
-            encoding
-                .split(';')
-                .next()
-                .unwrap_or_default()
-                .trim()
-                .to_ascii_lowercase()
-        })
-        .filter(|encoding| !encoding.is_empty())
-        .collect()
-}
-
-fn decode_chunked_body(bytes: &[u8]) -> Result<Vec<u8>, ()> {
-    let mut pos = 0usize;
-    let mut decoded = Vec::new();
-    loop {
-        let (line, next) = read_line(bytes, pos)?;
-        pos = next;
-        let size = parse_chunk_size(line)?;
-        if size == 0 {
-            let end = skip_trailers(bytes, pos)?;
-            if end != bytes.len() {
-                return Err(());
-            }
-            return Ok(decoded);
-        }
-        let end = pos.checked_add(size).ok_or(())?;
-        if end > bytes.len() {
-            return Err(());
-        }
-        decoded.extend_from_slice(&bytes[pos..end]);
-        pos = end;
-        pos = consume_line_ending(bytes, pos)?;
-    }
-}
-
-fn parse_chunk_size(line: &[u8]) -> Result<usize, ()> {
-    let line = std::str::from_utf8(line).map_err(|_| ())?;
-    let size = line.split(';').next().unwrap_or_default().trim();
-    if size.is_empty() {
-        return Err(());
-    }
-    usize::from_str_radix(size, 16).map_err(|_| ())
-}
-
-fn read_line(bytes: &[u8], start: usize) -> Result<(&[u8], usize), ()> {
-    if start > bytes.len() {
-        return Err(());
-    }
-    let mut index = start;
-    while index < bytes.len() {
-        match bytes[index] {
-            b'\r' if bytes.get(index + 1) == Some(&b'\n') => {
-                return Ok((&bytes[start..index], index + 2));
-            }
-            b'\n' => return Ok((&bytes[start..index], index + 1)),
-            _ => index += 1,
-        }
-    }
-    Err(())
-}
-
-fn consume_line_ending(bytes: &[u8], pos: usize) -> Result<usize, ()> {
-    match bytes.get(pos) {
-        Some(b'\r') if bytes.get(pos + 1) == Some(&b'\n') => Ok(pos + 2),
-        Some(b'\n') => Ok(pos + 1),
-        _ => Err(()),
-    }
-}
-
-fn skip_trailers(bytes: &[u8], mut pos: usize) -> Result<usize, ()> {
-    loop {
-        let (line, next) = read_line(bytes, pos)?;
-        pos = next;
-        if line.is_empty() {
-            return Ok(pos);
-        }
-        if !line.contains(&b':') {
-            return Err(());
-        }
+    match decode_response_incremental(bytes, true) {
+        DecodeStatus::Complete { value, .. } => Ok(BuiltinValue::ResultOk(Box::new(
+            BuiltinValue::Record(vec![
+                ("head".to_owned(), value.head.into_value()),
+                ("body".to_owned(), BuiltinValue::Bytes(value.body)),
+            ]),
+        ))),
+        DecodeStatus::NeedMore | DecodeStatus::Malformed { .. } => Ok(codec_error()),
     }
 }
 
@@ -170,20 +58,6 @@ struct HttpWireRequest {
     version: String,
     headers: Vec<HttpHeader>,
     body: Vec<u8>,
-}
-
-#[derive(Debug)]
-struct HttpWireResponseHead {
-    version: String,
-    status: u16,
-    reason: String,
-    headers: Vec<HttpHeader>,
-}
-
-#[derive(Debug)]
-struct HttpHeader {
-    name: String,
-    value: String,
 }
 
 impl HttpWireRequest {
@@ -245,43 +119,6 @@ impl HttpWireRequest {
 }
 
 impl HttpWireResponseHead {
-    fn decode(bytes: &[u8]) -> Result<Self, ()> {
-        let text = std::str::from_utf8(bytes).map_err(|_| ())?;
-        let normalized = text.replace("\r\n", "\n");
-        let mut lines = normalized.lines();
-        let status_line = lines.next().ok_or(())?;
-        let mut status_parts = status_line.splitn(3, ' ');
-        let version = status_parts.next().ok_or(())?.to_owned();
-        let status_text = status_parts.next().ok_or(())?;
-        let reason = status_parts.next().unwrap_or("").to_owned();
-        validate_version(&version)?;
-        let status = status_text.parse::<u16>().map_err(|_| ())?;
-        if !(100..=999).contains(&status) {
-            return Err(());
-        }
-        let mut headers = Vec::new();
-        for line in lines {
-            if line.is_empty() {
-                break;
-            }
-            let Some((name, value)) = line.split_once(':') else {
-                return Err(());
-            };
-            let header = HttpHeader {
-                name: name.trim().to_owned(),
-                value: value.trim_start().to_owned(),
-            };
-            header.validate()?;
-            headers.push(header);
-        }
-        Ok(Self {
-            version,
-            status,
-            reason,
-            headers,
-        })
-    }
-
     fn into_value(self) -> BuiltinValue {
         BuiltinValue::Record(vec![
             ("version".to_owned(), BuiltinValue::String(self.version)),
@@ -411,7 +248,7 @@ fn validate_token(value: &str) -> Result<(), ()> {
 }
 
 fn validate_version(value: &str) -> Result<(), ()> {
-    if value == "HTTP/1.0" || value == "HTTP/1.1" || value == "HTTP/2" || value == "HTTP/3" {
+    if value == "HTTP/1.0" || value == "HTTP/1.1" {
         Ok(())
     } else {
         Err(())
@@ -524,7 +361,7 @@ mod tests {
 
     #[test]
     fn decode_response_decodes_chunked_transfer_body() {
-        let bytes = b"HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\ncontent-length: 999\r\n\r\n5\r\nhello\r\n6;ext=value\r\n world\r\n0\r\nx-trailer: ignored\r\n\r\n".to_vec();
+        let bytes = b"HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\n\r\n5\r\nhello\r\n6;ext=value\r\n world\r\n0\r\nx-trailer: ignored\r\n\r\n".to_vec();
 
         let fields = decoded_response_fields(bytes);
 
@@ -550,11 +387,19 @@ mod tests {
     }
 
     #[test]
-    fn decode_response_rejects_trailing_bytes_after_chunked_terminator() {
-        assert_decode_response_codec_error(
-            b"HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\nHTTP/1.1 200 OK\r\n\r\n"
-                .to_vec(),
-        );
+    fn incremental_decoder_preserves_pipelined_bytes_after_chunked_response() {
+        let first = b"HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n";
+        let second = b"HTTP/1.1 204 No Content\r\n\r\n";
+        let bytes = [first.as_slice(), second.as_slice()].concat();
+
+        let DecodeStatus::Complete { value, consumed } = decode_response_incremental(&bytes, false)
+        else {
+            panic!("first framed response should be complete");
+        };
+
+        assert_eq!(value.body, b"hello");
+        assert_eq!(consumed, first.len());
+        assert_eq!(&bytes[consumed..], second);
     }
 
     #[test]
@@ -570,6 +415,120 @@ mod tests {
         assert_decode_response_codec_error(
             b"HTTP/1.1 200 OK\r\ntransfer-encoding: gzip, chunked\r\n\r\n0\r\n\r\n".to_vec(),
         );
+    }
+
+    #[test]
+    fn incremental_decoder_distinguishes_need_more_from_invalid_line_endings() {
+        assert_eq!(
+            decode_response_incremental(b"HTTP/1.1 200 OK\r\ncontent-length: 5\r\n", false),
+            DecodeStatus::NeedMore
+        );
+        assert!(matches!(
+            decode_response_incremental(b"HTTP/1.1 200 OK\n\n", false),
+            DecodeStatus::Malformed {
+                kind: HttpCodecFailureKind::InvalidLineEnding,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn incremental_content_length_response_consumes_exact_frame() {
+        let first = b"HTTP/1.1 200 OK\r\ncontent-length: 5\r\n\r\nhello";
+        let second = b"HTTP/1.1 204 No Content\r\n\r\n";
+        let bytes = [first.as_slice(), second.as_slice()].concat();
+
+        let DecodeStatus::Complete { value, consumed } = decode_response_incremental(&bytes, false)
+        else {
+            panic!("content-length framed response should be complete");
+        };
+
+        assert_eq!(value.body, b"hello");
+        assert_eq!(consumed, first.len());
+        assert_eq!(&bytes[consumed..], second);
+    }
+
+    #[test]
+    fn incremental_decoder_waits_for_complete_content_length_body() {
+        assert_eq!(
+            decode_response_incremental(b"HTTP/1.1 200 OK\r\ncontent-length: 5\r\n\r\nhell", false,),
+            DecodeStatus::NeedMore
+        );
+        assert!(matches!(
+            decode_response_incremental(b"HTTP/1.1 200 OK\r\ncontent-length: 5\r\n\r\nhell", true,),
+            DecodeStatus::Malformed {
+                kind: HttpCodecFailureKind::UnexpectedEof,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn incremental_decoder_rejects_ambiguous_message_framing() {
+        assert!(matches!(
+            decode_response_incremental(
+                b"HTTP/1.1 200 OK\r\ncontent-length: 5\r\ncontent-length: 6\r\n\r\nhello!",
+                true,
+            ),
+            DecodeStatus::Malformed {
+                kind: HttpCodecFailureKind::ConflictingContentLength,
+                ..
+            }
+        ));
+        assert!(matches!(
+            decode_response_incremental(
+                b"HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\ncontent-length: 5\r\n\r\n0\r\n\r\n",
+                true,
+            ),
+            DecodeStatus::Malformed {
+                kind: HttpCodecFailureKind::ConflictingMessageFraming,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn incremental_decoder_rejects_http_2_and_http_3_text_framing() {
+        for version in ["HTTP/2", "HTTP/3"] {
+            let message = format!("{version} 200 OK\r\n\r\n");
+            assert!(matches!(
+                decode_response_incremental(message.as_bytes(), true),
+                DecodeStatus::Malformed {
+                    kind: HttpCodecFailureKind::UnsupportedHttpVersion,
+                    ..
+                }
+            ));
+        }
+    }
+
+    #[test]
+    fn close_delimited_body_only_completes_at_end_of_stream() {
+        let bytes = b"HTTP/1.1 200 OK\r\n\r\nhello";
+        assert_eq!(
+            decode_response_incremental(bytes, false),
+            DecodeStatus::NeedMore
+        );
+        let DecodeStatus::Complete { value, consumed } = decode_response_incremental(bytes, true)
+        else {
+            panic!("EOF should complete a close-delimited response");
+        };
+        assert_eq!(value.body, b"hello");
+        assert_eq!(consumed, bytes.len());
+    }
+
+    #[test]
+    fn bodyless_status_finishes_at_header_boundary() {
+        let first = b"HTTP/1.1 204 No Content\r\n\r\n";
+        let second = b"HTTP/1.1 204 No Content\r\n\r\n";
+        let bytes = [first.as_slice(), second.as_slice()].concat();
+
+        let DecodeStatus::Complete { value, consumed } = decode_response_incremental(&bytes, false)
+        else {
+            panic!("204 response should complete at the header boundary");
+        };
+
+        assert!(value.body.is_empty());
+        assert_eq!(consumed, first.len());
     }
 
     fn decoded_response_fields(bytes: Vec<u8>) -> Vec<(String, BuiltinValue)> {
