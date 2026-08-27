@@ -334,6 +334,8 @@ pub struct ProtoCallableSignature {
     pub visibility: String,
     #[prost(string, repeated, tag = "6")]
     pub param_names: Vec<String>,
+    #[prost(message, repeated, tag = "7")]
+    pub generic_params: Vec<ProtoActionGenericParam>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -354,6 +356,16 @@ pub struct ProtoActionSignature {
     pub selector_param_names: Vec<String>,
     #[prost(message, repeated, tag = "8")]
     pub selector_defaults: Vec<ProtoOptionalEffectArg>,
+    #[prost(message, repeated, tag = "9")]
+    pub generic_params: Vec<ProtoActionGenericParam>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoActionGenericParam {
+    #[prost(string, tag = "1")]
+    pub name: String,
+    #[prost(message, repeated, tag = "2")]
+    pub bounds: Vec<ProtoSpecBound>,
 }
 
 #[derive(Clone, PartialEq, Message)]

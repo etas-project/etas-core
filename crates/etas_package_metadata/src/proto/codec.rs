@@ -1070,6 +1070,11 @@ fn named_signature_from_proto(
 fn callable_signature_to_proto(signature: &CallableSignature) -> ProtoCallableSignature {
     ProtoCallableSignature {
         path: signature.path.clone(),
+        generic_params: signature
+            .generic_params
+            .iter()
+            .map(generic_param_to_proto)
+            .collect(),
         param_names: signature.param_names.clone(),
         input: signature.input.iter().map(type_to_proto).collect(),
         output: signature.output.as_ref().map(type_to_proto),
@@ -1083,6 +1088,11 @@ fn callable_signature_from_proto(
 ) -> Result<CallableSignature, MetadataArtifactError> {
     Ok(CallableSignature {
         path: required_path(signature.path, "callable signature path")?,
+        generic_params: signature
+            .generic_params
+            .into_iter()
+            .map(generic_param_from_proto)
+            .collect::<Result<Vec<_>, _>>()?,
         param_names: signature.param_names,
         input: signature
             .input
@@ -1290,6 +1300,11 @@ fn trace_spec_conformance_from_proto(
 fn action_signature_to_proto(signature: &ActionSignature) -> ProtoActionSignature {
     ProtoActionSignature {
         path: signature.path.clone(),
+        generic_params: signature
+            .generic_params
+            .iter()
+            .map(generic_param_to_proto)
+            .collect(),
         params: signature.params.iter().map(type_to_proto).collect(),
         effect_args: signature
             .effect_args
@@ -1313,6 +1328,11 @@ fn action_signature_from_proto(
 ) -> Result<ActionSignature, MetadataArtifactError> {
     let signature = ActionSignature {
         path: required_path(signature.path, "action signature path")?,
+        generic_params: signature
+            .generic_params
+            .into_iter()
+            .map(generic_param_from_proto)
+            .collect::<Result<Vec<_>, MetadataArtifactError>>()?,
         params: signature
             .params
             .into_iter()
@@ -1335,6 +1355,26 @@ fn action_signature_from_proto(
     };
     validate_action_selector_metadata(&signature)?;
     Ok(signature)
+}
+
+fn generic_param_to_proto(param: &GenericParam) -> ProtoActionGenericParam {
+    ProtoActionGenericParam {
+        name: param.name.clone(),
+        bounds: param.bounds.iter().map(spec_bound_to_proto).collect(),
+    }
+}
+
+fn generic_param_from_proto(
+    param: ProtoActionGenericParam,
+) -> Result<GenericParam, MetadataArtifactError> {
+    Ok(GenericParam {
+        name: required(param.name, "callable generic parameter name")?,
+        bounds: param
+            .bounds
+            .into_iter()
+            .map(spec_bound_from_proto)
+            .collect::<Result<Vec<_>, _>>()?,
+    })
 }
 
 fn optional_effect_arg_to_proto(arg: &Option<EffectArg>) -> ProtoOptionalEffectArg {
@@ -1420,6 +1460,31 @@ fn validate_action_selector_metadata(
             signature.selector_defaults.len(),
             signature.effect_args.len()
         )));
+    }
+    let generic_names = signature
+        .generic_params
+        .iter()
+        .map(|param| param.name.as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    if generic_names.len() != signature.generic_params.len() {
+        return Err(invalid(format!(
+            "action signature `{}` contains duplicate generic parameter names",
+            signature.path.join(".")
+        )));
+    }
+    for (kind, name) in signature
+        .effect_args
+        .iter()
+        .zip(&signature.selector_param_names)
+    {
+        if matches!(kind, ActionArgKind::Type)
+            && (name.is_empty() || !generic_names.contains(name.as_str()))
+        {
+            return Err(invalid(format!(
+                "action signature `{}` type selector `{name}` does not name a declared generic parameter",
+                signature.path.join(".")
+            )));
+        }
     }
     for (index, (kind, default)) in signature
         .effect_args

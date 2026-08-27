@@ -79,6 +79,67 @@ mod tests {
     }
 
     #[test]
+    fn metadata_artifact_round_trips_generic_action_signature() {
+        let mut metadata = sample_metadata();
+        let action = &mut metadata.public_metadata.actions[0];
+        action.generic_params = vec![ActionGenericParam {
+            name: "S".to_owned(),
+            bounds: vec![SpecBound {
+                spec: vec![
+                    "std".to_owned(),
+                    "stream".to_owned(),
+                    "ByteStream".to_owned(),
+                ],
+                args: Vec::new(),
+            }],
+        }];
+        action.params = vec![Type {
+            kind: TypeKind::Var,
+            name: "S".to_owned(),
+            ..Default::default()
+        }];
+        action.effect_args = vec![ActionArgKind::Type];
+        action.selector_param_names = vec!["S".to_owned()];
+        action.selector_defaults = vec![None];
+
+        let bytes = encode_sample(&metadata);
+        let (_, decoded) =
+            package_metadata_from_artifact(Path::new("package.etasmeta"), &bytes).unwrap();
+
+        assert_eq!(
+            decoded.public_metadata.actions,
+            metadata.public_metadata.actions
+        );
+    }
+
+    #[test]
+    fn metadata_artifact_round_trips_generic_callable_signature() {
+        let mut metadata = sample_metadata();
+        let flow = &mut metadata.public_metadata.flows[0];
+        flow.generic_params = vec![GenericParam {
+            name: "R".to_owned(),
+            bounds: vec![SpecBound {
+                spec: vec!["std".to_owned(), "fs".to_owned(), "Region".to_owned()],
+                args: Vec::new(),
+            }],
+        }];
+        flow.input = vec![Type {
+            kind: TypeKind::Var,
+            name: "R".to_owned(),
+            ..Default::default()
+        }];
+
+        let bytes = encode_sample(&metadata);
+        let (_, decoded) =
+            package_metadata_from_artifact(Path::new("package.etasmeta"), &bytes).unwrap();
+
+        assert_eq!(
+            decoded.public_metadata.flows,
+            metadata.public_metadata.flows
+        );
+    }
+
+    #[test]
     fn metadata_artifact_rejects_unknown_section_kind() {
         let mut bytes = encode_sample(&sample_metadata());
         let table = section_table_start(&bytes);
@@ -219,6 +280,7 @@ mod tests {
                 public_metadata: PublicMetadata {
                     flows: vec![CallableSignature {
                         path: vec!["dep".to_owned(), "run".to_owned()],
+                        generic_params: Vec::new(),
                         param_names: vec!["input".to_owned()],
                         input: vec![Type {
                             kind: TypeKind::Primitive,
@@ -418,6 +480,7 @@ mod tests {
                         "EdkHttp".to_owned(),
                         "request".to_owned(),
                     ],
+                    generic_params: Vec::new(),
                     params: vec![
                         Type {
                             kind: TypeKind::Primitive,

@@ -202,6 +202,7 @@ pub struct NamedSignature {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CallableSignature {
     pub path: Vec<String>,
+    pub generic_params: Vec<GenericParam>,
     pub param_names: Vec<String>,
     pub input: Vec<Type>,
     pub output: Option<Type>,
@@ -212,6 +213,7 @@ pub struct CallableSignature {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ActionSignature {
     pub path: Vec<String>,
+    pub generic_params: Vec<ActionGenericParam>,
     pub params: Vec<Type>,
     pub effect_args: Vec<ActionArgKind>,
     pub selector_param_names: Vec<String>,
@@ -220,6 +222,14 @@ pub struct ActionSignature {
     pub returns_never: bool,
     pub visibility: Visibility,
 }
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct GenericParam {
+    pub name: String,
+    pub bounds: Vec<SpecBound>,
+}
+
+pub type ActionGenericParam = GenericParam;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum ActionArgKind {
