@@ -32,6 +32,12 @@ pub fn call_pure_intrinsic(
         intrinsic::pure::HTTP_ENCODE_REQUEST => http::codec::encode_request(args),
         intrinsic::pure::HTTP_DECODE_RESPONSE_HEAD => http::codec::decode_response_head(args),
         intrinsic::pure::HTTP_DECODE_RESPONSE => http::codec::decode_response(args),
+        intrinsic::pure::HTTP_DECODE_RESPONSE_HEAD_INCREMENTAL => {
+            http::codec::decode_response_head_step(args)
+        }
+        intrinsic::pure::HTTP_DECODE_RESPONSE_INCREMENTAL => {
+            http::codec::decode_response_step(args)
+        }
         intrinsic::pure::TEXT_UTF8_DECODE => codec::text::utf8_decode(args),
         intrinsic::pure::TEXT_UTF8_ENCODE => codec::text::utf8_encode(args),
         intrinsic::pure::CRYPTO_SHA256 => crypto::sha256_digest(args),

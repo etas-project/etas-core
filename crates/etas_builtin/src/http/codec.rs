@@ -51,6 +51,110 @@ pub fn decode_response(args: &[BuiltinValue]) -> Result<BuiltinValue, BuiltinErr
     }
 }
 
+pub fn decode_response_head_step(args: &[BuiltinValue]) -> Result<BuiltinValue, BuiltinError> {
+    let (bytes, end_of_stream) = incremental_args(args)?;
+    Ok(head_decode_status_value(decode_response_head_incremental(
+        bytes,
+        end_of_stream,
+    )))
+}
+
+pub fn decode_response_step(args: &[BuiltinValue]) -> Result<BuiltinValue, BuiltinError> {
+    let (bytes, end_of_stream) = incremental_args(args)?;
+    Ok(response_decode_status_value(decode_response_incremental(
+        bytes,
+        end_of_stream,
+    )))
+}
+
+fn incremental_args(args: &[BuiltinValue]) -> Result<(&[u8], bool), BuiltinError> {
+    expect_arity(args, 2)?;
+    let BuiltinValue::Bytes(bytes) = &args[0] else {
+        return Err(BuiltinError::TypeMismatch {
+            expected: BuiltinTypeTag::Bytes,
+            actual: args[0].type_tag(),
+        });
+    };
+    let BuiltinValue::Bool(end_of_stream) = args[1] else {
+        return Err(BuiltinError::TypeMismatch {
+            expected: BuiltinTypeTag::Bool,
+            actual: args[1].type_tag(),
+        });
+    };
+    Ok((bytes, end_of_stream))
+}
+
+fn head_decode_status_value(status: DecodeStatus<HttpWireResponseHead>) -> BuiltinValue {
+    match status {
+        DecodeStatus::NeedMore => decode_step_value("NeedMore", Vec::new()),
+        DecodeStatus::Complete { value, consumed } => decode_step_value(
+            "Complete",
+            vec![value.into_value(), BuiltinValue::Usize(consumed)],
+        ),
+        DecodeStatus::Malformed { kind, offset } => {
+            decode_step_value("Malformed", vec![decode_failure_value(kind, offset)])
+        }
+    }
+}
+
+fn response_decode_status_value(status: DecodeStatus<HttpWireResponse>) -> BuiltinValue {
+    match status {
+        DecodeStatus::NeedMore => decode_step_value("NeedMore", Vec::new()),
+        DecodeStatus::Complete { value, consumed } => decode_step_value(
+            "Complete",
+            vec![
+                BuiltinValue::Record(vec![
+                    ("head".to_owned(), value.head.into_value()),
+                    ("body".to_owned(), BuiltinValue::Bytes(value.body)),
+                ]),
+                BuiltinValue::Usize(consumed),
+            ],
+        ),
+        DecodeStatus::Malformed { kind, offset } => {
+            decode_step_value("Malformed", vec![decode_failure_value(kind, offset)])
+        }
+    }
+}
+
+fn decode_step_value(state: &str, fields: Vec<BuiltinValue>) -> BuiltinValue {
+    BuiltinValue::Variant {
+        name: state.to_owned(),
+        fields,
+    }
+}
+
+fn decode_failure_value(kind: HttpCodecFailureKind, offset: usize) -> BuiltinValue {
+    BuiltinValue::Record(vec![
+        (
+            "kind".to_owned(),
+            BuiltinValue::Variant {
+                name: failure_kind_name(kind).to_owned(),
+                fields: Vec::new(),
+            },
+        ),
+        ("offset".to_owned(), BuiltinValue::Usize(offset)),
+    ])
+}
+
+fn failure_kind_name(kind: HttpCodecFailureKind) -> &'static str {
+    match kind {
+        HttpCodecFailureKind::UnexpectedEof => "UnexpectedEof",
+        HttpCodecFailureKind::InvalidLineEnding => "InvalidLineEnding",
+        HttpCodecFailureKind::InvalidStatusLine => "InvalidStatusLine",
+        HttpCodecFailureKind::UnsupportedHttpVersion => "UnsupportedHttpVersion",
+        HttpCodecFailureKind::InvalidStatusCode => "InvalidStatusCode",
+        HttpCodecFailureKind::InvalidHeader => "InvalidHeader",
+        HttpCodecFailureKind::InvalidContentLength => "InvalidContentLength",
+        HttpCodecFailureKind::ConflictingContentLength => "ConflictingContentLength",
+        HttpCodecFailureKind::ConflictingMessageFraming => "ConflictingMessageFraming",
+        HttpCodecFailureKind::UnsupportedTransferEncoding => "UnsupportedTransferEncoding",
+        HttpCodecFailureKind::ForbiddenResponseBody => "ForbiddenResponseBody",
+        HttpCodecFailureKind::InvalidChunkSize => "InvalidChunkSize",
+        HttpCodecFailureKind::InvalidChunkTerminator => "InvalidChunkTerminator",
+        HttpCodecFailureKind::InvalidTrailer => "InvalidTrailer",
+    }
+}
+
 #[derive(Debug)]
 struct HttpWireRequest {
     method: String,
@@ -430,6 +534,55 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn source_incremental_step_preserves_need_more_complete_and_malformed() {
+        let need_more = decode_response_step(&[
+            BuiltinValue::Bytes(b"HTTP/1.1 200 OK\r\ncontent-length: 5\r\n\r\nhell".to_vec()),
+            BuiltinValue::Bool(false),
+        ])
+        .expect("incremental source ABI should decode incomplete input");
+        assert_eq!(
+            need_more,
+            BuiltinValue::Variant {
+                name: "NeedMore".to_owned(),
+                fields: Vec::new(),
+            }
+        );
+
+        let complete_frame = b"HTTP/1.1 200 OK\r\ncontent-length: 5\r\n\r\nhello";
+        let complete = decode_response_step(&[
+            BuiltinValue::Bytes([complete_frame.as_slice(), b"NEXT"].concat()),
+            BuiltinValue::Bool(false),
+        ])
+        .expect("incremental source ABI should decode one complete frame");
+        let BuiltinValue::Variant { name, fields } = complete else {
+            panic!("incremental step should be a variant");
+        };
+        assert_eq!(name, "Complete");
+        assert_eq!(fields.len(), 2);
+        assert_eq!(fields[1], BuiltinValue::Usize(complete_frame.len()));
+
+        let malformed = decode_response_step(&[
+            BuiltinValue::Bytes(b"HTTP/1.1 200 OK\n\n".to_vec()),
+            BuiltinValue::Bool(false),
+        ])
+        .expect("incremental source ABI should report malformed input");
+        let BuiltinValue::Variant { name, fields } = malformed else {
+            panic!("incremental step should be a variant");
+        };
+        assert_eq!(name, "Malformed");
+        let [BuiltinValue::Record(failure)] = fields.as_slice() else {
+            panic!("decode failure should be a record");
+        };
+        assert_eq!(
+            record_field(failure, "kind"),
+            Some(&BuiltinValue::Variant {
+                name: "InvalidLineEnding".to_owned(),
+                fields: Vec::new(),
+            })
+        );
     }
 
     #[test]

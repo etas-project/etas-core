@@ -25,6 +25,7 @@ impl PureIntrinsicRegistry {
                 | intrinsic::pure::BYTES_LEN
                 | intrinsic::pure::HTTP_ENCODE_REQUEST
                 | intrinsic::pure::HTTP_DECODE_RESPONSE_HEAD
+                | intrinsic::pure::HTTP_DECODE_RESPONSE_HEAD_INCREMENTAL
                 | intrinsic::pure::TEXT_UTF8_DECODE
                 | intrinsic::pure::TEXT_UTF8_ENCODE
                 | intrinsic::pure::CRYPTO_SHA256
@@ -43,6 +44,7 @@ impl PureIntrinsicRegistry {
                 | intrinsic::pure::RESULT_ERR
                 | intrinsic::pure::RESULT_UNWRAP
                 | intrinsic::pure::HTTP_DECODE_RESPONSE
+                | intrinsic::pure::HTTP_DECODE_RESPONSE_INCREMENTAL
         )
     }
 }
