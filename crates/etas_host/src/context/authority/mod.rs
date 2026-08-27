@@ -3,7 +3,7 @@ pub mod approval;
 pub mod policy;
 
 pub use action_grant::{ActionArgPattern, ActionInstance, ActionPattern, HostActionGrant};
-pub use approval::{ApprovalDecision, ApprovalGrant, ApprovalRequest};
+pub use approval::{ApprovalDecision, ApprovalGrant, ApprovalRequest, ApprovalResponse};
 pub use policy::PolicyContext;
 
 use crate::SandboxPolicy;

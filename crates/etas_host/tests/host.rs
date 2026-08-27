@@ -1,6 +1,7 @@
 use etas_host::{
     ApprovalDecision, ApprovalGrant, AuthorityContext, Budget, HostActionGrant, HostError,
-    HostErrorCode, HostRequestId, HostRequestKind, HostSchema, HostValue, HostValueCodec,
+    HostErrorCode, HostRequestId, HostRequestKind, HostSchema, HostTraceDigestKey,
+    HostTraceFieldSensitivity, HostTraceMetadata, HostTracePayload, HostValue, HostValueCodec,
     McpToolProtocolAdapter, ModelContent, ModelMessage, ModelName, ModelOptions, ModelRequest,
     ModelResponse, ModelRole, ModelUsage, OpenAiProtocolAdapter, SandboxPolicy, TimeBudget,
     TokenBudget, ToolRef, ToolRequest, ToolResponse, TraceContext, TraceEvent, TraceId,
@@ -61,6 +62,60 @@ fn host_value_json_encoding_rejects_lossy_values() {
         .code,
         HostErrorCode::SchemaMismatch
     );
+}
+
+#[test]
+fn host_trace_digest_covers_sensitive_payload_without_disclosing_it() {
+    let key = HostTraceDigestKey::from_bytes([9; 32]);
+    let first = HostTraceMetadata::from_payload(
+        &HostTracePayload::new("tool", "Tool.invoke").with_field(
+            "args",
+            HostValue::Record(vec![(
+                "query".to_owned(),
+                HostValue::String("first secret query".to_owned()),
+            )]),
+            HostTraceFieldSensitivity::Sensitive,
+        ),
+        &key,
+    )
+    .expect("first payload should be traceable");
+    let second = HostTraceMetadata::from_payload(
+        &HostTracePayload::new("tool", "Tool.invoke").with_field(
+            "args",
+            HostValue::Record(vec![(
+                "query".to_owned(),
+                HostValue::String("second secret query".to_owned()),
+            )]),
+            HostTraceFieldSensitivity::Sensitive,
+        ),
+        &key,
+    )
+    .expect("second payload should be traceable");
+
+    assert_ne!(first.payload_digest, second.payload_digest);
+    assert_eq!(first.fields[0].value, None);
+    assert!(!format!("{first:?}").contains("first secret query"));
+}
+
+#[test]
+fn host_trace_payload_rejects_duplicate_field_names() {
+    let error = HostTraceMetadata::from_payload(
+        &HostTracePayload::new("tool", "Tool.invoke")
+            .with_field(
+                "args",
+                HostValue::Unit,
+                HostTraceFieldSensitivity::Sensitive,
+            )
+            .with_field(
+                "args",
+                HostValue::Unit,
+                HostTraceFieldSensitivity::Sensitive,
+            ),
+        &HostTraceDigestKey::from_bytes([4; 32]),
+    )
+    .expect_err("duplicate trace payload fields must fail closed");
+
+    assert_eq!(error.code, HostErrorCode::InvalidRequest);
 }
 
 #[test]
@@ -179,7 +234,6 @@ fn authority_trace_and_errors_are_rendering_neutral_values() {
                 "/workspace".to_owned(),
             ])],
         )],
-        reason: "approved for test".to_owned(),
     };
     let decision = ApprovalDecision::Approved {
         grant: grant.clone(),
@@ -191,6 +245,8 @@ fn authority_trace_and_errors_are_rendering_neutral_values() {
     let event = TraceEvent::HostRequestFinished {
         id: HostRequestId(5),
         outcome: etas_host::HostOutcome::Failed(error.clone()),
+        finished_at_unix_micros: 11,
+        duration_micros: 3,
     };
 
     assert_eq!(error.details[0].key, "grant");
@@ -222,6 +278,15 @@ fn schemas_describe_host_boundaries_without_engine_values() {
     let event = TraceEvent::HostRequestStarted {
         id: HostRequestId(6),
         kind: HostRequestKind::Tool,
+        metadata: HostTraceMetadata::from_payload(
+            &HostTracePayload::new("tool", "app.tools.echo").with_field(
+                "input",
+                HostValue::String("redacted-value".to_owned()),
+                HostTraceFieldSensitivity::Sensitive,
+            ),
+            &HostTraceDigestKey::from_bytes([3; 32]),
+        )
+        .expect("trace metadata should be canonical"),
         authority: Box::new(AuthorityContext {
             grants: vec![HostActionGrant::allow("Tool", "host.echo")],
             approvals: Vec::new(),
@@ -229,7 +294,20 @@ fn schemas_describe_host_boundaries_without_engine_values() {
             policy: Default::default(),
         }),
         trace: TraceContext::root(TraceId(6)),
+        started_at_unix_micros: 10,
     };
+    let TraceEvent::HostRequestStarted { metadata, .. } = &event else {
+        unreachable!("constructed a started event");
+    };
+    assert_eq!(metadata.qualified_action, "app.tools.echo");
+    assert_eq!(metadata.fields.len(), 1);
+    assert_eq!(metadata.fields[0].name, "input");
+    assert_eq!(
+        metadata.fields[0].sensitivity,
+        HostTraceFieldSensitivity::Sensitive
+    );
+    assert_eq!(metadata.fields[0].value, None);
+    assert!(!metadata.payload_digest.contains("redacted-value"));
     assert!(matches!(
         event,
         TraceEvent::HostRequestStarted {

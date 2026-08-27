@@ -27,10 +27,12 @@ pub use command::{
 };
 pub use context::{
     ActionArgPattern, ActionInstance, ActionPattern, ApprovalDecision, ApprovalGrant,
-    ApprovalRequest, AuthorityContext, Budget, CostBudget, CostReservation, ExecutionBudget,
-    ExecutionBudgetSnapshot, ExecutionBudgetState, HostActionGrant, HostError, HostErrorCode,
-    HostErrorDetail, HostOutcome, HostRequestId, HostRequestKind, PolicyContext, TimeBudget,
-    TokenBudget, TokenReservation, TraceContext, TraceEvent, TraceId, TraceSpanId,
+    ApprovalRequest, ApprovalResponse, AuthorityContext, Budget, CostBudget, CostReservation,
+    ExecutionBudget, ExecutionBudgetSnapshot, ExecutionBudgetState, HostActionGrant, HostError,
+    HostErrorCode, HostErrorDetail, HostOutcome, HostRequestId, HostRequestKind,
+    HostTraceDigestKey, HostTraceFieldMetadata, HostTraceFieldSensitivity, HostTraceMetadata,
+    HostTracePayload, HostTracePayloadField, HostTraceRequest, MonotonicClock, PolicyContext,
+    TimeBudget, TokenBudget, TokenReservation, TraceContext, TraceEvent, TraceId, TraceSpanId,
 };
 pub use filesystem::{
     FilesystemClient, FilesystemEntry, FilesystemOperation, FilesystemRequest, FilesystemResponse,

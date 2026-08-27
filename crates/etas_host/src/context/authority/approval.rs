@@ -15,8 +15,13 @@ pub enum ApprovalDecision {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct ApprovalResponse {
+    pub id: HostRequestId,
+    pub decision: ApprovalDecision,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct ApprovalGrant {
     pub id: HostRequestId,
     pub grants: Vec<HostActionGrant>,
-    pub reason: String,
 }
