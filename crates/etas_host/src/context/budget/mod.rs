@@ -6,7 +6,7 @@ pub mod token;
 pub use cost::CostBudget;
 pub use execution::{
     CostReservation, ExecutionBudget, ExecutionBudgetSnapshot, ExecutionBudgetState,
-    TokenReservation,
+    MonotonicClock, TokenReservation,
 };
 pub use time::TimeBudget;
 pub use token::TokenBudget;

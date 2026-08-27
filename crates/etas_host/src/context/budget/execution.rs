@@ -20,6 +20,7 @@ pub struct ExecutionBudgetSnapshot {
 #[derive(Clone)]
 pub struct ExecutionBudgetState {
     inner: Arc<Mutex<BudgetLedger>>,
+    clock: Arc<dyn MonotonicClock>,
 }
 
 #[derive(Clone)]
@@ -59,14 +60,39 @@ enum Deadline {
     Invalid,
 }
 
+pub trait MonotonicClock: Send + Sync {
+    fn now(&self) -> Instant;
+}
+
+#[derive(Default)]
+struct SystemMonotonicClock;
+
+impl MonotonicClock for SystemMonotonicClock {
+    fn now(&self) -> Instant {
+        Instant::now()
+    }
+}
+
 impl ExecutionBudget {
     pub fn start(limits: Budget) -> Self {
-        let state = ExecutionBudgetState::start(&limits);
+        Self::start_with_clock(limits, Arc::new(SystemMonotonicClock))
+    }
+
+    pub fn start_with_clock(limits: Budget, clock: Arc<dyn MonotonicClock>) -> Self {
+        let state = ExecutionBudgetState::start(&limits, clock);
         Self { limits, state }
     }
 
     pub fn restore(limits: Budget, snapshot: ExecutionBudgetSnapshot) -> Result<Self, HostError> {
-        let state = ExecutionBudgetState::restore(&limits, snapshot)?;
+        Self::restore_with_clock(limits, snapshot, Arc::new(SystemMonotonicClock))
+    }
+
+    pub fn restore_with_clock(
+        limits: Budget,
+        snapshot: ExecutionBudgetSnapshot,
+        clock: Arc<dyn MonotonicClock>,
+    ) -> Result<Self, HostError> {
+        let state = ExecutionBudgetState::restore(&limits, snapshot, clock)?;
         Ok(Self { limits, state })
     }
 
@@ -390,8 +416,8 @@ impl PartialEq for ExecutionBudget {
 impl Eq for ExecutionBudget {}
 
 impl ExecutionBudgetState {
-    fn start(limits: &Budget) -> Self {
-        let (deadline, deadline_unix_millis) = deadline_from_limit(limits);
+    fn start(limits: &Budget, clock: Arc<dyn MonotonicClock>) -> Self {
+        let (deadline, deadline_unix_millis) = deadline_from_limit(limits, clock.as_ref());
         Self {
             inner: Arc::new(Mutex::new(BudgetLedger {
                 deadline,
@@ -404,10 +430,15 @@ impl ExecutionBudgetState {
                 reserved_cost_micros: 0,
                 consumed_cost_micros: 0,
             })),
+            clock,
         }
     }
 
-    fn restore(limits: &Budget, snapshot: ExecutionBudgetSnapshot) -> Result<Self, HostError> {
+    fn restore(
+        limits: &Budget,
+        snapshot: ExecutionBudgetSnapshot,
+        clock: Arc<dyn MonotonicClock>,
+    ) -> Result<Self, HostError> {
         if snapshot
             .consumed_tokens
             .checked_add(snapshot.reserved_tokens)
@@ -421,7 +452,7 @@ impl ExecutionBudgetState {
                 "execution budget snapshot counters overflow",
             ));
         }
-        let deadline = deadline_from_snapshot(snapshot.deadline_unix_millis);
+        let deadline = deadline_from_snapshot(snapshot.deadline_unix_millis, clock.as_ref());
         Ok(Self {
             inner: Arc::new(Mutex::new(BudgetLedger {
                 deadline,
@@ -434,6 +465,7 @@ impl ExecutionBudgetState {
                 reserved_cost_micros: snapshot.reserved_cost_micros,
                 consumed_cost_micros: snapshot.consumed_cost_micros,
             })),
+            clock,
         })
     }
 
@@ -461,7 +493,7 @@ impl ExecutionBudgetState {
         let ledger = self.lock()?;
         match ledger.deadline {
             Deadline::Unlimited => Ok(()),
-            Deadline::At(deadline) if deadline > Instant::now() => Ok(()),
+            Deadline::At(deadline) if deadline > self.clock.now() => Ok(()),
             Deadline::At(_) => Err(time_budget_exceeded()),
             Deadline::Invalid => Err(corrupt_budget_state(
                 "time budget exceeds the runtime clock range",
@@ -481,11 +513,11 @@ impl ExecutionBudgetState {
     }
 }
 
-fn deadline_from_limit(limits: &Budget) -> (Deadline, Option<u128>) {
+fn deadline_from_limit(limits: &Budget, clock: &dyn MonotonicClock) -> (Deadline, Option<u128>) {
     let Some(time) = limits.time else {
         return (Deadline::Unlimited, None);
     };
-    let now = Instant::now();
+    let now = clock.now();
     let duration = Duration::from_millis(time.max_millis);
     let deadline = now
         .checked_add(duration)
@@ -494,7 +526,10 @@ fn deadline_from_limit(limits: &Budget) -> (Deadline, Option<u128>) {
     (deadline, unix_millis)
 }
 
-fn deadline_from_snapshot(deadline_unix_millis: Option<u128>) -> Deadline {
+fn deadline_from_snapshot(
+    deadline_unix_millis: Option<u128>,
+    clock: &dyn MonotonicClock,
+) -> Deadline {
     let Some(deadline_unix_millis) = deadline_unix_millis else {
         return Deadline::Unlimited;
     };
@@ -502,13 +537,14 @@ fn deadline_from_snapshot(deadline_unix_millis: Option<u128>) -> Deadline {
         return Deadline::Invalid;
     };
     if deadline_unix_millis <= now_unix_millis {
-        return Deadline::At(Instant::now());
+        return Deadline::At(clock.now());
     }
     let remaining = deadline_unix_millis - now_unix_millis;
     let Ok(remaining) = u64::try_from(remaining) else {
         return Deadline::Invalid;
     };
-    Instant::now()
+    clock
+        .now()
         .checked_add(Duration::from_millis(remaining))
         .map_or(Deadline::Invalid, Deadline::At)
 }
