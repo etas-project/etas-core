@@ -103,7 +103,15 @@ impl LocalTcpClient {
                         result: Err(stream_io_error("failed to configure TCP stream", error)),
                     });
                 }
-                let handle = match self.streams.insert_stream(ManagedStream::tcp(stream)).await {
+                let origin = ByteStreamOrigin::Tcp {
+                    host: endpoint.host.clone(),
+                    port: endpoint.port,
+                };
+                let handle = match self
+                    .streams
+                    .insert_stream(ManagedStream::tcp(stream), origin.clone())
+                    .await
+                {
                     Ok(handle) => handle,
                     Err(error) => {
                         return Ok(TcpConnectResponse {
@@ -114,13 +122,7 @@ impl LocalTcpClient {
                 };
                 Ok(TcpConnectResponse {
                     id: request.id,
-                    result: Ok(TcpStreamRef::issued(
-                        handle,
-                        ByteStreamOrigin::Tcp {
-                            host: endpoint.host.clone(),
-                            port: endpoint.port,
-                        },
-                    )),
+                    result: Ok(TcpStreamRef::issued(handle, origin)),
                 })
             }
         }

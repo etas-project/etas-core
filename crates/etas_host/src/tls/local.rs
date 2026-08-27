@@ -33,28 +33,6 @@ impl LocalTlsClient {
                 stream,
                 server_name,
             } => {
-                let ByteStreamOrigin::Tcp {
-                    host: tcp_host,
-                    port: tcp_port,
-                } = stream.origin()
-                else {
-                    return Ok(TlsConnectResponse {
-                        id: request.id,
-                        result: Err(HostError::new(
-                            HostErrorCode::InvalidRequest,
-                            "TLS handshake requires a TCP stream with typed TCP origin",
-                        )
-                        .with_detail("stream", stream.handle().identity_fingerprint())),
-                    });
-                };
-                if let Err(error) = SandboxBroker::new(request.authority.sandbox.clone())
-                    .check_network_endpoint("tls", server_name, *tcp_port)
-                {
-                    return Ok(TlsConnectResponse {
-                        id: request.id,
-                        result: Err(error),
-                    });
-                }
                 let server_name_value = match ServerName::try_from(server_name.clone()) {
                     Ok(server_name) => server_name,
                     Err(error) => {
@@ -68,26 +46,81 @@ impl LocalTlsClient {
                         });
                     }
                 };
-                let tcp_stream = {
-                    let Some(slot) = self.streams.stream_slot(stream.handle()).await else {
+                let Some(slot) = self.streams.stream_slot(stream.handle()).await else {
+                    return Ok(TlsConnectResponse {
+                        id: request.id,
+                        result: Err(unknown_stream(stream.handle())),
+                    });
+                };
+                let origin = match slot.validate_tls_upgrade(stream.handle()) {
+                    Ok(origin) => origin,
+                    Err(error) => {
                         return Ok(TlsConnectResponse {
                             id: request.id,
-                            result: Err(unknown_stream(stream.handle())),
+                            result: Err(
+                                error.with_detail("stream", stream.handle().identity_fingerprint())
+                            ),
                         });
-                    };
-                    match slot.begin_tls_upgrade(stream.handle()) {
-                        Ok(tcp_stream) => (slot, tcp_stream),
-                        Err(error) => {
-                            return Ok(TlsConnectResponse {
-                                id: request.id,
-                                result: Err(error
-                                    .with_detail("stream", stream.handle().identity_fingerprint())),
-                            });
-                        }
                     }
                 };
+                let (checked_tcp_host, checked_tcp_port) = match origin {
+                    ByteStreamOrigin::Tcp { host, port } => (host, port),
+                    _ => {
+                        return Ok(TlsConnectResponse {
+                            id: request.id,
+                            result: Err(HostError::new(
+                                HostErrorCode::InvalidRequest,
+                                "TLS handshake requires a host-issued TCP stream",
+                            )
+                            .with_detail("stream", stream.handle().identity_fingerprint())),
+                        });
+                    }
+                };
+                if let Err(error) = SandboxBroker::new(request.authority.sandbox.clone())
+                    .check_network_endpoint("tls", server_name, checked_tcp_port)
+                {
+                    return Ok(TlsConnectResponse {
+                        id: request.id,
+                        result: Err(error),
+                    });
+                }
+                let (tcp_stream, origin) = match slot.begin_tls_upgrade(stream.handle()) {
+                    Ok((tcp_stream, origin)) => (tcp_stream, origin),
+                    Err(error) => {
+                        return Ok(TlsConnectResponse {
+                            id: request.id,
+                            result: Err(
+                                error.with_detail("stream", stream.handle().identity_fingerprint())
+                            ),
+                        });
+                    }
+                };
+                let ByteStreamOrigin::Tcp {
+                    host: tcp_host,
+                    port: tcp_port,
+                } = origin
+                else {
+                    slot.fail_tls_upgrade().await;
+                    return Ok(TlsConnectResponse {
+                        id: request.id,
+                        result: Err(HostError::new(
+                            HostErrorCode::InvalidResponse,
+                            "TCP stream provenance changed during TLS upgrade",
+                        )
+                        .with_detail("expected_host", checked_tcp_host)),
+                    });
+                };
+                if tcp_host != checked_tcp_host || tcp_port != checked_tcp_port {
+                    slot.fail_tls_upgrade().await;
+                    return Ok(TlsConnectResponse {
+                        id: request.id,
+                        result: Err(HostError::new(
+                            HostErrorCode::InvalidResponse,
+                            "TCP stream provenance changed during TLS upgrade",
+                        )),
+                    });
+                }
                 let deadlines = OperationDeadlines::new(&request.budget, None);
-                let (slot, tcp_stream) = tcp_stream;
                 let tls_stream = match tls_handshake(
                     tcp_stream,
                     server_name_value,
@@ -108,7 +141,15 @@ impl LocalTlsClient {
                         });
                     }
                 };
-                let generation = match slot.finish_tls_upgrade(tls_stream).await {
+                let tls_origin = ByteStreamOrigin::Tls {
+                    host: tcp_host.clone(),
+                    port: tcp_port,
+                    server_name: Some(server_name.clone()),
+                };
+                let generation = match slot
+                    .finish_tls_upgrade(tls_stream, tls_origin.clone())
+                    .await
+                {
                     Ok(generation) => generation,
                     Err(error) => {
                         return Ok(TlsConnectResponse {
@@ -124,11 +165,7 @@ impl LocalTlsClient {
                             stream.handle().token().to_owned(),
                             generation,
                         ),
-                        ByteStreamOrigin::Tls {
-                            host: tcp_host.clone(),
-                            port: *tcp_port,
-                            server_name: Some(server_name.clone()),
-                        },
+                        tls_origin,
                     )),
                 })
             }

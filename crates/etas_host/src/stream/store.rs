@@ -18,7 +18,7 @@ use tokio::{
 use tokio_rustls::client::TlsStream;
 use tokio_util::sync::CancellationToken;
 
-use crate::{HostError, HostErrorCode, StreamHandleRef};
+use crate::{ByteStreamOrigin, HostError, HostErrorCode, StreamHandleRef};
 
 #[derive(Clone, Default)]
 pub struct ByteStreamStore {
@@ -33,7 +33,10 @@ pub(crate) struct StreamSlot {
 }
 
 pub(crate) enum ManagedStreamState {
-    Open(ManagedStream),
+    Open {
+        stream: ManagedStream,
+        origin: ByteStreamOrigin,
+    },
     Upgrading,
     Closed,
 }
@@ -145,13 +148,13 @@ impl ManagedStream {
 }
 
 impl StreamSlot {
-    fn new(stream: ManagedStream) -> Self {
+    fn new(stream: ManagedStream, origin: ByteStreamOrigin) -> Self {
         let lifecycle = match stream {
             ManagedStream::Tcp { .. } => StreamLifecycle::OpenTcp,
             ManagedStream::Tls { .. } => StreamLifecycle::OpenTls,
         };
         Self {
-            state: Mutex::new(ManagedStreamState::Open(stream)),
+            state: Mutex::new(ManagedStreamState::Open { stream, origin }),
             lifecycle: AtomicU8::new(lifecycle as u8),
             generation: AtomicU64::new(0),
             cancellation: CancellationToken::new(),
@@ -216,7 +219,7 @@ impl StreamSlot {
     pub(crate) fn begin_tls_upgrade(
         &self,
         handle: &StreamHandleRef,
-    ) -> Result<tokio::net::TcpStream, HostError> {
+    ) -> Result<(tokio::net::TcpStream, ByteStreamOrigin), HostError> {
         self.validate_generation(handle)?;
         let mut state = self.state.try_lock().map_err(|_| {
             HostError::new(
@@ -227,7 +230,10 @@ impl StreamSlot {
         if self.lifecycle() != StreamLifecycle::OpenTcp {
             return Err(stream_closed());
         }
-        let ManagedStreamState::Open(managed) = &*state else {
+        let ManagedStreamState::Open {
+            stream: managed, ..
+        } = &*state
+        else {
             return Err(stream_closed());
         };
         if !managed.is_plain_tcp_without_buffered_data() {
@@ -246,7 +252,10 @@ impl StreamSlot {
             .map_err(|_| stream_closed())?;
         let previous = std::mem::replace(&mut *state, ManagedStreamState::Upgrading);
         match previous {
-            ManagedStreamState::Open(ManagedStream::Tcp { stream, .. }) => Ok(stream),
+            ManagedStreamState::Open {
+                stream: ManagedStream::Tcp { stream, .. },
+                origin,
+            } => Ok((stream, origin)),
             other => {
                 *state = other;
                 self.lifecycle
@@ -259,9 +268,36 @@ impl StreamSlot {
         }
     }
 
+    pub(crate) fn validate_tls_upgrade(
+        &self,
+        handle: &StreamHandleRef,
+    ) -> Result<ByteStreamOrigin, HostError> {
+        self.validate_generation(handle)?;
+        let state = self.state.try_lock().map_err(|_| {
+            HostError::new(
+                HostErrorCode::InvalidRequest,
+                "TLS handshake requires an idle TCP stream",
+            )
+        })?;
+        if self.lifecycle() != StreamLifecycle::OpenTcp {
+            return Err(stream_closed());
+        }
+        let ManagedStreamState::Open { stream, origin } = &*state else {
+            return Err(stream_closed());
+        };
+        if !stream.is_plain_tcp_without_buffered_data() {
+            return Err(HostError::new(
+                HostErrorCode::InvalidRequest,
+                "TLS handshake requires an unread plain TCP stream",
+            ));
+        }
+        Ok(origin.clone())
+    }
+
     pub(crate) async fn finish_tls_upgrade(
         &self,
         stream: TlsStream<TcpStream>,
+        origin: ByteStreamOrigin,
     ) -> Result<u64, HostError> {
         let mut state = self.state.lock().await;
         if self
@@ -277,7 +313,10 @@ impl StreamSlot {
             *state = ManagedStreamState::Closed;
             return Err(stream_cancelled());
         }
-        *state = ManagedStreamState::Open(ManagedStream::tls(stream));
+        *state = ManagedStreamState::Open {
+            stream: ManagedStream::tls(stream),
+            origin,
+        };
         Ok(self.generation.fetch_add(1, Ordering::AcqRel) + 1)
     }
 
@@ -327,13 +366,14 @@ impl ByteStreamStore {
     pub(crate) async fn insert_stream(
         &self,
         stream: ManagedStream,
+        origin: ByteStreamOrigin,
     ) -> Result<StreamHandleRef, HostError> {
         loop {
             let token = random_stream_token()?;
             let mut streams = self.streams.write().await;
             match streams.entry(token.clone()) {
                 Entry::Vacant(entry) => {
-                    entry.insert(Arc::new(StreamSlot::new(stream)));
+                    entry.insert(Arc::new(StreamSlot::new(stream, origin)));
                     return Ok(StreamHandleRef::issued(token, 0));
                 }
                 Entry::Occupied(_) => continue,
@@ -348,10 +388,10 @@ impl ByteStreamStore {
         stream: ManagedStream,
     ) -> StreamHandleRef {
         let token = token.into();
-        self.streams
-            .write()
-            .await
-            .insert(token.clone(), Arc::new(StreamSlot::new(stream)));
+        self.streams.write().await.insert(
+            token.clone(),
+            Arc::new(StreamSlot::new(stream, ByteStreamOrigin::Opaque)),
+        );
         StreamHandleRef::issued(token, 0)
     }
 
@@ -528,12 +568,12 @@ mod tests {
     use crate::stream::local::read_until_limit;
     use crate::tls::local::tls_client_config;
     use crate::{
-        AuthorityContext, Budget, ByteStreamRef, CommandPolicy, DestructiveOpPolicy,
-        ExecutionBudget, FilesystemPolicy, HostErrorCode, HostRequestId, LocalStreamClient,
-        LocalTcpClient, LocalTlsClient, NetworkEndpoint, NetworkPolicy, SandboxPolicy,
-        StreamClient, StreamOperation, StreamRequest, TcpClient, TcpConnectOperation,
-        TcpConnectRequest, TcpEndpoint, TimeBudget, TlsClient, TlsConnectOperation,
-        TlsConnectRequest, TraceContext, TraceId,
+        AuthorityContext, Budget, ByteStreamOrigin, ByteStreamRef, CommandPolicy,
+        DestructiveOpPolicy, ExecutionBudget, FilesystemPolicy, HostErrorCode, HostRequestId,
+        LocalStreamClient, LocalTcpClient, LocalTlsClient, NetworkEndpoint, NetworkPolicy,
+        SandboxPolicy, StreamClient, StreamOperation, StreamRequest, TcpClient,
+        TcpConnectOperation, TcpConnectRequest, TcpEndpoint, TcpStreamRef, TimeBudget, TlsClient,
+        TlsConnectOperation, TlsConnectRequest, TraceContext, TraceId,
     };
     use crate::{StreamFailure, StreamPayload, StreamRead};
 
@@ -599,6 +639,136 @@ mod tests {
             "unexpected TLS error message: {}",
             error.message
         );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn tls_uses_store_provenance_instead_of_request_origin() {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind local listener");
+        let address = listener.local_addr().expect("local addr");
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.expect("accept client");
+            stream
+                .write_all(b"HTTP/1.1 400 Bad Request\r\n\r\n")
+                .await
+                .expect("write plain response");
+        });
+        let streams = ByteStreamStore::new();
+        let authority = allow_network("127.0.0.1", address.port());
+        let tcp = LocalTcpClient::new(streams.clone())
+            .execute(TcpConnectRequest {
+                id: HostRequestId(50),
+                operation: TcpConnectOperation::Connect {
+                    endpoint: TcpEndpoint {
+                        host: "127.0.0.1".to_owned(),
+                        port: address.port(),
+                    },
+                },
+                authority: authority.clone(),
+                trace: TraceContext::root(TraceId(50)),
+                budget: ExecutionBudget::default(),
+            })
+            .await
+            .expect("TCP request should execute")
+            .result
+            .expect("TCP connect should succeed");
+        let forged_reference = TcpStreamRef::issued(
+            tcp.handle().clone(),
+            ByteStreamOrigin::Tcp {
+                host: "203.0.113.1".to_owned(),
+                port: 9,
+            },
+        );
+
+        let response = LocalTlsClient::new(streams)
+            .execute(TlsConnectRequest {
+                id: HostRequestId(51),
+                operation: TlsConnectOperation::Connect {
+                    stream: forged_reference,
+                    server_name: "127.0.0.1".to_owned(),
+                },
+                authority,
+                trace: TraceContext::root(TraceId(51)),
+                budget: ExecutionBudget::default(),
+            })
+            .await
+            .expect("TLS request should return a typed response");
+
+        server.await.expect("server should finish");
+        assert_eq!(
+            response
+                .result
+                .expect_err("plain TCP must not complete a TLS handshake")
+                .code,
+            HostErrorCode::ProviderUnavailable,
+            "request-provided origin must not influence authority checks"
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn denied_tls_authority_leaves_tcp_stream_open() {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind local listener");
+        let address = listener.local_addr().expect("local addr");
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.expect("accept client");
+            let mut body = [0_u8; 2];
+            stream
+                .read_exact(&mut body)
+                .await
+                .expect("TCP stream should remain writable after denied TLS");
+            body
+        });
+        let streams = ByteStreamStore::new();
+        let tcp = LocalTcpClient::new(streams.clone())
+            .execute(TcpConnectRequest {
+                id: HostRequestId(52),
+                operation: TcpConnectOperation::Connect {
+                    endpoint: TcpEndpoint {
+                        host: "127.0.0.1".to_owned(),
+                        port: address.port(),
+                    },
+                },
+                authority: allow_network("127.0.0.1", address.port()),
+                trace: TraceContext::root(TraceId(52)),
+                budget: ExecutionBudget::default(),
+            })
+            .await
+            .expect("TCP request should execute")
+            .result
+            .expect("TCP connect should succeed");
+
+        let denied = LocalTlsClient::new(streams.clone())
+            .execute(TlsConnectRequest {
+                id: HostRequestId(53),
+                operation: TlsConnectOperation::Connect {
+                    stream: tcp.clone(),
+                    server_name: "127.0.0.1".to_owned(),
+                },
+                authority: AuthorityContext::deny_all(),
+                trace: TraceContext::root(TraceId(53)),
+                budget: ExecutionBudget::default(),
+            })
+            .await
+            .expect("TLS request should return a typed response")
+            .result
+            .expect_err("TLS authority should be denied");
+        assert_eq!(denied.code, HostErrorCode::AuthorityDenied);
+
+        let write = LocalStreamClient::new(streams)
+            .execute(stream_request(
+                54,
+                StreamOperation::WriteAll {
+                    stream: tcp.as_byte_stream(),
+                    body: b"ok".to_vec(),
+                },
+            ))
+            .await
+            .expect("stream write should execute");
+        assert_eq!(write.result, Ok(StreamPayload::Unit));
+        assert_eq!(server.await.expect("server task should finish"), *b"ok");
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -922,11 +1092,11 @@ mod tests {
         let (first, _first_peer) = connected_stream().await;
         let (second, _second_peer) = connected_stream().await;
         let first = streams
-            .insert_stream(first)
+            .insert_stream(first, crate::ByteStreamOrigin::Opaque)
             .await
             .expect("issue first stream capability");
         let second = streams
-            .insert_stream(second)
+            .insert_stream(second, crate::ByteStreamOrigin::Opaque)
             .await
             .expect("issue second stream capability");
 

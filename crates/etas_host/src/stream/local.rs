@@ -68,7 +68,10 @@ impl LocalStreamClient {
                 });
             }
         };
-        let super::store::ManagedStreamState::Open(connection) = &mut *state else {
+        let super::store::ManagedStreamState::Open {
+            stream: connection, ..
+        } = &mut *state
+        else {
             return Ok(StreamResponse {
                 id: request.id,
                 result: Err(StreamFailure::Closed),
