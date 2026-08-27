@@ -1,9 +1,10 @@
 use etas_std::{
     EffectActionArgKind, EffectActionDecl, EffectDecl, FlowDecl, IntrinsicDispatch,
     IntrinsicLatentEffect, IntrinsicMemoryAccess, IntrinsicPurity, IntrinsicRuntimeRequirement,
-    RequirementSemantics, StdDecl, StdEffectRef, StdIntrinsicId, StdLimitKind, StdPrimitiveType,
-    StdRegistryBuilder, StdRegistryVersion, StdStaticArg, StdSupportConstraint, StdSymbolKind,
-    StdType, intrinsic, standard_registry,
+    RequirementSemantics, StdDecl, StdEffectRef, StdGenericParam, StdImplFact, StdIntrinsicId,
+    StdLimitKind, StdPrimitiveType, StdRegistryBuilder, StdRegistryVersion, StdSpecRef,
+    StdStaticArg, StdSupportConstraint, StdSymbolKind, StdType, TypeDecl, TypeDeclKind, intrinsic,
+    standard_registry,
 };
 
 #[test]
@@ -694,7 +695,7 @@ fn registry_stores_structured_std_flow_types() {
     };
     assert!(flow.params.is_empty());
     assert_eq!(flow.output, StdType::Primitive(StdPrimitiveType::String));
-    assert_eq!(flow.public_effects, vec![error_effect("IOError")]);
+    assert_eq!(flow.public_effects, vec![error_effect("std.io.IOError")]);
     assert_eq!(
         flow.requested_actions,
         vec![StdEffectRef::new(&["Console", "stdin_read_all"])]
@@ -936,22 +937,40 @@ fn registry_declares_edk_facing_substrate_modules() {
             1,
             "std.tls.TlsError",
         ),
-        (&["std", "fs", "read_bytes"][..], "Fs", "read", 1, "IOError"),
+        (
+            &["std", "fs", "read_bytes"][..],
+            "Fs",
+            "read",
+            1,
+            "std.fs.IOError",
+        ),
         (
             &["std", "fs", "write_bytes"][..],
             "Fs",
             "write",
             1,
-            "IOError",
+            "std.fs.IOError",
         ),
-        (&["std", "fs", "list"][..], "Fs", "list", 1, "IOError"),
-        (&["std", "fs", "stat"][..], "Fs", "stat", 1, "IOError"),
+        (
+            &["std", "fs", "list"][..],
+            "Fs",
+            "list",
+            1,
+            "std.fs.IOError",
+        ),
+        (
+            &["std", "fs", "stat"][..],
+            "Fs",
+            "stat",
+            1,
+            "std.fs.IOError",
+        ),
         (
             &["std", "fs", "atomic_replace"][..],
             "Fs",
             "atomic_replace",
             1,
-            "IOError",
+            "std.fs.IOError",
         ),
         (
             &["std", "secret", "read"][..],
@@ -1011,13 +1030,17 @@ fn registry_declares_edk_facing_substrate_modules() {
             panic!("{} should be a flow", path.join("."));
         };
         assert_eq!(flow.public_effects, vec![error_effect(error_type)]);
-        assert_eq!(
-            flow.requested_actions,
-            vec![StdEffectRef::wildcard(
-                &[action_owner, action_name],
-                selector_arity,
-            )]
+        let selector_type_param = match action_owner {
+            "Stream" => Some("S"),
+            "Fs" => Some("R"),
+            "Secret" => Some("K"),
+            _ => None,
+        };
+        let expected_action = selector_type_param.map_or_else(
+            || StdEffectRef::wildcard(&[action_owner, action_name], selector_arity),
+            |name| StdEffectRef::typed(&[action_owner, action_name], StdType::Var(name.to_owned())),
         );
+        assert_eq!(flow.requested_actions, vec![expected_action]);
         let intrinsic = symbol
             .intrinsic
             .as_ref()
@@ -1176,6 +1199,280 @@ fn registry_rejects_undeclared_generic_effect_selectors() {
         .try_finish()
         .expect_err("undeclared generic selector must be rejected");
     assert!(error.reason.contains("undeclared generic `T`"));
+}
+
+#[test]
+fn registry_rejects_duplicate_qualified_symbols() {
+    let mut builder = StdRegistryBuilder::new(StdRegistryVersion::phase1());
+    let module = builder.module(&["std", "probe"], "probe module");
+    for _ in 0..2 {
+        builder.symbol(
+            module,
+            "duplicate",
+            StdSymbolKind::Flow,
+            StdDecl::Flow(FlowDecl::pure("duplicate", &[], "unit")),
+            "duplicate flow",
+        );
+    }
+
+    let error = builder
+        .try_finish()
+        .expect_err("duplicate qualified symbols must be rejected");
+    assert!(error.reason.contains("duplicate qualified"), "{error}");
+}
+
+#[test]
+fn registry_rejects_duplicate_generic_parameter_names() {
+    let mut builder = StdRegistryBuilder::new(StdRegistryVersion::phase1());
+    let module = builder.module(&["std", "probe"], "probe module");
+    builder.symbol(
+        module,
+        "duplicate_generics",
+        StdSymbolKind::Flow,
+        StdDecl::Flow(FlowDecl::with_type_params_actions(
+            "duplicate_generics",
+            &[StdGenericParam::new("T"), StdGenericParam::new("T")],
+            &[],
+            "unit",
+            &[],
+            &[],
+        )),
+        "invalid generic declaration",
+    );
+
+    let error = builder
+        .try_finish()
+        .expect_err("duplicate generic names must be rejected");
+    assert!(error.reason.contains("duplicate generic parameter `T`"));
+}
+
+#[test]
+fn registry_rejects_unknown_generic_bound_specs() {
+    let mut builder = StdRegistryBuilder::new(StdRegistryVersion::phase1());
+    let module = builder.module(&["std", "probe"], "probe module");
+    builder.symbol(
+        module,
+        "unknown_bound",
+        StdSymbolKind::Flow,
+        StdDecl::Flow(FlowDecl::with_type_params_actions(
+            "unknown_bound",
+            &[StdGenericParam::bounded(
+                "T",
+                &[StdSpecRef::new(&["std", "probe", "MissingSpec"])],
+            )],
+            &["T"],
+            "T",
+            &[],
+            &[],
+        )),
+        "invalid generic bound",
+    );
+
+    let error = builder
+        .try_finish()
+        .expect_err("unknown bound specs must be rejected");
+    assert!(
+        error
+            .reason
+            .contains("unknown spec `std.probe.MissingSpec`")
+    );
+}
+
+#[test]
+fn registry_rejects_generic_bound_spec_arity_mismatch() {
+    let mut builder = StdRegistryBuilder::new(StdRegistryVersion::phase1());
+    let module = builder.module(&["std", "probe"], "probe module");
+    builder.symbol(
+        module,
+        "Parameterized",
+        StdSymbolKind::Type,
+        StdDecl::Type(TypeDecl::generic(
+            "Parameterized",
+            &["A"],
+            TypeDeclKind::Spec,
+        )),
+        "parameterized spec",
+    );
+    builder.symbol(
+        module,
+        "bad_bound_arity",
+        StdSymbolKind::Flow,
+        StdDecl::Flow(FlowDecl::with_type_params_actions(
+            "bad_bound_arity",
+            &[StdGenericParam::bounded(
+                "T",
+                &[StdSpecRef::new(&["std", "probe", "Parameterized"])],
+            )],
+            &["T"],
+            "T",
+            &[],
+            &[],
+        )),
+        "invalid generic bound arity",
+    );
+
+    let error = builder
+        .try_finish()
+        .expect_err("bound spec arity mismatches must be rejected");
+    assert!(
+        error
+            .reason
+            .contains("expects 1 argument(s) but received 0")
+    );
+}
+
+#[test]
+fn registry_rejects_invalid_spec_implementation_self_type() {
+    let mut builder = StdRegistryBuilder::new(StdRegistryVersion::phase1());
+    let module = builder.module(&["std", "probe"], "probe module");
+    builder.symbol(
+        module,
+        "Marker",
+        StdSymbolKind::Type,
+        StdDecl::Type(TypeDecl::generic("Marker", &[], TypeDeclKind::Spec)),
+        "marker spec",
+    );
+    builder.spec_impl(StdImplFact::new(
+        StdType::Named("std.probe.Missing".to_owned()),
+        StdSpecRef::new(&["std", "probe", "Marker"]),
+    ));
+
+    let error = builder
+        .try_finish()
+        .expect_err("impl facts with unknown self types must be rejected");
+    assert!(
+        error
+            .reason
+            .contains("unknown standard type `std.probe.Missing`")
+    );
+}
+
+#[test]
+fn registry_rejects_unknown_nested_flow_signature_type() {
+    let mut builder = StdRegistryBuilder::new(StdRegistryVersion::phase1());
+    let module = builder.module(&["std", "probe"], "probe module");
+    builder.symbol(
+        module,
+        "bad_flow",
+        StdSymbolKind::Flow,
+        StdDecl::Flow(FlowDecl {
+            name: "bad_flow".to_owned(),
+            type_params: Vec::new(),
+            params: vec![StdType::Array(Box::new(StdType::Named(
+                "std.probe.Missing".to_owned(),
+            )))],
+            output: StdType::Primitive(StdPrimitiveType::Unit),
+            public_effects: Vec::new(),
+            requested_actions: Vec::new(),
+            source_method: None,
+        }),
+        "invalid flow signature",
+    );
+
+    let error = builder
+        .try_finish()
+        .expect_err("nested unknown flow parameter type must be rejected");
+    assert!(
+        error
+            .reason
+            .contains("unknown standard type `std.probe.Missing`")
+    );
+}
+
+#[test]
+fn registry_rejects_unknown_nominal_representation_type() {
+    let mut builder = StdRegistryBuilder::new(StdRegistryVersion::phase1());
+    let module = builder.module(&["std", "probe"], "probe module");
+    builder.symbol(
+        module,
+        "Broken",
+        StdSymbolKind::Type,
+        StdDecl::Type(
+            TypeDecl::generic("Broken", &[], TypeDeclKind::Wrapper)
+                .with_representation(StdType::Named("std.probe.Missing".to_owned())),
+        ),
+        "invalid representation",
+    );
+
+    let error = builder
+        .try_finish()
+        .expect_err("unknown nominal representation type must be rejected");
+    assert!(
+        error
+            .reason
+            .contains("unknown standard type `std.probe.Missing`")
+    );
+}
+
+#[test]
+fn registry_rejects_unknown_source_method_receiver_type() {
+    let mut builder = StdRegistryBuilder::new(StdRegistryVersion::phase1());
+    let module = builder.module(&["std", "probe"], "probe module");
+    builder.symbol(
+        module,
+        "bad_method",
+        StdSymbolKind::Flow,
+        StdDecl::Flow(
+            FlowDecl::pure("bad_method", &[], "unit")
+                .with_value_method("std.probe.Missing", "bad_method"),
+        ),
+        "invalid source method",
+    );
+
+    let error = builder
+        .try_finish()
+        .expect_err("unknown source method receiver type must be rejected");
+    assert!(
+        error
+            .reason
+            .contains("unknown standard type `std.probe.Missing`")
+    );
+}
+
+#[test]
+fn registry_rejects_unknown_type_nested_in_spec_argument() {
+    let mut builder = StdRegistryBuilder::new(StdRegistryVersion::phase1());
+    let module = builder.module(&["std", "probe"], "probe module");
+    builder.symbol(
+        module,
+        "Parameterized",
+        StdSymbolKind::Type,
+        StdDecl::Type(TypeDecl::generic(
+            "Parameterized",
+            &["A"],
+            TypeDeclKind::Spec,
+        )),
+        "parameterized spec",
+    );
+    builder.symbol(
+        module,
+        "bad_bound",
+        StdSymbolKind::Flow,
+        StdDecl::Flow(FlowDecl::with_type_params_actions(
+            "bad_bound",
+            &[StdGenericParam::bounded(
+                "T",
+                &[StdSpecRef::with_args(
+                    &["std", "probe", "Parameterized"],
+                    vec![StdType::Named("std.probe.Missing".to_owned())],
+                )],
+            )],
+            &["T"],
+            "T",
+            &[],
+            &[],
+        )),
+        "invalid spec argument",
+    );
+
+    let error = builder
+        .try_finish()
+        .expect_err("unknown type nested in a spec argument must be rejected");
+    assert!(
+        error
+            .reason
+            .contains("unknown standard type `std.probe.Missing`")
+    );
 }
 
 fn error_effect(error_type: &str) -> StdEffectRef {

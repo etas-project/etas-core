@@ -1,7 +1,7 @@
 use crate::{
     FlowDecl, IntrinsicDescriptor, IntrinsicDispatch, IntrinsicLatentEffect, IntrinsicPurity,
-    LoweringHint, StdDecl, StdIntrinsicId, StdRegistryBuilder, StdSymbolKind, TypeDecl,
-    TypeDeclKind, intrinsic,
+    LoweringHint, StdDecl, StdGenericParam, StdIntrinsicId, StdRegistryBuilder, StdSymbolKind,
+    TypeDecl, TypeDeclKind, intrinsic,
 };
 
 pub fn register(builder: &mut StdRegistryBuilder) {
@@ -35,7 +35,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
     pure_helper(
         builder,
         option,
-        "is_some",
+        &["T"],
         &["Option[T]"],
         "bool",
         intrinsic::pure::OPTION_IS_SOME,
@@ -44,7 +44,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
     pure_helper(
         builder,
         option,
-        "is_none",
+        &["T"],
         &["Option[T]"],
         "bool",
         intrinsic::pure::OPTION_IS_NONE,
@@ -53,7 +53,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
     pure_helper(
         builder,
         option,
-        "unwrap",
+        &["T"],
         &["Option[T]"],
         "T",
         intrinsic::pure::OPTION_UNWRAP,
@@ -90,7 +90,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
     pure_helper(
         builder,
         result,
-        "unwrap",
+        &["T", "E"],
         &["Result[T, E]"],
         "T",
         intrinsic::pure::RESULT_UNWRAP,
@@ -99,7 +99,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
     pure_helper(
         builder,
         result,
-        "is_ok",
+        &["T", "E"],
         &["Result[T, E]"],
         "bool",
         intrinsic::pure::RESULT_IS_OK,
@@ -108,7 +108,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
     pure_helper(
         builder,
         result,
-        "is_err",
+        &["T", "E"],
         &["Result[T, E]"],
         "bool",
         intrinsic::pure::RESULT_IS_ERR,
@@ -119,17 +119,31 @@ pub fn register(builder: &mut StdRegistryBuilder) {
 fn pure_helper(
     builder: &mut StdRegistryBuilder,
     module: crate::StdModuleId,
-    name: &str,
+    generic_params: &[&str],
     params: &[&str],
     output: &str,
     id: u32,
     path: &[&str],
 ) -> crate::StdSymbolId {
+    let name = path
+        .last()
+        .copied()
+        .expect("standard intrinsic path must contain its symbol name");
     builder.symbol_with_intrinsic(
         module,
         name,
         StdSymbolKind::Flow,
-        StdDecl::Flow(FlowDecl::pure(name, params, output)),
+        StdDecl::Flow(FlowDecl::with_type_params_actions(
+            name,
+            &generic_params
+                .iter()
+                .map(|name| StdGenericParam::new(name))
+                .collect::<Vec<_>>(),
+            params,
+            output,
+            &[],
+            &[],
+        )),
         "Pure standard helper.",
         Some(IntrinsicDescriptor {
             id: StdIntrinsicId(id),

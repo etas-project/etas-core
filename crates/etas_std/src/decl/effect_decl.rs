@@ -1,4 +1,4 @@
-use super::StdType;
+use super::{StdGenericParam, StdType};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EffectDecl {
@@ -68,8 +68,10 @@ impl EffectDecl {
 pub struct EffectActionDecl {
     pub owner: String,
     pub name: String,
+    pub type_params: Vec<StdGenericParam>,
     pub params: Vec<StdType>,
     pub effect_args: Vec<EffectActionArgKind>,
+    pub selector_param_names: Vec<String>,
     pub output: StdType,
     pub stable_id: Option<u32>,
     pub runtime_requirement: Option<StdRuntimeRequirement>,
@@ -110,8 +112,10 @@ impl EffectActionDecl {
         Self {
             owner: owner.to_owned(),
             name: name.to_owned(),
+            type_params: Vec::new(),
             params: params.iter().map(|param| StdType::parse(param)).collect(),
             effect_args: Vec::new(),
+            selector_param_names: Vec::new(),
             output: StdType::parse(output),
             stable_id: None,
             runtime_requirement: None,
@@ -125,6 +129,17 @@ impl EffectActionDecl {
 
     pub fn with_effect_args(mut self, effect_args: &[EffectActionArgKind]) -> Self {
         self.effect_args = effect_args.to_vec();
+        self.selector_param_names = vec![String::new(); effect_args.len()];
+        self
+    }
+
+    pub fn with_type_params(mut self, type_params: &[StdGenericParam]) -> Self {
+        self.type_params = type_params.to_vec();
+        self
+    }
+
+    pub fn with_selector_param_names(mut self, names: &[&str]) -> Self {
+        self.selector_param_names = names.iter().map(|name| (*name).to_owned()).collect();
         self
     }
 

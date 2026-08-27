@@ -1,4 +1,4 @@
-use crate::{FlowDecl, StdDecl, StdRegistryBuilder, StdSymbolKind};
+use crate::{FlowDecl, StdDecl, StdGenericParam, StdRegistryBuilder, StdSymbolKind};
 
 pub fn register(builder: &mut StdRegistryBuilder) {
     let module = builder.module(
@@ -10,7 +10,14 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             module,
             name,
             StdSymbolKind::Flow,
-            StdDecl::Flow(FlowDecl::pure(name, &["T"], "T")),
+            StdDecl::Flow(FlowDecl::with_type_params_actions(
+                name,
+                &[StdGenericParam::new("T")],
+                &["T"],
+                "T",
+                &[],
+                &[],
+            )),
             "Deterministic numeric helper.",
         );
     }

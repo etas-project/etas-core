@@ -1,17 +1,22 @@
 use crate::{
     FlowDecl, IntrinsicDescriptor, IntrinsicDispatch, IntrinsicPurity, LoweringHint, StdDecl,
-    StdEffectRef, StdIntrinsicId, StdRegistryBuilder, StdSymbolKind, StdType, TypeDecl,
-    TypeDeclKind, intrinsic,
+    StdEffectRef, StdGenericParam, StdIntrinsicId, StdRegistryBuilder, StdSymbolKind, StdType,
+    TypeDecl, TypeDeclKind, intrinsic,
 };
 
 pub fn register(builder: &mut StdRegistryBuilder) {
     let module = builder.module(&["std", "secret"], "Secret substrate declarations.");
     for name in ["SecretKey", "SecretValue", "SecretError"] {
+        let params = if matches!(name, "SecretKey" | "SecretValue") {
+            &["K"][..]
+        } else {
+            &[]
+        };
         let symbol = builder.symbol(
             module,
             name,
             StdSymbolKind::Type,
-            StdDecl::Type(TypeDecl::generic(name, &[], TypeDeclKind::Support)),
+            StdDecl::Type(TypeDecl::generic(name, params, TypeDeclKind::Support)),
             "Secret substrate support type.",
         );
         builder.prelude(name, symbol);
@@ -20,15 +25,19 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         module,
         "read",
         StdSymbolKind::Flow,
-        StdDecl::Flow(FlowDecl::with_actions(
+        StdDecl::Flow(FlowDecl::with_type_params_actions(
             "read",
-            &["SecretKey"],
-            "SecretValue",
+            &[StdGenericParam::new("K")],
+            &["SecretKey[K]"],
+            "std.secret.SecretValue[K]",
             &[StdEffectRef::typed(
                 &["Error"],
                 StdType::parse("SecretError"),
             )],
-            &[StdEffectRef::wildcard(&["Secret", "read"], 1)],
+            &[StdEffectRef::typed(
+                &["Secret", "read"],
+                StdType::Var("K".to_owned()),
+            )],
         )),
         "Read a redaction-safe secret value from the host secret provider.",
         Some(IntrinsicDescriptor {

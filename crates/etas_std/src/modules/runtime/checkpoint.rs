@@ -1,6 +1,6 @@
 use crate::{
     FlowDecl, IntrinsicDescriptor, IntrinsicDispatch, IntrinsicPurity, LoweringHint, StdDecl,
-    StdIntrinsicId, StdRegistryBuilder, StdSymbolKind, intrinsic,
+    StdGenericParam, StdIntrinsicId, StdRegistryBuilder, StdSymbolKind, intrinsic,
 };
 
 pub fn register(builder: &mut StdRegistryBuilder) {
@@ -27,7 +27,14 @@ fn register_checkpoint_symbol(
         module,
         "checkpoint",
         StdSymbolKind::Flow,
-        StdDecl::Flow(FlowDecl::pure("checkpoint", &["T"], "unit")),
+        StdDecl::Flow(FlowDecl::with_type_params_actions(
+            "checkpoint",
+            &[StdGenericParam::new("T")],
+            &["T"],
+            "unit",
+            &[],
+            &[],
+        )),
         "Checkpoint runtime state through the future runtime boundary.",
         Some(IntrinsicDescriptor {
             id: StdIntrinsicId(intrinsic::runtime::CHECKPOINT),

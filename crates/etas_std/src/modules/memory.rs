@@ -115,173 +115,225 @@ pub fn register(builder: &mut StdRegistryBuilder) {
     register_store_flow(
         builder,
         module,
-        "get",
-        vec![store_type(), StdType::Var("K".to_owned())],
-        StdType::Option(Box::new(StdType::Var("V".to_owned()))),
-        "Read a typed value from a persistent store.",
-        intrinsic::runtime::MEMORY_GET,
+        StoreFlowRegistration {
+            name: "get",
+            type_params: &["K", "V"],
+            params: vec![store_type(), StdType::Var("K".to_owned())],
+            output: StdType::Option(Box::new(StdType::Var("V".to_owned()))),
+            docs: "Read a typed value from a persistent store.",
+            intrinsic_id: intrinsic::runtime::MEMORY_GET,
+        },
     );
     register_store_flow(
         builder,
         module,
-        "contains",
-        vec![store_type(), StdType::Var("K".to_owned())],
-        StdType::Primitive(crate::StdPrimitiveType::Bool),
-        "Return whether a persistent store contains the given key.",
-        intrinsic::runtime::MEMORY_CONTAINS,
+        StoreFlowRegistration {
+            name: "contains",
+            type_params: &["K", "V"],
+            params: vec![store_type(), StdType::Var("K".to_owned())],
+            output: StdType::Primitive(crate::StdPrimitiveType::Bool),
+            docs: "Return whether a persistent store contains the given key.",
+            intrinsic_id: intrinsic::runtime::MEMORY_CONTAINS,
+        },
     );
     register_store_flow(
         builder,
         module,
-        "keys",
-        vec![store_type()],
-        StdType::List(Box::new(StdType::Var("K".to_owned()))),
-        "List keys from a persistent store.",
-        intrinsic::runtime::MEMORY_KEYS,
+        StoreFlowRegistration {
+            name: "keys",
+            type_params: &["K", "V"],
+            params: vec![store_type()],
+            output: StdType::List(Box::new(StdType::Var("K".to_owned()))),
+            docs: "List keys from a persistent store.",
+            intrinsic_id: intrinsic::runtime::MEMORY_KEYS,
+        },
     );
     register_store_flow(
         builder,
         module,
-        "select",
-        vec![store_type(), StdType::Var("Q".to_owned())],
-        StdType::MemorySelection(Box::new(StdType::Var("V".to_owned()))),
-        "Build a typed persistent-memory selection from a store.",
-        intrinsic::runtime::MEMORY_SELECT,
+        StoreFlowRegistration {
+            name: "select",
+            type_params: &["K", "V", "Q"],
+            params: vec![store_type(), StdType::Var("Q".to_owned())],
+            output: StdType::MemorySelection(Box::new(StdType::Var("V".to_owned()))),
+            docs: "Build a typed persistent-memory selection from a store.",
+            intrinsic_id: intrinsic::runtime::MEMORY_SELECT,
+        },
     );
     register_store_flow(
         builder,
         module,
-        "query",
-        vec![store_type(), StdType::Var("Q".to_owned())],
-        StdType::MemorySelection(Box::new(StdType::Var("V".to_owned()))),
-        "Build a typed persistent-memory query from a store.",
-        intrinsic::runtime::MEMORY_QUERY,
+        StoreFlowRegistration {
+            name: "query",
+            type_params: &["K", "V", "Q"],
+            params: vec![store_type(), StdType::Var("Q".to_owned())],
+            output: StdType::MemorySelection(Box::new(StdType::Var("V".to_owned()))),
+            docs: "Build a typed persistent-memory query from a store.",
+            intrinsic_id: intrinsic::runtime::MEMORY_QUERY,
+        },
     );
     register_store_flow(
         builder,
         module,
-        "scan",
-        vec![store_type()],
-        StdType::MemorySelection(Box::new(StdType::Var("V".to_owned()))),
-        "Build a typed persistent-memory scan over a store.",
-        intrinsic::runtime::MEMORY_SCAN,
+        StoreFlowRegistration {
+            name: "scan",
+            type_params: &["K", "V"],
+            params: vec![store_type()],
+            output: StdType::MemorySelection(Box::new(StdType::Var("V".to_owned()))),
+            docs: "Build a typed persistent-memory scan over a store.",
+            intrinsic_id: intrinsic::runtime::MEMORY_SCAN,
+        },
     );
     register_store_flow(
         builder,
         module,
-        "related_to",
-        vec![store_type(), StdType::Var("Q".to_owned())],
-        StdType::MemorySelection(Box::new(StdType::Var("V".to_owned()))),
-        "Build a retrieval-oriented memory selection related to the given query value.",
-        intrinsic::runtime::MEMORY_RELATED_TO,
+        StoreFlowRegistration {
+            name: "related_to",
+            type_params: &["K", "V", "Q"],
+            params: vec![store_type(), StdType::Var("Q".to_owned())],
+            output: StdType::MemorySelection(Box::new(StdType::Var("V".to_owned()))),
+            docs: "Build a retrieval-oriented memory selection related to the given query value.",
+            intrinsic_id: intrinsic::runtime::MEMORY_RELATED_TO,
+        },
     );
     builder.symbol(
         module,
         "limit",
         StdSymbolKind::Flow,
-        StdDecl::Flow(FlowDecl::pure(
-            "limit",
-            &["MemorySelection[V]", "std.runtime.limits.Limit"],
-            "MemorySelection[V]",
-        )),
+        StdDecl::Flow(FlowDecl {
+            name: "limit".to_owned(),
+            type_params: vec![crate::StdGenericParam::new("V")],
+            params: vec![
+                StdType::parse("MemorySelection[V]"),
+                StdType::parse("std.runtime.limits.Limit"),
+            ],
+            output: StdType::parse("MemorySelection[V]"),
+            public_effects: Vec::new(),
+            requested_actions: Vec::new(),
+            source_method: None,
+        }),
         "Limit a typed persistent-memory selection without performing additional host actions.",
     );
     register_store_flow(
         builder,
         module,
-        "put",
-        vec![
-            store_type(),
-            StdType::Var("K".to_owned()),
-            StdType::Var("V".to_owned()),
-        ],
-        StdType::Primitive(crate::StdPrimitiveType::Unit),
-        "Write a typed value into a persistent store.",
-        intrinsic::runtime::MEMORY_PUT,
+        StoreFlowRegistration {
+            name: "put",
+            type_params: &["K", "V"],
+            params: vec![
+                store_type(),
+                StdType::Var("K".to_owned()),
+                StdType::Var("V".to_owned()),
+            ],
+            output: StdType::Primitive(crate::StdPrimitiveType::Unit),
+            docs: "Write a typed value into a persistent store.",
+            intrinsic_id: intrinsic::runtime::MEMORY_PUT,
+        },
     );
     register_store_flow(
         builder,
         module,
-        "put_versioned",
-        vec![
-            store_type(),
-            StdType::Var("K".to_owned()),
-            StdType::Var("V".to_owned()),
-            StdType::Named("MemoryVersion".to_owned()),
-        ],
-        StdType::Primitive(crate::StdPrimitiveType::Unit),
-        "Write a typed value if the persistent store entry still has the expected version.",
-        intrinsic::runtime::MEMORY_PUT_VERSIONED,
+        StoreFlowRegistration {
+            name: "put_versioned",
+            type_params: &["K", "V"],
+            params: vec![
+                store_type(),
+                StdType::Var("K".to_owned()),
+                StdType::Var("V".to_owned()),
+                StdType::Named("MemoryVersion".to_owned()),
+            ],
+            output: StdType::Primitive(crate::StdPrimitiveType::Unit),
+            docs: "Write a typed value if the persistent store entry still has the expected version.",
+            intrinsic_id: intrinsic::runtime::MEMORY_PUT_VERSIONED,
+        },
     );
     register_store_flow(
         builder,
         module,
-        "insert",
-        vec![
-            store_type(),
-            StdType::Var("K".to_owned()),
-            StdType::Var("V".to_owned()),
-        ],
-        StdType::Primitive(crate::StdPrimitiveType::Unit),
-        "Insert a typed value into a persistent store.",
-        intrinsic::runtime::MEMORY_INSERT,
+        StoreFlowRegistration {
+            name: "insert",
+            type_params: &["K", "V"],
+            params: vec![
+                store_type(),
+                StdType::Var("K".to_owned()),
+                StdType::Var("V".to_owned()),
+            ],
+            output: StdType::Primitive(crate::StdPrimitiveType::Unit),
+            docs: "Insert a typed value into a persistent store.",
+            intrinsic_id: intrinsic::runtime::MEMORY_INSERT,
+        },
     );
     register_store_flow(
         builder,
         module,
-        "update",
-        vec![
-            store_type(),
-            StdType::Var("K".to_owned()),
-            StdType::Var("V".to_owned()),
-        ],
-        StdType::Primitive(crate::StdPrimitiveType::Unit),
-        "Update a typed value in a persistent store.",
-        intrinsic::runtime::MEMORY_UPDATE,
+        StoreFlowRegistration {
+            name: "update",
+            type_params: &["K", "V"],
+            params: vec![
+                store_type(),
+                StdType::Var("K".to_owned()),
+                StdType::Var("V".to_owned()),
+            ],
+            output: StdType::Primitive(crate::StdPrimitiveType::Unit),
+            docs: "Update a typed value in a persistent store.",
+            intrinsic_id: intrinsic::runtime::MEMORY_UPDATE,
+        },
     );
     register_store_flow(
         builder,
         module,
-        "upsert",
-        vec![
-            store_type(),
-            StdType::Var("K".to_owned()),
-            StdType::Var("V".to_owned()),
-        ],
-        StdType::Primitive(crate::StdPrimitiveType::Unit),
-        "Upsert a typed value in a persistent store.",
-        intrinsic::runtime::MEMORY_UPSERT,
+        StoreFlowRegistration {
+            name: "upsert",
+            type_params: &["K", "V"],
+            params: vec![
+                store_type(),
+                StdType::Var("K".to_owned()),
+                StdType::Var("V".to_owned()),
+            ],
+            output: StdType::Primitive(crate::StdPrimitiveType::Unit),
+            docs: "Upsert a typed value in a persistent store.",
+            intrinsic_id: intrinsic::runtime::MEMORY_UPSERT,
+        },
     );
     register_store_flow(
         builder,
         module,
-        "delete",
-        vec![store_type(), StdType::Var("K".to_owned())],
-        StdType::Primitive(crate::StdPrimitiveType::Unit),
-        "Delete a typed value from a persistent store.",
-        intrinsic::runtime::MEMORY_DELETE,
+        StoreFlowRegistration {
+            name: "delete",
+            type_params: &["K", "V"],
+            params: vec![store_type(), StdType::Var("K".to_owned())],
+            output: StdType::Primitive(crate::StdPrimitiveType::Unit),
+            docs: "Delete a typed value from a persistent store.",
+            intrinsic_id: intrinsic::runtime::MEMORY_DELETE,
+        },
     );
     register_store_flow(
         builder,
         module,
-        "delete_versioned",
-        vec![
-            store_type(),
-            StdType::Var("K".to_owned()),
-            StdType::Named("MemoryVersion".to_owned()),
-        ],
-        StdType::Primitive(crate::StdPrimitiveType::Unit),
-        "Delete a typed value if the persistent store entry still has the expected version.",
-        intrinsic::runtime::MEMORY_DELETE_VERSIONED,
+        StoreFlowRegistration {
+            name: "delete_versioned",
+            type_params: &["K", "V"],
+            params: vec![
+                store_type(),
+                StdType::Var("K".to_owned()),
+                StdType::Named("MemoryVersion".to_owned()),
+            ],
+            output: StdType::Primitive(crate::StdPrimitiveType::Unit),
+            docs: "Delete a typed value if the persistent store entry still has the expected version.",
+            intrinsic_id: intrinsic::runtime::MEMORY_DELETE_VERSIONED,
+        },
     );
     register_store_flow(
         builder,
         module,
-        "clear",
-        vec![store_type()],
-        StdType::Primitive(crate::StdPrimitiveType::Unit),
-        "Clear a persistent store.",
-        intrinsic::runtime::MEMORY_CLEAR,
+        StoreFlowRegistration {
+            name: "clear",
+            type_params: &["K", "V"],
+            params: vec![store_type()],
+            output: StdType::Primitive(crate::StdPrimitiveType::Unit),
+            docs: "Clear a persistent store.",
+            intrinsic_id: intrinsic::runtime::MEMORY_CLEAR,
+        },
     );
 }
 
@@ -292,25 +344,38 @@ fn store_type() -> StdType {
     }
 }
 
+struct StoreFlowRegistration<'a> {
+    name: &'a str,
+    type_params: &'a [&'a str],
+    params: Vec<StdType>,
+    output: StdType,
+    docs: &'a str,
+    intrinsic_id: u32,
+}
+
 fn register_store_flow(
     builder: &mut StdRegistryBuilder,
     module: crate::StdModuleId,
-    name: &str,
-    params: Vec<StdType>,
-    output: StdType,
-    docs: &str,
-    intrinsic_id: u32,
+    registration: StoreFlowRegistration<'_>,
 ) {
+    let StoreFlowRegistration {
+        name,
+        type_params,
+        params,
+        output,
+        docs,
+        intrinsic_id,
+    } = registration;
     builder.symbol_with_intrinsic(
         module,
         name,
         StdSymbolKind::Flow,
         StdDecl::Flow(FlowDecl {
             name: name.to_owned(),
-            type_params: vec![
-                crate::StdGenericParam::new("K"),
-                crate::StdGenericParam::new("V"),
-            ],
+            type_params: type_params
+                .iter()
+                .map(|name| crate::StdGenericParam::new(name))
+                .collect(),
             params,
             output,
             public_effects: Vec::new(),

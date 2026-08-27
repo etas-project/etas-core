@@ -1,4 +1,6 @@
-use crate::{FlowDecl, StdDecl, StdRegistryBuilder, StdSymbolKind, TypeDecl, TypeDeclKind};
+use crate::{
+    FlowDecl, StdDecl, StdGenericParam, StdRegistryBuilder, StdSymbolKind, TypeDecl, TypeDeclKind,
+};
 
 pub fn register(builder: &mut StdRegistryBuilder) {
     let module = builder.module(&["std", "agent", "prompt"], "Prompt construction support.");
@@ -55,11 +57,23 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             "Append data-channel content to a prompt value.",
         ),
     ] {
+        let declaration = if name == "data" {
+            FlowDecl::with_type_params_actions(
+                name,
+                &[StdGenericParam::new("T")],
+                params,
+                output,
+                &[],
+                &[],
+            )
+        } else {
+            FlowDecl::pure(name, params, output)
+        };
         builder.symbol(
             module,
             name,
             StdSymbolKind::Flow,
-            StdDecl::Flow(FlowDecl::pure(name, params, output)),
+            StdDecl::Flow(declaration),
             docs,
         );
     }

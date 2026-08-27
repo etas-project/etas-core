@@ -27,7 +27,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         IntrinsicFlowRegistration {
             name: "hmac_sha256",
             type_params: &[],
-            params: &["SecretValue", "bytes"],
+            params: &["std.crypto.SecretValue", "bytes"],
             output: "Digest",
             public_effects: &[StdEffectRef::typed(
                 &["Error"],

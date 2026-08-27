@@ -1,6 +1,6 @@
 use crate::{
-    FlowDecl, StdDecl, StdEffectRef, StdRecordField, StdRegistryBuilder, StdStaticArg,
-    StdSymbolKind, StdType, TypeDecl, TypeDeclKind,
+    FlowDecl, StdDecl, StdEffectRef, StdGenericParam, StdRecordField, StdRegistryBuilder,
+    StdStaticArg, StdSymbolKind, StdType, TypeDecl, TypeDeclKind,
 };
 
 pub fn register(builder: &mut StdRegistryBuilder) {
@@ -59,25 +59,27 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             "Attach a runtime session configuration to a typed message.",
         ),
     ] {
-        let decl = if name == "with_session" {
-            FlowDecl::with_actions(
-                name,
-                params,
-                output,
-                &[],
-                &[StdEffectRef::with_args(
-                    &["Memory", "write"],
-                    vec![StdStaticArg::path(&[
-                        "std",
-                        "agent",
-                        "session",
-                        "SessionId",
-                    ])],
-                )],
-            )
+        let requested_actions = if name == "with_session" {
+            vec![StdEffectRef::with_args(
+                &["Memory", "write"],
+                vec![StdStaticArg::path(&[
+                    "std",
+                    "agent",
+                    "session",
+                    "SessionId",
+                ])],
+            )]
         } else {
-            FlowDecl::pure(name, params, output)
+            Vec::new()
         };
+        let decl = FlowDecl::with_type_params_actions(
+            name,
+            &[StdGenericParam::new("T")],
+            params,
+            output,
+            &[],
+            &requested_actions,
+        );
         builder.symbol(module, name, StdSymbolKind::Flow, StdDecl::Flow(decl), docs);
     }
 }

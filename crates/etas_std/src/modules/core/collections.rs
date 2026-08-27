@@ -88,7 +88,14 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         module,
         "contains_key",
         StdSymbolKind::Flow,
-        StdDecl::Flow(FlowDecl::pure("contains_key", &["Map[K, V]", "K"], "bool")),
+        StdDecl::Flow(FlowDecl::with_type_params_actions(
+            "contains_key",
+            &[StdGenericParam::new("K"), StdGenericParam::new("V")],
+            &["Map[K, V]", "K"],
+            "bool",
+            &[],
+            &[],
+        )),
         "Return whether a map contains the requested key.",
         Some(IntrinsicDescriptor {
             id: StdIntrinsicId(intrinsic::pure::MAP_CONTAINS_KEY),
@@ -202,16 +209,38 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             "Return a map value when the key exists.",
         ),
     ] {
-        let decl = match error_type {
-            None => FlowDecl::pure(name, params, output),
-            Some(error_type) => FlowDecl::effectful(
-                name,
-                params,
-                output,
-                &[StdEffectRef::typed(&["Error"], StdType::parse(error_type))],
-            ),
+        let receiver = params
+            .first()
+            .copied()
+            .expect("collection operation must declare a receiver");
+        let receiver_name = receiver.split('[').next().unwrap_or(receiver);
+        let source_method = match name {
+            "slice_get" | "map_get" => "get",
+            "slice_at" => "at",
+            _ => name,
         };
-        builder.symbol(module, name, StdSymbolKind::Flow, StdDecl::Flow(decl), docs);
+        let symbol_name = match receiver_name {
+            "Array" => format!("array_{name}"),
+            "List" => format!("list_{name}"),
+            _ => name.to_owned(),
+        };
+        let type_params = match receiver_name {
+            "Map" => vec![StdGenericParam::new("K"), StdGenericParam::new("V")],
+            _ => vec![StdGenericParam::new("T")],
+        };
+        let effects = error_type
+            .map(|error_type| vec![StdEffectRef::typed(&["Error"], StdType::parse(error_type))])
+            .unwrap_or_default();
+        let decl =
+            FlowDecl::with_type_params_actions(name, &type_params, params, output, &effects, &[])
+                .with_value_method(receiver, source_method);
+        builder.symbol(
+            module,
+            &symbol_name,
+            StdSymbolKind::Flow,
+            StdDecl::Flow(decl),
+            docs,
+        );
     }
     for (name, docs) in [
         ("closed", "Construct a closed range."),
@@ -422,10 +451,18 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             "Return whether an ordered set contains the value.",
         ),
     ] {
-        let decl = if type_member {
-            FlowDecl::pure(name, params, output).with_type_member_method(receiver, method)
+        let type_params = if receiver.starts_with("PriorityQueue") {
+            vec![StdGenericParam::new("T"), StdGenericParam::new("P")]
+        } else if receiver.starts_with("OrderedMap") {
+            vec![StdGenericParam::new("K"), StdGenericParam::new("V")]
         } else {
-            FlowDecl::pure(name, params, output).with_value_method(receiver, method)
+            vec![StdGenericParam::new("T")]
+        };
+        let decl = FlowDecl::with_type_params_actions(name, &type_params, params, output, &[], &[]);
+        let decl = if type_member {
+            decl.with_type_member_method(receiver, method)
+        } else {
+            decl.with_value_method(receiver, method)
         };
         builder.symbol(module, name, StdSymbolKind::Flow, StdDecl::Flow(decl), docs);
     }

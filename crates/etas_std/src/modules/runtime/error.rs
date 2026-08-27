@@ -1,6 +1,6 @@
 use crate::{
-    EffectActionArgKind, EffectActionDecl, StdDecl, StdRegistryBuilder, StdSymbolKind, TypeDecl,
-    TypeDeclKind,
+    EffectActionArgKind, EffectActionDecl, StdDecl, StdGenericParam, StdRegistryBuilder,
+    StdSymbolKind, TypeDecl, TypeDeclKind,
 };
 
 pub fn register(builder: &mut StdRegistryBuilder) {
@@ -15,6 +15,8 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         StdDecl::EffectAction(
             EffectActionDecl::local("Error", "raise", &["E"], "never")
                 .with_effect_args(&[EffectActionArgKind::Type])
+                .with_type_params(&[StdGenericParam::new("E")])
+                .with_selector_param_names(&["E"])
                 .with_stable_id(33),
         ),
         "Raise a typed error effect.",

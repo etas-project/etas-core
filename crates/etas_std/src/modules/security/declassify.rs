@@ -1,4 +1,4 @@
-use crate::{FlowDecl, StdDecl, StdEffectRef, StdRegistryBuilder, StdSymbolKind};
+use crate::{FlowDecl, StdDecl, StdEffectRef, StdGenericParam, StdRegistryBuilder, StdSymbolKind};
 
 pub fn register(builder: &mut StdRegistryBuilder) {
     let module = builder.module(
@@ -10,11 +10,13 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             module,
             name,
             StdSymbolKind::Flow,
-            StdDecl::Flow(FlowDecl::effectful(
+            StdDecl::Flow(FlowDecl::with_type_params_actions(
                 name,
+                &[StdGenericParam::new("T")],
                 &["T"],
                 "T",
                 &[StdEffectRef::new(&["Secret"])],
+                &[],
             )),
             "Security declassification support descriptor.",
         );

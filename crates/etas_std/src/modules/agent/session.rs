@@ -1,7 +1,7 @@
 use crate::{
     FlowDecl, IntrinsicDescriptor, IntrinsicDispatch, IntrinsicPurity, LoweringHint, StdDecl,
-    StdEffectRef, StdIntrinsicId, StdRecordField, StdRegistryBuilder, StdStaticArg, StdSymbolKind,
-    StdType, TypeDecl, TypeDeclKind, intrinsic,
+    StdEffectRef, StdGenericParam, StdIntrinsicId, StdRecordField, StdRegistryBuilder,
+    StdStaticArg, StdSymbolKind, StdType, TypeDecl, TypeDeclKind, intrinsic,
 };
 
 pub fn register(builder: &mut StdRegistryBuilder) {
@@ -98,6 +98,14 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             "compact" => {
                 FlowDecl::with_actions(name, params, output, &[], &[session_memory_action("write")])
             }
+            "continue_or_new" => FlowDecl::with_type_params_actions(
+                name,
+                &[StdGenericParam::new("T")],
+                params,
+                output,
+                &[],
+                &[],
+            ),
             _ => FlowDecl::pure(name, params, output),
         };
         let descriptor = session_policy_intrinsic(name);

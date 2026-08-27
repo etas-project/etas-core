@@ -90,7 +90,8 @@ impl StdRegistry {
 
     pub(crate) fn push_symbol(&mut self, symbol: StdSymbol) {
         self.qualified
-            .insert(symbol.qualified_path.clone(), symbol.id);
+            .entry(symbol.qualified_path.clone())
+            .or_insert(symbol.id);
         self.symbols.push(symbol);
     }
 
@@ -113,12 +114,6 @@ impl StdRegistry {
     }
 
     pub(crate) fn push_spec_impl(&mut self, implementation: StdImplFact) {
-        assert!(
-            !self.spec_impls.contains(&implementation),
-            "duplicate standard spec implementation for {:?} ~ {}",
-            implementation.self_type,
-            implementation.spec.path.join(".")
-        );
         self.spec_impls.push(implementation);
     }
 }

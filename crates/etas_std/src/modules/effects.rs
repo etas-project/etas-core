@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    EffectActionArgKind, EffectActionDecl, EffectDecl, StdDecl, StdModuleId, StdRegistryBuilder,
-    StdRuntimeRequirement, StdSymbolKind,
+    EffectActionArgKind, EffectActionDecl, EffectDecl, StdDecl, StdGenericParam, StdModuleId,
+    StdRegistryBuilder, StdRuntimeRequirement, StdSpecRef, StdSymbolKind,
 };
 
 pub fn register(builder: &mut StdRegistryBuilder) {
@@ -49,11 +49,12 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             action.name,
             StdSymbolKind::EffectAction,
             StdDecl::EffectAction({
-                let mut decl =
+                let decl =
                     EffectActionDecl::new(action.owner, action.name, action.params, action.output)
                         .with_effect_args(action.effect_args)
                         .with_stable_id(action.stable_id)
                         .with_runtime_requirement(action.runtime_requirement.clone());
+                let mut decl = declare_standard_action_generics(action, decl);
                 if action.high_impact_ack {
                     decl = decl.with_high_impact_ack();
                 }
@@ -61,6 +62,34 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             }),
             action.description,
         );
+    }
+}
+
+fn declare_standard_action_generics(
+    action: &StandardActionSpec,
+    decl: EffectActionDecl,
+) -> EffectActionDecl {
+    match action.owner {
+        "Stream" => decl
+            .with_type_params(&[StdGenericParam::bounded(
+                "S",
+                &[StdSpecRef::new(&["std", "stream", "ByteStream"])],
+            )])
+            .with_selector_param_names(&["S"]),
+        "Fs" => decl
+            .with_type_params(&[StdGenericParam::bounded(
+                "R",
+                &[StdSpecRef::new(&["std", "fs", "Region"])],
+            )])
+            .with_selector_param_names(&["R"]),
+        "Secret" => decl
+            .with_type_params(&[StdGenericParam::new("K")])
+            .with_selector_param_names(&["K"]),
+        "Agentic" => decl
+            .with_type_params(&[StdGenericParam::new("O")])
+            .with_selector_param_names(&["C", "O"]),
+        "Memory" => decl.with_type_params(&[StdGenericParam::new("R")]),
+        _ => decl,
     }
 }
 
@@ -321,33 +350,36 @@ const STANDARD_ACTIONS: &[StandardActionSpec] = &[
     StandardActionSpec {
         owner: "Secret",
         name: "read",
-        params: &["SecretKey"],
-        output: "SecretValue",
+        params: &["SecretKey[K]"],
+        output: "std.secret.SecretValue[K]",
         stable_id: 85,
         runtime_requirement: StdRuntimeRequirement::SecretAccess,
-        effect_args: &[EffectActionArgKind::StaticResourcePath { ty: "SecretKey" }],
+        effect_args: &[EffectActionArgKind::Type],
         high_impact_ack: true,
         description: "Secret read action.",
     },
     StandardActionSpec {
         owner: "Secret",
         name: "use",
-        params: &["SecretValue"],
+        params: &["std.secret.SecretValue[K]"],
         output: "unit",
         stable_id: 86,
         runtime_requirement: StdRuntimeRequirement::SecretAccess,
-        effect_args: &[EffectActionArgKind::StaticResourcePath { ty: "SecretKey" }],
+        effect_args: &[EffectActionArgKind::Type],
         high_impact_ack: true,
         description: "Non-revealing use of an opaque secret value.",
     },
     StandardActionSpec {
         owner: "Agentic",
         name: "infer",
-        params: &["AgentRequest"],
-        output: "ModelResponse",
+        params: &["Prompt", "Schema[O]"],
+        output: "O",
         stable_id: 88,
         runtime_requirement: StdRuntimeRequirement::Agentic,
-        effect_args: &[EffectActionArgKind::StaticResourcePath { ty: "Agent" }],
+        effect_args: &[
+            EffectActionArgKind::StaticResourcePath { ty: "Agent" },
+            EffectActionArgKind::Type,
+        ],
         high_impact_ack: false,
         description: "Agentic inference action.",
     },
@@ -398,7 +430,7 @@ const STANDARD_ACTIONS: &[StandardActionSpec] = &[
     StandardActionSpec {
         owner: "Clock",
         name: "sleep",
-        params: &["WallTime"],
+        params: &["std.runtime.time.Duration"],
         output: "unit",
         stable_id: 120,
         runtime_requirement: StdRuntimeRequirement::Time,
@@ -409,8 +441,8 @@ const STANDARD_ACTIONS: &[StandardActionSpec] = &[
     StandardActionSpec {
         owner: "Net",
         name: "tcp_connect",
-        params: &["Host", "Port"],
-        output: "TcpStream",
+        params: &["std.net.tcp.Host", "std.net.tcp.Port"],
+        output: "std.net.tcp.TcpStream",
         stable_id: 130,
         runtime_requirement: StdRuntimeRequirement::Tcp,
         effect_args: &[
@@ -423,52 +455,52 @@ const STANDARD_ACTIONS: &[StandardActionSpec] = &[
     StandardActionSpec {
         owner: "Stream",
         name: "read",
-        params: &["ByteStream"],
+        params: &["S"],
         output: "StreamRead",
         stable_id: 131,
         runtime_requirement: StdRuntimeRequirement::Stream,
-        effect_args: &[EffectActionArgKind::StaticResourcePath { ty: "ByteStream" }],
+        effect_args: &[EffectActionArgKind::Type],
         high_impact_ack: false,
         description: "Byte stream read action.",
     },
     StandardActionSpec {
         owner: "Stream",
         name: "write",
-        params: &["ByteStream"],
+        params: &["S"],
         output: "unit",
         stable_id: 132,
         runtime_requirement: StdRuntimeRequirement::Stream,
-        effect_args: &[EffectActionArgKind::StaticResourcePath { ty: "ByteStream" }],
+        effect_args: &[EffectActionArgKind::Type],
         high_impact_ack: false,
         description: "Byte stream write action.",
     },
     StandardActionSpec {
         owner: "Stream",
         name: "flush",
-        params: &["ByteStream"],
+        params: &["S"],
         output: "unit",
         stable_id: 133,
         runtime_requirement: StdRuntimeRequirement::Stream,
-        effect_args: &[EffectActionArgKind::StaticResourcePath { ty: "ByteStream" }],
+        effect_args: &[EffectActionArgKind::Type],
         high_impact_ack: false,
         description: "Byte stream flush action.",
     },
     StandardActionSpec {
         owner: "Stream",
         name: "close",
-        params: &["ByteStream"],
+        params: &["S"],
         output: "unit",
         stable_id: 134,
         runtime_requirement: StdRuntimeRequirement::Stream,
-        effect_args: &[EffectActionArgKind::StaticResourcePath { ty: "ByteStream" }],
+        effect_args: &[EffectActionArgKind::Type],
         high_impact_ack: false,
         description: "Byte stream close action.",
     },
     StandardActionSpec {
         owner: "Tls",
         name: "handshake",
-        params: &["Host"],
-        output: "TlsStream",
+        params: &["std.tls.Host"],
+        output: "std.tls.TlsStream",
         stable_id: 135,
         runtime_requirement: StdRuntimeRequirement::Tls,
         effect_args: &[EffectActionArgKind::StringPattern],
@@ -478,55 +510,55 @@ const STANDARD_ACTIONS: &[StandardActionSpec] = &[
     StandardActionSpec {
         owner: "Fs",
         name: "read",
-        params: &["WorkspacePath"],
+        params: &["WorkspacePath[R]"],
         output: "bytes",
         stable_id: 136,
         runtime_requirement: StdRuntimeRequirement::FileIO,
-        effect_args: &[EffectActionArgKind::StringPattern],
+        effect_args: &[EffectActionArgKind::Type],
         high_impact_ack: false,
         description: "Workspace filesystem read action.",
     },
     StandardActionSpec {
         owner: "Fs",
         name: "write",
-        params: &["WorkspacePath"],
+        params: &["WorkspacePath[R]"],
         output: "unit",
         stable_id: 137,
         runtime_requirement: StdRuntimeRequirement::FileIO,
-        effect_args: &[EffectActionArgKind::StringPattern],
+        effect_args: &[EffectActionArgKind::Type],
         high_impact_ack: true,
         description: "Workspace filesystem write action.",
     },
     StandardActionSpec {
         owner: "Fs",
         name: "list",
-        params: &["WorkspacePath"],
-        output: "List[WorkspacePath]",
+        params: &["WorkspacePath[R]"],
+        output: "List[WorkspacePath[R]]",
         stable_id: 138,
         runtime_requirement: StdRuntimeRequirement::FileIO,
-        effect_args: &[EffectActionArgKind::StringPattern],
+        effect_args: &[EffectActionArgKind::Type],
         high_impact_ack: false,
         description: "Workspace filesystem list action.",
     },
     StandardActionSpec {
         owner: "Fs",
         name: "stat",
-        params: &["WorkspacePath"],
+        params: &["WorkspacePath[R]"],
         output: "FsStat",
         stable_id: 139,
         runtime_requirement: StdRuntimeRequirement::FileIO,
-        effect_args: &[EffectActionArgKind::StringPattern],
+        effect_args: &[EffectActionArgKind::Type],
         high_impact_ack: false,
         description: "Workspace filesystem stat action.",
     },
     StandardActionSpec {
         owner: "Fs",
         name: "atomic_replace",
-        params: &["WorkspacePath"],
+        params: &["WorkspacePath[R]"],
         output: "unit",
         stable_id: 140,
         runtime_requirement: StdRuntimeRequirement::FileIO,
-        effect_args: &[EffectActionArgKind::StringPattern],
+        effect_args: &[EffectActionArgKind::Type],
         high_impact_ack: true,
         description: "Workspace filesystem atomic replace action.",
     },

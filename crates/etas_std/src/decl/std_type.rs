@@ -259,9 +259,12 @@ fn strip_any_type_constructor(text: &str) -> Option<(&str, &str)> {
     let close = text.strip_suffix(']')?;
     let name = &text[..open];
     if name.is_empty()
-        || !name
-            .chars()
-            .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+        || !name.split('.').all(|segment| {
+            !segment.is_empty()
+                && segment
+                    .chars()
+                    .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+        })
     {
         return None;
     }
