@@ -128,6 +128,7 @@ fn model_protocol_adapter_preserves_boundary_context() {
     };
     let trace = TraceContext {
         trace_id: TraceId(7),
+        parent_trace: None,
         parent_span: Some(TraceSpanId(3)),
     };
     let budget = etas_host::ExecutionBudget::start(Budget {

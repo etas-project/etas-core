@@ -110,7 +110,7 @@ fn local_completion_request(id: HostRequestId) -> ModelRequest {
             ),
             policy: Default::default(),
         },
-        trace: TraceContext::root(TraceId(id.0)),
+        trace: TraceContext::root(TraceId(u128::from(id.0))),
         budget: etas_host::ExecutionBudget::start(Budget {
             tokens: Some(TokenBudget { max_tokens: 64 }),
             time: Some(TimeBudget { max_millis: 2500 }),

@@ -111,7 +111,7 @@ fn encode_policy_request(request: &PolicyEvaluationRequest) -> Result<Value, Hos
             },
         },
         "trace": {
-            "trace_id": request.trace.trace_id.0,
+            "trace_id": request.trace.trace_id.to_hex(),
             "parent_span": request.trace.parent_span.map(|span| span.0),
         },
     }))
@@ -414,6 +414,7 @@ mod tests {
             HostRequestId(11),
             TraceContext {
                 trace_id: crate::TraceId(99),
+                parent_trace: None,
                 parent_span: Some(crate::TraceSpanId(3)),
             },
             r#"{

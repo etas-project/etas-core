@@ -608,7 +608,7 @@ fn model_request(id: HostRequestId, sandbox: SandboxPolicy) -> ModelRequest {
             sandbox,
             policy: Default::default(),
         },
-        trace: TraceContext::root(TraceId(id.0)),
+        trace: TraceContext::root(TraceId(u128::from(id.0))),
         budget: etas_host::ExecutionBudget::default(),
     }
 }
@@ -624,7 +624,7 @@ fn tool_request(id: HostRequestId, sandbox: SandboxPolicy) -> ToolRequest {
             sandbox,
             policy: Default::default(),
         },
-        trace: TraceContext::root(TraceId(id.0)),
+        trace: TraceContext::root(TraceId(u128::from(id.0))),
         budget: etas_host::ExecutionBudget::default(),
     }
 }
@@ -640,7 +640,7 @@ fn memory_request(id: HostRequestId, store: StoreRef, operation: MemoryOperation
             sandbox: SandboxPolicy::deny_all(),
             policy: Default::default(),
         },
-        trace: TraceContext::root(TraceId(id.0)),
+        trace: TraceContext::root(TraceId(u128::from(id.0))),
         budget: etas_host::ExecutionBudget::default(),
     }
 }

@@ -1293,7 +1293,7 @@ mod tests {
             id: HostRequestId(id),
             operation,
             authority: AuthorityContext::deny_all(),
-            trace: TraceContext::root(TraceId(id)),
+            trace: TraceContext::root(TraceId(u128::from(id))),
             budget: ExecutionBudget::default(),
         }
     }
