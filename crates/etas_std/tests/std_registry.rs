@@ -1,10 +1,10 @@
 use etas_std::{
     EffectActionArgKind, EffectActionDecl, EffectDecl, FlowDecl, IntrinsicDispatch,
     IntrinsicLatentEffect, IntrinsicMemoryAccess, IntrinsicPurity, IntrinsicRuntimeRequirement,
-    RequirementSemantics, StdDecl, StdEffectRef, StdGenericParam, StdImplFact, StdIntrinsicId,
-    StdLimitKind, StdPrimitiveType, StdRegistryBuilder, StdRegistryVersion, StdSpecRef,
-    StdStaticArg, StdSupportConstraint, StdSymbolKind, StdType, TypeDecl, TypeDeclKind, intrinsic,
-    standard_registry,
+    RequirementDecl, RequirementKind, RequirementSemantics, StdDecl, StdEffectRef, StdGenericParam,
+    StdImplFact, StdIntrinsicId, StdLimitKind, StdPrimitiveType, StdRegistryBuilder,
+    StdRegistryVersion, StdSpecRef, StdStaticArg, StdSupportConstraint, StdSymbolKind, StdType,
+    ToolDecl, TypeDecl, TypeDeclKind, intrinsic, standard_registry,
 };
 
 #[test]
@@ -227,7 +227,7 @@ fn registry_declares_core_effects_and_requirement_constructors() {
         "Agentic", "Network", "FileIO", "Command", "Memory", "Secret", "Time", "Human", "Error",
     ] {
         let symbol = registry
-            .lookup_qualified(&["std", "runtime", "effects", name])
+            .lookup_qualified(&["std", "effects", name])
             .unwrap_or_else(|| panic!("{name} effect should be registered"));
         assert_eq!(symbol.kind, StdSymbolKind::Effect);
         let StdDecl::Effect(effect) = &symbol.decl else {
@@ -286,7 +286,7 @@ fn registry_declares_error_raise_as_never_returning_action() {
 
     let raise = registry
         .lookup_qualified(&["std", "runtime", "error", "raise"])
-        .expect("std.runtime.error.raise should exist");
+        .expect("the canonical Error.raise action should exist");
     assert_eq!(raise.kind, StdSymbolKind::EffectAction);
     let StdDecl::EffectAction(action) = &raise.decl else {
         panic!("raise should be an effect action declaration");
@@ -302,8 +302,8 @@ fn registry_declares_approval_request_as_effect_action() {
     let registry = standard_registry();
 
     let request = registry
-        .lookup_qualified(&["std", "runtime", "approval", "request"])
-        .expect("std.runtime.approval.request should exist");
+        .lookup_qualified(&["std", "effects", "actions", "Approval", "request"])
+        .expect("the canonical Approval.request action should exist");
     assert_eq!(request.kind, StdSymbolKind::EffectAction);
     let StdDecl::EffectAction(action) = &request.decl else {
         panic!("request should be an effect action declaration");
@@ -446,7 +446,7 @@ fn registry_covers_phase1_standard_surface_vocabulary() {
         &["std", "runtime", "limits", "Limit"][..],
         &["std", "runtime", "limits", "Cost"][..],
         &["std", "runtime", "limits", "WallTime"][..],
-        &["std", "runtime", "approval", "request"][..],
+        &["std", "effects", "actions", "Approval", "request"][..],
         &["std", "runtime", "error", "raise"][..],
         &["std", "runtime", "checkpoint", "checkpoint"][..],
         &["std", "runtime", "trace", "TraceLabel"][..],
@@ -1132,6 +1132,14 @@ fn registry_declares_substrate_effect_action_metadata() {
 #[test]
 fn registry_rejects_runtime_payload_names_as_static_action_selectors() {
     let mut builder = StdRegistryBuilder::new(StdRegistryVersion::phase1());
+    let effects = builder.module(&["std", "effects"], "effects");
+    builder.symbol(
+        effects,
+        "Probe",
+        StdSymbolKind::Effect,
+        StdDecl::Effect(EffectDecl::standard("Probe", &[])),
+        "probe effect",
+    );
     let actions = builder.module(&["std", "effects", "actions", "Probe"], "probe actions");
     builder.symbol(
         actions,
@@ -1165,6 +1173,196 @@ fn registry_rejects_runtime_payload_names_as_static_action_selectors() {
         .try_finish()
         .expect_err("unresolved runtime payload selector must be rejected");
     assert!(error.reason.contains("unknown static resource `path`"));
+}
+
+#[test]
+fn registry_rejects_invalid_effect_extension_graphs() {
+    let mut missing = StdRegistryBuilder::new(StdRegistryVersion::phase1());
+    let module = missing.module(&["std", "effects"], "effects");
+    missing.symbol(
+        module,
+        "Child",
+        StdSymbolKind::Effect,
+        StdDecl::Effect(EffectDecl::standard("Child", &["Missing"])),
+        "child effect",
+    );
+    let error = missing
+        .try_finish()
+        .expect_err("unknown extended effects must be rejected");
+    assert!(
+        error
+            .reason
+            .contains("extended effect `Missing` is missing")
+    );
+
+    let mut cyclic = StdRegistryBuilder::new(StdRegistryVersion::phase1());
+    let module = cyclic.module(&["std", "effects"], "effects");
+    cyclic.symbol(
+        module,
+        "Left",
+        StdSymbolKind::Effect,
+        StdDecl::Effect(EffectDecl::standard("Left", &["Right"])),
+        "left effect",
+    );
+    cyclic.symbol(
+        module,
+        "Right",
+        StdSymbolKind::Effect,
+        StdDecl::Effect(EffectDecl::standard("Right", &["Left"])),
+        "right effect",
+    );
+    let error = cyclic
+        .try_finish()
+        .expect_err("cyclic effect extensions must be rejected");
+    assert!(error.reason.contains("cyclic effect extension graph"));
+}
+
+#[test]
+fn registry_rejects_invalid_action_owner_and_duplicate_stable_ids() {
+    let mut missing_owner = StdRegistryBuilder::new(StdRegistryVersion::phase1());
+    let module = missing_owner.module(&["std", "actions"], "actions");
+    missing_owner.symbol(
+        module,
+        "read",
+        StdSymbolKind::EffectAction,
+        StdDecl::EffectAction(EffectActionDecl::new("Missing", "read", &[], "unit")),
+        "invalid action",
+    );
+    let error = missing_owner
+        .try_finish()
+        .expect_err("an action owner must name an effect");
+    assert!(
+        error
+            .reason
+            .contains("action owner effect `Missing` is missing")
+    );
+
+    let mut duplicate = StdRegistryBuilder::new(StdRegistryVersion::phase1());
+    let module = duplicate.module(&["std", "effects"], "effects");
+    for name in ["One", "Two"] {
+        duplicate.symbol(
+            module,
+            name,
+            StdSymbolKind::Effect,
+            StdDecl::Effect(EffectDecl::standard(name, &[]).with_stable_id(7)),
+            "effect",
+        );
+    }
+    let error = duplicate
+        .try_finish()
+        .expect_err("effect stable IDs must be unique");
+    assert!(error.reason.contains("duplicate effect stable id 7"));
+}
+
+#[test]
+fn registry_rejects_ambiguous_or_inconsistent_effect_identities() {
+    let mut duplicate_effect = StdRegistryBuilder::new(StdRegistryVersion::phase1());
+    let left = duplicate_effect.module(&["std", "left"], "left");
+    let right = duplicate_effect.module(&["std", "right"], "right");
+    for module in [left, right] {
+        duplicate_effect.symbol(
+            module,
+            "Probe",
+            StdSymbolKind::Effect,
+            StdDecl::Effect(EffectDecl::standard("Probe", &[])),
+            "probe",
+        );
+    }
+    let error = duplicate_effect
+        .try_finish()
+        .expect_err("logical effect names must be globally unique");
+    assert!(
+        error
+            .reason
+            .contains("duplicate logical effect identity `Probe`")
+    );
+
+    let mut mismatched = StdRegistryBuilder::new(StdRegistryVersion::phase1());
+    let module = mismatched.module(&["std", "effects"], "effects");
+    mismatched.symbol(
+        module,
+        "SymbolName",
+        StdSymbolKind::Effect,
+        StdDecl::Effect(EffectDecl::standard("DeclarationName", &[])),
+        "mismatched effect",
+    );
+    let error = mismatched
+        .try_finish()
+        .expect_err("declaration and symbol names must agree");
+    assert!(error.reason.contains("does not match its symbol identity"));
+
+    let mut duplicate_action = StdRegistryBuilder::new(StdRegistryVersion::phase1());
+    let effects = duplicate_action.module(&["std", "effects"], "effects");
+    duplicate_action.symbol(
+        effects,
+        "Probe",
+        StdSymbolKind::Effect,
+        StdDecl::Effect(EffectDecl::standard("Probe", &[])),
+        "probe",
+    );
+    for path in [["std", "left"], ["std", "right"]] {
+        let module = duplicate_action.module(&path, "actions");
+        duplicate_action.symbol(
+            module,
+            "read",
+            StdSymbolKind::EffectAction,
+            StdDecl::EffectAction(EffectActionDecl::new("Probe", "read", &[], "unit")),
+            "read",
+        );
+    }
+    let error = duplicate_action
+        .try_finish()
+        .expect_err("logical action identities must be globally unique");
+    assert!(
+        error
+            .reason
+            .contains("duplicate logical action identity `Probe.read`")
+    );
+}
+
+#[test]
+fn registry_validates_requirement_declarations_and_tool_references() {
+    let mut invalid_requirement = StdRegistryBuilder::new(StdRegistryVersion::phase1());
+    let module = invalid_requirement.module(&["std", "requirements"], "requirements");
+    invalid_requirement.symbol(
+        module,
+        "Budget",
+        StdSymbolKind::Requirement,
+        StdDecl::Requirement(RequirementDecl::new(
+            "Budget",
+            &["u32"],
+            RequirementKind::Limit,
+        )),
+        "invalid limit",
+    );
+    let error = invalid_requirement
+        .try_finish()
+        .expect_err("limit requirements need typed limit semantics");
+    assert!(error.reason.contains("missing limit semantics"));
+
+    let mut missing_requirement = StdRegistryBuilder::new(StdRegistryVersion::phase1());
+    let module = missing_requirement.module(&["std", "tools"], "tools");
+    missing_requirement.symbol(
+        module,
+        "probe",
+        StdSymbolKind::Tool,
+        StdDecl::Tool(ToolDecl {
+            name: "probe".to_owned(),
+            params: Vec::new(),
+            output: StdType::Primitive(StdPrimitiveType::Unit),
+            effects: Vec::new(),
+            requirements: vec!["MissingRequirement".to_owned()],
+        }),
+        "invalid tool",
+    );
+    let error = missing_requirement
+        .try_finish()
+        .expect_err("tool requirements must resolve");
+    assert!(
+        error
+            .reason
+            .contains("tool requirement `MissingRequirement` is missing")
+    );
 }
 
 #[test]

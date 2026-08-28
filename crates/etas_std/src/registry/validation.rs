@@ -1,8 +1,12 @@
-use std::{collections::BTreeSet, fmt};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt,
+};
 
 use crate::{
-    EffectActionArgKind, StdDecl, StdEffectRef, StdGenericParam, StdImplFact, StdRegistry,
-    StdSpecRef, StdStaticArg, StdType, TypeDeclKind,
+    EffectActionArgKind, RequirementKind, RequirementSemantics, StdDecl, StdEffectRef,
+    StdGenericParam, StdImplFact, StdRegistry, StdSpecRef, StdStaticArg, StdSymbolKind, StdType,
+    TypeDeclKind,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -25,6 +29,8 @@ impl std::error::Error for StdRegistryValidationError {}
 
 pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistryValidationError> {
     validate_unique_symbols(registry)?;
+    validate_stable_ids(registry)?;
+    let logical_effects = LogicalEffectIndex::build(registry)?;
     for symbol in registry.symbols() {
         match &symbol.decl {
             StdDecl::Type(declaration) => {
@@ -41,6 +47,7 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
             }
             StdDecl::Effect(effect) => {
                 validate_unique_names(&symbol.qualified_path, "effect parameter", &effect.params)?;
+                validate_effect_extensions(&logical_effects, &symbol.qualified_path, effect)?;
             }
             StdDecl::Flow(flow) => {
                 validate_generic_params(registry, &symbol.qualified_path, &flow.type_params)?;
@@ -54,6 +61,7 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                 }
                 validate_effect_row(
                     registry,
+                    &logical_effects,
                     &symbol.qualified_path,
                     &flow.public_effects,
                     EffectReferenceKind::Effect,
@@ -61,6 +69,7 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                 )?;
                 validate_effect_row(
                     registry,
+                    &logical_effects,
                     &symbol.qualified_path,
                     &flow.requested_actions,
                     EffectReferenceKind::Action,
@@ -75,14 +84,17 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                 }
                 validate_effect_row(
                     registry,
+                    &logical_effects,
                     &symbol.qualified_path,
                     &tool.effects,
                     EffectReferenceKind::Effect,
                     &generics,
                 )?;
+                validate_tool_requirements(registry, &symbol.qualified_path, &tool.requirements)?;
             }
             StdDecl::EffectAction(action) => {
                 validate_action_declaration(registry, &symbol.qualified_path, action)?;
+                validate_action_owner(&logical_effects, &symbol.qualified_path, action)?;
             }
             StdDecl::Value(value) => validate_type_expr(
                 registry,
@@ -90,11 +102,255 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                 &value.ty,
                 &BTreeSet::new(),
             )?,
-            StdDecl::Requirement(_) => {}
+            StdDecl::Requirement(requirement) => {
+                validate_requirement(registry, &symbol.qualified_path, requirement)?;
+            }
         }
     }
     validate_spec_impls(registry)?;
+    validate_effect_extension_cycles(&logical_effects)?;
     Ok(())
+}
+
+struct LogicalEffectIndex<'a> {
+    effects: BTreeMap<String, &'a crate::EffectDecl>,
+    actions: BTreeMap<(String, String), &'a crate::EffectActionDecl>,
+}
+
+impl<'a> LogicalEffectIndex<'a> {
+    fn build(registry: &'a StdRegistry) -> Result<Self, StdRegistryValidationError> {
+        let mut effects = BTreeMap::new();
+        let mut actions = BTreeMap::new();
+        for symbol in registry.symbols() {
+            match &symbol.decl {
+                StdDecl::Effect(effect) => {
+                    validate_decl_identity(symbol, StdSymbolKind::Effect, &effect.name, "effect")?;
+                    if let Some(existing) = effects.insert(effect.name.clone(), effect) {
+                        return invalid(
+                            symbol.qualified_path.join("."),
+                            format!(
+                                "duplicate logical effect identity `{}`; first declaration has stable id {:?}",
+                                effect.name, existing.stable_id
+                            ),
+                        );
+                    }
+                }
+                StdDecl::EffectAction(action) => {
+                    validate_decl_identity(
+                        symbol,
+                        StdSymbolKind::EffectAction,
+                        &action.name,
+                        "effect action",
+                    )?;
+                    let key = (action.owner.clone(), action.name.clone());
+                    if let Some(existing) = actions.insert(key, action) {
+                        return invalid(
+                            symbol.qualified_path.join("."),
+                            format!(
+                                "duplicate logical action identity `{}.{}`; first declaration has stable id {:?}",
+                                action.owner, action.name, existing.stable_id
+                            ),
+                        );
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(Self { effects, actions })
+    }
+
+    fn effect(&self, name: &str) -> Option<&'a crate::EffectDecl> {
+        self.effects.get(name).copied()
+    }
+
+    fn action(&self, owner: &str, name: &str) -> Option<&'a crate::EffectActionDecl> {
+        self.actions
+            .get(&(owner.to_owned(), name.to_owned()))
+            .copied()
+    }
+}
+
+fn validate_decl_identity(
+    symbol: &crate::StdSymbol,
+    expected_kind: StdSymbolKind,
+    declaration_name: &str,
+    declaration_kind: &str,
+) -> Result<(), StdRegistryValidationError> {
+    let path = symbol.qualified_path.join(".");
+    if symbol.kind != expected_kind {
+        return invalid(
+            path,
+            format!("{declaration_kind} symbol has inconsistent symbol kind"),
+        );
+    }
+    if symbol.name != declaration_name
+        || symbol.qualified_path.last().map(String::as_str) != Some(declaration_name)
+    {
+        return invalid(
+            path,
+            format!(
+                "{declaration_kind} declaration name `{declaration_name}` does not match its symbol identity"
+            ),
+        );
+    }
+    Ok(())
+}
+
+fn validate_stable_ids(registry: &StdRegistry) -> Result<(), StdRegistryValidationError> {
+    let mut effect_ids = BTreeMap::new();
+    let mut action_ids = BTreeMap::new();
+    for symbol in registry.symbols() {
+        let (kind, id, ids) = match &symbol.decl {
+            StdDecl::Effect(effect) => ("effect", effect.stable_id, &mut effect_ids),
+            StdDecl::EffectAction(action) => ("action", action.stable_id, &mut action_ids),
+            _ => continue,
+        };
+        let Some(id) = id else {
+            continue;
+        };
+        if let Some(existing) = ids.insert(id, symbol.qualified_path.join(".")) {
+            return invalid(
+                symbol.qualified_path.join("."),
+                format!("duplicate {kind} stable id {id}; already used by `{existing}`"),
+            );
+        }
+    }
+    Ok(())
+}
+
+fn validate_effect_extensions(
+    logical_effects: &LogicalEffectIndex<'_>,
+    path: &[String],
+    effect: &crate::EffectDecl,
+) -> Result<(), StdRegistryValidationError> {
+    validate_unique_names(path, "extended effect", &effect.extends)?;
+    for parent in &effect.extends {
+        if parent == &effect.name {
+            return invalid(path.join("."), "effect cannot extend itself");
+        }
+        let declaration =
+            logical_effects
+                .effect(parent)
+                .ok_or_else(|| StdRegistryValidationError {
+                    symbol: path.join("."),
+                    reason: format!("extended effect `{parent}` is missing"),
+                })?;
+        if !declaration.params.is_empty() {
+            return invalid(
+                path.join("."),
+                format!(
+                    "extended effect `{parent}` requires {} static argument(s), but effect extends does not provide arguments",
+                    declaration.params.len()
+                ),
+            );
+        }
+    }
+    Ok(())
+}
+
+fn validate_effect_extension_cycles(
+    logical_effects: &LogicalEffectIndex<'_>,
+) -> Result<(), StdRegistryValidationError> {
+    fn visit(
+        logical_effects: &LogicalEffectIndex<'_>,
+        name: &str,
+        visiting: &mut BTreeSet<String>,
+        visited: &mut BTreeSet<String>,
+    ) -> Result<(), StdRegistryValidationError> {
+        if visited.contains(name) {
+            return Ok(());
+        }
+        if !visiting.insert(name.to_owned()) {
+            return invalid(name.to_owned(), "cyclic effect extension graph");
+        }
+        let effect = logical_effects
+            .effect(name)
+            .ok_or_else(|| StdRegistryValidationError {
+                symbol: name.to_owned(),
+                reason: "effect declaration is missing".to_owned(),
+            })?;
+        for parent in &effect.extends {
+            visit(logical_effects, parent, visiting, visited)?;
+        }
+        visiting.remove(name);
+        visited.insert(name.to_owned());
+        Ok(())
+    }
+
+    let names = logical_effects.effects.keys().cloned().collect::<Vec<_>>();
+    let mut visiting = BTreeSet::new();
+    let mut visited = BTreeSet::new();
+    for name in names {
+        visit(logical_effects, &name, &mut visiting, &mut visited)?;
+    }
+    Ok(())
+}
+
+fn validate_action_owner(
+    logical_effects: &LogicalEffectIndex<'_>,
+    path: &[String],
+    action: &crate::EffectActionDecl,
+) -> Result<(), StdRegistryValidationError> {
+    if logical_effects.effect(&action.owner).is_none() {
+        return invalid(
+            path.join("."),
+            format!("action owner effect `{}` is missing", action.owner),
+        );
+    }
+    Ok(())
+}
+
+fn validate_tool_requirements(
+    registry: &StdRegistry,
+    path: &[String],
+    requirements: &[String],
+) -> Result<(), StdRegistryValidationError> {
+    validate_unique_names(path, "tool requirement", requirements)?;
+    for requirement in requirements {
+        let mut matches = registry.symbols().filter(|symbol| {
+            matches!(symbol.decl, StdDecl::Requirement(_))
+                && (symbol.qualified_path.join(".") == *requirement
+                    || (!requirement.contains('.') && symbol.name == *requirement))
+        });
+        if matches.next().is_none() || matches.next().is_some() {
+            return invalid(
+                path.join("."),
+                format!("tool requirement `{requirement}` is missing or ambiguous"),
+            );
+        }
+    }
+    Ok(())
+}
+
+fn validate_requirement(
+    registry: &StdRegistry,
+    path: &[String],
+    requirement: &crate::RequirementDecl,
+) -> Result<(), StdRegistryValidationError> {
+    if requirement.name.is_empty() {
+        return invalid(path.join("."), "requirement name must not be empty");
+    }
+    for ty in &requirement.params {
+        validate_type_expr(registry, &path.join("."), ty, &BTreeSet::new())?;
+    }
+    match (requirement.kind, requirement.semantics) {
+        (RequirementKind::Limit, RequirementSemantics::Limit(_))
+        | (
+            RequirementKind::Policy
+            | RequirementKind::Schema
+            | RequirementKind::Evidence
+            | RequirementKind::Predicate,
+            RequirementSemantics::None,
+        ) => Ok(()),
+        (RequirementKind::Limit, RequirementSemantics::None) => invalid(
+            path.join("."),
+            "limit requirement is missing limit semantics",
+        ),
+        (_, RequirementSemantics::Limit(_)) => invalid(
+            path.join("."),
+            "non-limit requirement cannot declare limit semantics",
+        ),
+    }
 }
 
 fn generic_names(params: &[StdGenericParam]) -> BTreeSet<&str> {
@@ -367,19 +623,21 @@ enum EffectReferenceKind {
 
 fn validate_effect_row(
     registry: &StdRegistry,
+    logical_effects: &LogicalEffectIndex<'_>,
     owner: &[String],
     effects: &[StdEffectRef],
     kind: EffectReferenceKind,
     generics: &BTreeSet<&str>,
 ) -> Result<(), StdRegistryValidationError> {
     for effect in effects {
-        validate_effect_ref(registry, owner, effect, kind, generics)?;
+        validate_effect_ref(registry, logical_effects, owner, effect, kind, generics)?;
     }
     Ok(())
 }
 
 fn validate_effect_ref(
     registry: &StdRegistry,
+    logical_effects: &LogicalEffectIndex<'_>,
     owner: &[String],
     effect: &StdEffectRef,
     kind: EffectReferenceKind,
@@ -401,13 +659,7 @@ fn validate_effect_ref(
                     ),
                 );
             };
-            let declaration = registry.symbols().find_map(|symbol| {
-                let StdDecl::Effect(declaration) = &symbol.decl else {
-                    return None;
-                };
-                (declaration.name == *name).then_some(declaration)
-            });
-            let Some(declaration) = declaration else {
+            let Some(declaration) = logical_effects.effect(name) else {
                 return invalid(owner_name, format!("unknown effect `{name}`"));
             };
             if effect.args.len() != declaration.params.len() {
@@ -442,14 +694,7 @@ fn validate_effect_ref(
                     ),
                 );
             };
-            let declaration = registry.symbols().find_map(|symbol| {
-                let StdDecl::EffectAction(declaration) = &symbol.decl else {
-                    return None;
-                };
-                (declaration.owner == *action_owner && declaration.name == *action_name)
-                    .then_some(declaration)
-            });
-            let Some(declaration) = declaration else {
+            let Some(declaration) = logical_effects.action(action_owner, action_name) else {
                 return invalid(
                     owner_name,
                     format!("unknown action `{action_owner}.{action_name}`"),
