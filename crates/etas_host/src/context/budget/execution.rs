@@ -123,6 +123,35 @@ impl ExecutionBudget {
         self.state.snapshot()
     }
 
+    pub fn resume_under(&self, invocation: &Self) -> Result<Self, HostError> {
+        let checkpoint = self.snapshot()?;
+        let invocation_snapshot = invocation.snapshot()?;
+        let limits = stricter_budget_limits(self.limits(), invocation.limits())?;
+        let snapshot = ExecutionBudgetSnapshot {
+            deadline_unix_millis: minimum_limit(
+                checkpoint.deadline_unix_millis,
+                invocation_snapshot.deadline_unix_millis,
+            ),
+            reserved_tokens: checkpoint
+                .reserved_tokens
+                .checked_add(invocation_snapshot.reserved_tokens)
+                .ok_or_else(token_budget_exceeded)?,
+            consumed_tokens: checkpoint
+                .consumed_tokens
+                .checked_add(invocation_snapshot.consumed_tokens)
+                .ok_or_else(token_budget_exceeded)?,
+            reserved_cost_micros: checkpoint
+                .reserved_cost_micros
+                .checked_add(invocation_snapshot.reserved_cost_micros)
+                .ok_or_else(cost_budget_exceeded)?,
+            consumed_cost_micros: checkpoint
+                .consumed_cost_micros
+                .checked_add(invocation_snapshot.consumed_cost_micros)
+                .ok_or_else(cost_budget_exceeded)?,
+        };
+        Self::restore(limits, snapshot)
+    }
+
     pub fn check_time(&self) -> Result<(), HostError> {
         self.state.check_time()
     }
@@ -389,6 +418,43 @@ impl ExecutionBudget {
         }
         Ok(())
     }
+}
+
+fn stricter_budget_limits(checkpoint: &Budget, invocation: &Budget) -> Result<Budget, HostError> {
+    let cost = match (&checkpoint.cost, &invocation.cost) {
+        (Some(checkpoint), Some(invocation)) if checkpoint.currency != invocation.currency => {
+            return Err(HostError::new(
+                HostErrorCode::InvalidRequest,
+                "resume budget currency does not match checkpoint budget currency",
+            )
+            .with_detail("checkpoint", checkpoint.currency.clone())
+            .with_detail("invocation", invocation.currency.clone()));
+        }
+        (Some(checkpoint), Some(invocation)) => Some(CostBudget {
+            max_micros: checkpoint.max_micros.min(invocation.max_micros),
+            currency: checkpoint.currency.clone(),
+        }),
+        (Some(checkpoint), None) => Some(checkpoint.clone()),
+        (None, Some(invocation)) => Some(invocation.clone()),
+        (None, None) => None,
+    };
+    Ok(Budget {
+        tokens: match (checkpoint.tokens, invocation.tokens) {
+            (Some(checkpoint), Some(invocation)) => Some(super::TokenBudget {
+                max_tokens: checkpoint.max_tokens.min(invocation.max_tokens),
+            }),
+            (Some(limit), None) | (None, Some(limit)) => Some(limit),
+            (None, None) => None,
+        },
+        time: match (checkpoint.time, invocation.time) {
+            (Some(checkpoint), Some(invocation)) => Some(super::TimeBudget {
+                max_millis: checkpoint.max_millis.min(invocation.max_millis),
+            }),
+            (Some(limit), None) | (None, Some(limit)) => Some(limit),
+            (None, None) => None,
+        },
+        cost,
+    })
 }
 
 impl Default for ExecutionBudget {
@@ -664,6 +730,72 @@ mod tests {
 
         assert_eq!(restored.snapshot().expect("restored snapshot"), snapshot);
         assert!(restored.deadline().expect("restored deadline").is_some());
+    }
+
+    #[test]
+    fn resume_preserves_consumption_and_uses_stricter_invocation_limits() {
+        let checkpoint = ExecutionBudget::start(Budget {
+            tokens: Some(TokenBudget { max_tokens: 100 }),
+            time: Some(TimeBudget { max_millis: 30_000 }),
+            cost: Some(CostBudget {
+                max_micros: 1_000,
+                currency: "USD".to_owned(),
+            }),
+        });
+        let tokens = checkpoint.reserve_tokens(40).expect("token reservation");
+        checkpoint
+            .settle_tokens(tokens, 40)
+            .expect("token settlement");
+        let invocation = ExecutionBudget::start(Budget {
+            tokens: Some(TokenBudget { max_tokens: 50 }),
+            time: Some(TimeBudget { max_millis: 10_000 }),
+            cost: Some(CostBudget {
+                max_micros: 500,
+                currency: "USD".to_owned(),
+            }),
+        });
+
+        let resumed = checkpoint.resume_under(&invocation).expect("resume budget");
+
+        assert_eq!(
+            resumed.limits(),
+            &Budget {
+                tokens: Some(TokenBudget { max_tokens: 50 }),
+                time: Some(TimeBudget { max_millis: 10_000 }),
+                cost: Some(CostBudget {
+                    max_micros: 500,
+                    currency: "USD".to_owned(),
+                }),
+            }
+        );
+        assert_eq!(resumed.snapshot().expect("snapshot").consumed_tokens, 40);
+        assert_eq!(resumed.remaining_tokens().expect("remaining"), Some(10));
+    }
+
+    #[test]
+    fn resume_rejects_cost_currency_changes() {
+        let checkpoint = ExecutionBudget::start(Budget {
+            cost: Some(CostBudget {
+                max_micros: 1_000,
+                currency: "USD".to_owned(),
+            }),
+            ..Budget::default()
+        });
+        let invocation = ExecutionBudget::start(Budget {
+            cost: Some(CostBudget {
+                max_micros: 1_000,
+                currency: "EUR".to_owned(),
+            }),
+            ..Budget::default()
+        });
+
+        assert_eq!(
+            checkpoint
+                .resume_under(&invocation)
+                .expect_err("currency mismatch")
+                .code,
+            HostErrorCode::InvalidRequest
+        );
     }
 
     #[test]
