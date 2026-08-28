@@ -366,6 +366,8 @@ pub struct ProtoActionGenericParam {
     pub name: String,
     #[prost(message, repeated, tag = "2")]
     pub bounds: Vec<ProtoSpecBound>,
+    #[prost(string, tag = "3")]
+    pub kind: String,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -414,6 +416,8 @@ pub struct ProtoTypeField {
 pub struct ProtoEffectRow {
     #[prost(message, repeated, tag = "1")]
     pub effects: Vec<ProtoEffectRef>,
+    #[prost(string, optional, tag = "2")]
+    pub tail: Option<String>,
 }
 
 #[derive(Clone, PartialEq, Message)]

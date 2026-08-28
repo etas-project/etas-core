@@ -1361,6 +1361,11 @@ fn generic_param_to_proto(param: &GenericParam) -> ProtoActionGenericParam {
     ProtoActionGenericParam {
         name: param.name.clone(),
         bounds: param.bounds.iter().map(spec_bound_to_proto).collect(),
+        kind: match param.kind {
+            GenericParamKind::Type => "type",
+            GenericParamKind::Effect => "effect",
+        }
+        .to_owned(),
     }
 }
 
@@ -1369,6 +1374,15 @@ fn generic_param_from_proto(
 ) -> Result<GenericParam, MetadataArtifactError> {
     Ok(GenericParam {
         name: required(param.name, "callable generic parameter name")?,
+        kind: match param.kind.as_str() {
+            "type" => GenericParamKind::Type,
+            "effect" => GenericParamKind::Effect,
+            other => {
+                return Err(invalid(format!(
+                    "unknown callable generic parameter kind `{other}`"
+                )));
+            }
+        },
         bounds: param
             .bounds
             .into_iter()
@@ -1603,6 +1617,7 @@ fn type_field_from_proto(field: ProtoTypeField) -> Result<TypeField, MetadataArt
 fn effect_row_to_proto(row: &EffectRow) -> ProtoEffectRow {
     ProtoEffectRow {
         effects: row.effects.iter().map(effect_ref_to_proto).collect(),
+        tail: row.tail.clone(),
     }
 }
 
@@ -1613,6 +1628,7 @@ fn effect_row_from_proto(row: ProtoEffectRow) -> Result<EffectRow, MetadataArtif
             .into_iter()
             .map(effect_ref_from_proto)
             .collect::<Result<Vec<_>, _>>()?,
+        tail: row.tail,
     })
 }
 

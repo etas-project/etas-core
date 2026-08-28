@@ -52,12 +52,14 @@ mod tests {
                         ],
                         args: Vec::new(),
                     }],
+                    tail: None,
                 }),
                 produced_effects: Some(EffectRow {
                     effects: vec![EffectRef {
                         path: vec!["Error".to_owned()],
                         args: Vec::new(),
                     }],
+                    tail: None,
                 }),
                 children: vec![Type {
                     kind: TypeKind::Primitive,
@@ -84,6 +86,7 @@ mod tests {
         let action = &mut metadata.public_metadata.actions[0];
         action.generic_params = vec![ActionGenericParam {
             name: "S".to_owned(),
+            kind: GenericParamKind::Type,
             bounds: vec![SpecBound {
                 spec: vec![
                     "std".to_owned(),
@@ -116,18 +119,30 @@ mod tests {
     fn metadata_artifact_round_trips_generic_callable_signature() {
         let mut metadata = sample_metadata();
         let flow = &mut metadata.public_metadata.flows[0];
-        flow.generic_params = vec![GenericParam {
-            name: "R".to_owned(),
-            bounds: vec![SpecBound {
-                spec: vec!["std".to_owned(), "fs".to_owned(), "Region".to_owned()],
-                args: Vec::new(),
-            }],
-        }];
+        flow.generic_params = vec![
+            GenericParam {
+                name: "R".to_owned(),
+                kind: GenericParamKind::Type,
+                bounds: vec![SpecBound {
+                    spec: vec!["std".to_owned(), "fs".to_owned(), "Region".to_owned()],
+                    args: Vec::new(),
+                }],
+            },
+            GenericParam {
+                name: "E".to_owned(),
+                kind: GenericParamKind::Effect,
+                bounds: Vec::new(),
+            },
+        ];
         flow.input = vec![Type {
             kind: TypeKind::Var,
             name: "R".to_owned(),
             ..Default::default()
         }];
+        flow.effects = Some(EffectRow {
+            effects: Vec::new(),
+            tail: Some("E".to_owned()),
+        });
 
         let bytes = encode_sample(&metadata);
         let (_, decoded) =
@@ -297,6 +312,7 @@ mod tests {
                                 path: vec!["Console".to_owned()],
                                 args: Vec::new(),
                             }],
+                            tail: None,
                         }),
                         visibility: Visibility::Public,
                     }],
@@ -418,6 +434,7 @@ mod tests {
                                     path: vec!["Network".to_owned()],
                                     args: Vec::new(),
                                 }],
+                                tail: None,
                             }),
                             ..Default::default()
                         },
@@ -446,18 +463,21 @@ mod tests {
                                 ..Default::default()
                             }],
                         }],
+                        tail: None,
                     },
                     requested_actions: EffectRow {
                         effects: vec![EffectRef {
                             path: vec!["Console".to_owned(), "stdout_write".to_owned()],
                             args: Vec::new(),
                         }],
+                        tail: None,
                     },
                     handled_requested_actions: EffectRow {
                         effects: vec![EffectRef {
                             path: vec!["Console".to_owned(), "stdout_write".to_owned()],
                             args: Vec::new(),
                         }],
+                        tail: None,
                     },
                     latent_flows: vec![LatentFlowSummary {
                         declared_bound: EffectRow {
@@ -465,12 +485,14 @@ mod tests {
                                 path: vec!["Network".to_owned()],
                                 args: Vec::new(),
                             }],
+                            tail: None,
                         },
                         inferred_effects: EffectRow {
                             effects: vec![EffectRef {
                                 path: vec!["Network".to_owned()],
                                 args: Vec::new(),
                             }],
+                            tail: None,
                         },
                     }],
                 }],

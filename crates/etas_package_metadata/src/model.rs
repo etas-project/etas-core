@@ -226,7 +226,15 @@ pub struct ActionSignature {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct GenericParam {
     pub name: String,
+    pub kind: GenericParamKind,
     pub bounds: Vec<SpecBound>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum GenericParamKind {
+    #[default]
+    Type,
+    Effect,
 }
 
 pub type ActionGenericParam = GenericParam;
@@ -262,6 +270,7 @@ pub struct TypeField {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct EffectRow {
     pub effects: Vec<EffectRef>,
+    pub tail: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
