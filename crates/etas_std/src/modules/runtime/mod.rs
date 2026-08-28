@@ -10,7 +10,6 @@ pub mod trace;
 use crate::StdRegistryBuilder;
 
 pub fn register(builder: &mut StdRegistryBuilder) {
-    effects::register(builder);
     approval::register(builder);
     error::register(builder);
     limits::register(builder);

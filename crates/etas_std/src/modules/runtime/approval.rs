@@ -1,7 +1,7 @@
 use crate::{
-    EffectActionDecl, FlowDecl, IntrinsicDescriptor, IntrinsicDispatch, IntrinsicPurity,
-    LoweringHint, StdDecl, StdEffectRef, StdGenericParam, StdIntrinsicId, StdRegistryBuilder,
-    StdSymbolKind, TypeDecl, TypeDeclKind, intrinsic,
+    FlowDecl, IntrinsicDescriptor, IntrinsicDispatch, IntrinsicPurity, LoweringHint, StdDecl,
+    StdEffectRef, StdGenericParam, StdIntrinsicId, StdRegistryBuilder, StdSymbolKind, TypeDecl,
+    TypeDeclKind, intrinsic,
 };
 
 pub fn register(builder: &mut StdRegistryBuilder) {
@@ -18,18 +18,6 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             "Approval support type.",
         );
     }
-    builder.symbol(
-        module,
-        "request",
-        StdSymbolKind::EffectAction,
-        StdDecl::EffectAction(EffectActionDecl::new(
-            "Approval",
-            "request",
-            &["ApprovalRequest"],
-            "ApprovalDecision",
-        )),
-        "Request a runtime approval decision through the Approval effect.",
-    );
     let approve = builder.symbol_with_intrinsic(
         module,
         "approve",
