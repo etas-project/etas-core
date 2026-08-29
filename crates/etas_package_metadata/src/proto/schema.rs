@@ -470,6 +470,53 @@ pub struct ProtoEffectSummary {
     pub latent_flows: Vec<ProtoLatentFlowSummary>,
     #[prost(message, optional, tag = "5")]
     pub handled_requested_actions: Option<ProtoEffectRow>,
+    #[prost(message, optional, tag = "6")]
+    pub action_trace: Option<ProtoActionTrace>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoActionTrace {
+    #[prost(enumeration = "ProtoActionTraceKind", tag = "1")]
+    pub kind: i32,
+    #[prost(message, optional, tag = "2")]
+    pub event: Option<ProtoActionTraceEvent>,
+    #[prost(string, tag = "3")]
+    pub parameter: String,
+    #[prost(message, repeated, tag = "4")]
+    pub children: Vec<ProtoActionTrace>,
+    #[prost(message, repeated, tag = "5")]
+    pub actions: Vec<ProtoEffectRef>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoActionTraceEvent {
+    #[prost(message, optional, tag = "1")]
+    pub action: Option<ProtoEffectRef>,
+    #[prost(enumeration = "ProtoActionTraceEventSource", tag = "2")]
+    pub source: i32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, prost::Enumeration)]
+#[repr(i32)]
+pub enum ProtoActionTraceKind {
+    Empty = 0,
+    Event = 1,
+    ParameterCall = 2,
+    Seq = 3,
+    Choice = 4,
+    Repeat = 5,
+    UnknownOrder = 6,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, prost::Enumeration)]
+#[repr(i32)]
+pub enum ProtoActionTraceEventSource {
+    Unknown = 0,
+    Perform = 1,
+    StdIntrinsic = 2,
+    AgentCall = 3,
+    ExternalMetadata = 4,
+    Transfer = 5,
 }
 
 #[derive(Clone, PartialEq, Message)]

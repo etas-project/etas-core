@@ -214,12 +214,14 @@ mod tests {
 
     #[test]
     fn metadata_artifact_rejects_schema_version_mismatch() {
-        let mut header = sample_header();
-        header.artifact_schema_version = ARTIFACT_SCHEMA_VERSION + 1;
+        for unsupported in [ARTIFACT_SCHEMA_VERSION - 1, ARTIFACT_SCHEMA_VERSION + 1] {
+            let mut header = sample_header();
+            header.artifact_schema_version = unsupported;
 
-        let error = validate_artifact_schema(&header).unwrap_err();
+            let error = validate_artifact_schema(&header).unwrap_err();
 
-        assert!(error.to_string().contains("schema version"));
+            assert!(error.to_string().contains("schema version"));
+        }
     }
 
     #[test]
@@ -495,6 +497,18 @@ mod tests {
                             tail: None,
                         },
                     }],
+                    action_trace: ActionTrace::Seq(vec![
+                        ActionTrace::Event(ActionTraceEvent {
+                            action: EffectRef {
+                                path: vec!["Console".to_owned(), "stdout_write".to_owned()],
+                                args: Vec::new(),
+                            },
+                            source: ActionTraceEventSource::Perform,
+                        }),
+                        ActionTrace::ParameterCall {
+                            parameter: "f".to_owned(),
+                        },
+                    ]),
                 }],
                 actions: vec![ActionSignature {
                     path: vec![

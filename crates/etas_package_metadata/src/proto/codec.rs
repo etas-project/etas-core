@@ -1716,6 +1716,7 @@ fn effect_summary_to_proto(summary: &EffectSummary) -> ProtoEffectSummary {
         public_effects: Some(effect_row_to_proto(&summary.public_effects)),
         requested_actions: Some(effect_row_to_proto(&summary.requested_actions)),
         handled_requested_actions: Some(effect_row_to_proto(&summary.handled_requested_actions)),
+        action_trace: Some(action_trace_to_proto(&summary.action_trace)),
         latent_flows: summary
             .latent_flows
             .iter()
@@ -1744,12 +1745,146 @@ fn effect_summary_from_proto(
             .map(effect_row_from_proto)
             .transpose()?
             .unwrap_or_default(),
+        action_trace: summary
+            .action_trace
+            .map(action_trace_from_proto)
+            .transpose()?
+            .ok_or_else(|| invalid("effect summary is missing action trace"))?,
         latent_flows: summary
             .latent_flows
             .into_iter()
             .map(latent_flow_summary_from_proto)
             .collect::<Result<Vec<_>, _>>()?,
     })
+}
+
+fn action_trace_to_proto(trace: &ActionTrace) -> ProtoActionTrace {
+    let mut proto = ProtoActionTrace {
+        kind: ProtoActionTraceKind::Empty as i32,
+        event: None,
+        parameter: String::new(),
+        children: Vec::new(),
+        actions: Vec::new(),
+    };
+    match trace {
+        ActionTrace::Empty => {}
+        ActionTrace::Event(event) => {
+            proto.kind = ProtoActionTraceKind::Event as i32;
+            proto.event = Some(ProtoActionTraceEvent {
+                action: Some(effect_ref_to_proto(&event.action)),
+                source: action_trace_source_to_proto(event.source) as i32,
+            });
+        }
+        ActionTrace::ParameterCall { parameter } => {
+            proto.kind = ProtoActionTraceKind::ParameterCall as i32;
+            proto.parameter.clone_from(parameter);
+        }
+        ActionTrace::Seq(children) => {
+            proto.kind = ProtoActionTraceKind::Seq as i32;
+            proto.children = children.iter().map(action_trace_to_proto).collect();
+        }
+        ActionTrace::Choice(children) => {
+            proto.kind = ProtoActionTraceKind::Choice as i32;
+            proto.children = children.iter().map(action_trace_to_proto).collect();
+        }
+        ActionTrace::Repeat(child) => {
+            proto.kind = ProtoActionTraceKind::Repeat as i32;
+            proto.children.push(action_trace_to_proto(child));
+        }
+        ActionTrace::UnknownOrder(actions) => {
+            proto.kind = ProtoActionTraceKind::UnknownOrder as i32;
+            proto.actions = actions.iter().map(effect_ref_to_proto).collect();
+        }
+    }
+    proto
+}
+
+fn action_trace_from_proto(trace: ProtoActionTrace) -> Result<ActionTrace, MetadataArtifactError> {
+    let kind = ProtoActionTraceKind::try_from(trace.kind)
+        .map_err(|_| invalid("effect summary action trace has unknown kind"))?;
+    match kind {
+        ProtoActionTraceKind::Empty => Ok(ActionTrace::Empty),
+        ProtoActionTraceKind::Event => {
+            let event = trace
+                .event
+                .ok_or_else(|| invalid("effect summary action trace event is missing payload"))?;
+            Ok(ActionTrace::Event(ActionTraceEvent {
+                action: effect_ref_from_proto(event.action.ok_or_else(|| {
+                    invalid("effect summary action trace event is missing action")
+                })?)?,
+                source: action_trace_source_from_proto(event.source)?,
+            }))
+        }
+        ProtoActionTraceKind::ParameterCall => {
+            if trace.parameter.is_empty() {
+                return Err(invalid(
+                    "effect summary parameter-call trace has empty parameter",
+                ));
+            }
+            Ok(ActionTrace::ParameterCall {
+                parameter: trace.parameter,
+            })
+        }
+        ProtoActionTraceKind::Seq => Ok(ActionTrace::Seq(
+            trace
+                .children
+                .into_iter()
+                .map(action_trace_from_proto)
+                .collect::<Result<Vec<_>, _>>()?,
+        )),
+        ProtoActionTraceKind::Choice => Ok(ActionTrace::Choice(
+            trace
+                .children
+                .into_iter()
+                .map(action_trace_from_proto)
+                .collect::<Result<Vec<_>, _>>()?,
+        )),
+        ProtoActionTraceKind::Repeat => {
+            let [child] = trace.children.try_into().map_err(|_| {
+                invalid("effect summary repeat trace must contain exactly one child")
+            })?;
+            Ok(ActionTrace::Repeat(Box::new(action_trace_from_proto(
+                child,
+            )?)))
+        }
+        ProtoActionTraceKind::UnknownOrder => Ok(ActionTrace::UnknownOrder(
+            trace
+                .actions
+                .into_iter()
+                .map(effect_ref_from_proto)
+                .collect::<Result<Vec<_>, _>>()?,
+        )),
+    }
+}
+
+fn action_trace_source_to_proto(source: ActionTraceEventSource) -> ProtoActionTraceEventSource {
+    match source {
+        ActionTraceEventSource::Perform => ProtoActionTraceEventSource::Perform,
+        ActionTraceEventSource::StdIntrinsic => ProtoActionTraceEventSource::StdIntrinsic,
+        ActionTraceEventSource::AgentCall => ProtoActionTraceEventSource::AgentCall,
+        ActionTraceEventSource::ExternalMetadata => ProtoActionTraceEventSource::ExternalMetadata,
+        ActionTraceEventSource::Transfer => ProtoActionTraceEventSource::Transfer,
+        ActionTraceEventSource::Unknown => ProtoActionTraceEventSource::Unknown,
+    }
+}
+
+fn action_trace_source_from_proto(
+    source: i32,
+) -> Result<ActionTraceEventSource, MetadataArtifactError> {
+    Ok(
+        match ProtoActionTraceEventSource::try_from(source)
+            .map_err(|_| invalid("effect summary action trace has unknown event source"))?
+        {
+            ProtoActionTraceEventSource::Perform => ActionTraceEventSource::Perform,
+            ProtoActionTraceEventSource::StdIntrinsic => ActionTraceEventSource::StdIntrinsic,
+            ProtoActionTraceEventSource::AgentCall => ActionTraceEventSource::AgentCall,
+            ProtoActionTraceEventSource::ExternalMetadata => {
+                ActionTraceEventSource::ExternalMetadata
+            }
+            ProtoActionTraceEventSource::Transfer => ActionTraceEventSource::Transfer,
+            ProtoActionTraceEventSource::Unknown => ActionTraceEventSource::Unknown,
+        },
+    )
 }
 
 fn latent_flow_summary_to_proto(summary: &LatentFlowSummary) -> ProtoLatentFlowSummary {

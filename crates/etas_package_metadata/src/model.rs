@@ -306,6 +306,38 @@ pub struct EffectSummary {
     pub requested_actions: EffectRow,
     pub handled_requested_actions: EffectRow,
     pub latent_flows: Vec<LatentFlowSummary>,
+    pub action_trace: ActionTrace,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum ActionTrace {
+    #[default]
+    Empty,
+    Event(ActionTraceEvent),
+    ParameterCall {
+        parameter: String,
+    },
+    Seq(Vec<ActionTrace>),
+    Choice(Vec<ActionTrace>),
+    Repeat(Box<ActionTrace>),
+    UnknownOrder(Vec<EffectRef>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ActionTraceEvent {
+    pub action: EffectRef,
+    pub source: ActionTraceEventSource,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ActionTraceEventSource {
+    Perform,
+    StdIntrinsic,
+    AgentCall,
+    ExternalMetadata,
+    Transfer,
+    #[default]
+    Unknown,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
