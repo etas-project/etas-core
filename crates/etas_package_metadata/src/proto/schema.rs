@@ -486,6 +486,8 @@ pub struct ProtoActionTrace {
     pub children: Vec<ProtoActionTrace>,
     #[prost(message, repeated, tag = "5")]
     pub actions: Vec<ProtoEffectRef>,
+    #[prost(string, repeated, tag = "6")]
+    pub parameter_calls: Vec<String>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -506,6 +508,7 @@ pub enum ProtoActionTraceKind {
     Choice = 4,
     Repeat = 5,
     UnknownOrder = 6,
+    Widened = 7,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, prost::Enumeration)]

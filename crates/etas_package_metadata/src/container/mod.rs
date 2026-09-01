@@ -12,9 +12,15 @@ use crate::MetadataArtifactError;
 
 pub const PACKAGE_METADATA_FILE: &str = ".etas/package.etasmeta";
 pub const MAGIC: &[u8; 8] = b"ETASMETA";
-pub const ARTIFACT_SCHEMA_VERSION: u32 = 5;
+pub const ARTIFACT_SCHEMA_VERSION: u32 = 6;
 pub const COMPRESSION_ZSTD: u8 = 1;
 const SECTION_TABLE_ENTRY_SIZE: usize = 2 + 1 + 8 + 8 + 8 + 32;
+pub const MAX_METADATA_ARTIFACT_SIZE: usize = 64 * 1024 * 1024;
+pub const MAX_METADATA_HEADER_SIZE: usize = 64 * 1024;
+pub const MAX_METADATA_SECTION_COUNT: usize = 64;
+pub const MAX_METADATA_COMPRESSED_SECTION_SIZE: usize = 32 * 1024 * 1024;
+pub const MAX_METADATA_UNCOMPRESSED_SECTION_SIZE: usize = 64 * 1024 * 1024;
+pub const MAX_METADATA_TOTAL_UNCOMPRESSED_SIZE: usize = 128 * 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u16)]
@@ -109,6 +115,42 @@ pub fn encode_metadata_artifact(
     push_string(&mut header_bytes, &header.dependency_lock_hash)?;
     push_string(&mut header_bytes, &header.created_target)?;
 
+    if header_bytes.len() > MAX_METADATA_HEADER_SIZE {
+        return Err(MetadataArtifactError::invalid(
+            PACKAGE_METADATA_FILE,
+            "package metadata header exceeds the configured size limit",
+        ));
+    }
+    if sections.len() > MAX_METADATA_SECTION_COUNT {
+        return Err(MetadataArtifactError::invalid(
+            PACKAGE_METADATA_FILE,
+            "package metadata contains too many sections",
+        ));
+    }
+    let mut total_uncompressed = 0usize;
+    for section in &sections {
+        if section.payload.len() > MAX_METADATA_UNCOMPRESSED_SECTION_SIZE {
+            return Err(MetadataArtifactError::invalid(
+                PACKAGE_METADATA_FILE,
+                format!("metadata section {:?} exceeds the size limit", section.kind),
+            ));
+        }
+        total_uncompressed = total_uncompressed
+            .checked_add(section.payload.len())
+            .ok_or_else(|| {
+                MetadataArtifactError::invalid(
+                    PACKAGE_METADATA_FILE,
+                    "metadata section sizes overflow",
+                )
+            })?;
+    }
+    if total_uncompressed > MAX_METADATA_TOTAL_UNCOMPRESSED_SIZE {
+        return Err(MetadataArtifactError::invalid(
+            PACKAGE_METADATA_FILE,
+            "package metadata uncompressed payload exceeds the total size limit",
+        ));
+    }
+
     let table_len = checked_mul(sections.len(), SECTION_TABLE_ENTRY_SIZE)?;
     let payload_start = MAGIC.len() + 4 + header_bytes.len() + 4 + table_len;
     let mut offset = payload_start as u64;
@@ -121,6 +163,15 @@ pub fn encode_metadata_artifact(
                 format!("metadata section compression failed: {source}"),
             )
         })?;
+        if compressed.len() > MAX_METADATA_COMPRESSED_SECTION_SIZE {
+            return Err(MetadataArtifactError::invalid(
+                PACKAGE_METADATA_FILE,
+                format!(
+                    "compressed metadata section {:?} exceeds the size limit",
+                    section.kind
+                ),
+            ));
+        }
         push_u16(&mut table, section.kind as u16);
         table.push(COMPRESSION_ZSTD);
         push_u64(&mut table, offset);
@@ -140,6 +191,12 @@ pub fn encode_metadata_artifact(
     for payload in payloads {
         artifact.extend_from_slice(&payload);
     }
+    if artifact.len() > MAX_METADATA_ARTIFACT_SIZE {
+        return Err(MetadataArtifactError::invalid(
+            PACKAGE_METADATA_FILE,
+            "package metadata artifact exceeds the size limit",
+        ));
+    }
     Ok(artifact)
 }
 
@@ -147,6 +204,12 @@ pub fn decode_metadata_artifact(
     path: &Path,
     bytes: &[u8],
 ) -> Result<DecodedMetadataArtifact, MetadataArtifactError> {
+    if bytes.len() > MAX_METADATA_ARTIFACT_SIZE {
+        return Err(MetadataArtifactError::invalid(
+            path,
+            "package metadata artifact exceeds the size limit",
+        ));
+    }
     let mut cursor = Cursor::new(bytes);
     let magic = cursor.take(MAGIC.len())?;
     if magic != MAGIC {
@@ -156,18 +219,60 @@ pub fn decode_metadata_artifact(
         ));
     }
     let header_len = cursor.read_u32()? as usize;
+    if header_len > MAX_METADATA_HEADER_SIZE {
+        return Err(MetadataArtifactError::invalid(
+            path,
+            "package metadata header exceeds the configured size limit",
+        ));
+    }
     let header = decode_header(cursor.take(header_len)?)?;
     let section_count = cursor.read_u32()? as usize;
-    let mut entries = Vec::new();
+    if section_count > MAX_METADATA_SECTION_COUNT {
+        return Err(MetadataArtifactError::invalid(
+            path,
+            "package metadata contains too many sections",
+        ));
+    }
+    let mut entries = Vec::with_capacity(section_count);
+    let mut total_uncompressed = 0usize;
     for _ in 0..section_count {
-        entries.push(SectionEntry {
+        let entry = SectionEntry {
             kind: MetadataSectionKind::from_u16(cursor.read_u16()?)?,
             compression: cursor.read_u8()?,
             offset: cursor.read_u64()?,
             compressed_len: cursor.read_u64()?,
             uncompressed_len: cursor.read_u64()?,
             uncompressed_hash: cursor.take_array::<32>()?,
-        });
+        };
+        let compressed_len = usize::try_from(entry.compressed_len).map_err(|_| {
+            MetadataArtifactError::invalid(path, "metadata section length does not fit usize")
+        })?;
+        let uncompressed_len = usize::try_from(entry.uncompressed_len).map_err(|_| {
+            MetadataArtifactError::invalid(
+                path,
+                "metadata section uncompressed length does not fit usize",
+            )
+        })?;
+        if compressed_len > MAX_METADATA_COMPRESSED_SECTION_SIZE
+            || uncompressed_len > MAX_METADATA_UNCOMPRESSED_SECTION_SIZE
+        {
+            return Err(MetadataArtifactError::invalid(
+                path,
+                format!("metadata section {:?} exceeds the size limit", entry.kind),
+            ));
+        }
+        total_uncompressed = total_uncompressed
+            .checked_add(uncompressed_len)
+            .ok_or_else(|| {
+                MetadataArtifactError::invalid(path, "metadata section sizes overflow")
+            })?;
+        if total_uncompressed > MAX_METADATA_TOTAL_UNCOMPRESSED_SIZE {
+            return Err(MetadataArtifactError::invalid(
+                path,
+                "package metadata uncompressed payload exceeds the total size limit",
+            ));
+        }
+        entries.push(entry);
     }
     validate_section_layout(path, bytes.len(), cursor.position, &entries)?;
     let mut sections = BTreeMap::new();
@@ -315,6 +420,16 @@ fn decode_section(
             format!("metadata section decompression failed: {source}"),
         )
     })?;
+    if section.len() != uncompressed_len {
+        return Err(MetadataArtifactError::invalid(
+            path,
+            format!(
+                "metadata section {:?} decompressed to {} bytes, expected {uncompressed_len}",
+                entry.kind,
+                section.len()
+            ),
+        ));
+    }
     if blake3::hash(&section).as_bytes() != &entry.uncompressed_hash {
         return Err(MetadataArtifactError::invalid(
             path,

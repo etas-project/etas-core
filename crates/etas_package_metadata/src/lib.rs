@@ -5,10 +5,13 @@ mod proto;
 
 pub use container::{
     ARTIFACT_SCHEMA_VERSION, COMPRESSION_ZSTD, DecodedMetadataArtifact, EncodedMetadataSection,
-    MAGIC, MetadataArtifactHeader, MetadataArtifactInfo, MetadataSectionKind,
-    PACKAGE_METADATA_FILE, blake3_hash, decode_metadata_artifact, encode_metadata_artifact,
-    file_checksum, optional_file_checksum, package_metadata_artifact_path, section_from_message,
-    source_payload_checksum, validate_artifact_schema, write_metadata_artifact_file,
+    MAGIC, MAX_METADATA_ARTIFACT_SIZE, MAX_METADATA_COMPRESSED_SECTION_SIZE,
+    MAX_METADATA_HEADER_SIZE, MAX_METADATA_SECTION_COUNT, MAX_METADATA_TOTAL_UNCOMPRESSED_SIZE,
+    MAX_METADATA_UNCOMPRESSED_SECTION_SIZE, MetadataArtifactHeader, MetadataArtifactInfo,
+    MetadataSectionKind, PACKAGE_METADATA_FILE, blake3_hash, decode_metadata_artifact,
+    encode_metadata_artifact, file_checksum, optional_file_checksum,
+    package_metadata_artifact_path, section_from_message, source_payload_checksum,
+    validate_artifact_schema, write_metadata_artifact_file,
 };
 pub use error::MetadataArtifactError;
 pub use model::*;
@@ -251,6 +254,91 @@ mod tests {
             error.to_string().contains("selector_defaults length"),
             "{error}"
         );
+    }
+
+    #[test]
+    fn metadata_artifact_round_trips_widened_parameter_calls() {
+        let mut metadata = sample_metadata();
+        metadata.public_metadata.effect_summaries[0].action_trace = ActionTrace::Widened {
+            actions: vec![EffectRef {
+                path: vec!["Console".to_owned(), "stdout_write".to_owned()],
+                args: Vec::new(),
+            }],
+            parameter_calls: vec!["f".to_owned()],
+        };
+
+        let bytes = encode_sample(&metadata);
+        let (_, decoded) =
+            package_metadata_from_artifact(Path::new("package.etasmeta"), &bytes).unwrap();
+
+        assert_eq!(decoded, metadata);
+    }
+
+    #[test]
+    fn metadata_artifact_rejects_excessive_section_count_before_allocation() {
+        let mut bytes = encode_sample(&sample_metadata());
+        let count = section_count_offset(&bytes);
+        bytes[count..count + 4]
+            .copy_from_slice(&((MAX_METADATA_SECTION_COUNT + 1) as u32).to_le_bytes());
+
+        let error = decode_metadata_artifact(Path::new("package.etasmeta"), &bytes).unwrap_err();
+
+        assert!(error.to_string().contains("too many sections"), "{error}");
+    }
+
+    #[test]
+    fn metadata_artifact_rejects_excessive_declared_uncompressed_size() {
+        let mut bytes = encode_sample(&sample_metadata());
+        let table = section_table_start(&bytes);
+        let uncompressed_len = table + 2 + 1 + 8 + 8;
+        bytes[uncompressed_len..uncompressed_len + 8]
+            .copy_from_slice(&((MAX_METADATA_UNCOMPRESSED_SECTION_SIZE + 1) as u64).to_le_bytes());
+
+        let error = decode_metadata_artifact(Path::new("package.etasmeta"), &bytes).unwrap_err();
+
+        assert!(error.to_string().contains("size limit"), "{error}");
+    }
+
+    #[test]
+    fn metadata_artifact_rejects_excessively_deep_action_trace() {
+        let mut metadata = sample_metadata();
+        let mut trace = ActionTrace::ParameterCall {
+            parameter: "f".to_owned(),
+        };
+        for _ in 0..70 {
+            trace = ActionTrace::Repeat(Box::new(trace));
+        }
+        metadata.public_metadata.effect_summaries[0].action_trace = trace;
+        let bytes = encode_sample(&metadata);
+
+        let error =
+            package_metadata_from_artifact(Path::new("package.etasmeta"), &bytes).unwrap_err();
+
+        assert!(error.to_string().contains("maximum depth"), "{error}");
+    }
+
+    #[test]
+    fn metadata_artifact_rejects_excessively_deep_type_graph() {
+        let mut metadata = sample_metadata();
+        let mut ty = Type {
+            kind: TypeKind::Primitive,
+            name: "i32".to_owned(),
+            ..Default::default()
+        };
+        for _ in 0..70 {
+            ty = Type {
+                kind: TypeKind::Array,
+                children: vec![ty],
+                ..Default::default()
+            };
+        }
+        metadata.public_metadata.flows[0].input = vec![ty];
+        let bytes = encode_sample(&metadata);
+
+        let error =
+            package_metadata_from_artifact(Path::new("package.etasmeta"), &bytes).unwrap_err();
+
+        assert!(error.to_string().contains("maximum depth"), "{error}");
     }
 
     fn encode_sample(metadata: &PackageMetadata) -> Vec<u8> {
@@ -598,6 +686,12 @@ mod tests {
         let header_len =
             u32::from_le_bytes(bytes[MAGIC.len()..MAGIC.len() + 4].try_into().unwrap()) as usize;
         MAGIC.len() + 4 + header_len + 4
+    }
+
+    fn section_count_offset(bytes: &[u8]) -> usize {
+        let header_len =
+            u32::from_le_bytes(bytes[MAGIC.len()..MAGIC.len() + 4].try_into().unwrap()) as usize;
+        MAGIC.len() + 4 + header_len
     }
 
     fn first_payload_offset(bytes: &[u8]) -> usize {

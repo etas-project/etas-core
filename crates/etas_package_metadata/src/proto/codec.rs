@@ -1557,20 +1557,63 @@ fn type_to_proto(ty: &Type) -> ProtoType {
     }
 }
 
+const MAX_METADATA_GRAPH_DEPTH: usize = 64;
+const MAX_METADATA_GRAPH_NODES: usize = 100_000;
+
+#[derive(Default)]
+struct DecodeGraphBudget {
+    nodes: usize,
+}
+
+impl DecodeGraphBudget {
+    fn enter(&mut self, depth: usize, graph: &str) -> Result<(), MetadataArtifactError> {
+        if depth > MAX_METADATA_GRAPH_DEPTH {
+            return Err(invalid(format!(
+                "package metadata {graph} exceeds the maximum depth"
+            )));
+        }
+        self.nodes = self
+            .nodes
+            .checked_add(1)
+            .ok_or_else(|| invalid(format!("package metadata {graph} node count overflow")))?;
+        if self.nodes > MAX_METADATA_GRAPH_NODES {
+            return Err(invalid(format!(
+                "package metadata {graph} exceeds the maximum node count"
+            )));
+        }
+        Ok(())
+    }
+}
+
 fn type_from_proto(ty: ProtoType) -> Result<Type, MetadataArtifactError> {
+    type_from_proto_with_budget(ty, 0, &mut DecodeGraphBudget::default())
+}
+
+fn type_from_proto_with_budget(
+    ty: ProtoType,
+    depth: usize,
+    budget: &mut DecodeGraphBudget,
+) -> Result<Type, MetadataArtifactError> {
+    budget.enter(depth, "type graph")?;
     let kind = type_kind_from_wire(&ty.kind)?;
     let children = ty
         .children
         .into_iter()
-        .map(type_from_proto)
+        .map(|child| type_from_proto_with_budget(child, depth + 1, budget))
         .collect::<Result<Vec<_>, _>>()?;
     let fields = ty
         .fields
         .into_iter()
-        .map(type_field_from_proto)
+        .map(|field| type_field_from_proto_with_budget(field, depth + 1, budget))
         .collect::<Result<Vec<_>, _>>()?;
-    let effects = ty.effects.map(effect_row_from_proto).transpose()?;
-    let produced_effects = ty.produced_effects.map(effect_row_from_proto).transpose()?;
+    let effects = ty
+        .effects
+        .map(|row| effect_row_from_proto_with_budget(row, depth + 1, budget))
+        .transpose()?;
+    let produced_effects = ty
+        .produced_effects
+        .map(|row| effect_row_from_proto_with_budget(row, depth + 1, budget))
+        .transpose()?;
     validate_type_shape(
         kind,
         &ty.name,
@@ -1598,16 +1641,24 @@ fn type_field_to_proto(field: &TypeField) -> ProtoTypeField {
     }
 }
 
-fn type_field_from_proto(field: ProtoTypeField) -> Result<TypeField, MetadataArtifactError> {
+fn type_field_from_proto_with_budget(
+    field: ProtoTypeField,
+    depth: usize,
+    budget: &mut DecodeGraphBudget,
+) -> Result<TypeField, MetadataArtifactError> {
     if field.name.is_empty() {
         return Err(invalid("record field name is required"));
     }
-    let ty = field.ty.map(type_from_proto).transpose()?.ok_or_else(|| {
-        MetadataArtifactError::invalid(
-            crate::PACKAGE_METADATA_FILE,
-            "record field type is required",
-        )
-    })?;
+    let ty = field
+        .ty
+        .map(|ty| type_from_proto_with_budget(ty, depth, budget))
+        .transpose()?
+        .ok_or_else(|| {
+            MetadataArtifactError::invalid(
+                crate::PACKAGE_METADATA_FILE,
+                "record field type is required",
+            )
+        })?;
     Ok(TypeField {
         name: field.name,
         ty,
@@ -1622,11 +1673,19 @@ fn effect_row_to_proto(row: &EffectRow) -> ProtoEffectRow {
 }
 
 fn effect_row_from_proto(row: ProtoEffectRow) -> Result<EffectRow, MetadataArtifactError> {
+    effect_row_from_proto_with_budget(row, 0, &mut DecodeGraphBudget::default())
+}
+
+fn effect_row_from_proto_with_budget(
+    row: ProtoEffectRow,
+    depth: usize,
+    budget: &mut DecodeGraphBudget,
+) -> Result<EffectRow, MetadataArtifactError> {
     Ok(EffectRow {
         effects: row
             .effects
             .into_iter()
-            .map(effect_ref_from_proto)
+            .map(|effect| effect_ref_from_proto_with_budget(effect, depth, budget))
             .collect::<Result<Vec<_>, _>>()?,
         tail: row.tail,
     })
@@ -1640,6 +1699,14 @@ fn effect_ref_to_proto(effect: &EffectRef) -> ProtoEffectRef {
 }
 
 fn effect_ref_from_proto(effect: ProtoEffectRef) -> Result<EffectRef, MetadataArtifactError> {
+    effect_ref_from_proto_with_budget(effect, 0, &mut DecodeGraphBudget::default())
+}
+
+fn effect_ref_from_proto_with_budget(
+    effect: ProtoEffectRef,
+    depth: usize,
+    budget: &mut DecodeGraphBudget,
+) -> Result<EffectRef, MetadataArtifactError> {
     if effect.path.is_empty() {
         return Err(invalid("effect reference path is required"));
     }
@@ -1648,7 +1715,7 @@ fn effect_ref_from_proto(effect: ProtoEffectRef) -> Result<EffectRef, MetadataAr
         args: effect
             .args
             .into_iter()
-            .map(effect_arg_from_proto)
+            .map(|arg| effect_arg_from_proto_with_budget(arg, depth + 1, budget))
             .collect::<Result<Vec<_>, _>>()?,
     })
 }
@@ -1663,8 +1730,19 @@ fn effect_arg_to_proto(arg: &EffectArg) -> ProtoEffectArg {
 }
 
 fn effect_arg_from_proto(arg: ProtoEffectArg) -> Result<EffectArg, MetadataArtifactError> {
+    effect_arg_from_proto_with_budget(arg, 0, &mut DecodeGraphBudget::default())
+}
+
+fn effect_arg_from_proto_with_budget(
+    arg: ProtoEffectArg,
+    depth: usize,
+    budget: &mut DecodeGraphBudget,
+) -> Result<EffectArg, MetadataArtifactError> {
     let kind = effect_arg_kind_from_wire(&arg.kind)?;
-    let ty = arg.ty.map(type_from_proto).transpose()?;
+    let ty = arg
+        .ty
+        .map(|ty| type_from_proto_with_budget(ty, depth + 1, budget))
+        .transpose()?;
     match kind {
         EffectArgKind::Type if ty.is_none() => {
             return Err(invalid("effect type arg is missing type"));
@@ -1765,6 +1843,7 @@ fn action_trace_to_proto(trace: &ActionTrace) -> ProtoActionTrace {
         parameter: String::new(),
         children: Vec::new(),
         actions: Vec::new(),
+        parameter_calls: Vec::new(),
     };
     match trace {
         ActionTrace::Empty => {}
@@ -1795,11 +1874,28 @@ fn action_trace_to_proto(trace: &ActionTrace) -> ProtoActionTrace {
             proto.kind = ProtoActionTraceKind::UnknownOrder as i32;
             proto.actions = actions.iter().map(effect_ref_to_proto).collect();
         }
+        ActionTrace::Widened {
+            actions,
+            parameter_calls,
+        } => {
+            proto.kind = ProtoActionTraceKind::Widened as i32;
+            proto.actions = actions.iter().map(effect_ref_to_proto).collect();
+            proto.parameter_calls.clone_from(parameter_calls);
+        }
     }
     proto
 }
 
 fn action_trace_from_proto(trace: ProtoActionTrace) -> Result<ActionTrace, MetadataArtifactError> {
+    action_trace_from_proto_with_budget(trace, 0, &mut DecodeGraphBudget::default())
+}
+
+fn action_trace_from_proto_with_budget(
+    trace: ProtoActionTrace,
+    depth: usize,
+    budget: &mut DecodeGraphBudget,
+) -> Result<ActionTrace, MetadataArtifactError> {
+    budget.enter(depth, "action trace")?;
     let kind = ProtoActionTraceKind::try_from(trace.kind)
         .map_err(|_| invalid("effect summary action trace has unknown kind"))?;
     match kind {
@@ -1829,23 +1925,23 @@ fn action_trace_from_proto(trace: ProtoActionTrace) -> Result<ActionTrace, Metad
             trace
                 .children
                 .into_iter()
-                .map(action_trace_from_proto)
+                .map(|child| action_trace_from_proto_with_budget(child, depth + 1, budget))
                 .collect::<Result<Vec<_>, _>>()?,
         )),
         ProtoActionTraceKind::Choice => Ok(ActionTrace::Choice(
             trace
                 .children
                 .into_iter()
-                .map(action_trace_from_proto)
+                .map(|child| action_trace_from_proto_with_budget(child, depth + 1, budget))
                 .collect::<Result<Vec<_>, _>>()?,
         )),
         ProtoActionTraceKind::Repeat => {
             let [child] = trace.children.try_into().map_err(|_| {
                 invalid("effect summary repeat trace must contain exactly one child")
             })?;
-            Ok(ActionTrace::Repeat(Box::new(action_trace_from_proto(
-                child,
-            )?)))
+            Ok(ActionTrace::Repeat(Box::new(
+                action_trace_from_proto_with_budget(child, depth + 1, budget)?,
+            )))
         }
         ProtoActionTraceKind::UnknownOrder => Ok(ActionTrace::UnknownOrder(
             trace
@@ -1854,6 +1950,30 @@ fn action_trace_from_proto(trace: ProtoActionTrace) -> Result<ActionTrace, Metad
                 .map(effect_ref_from_proto)
                 .collect::<Result<Vec<_>, _>>()?,
         )),
+        ProtoActionTraceKind::Widened => {
+            if trace.parameter_calls.iter().any(String::is_empty) {
+                return Err(invalid(
+                    "effect summary widened trace has an empty parameter call",
+                ));
+            }
+            let unique = trace
+                .parameter_calls
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>();
+            if unique.len() != trace.parameter_calls.len() {
+                return Err(invalid(
+                    "effect summary widened trace has duplicate parameter calls",
+                ));
+            }
+            Ok(ActionTrace::Widened {
+                actions: trace
+                    .actions
+                    .into_iter()
+                    .map(effect_ref_from_proto)
+                    .collect::<Result<Vec<_>, _>>()?,
+                parameter_calls: trace.parameter_calls,
+            })
+        }
     }
 }
 

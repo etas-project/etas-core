@@ -321,6 +321,10 @@ pub enum ActionTrace {
     Choice(Vec<ActionTrace>),
     Repeat(Box<ActionTrace>),
     UnknownOrder(Vec<EffectRef>),
+    Widened {
+        actions: Vec<EffectRef>,
+        parameter_calls: Vec<String>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
