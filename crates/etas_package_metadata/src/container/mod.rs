@@ -93,11 +93,17 @@ pub fn package_metadata_artifact_path(package_root: &Path) -> PathBuf {
 pub fn section_from_message<M: Message>(
     kind: MetadataSectionKind,
     message: M,
-) -> EncodedMetadataSection {
-    EncodedMetadataSection {
+) -> Result<EncodedMetadataSection, MetadataArtifactError> {
+    if message.encoded_len() > MAX_METADATA_UNCOMPRESSED_SECTION_SIZE {
+        return Err(MetadataArtifactError::invalid(
+            PACKAGE_METADATA_FILE,
+            format!("metadata section {kind:?} exceeds the size limit"),
+        ));
+    }
+    Ok(EncodedMetadataSection {
         kind,
         payload: message.encode_to_vec(),
-    }
+    })
 }
 
 pub fn encode_metadata_artifact(

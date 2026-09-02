@@ -7,6 +7,9 @@ use crate::{
     decode_metadata_artifact, section_from_message, validate_artifact_schema,
 };
 
+use super::budget::{
+    MetadataGraphBudget, validate_package_metadata_graph, validate_proto_package_metadata_graph,
+};
 use super::schema::*;
 use crate::model::*;
 
@@ -83,7 +86,10 @@ pub(crate) fn package_metadata_from_proto(
     })
 }
 
-pub fn package_metadata_to_sections(metadata: &PackageMetadata) -> Vec<EncodedMetadataSection> {
+pub fn package_metadata_to_sections(
+    metadata: &PackageMetadata,
+) -> Result<Vec<EncodedMetadataSection>, MetadataArtifactError> {
+    validate_package_metadata_graph(metadata)?;
     let exports = exports_section(metadata);
     let type_contracts = type_contracts_section(&metadata.public_metadata);
     let effect_contracts =
@@ -94,9 +100,9 @@ pub fn package_metadata_to_sections(metadata: &PackageMetadata) -> Vec<EncodedMe
     let mut sections = vec![section_from_message(
         MetadataSectionKind::PackageGraph,
         package_metadata_to_proto(metadata),
-    )];
+    )?];
     if !exports.modules.is_empty() || !exports.re_exports.is_empty() {
-        sections.push(section_from_message(MetadataSectionKind::Exports, exports));
+        sections.push(section_from_message(MetadataSectionKind::Exports, exports)?);
     }
     if !type_contracts.types.is_empty()
         || !type_contracts.enums.is_empty()
@@ -111,7 +117,7 @@ pub fn package_metadata_to_sections(metadata: &PackageMetadata) -> Vec<EncodedMe
         sections.push(section_from_message(
             MetadataSectionKind::TypeContracts,
             type_contracts,
-        ));
+        )?);
     }
     if !effect_contracts.summaries.is_empty()
         || !effect_contracts.tags.is_empty()
@@ -120,7 +126,7 @@ pub fn package_metadata_to_sections(metadata: &PackageMetadata) -> Vec<EncodedMe
         sections.push(section_from_message(
             MetadataSectionKind::EffectContracts,
             effect_contracts,
-        ));
+        )?);
     }
     if !tool_contracts.signatures.is_empty()
         || !tool_contracts.schemas.is_empty()
@@ -129,21 +135,21 @@ pub fn package_metadata_to_sections(metadata: &PackageMetadata) -> Vec<EncodedMe
         sections.push(section_from_message(
             MetadataSectionKind::ToolContracts,
             tool_contracts,
-        ));
+        )?);
     }
     if !trace_spec_contracts.trace_specs.is_empty() || !trace_spec_contracts.summaries.is_empty() {
         sections.push(section_from_message(
             MetadataSectionKind::TraceSpecContracts,
             trace_spec_contracts,
-        ));
+        )?);
     }
     if !public_symbols.symbols.is_empty() {
         sections.push(section_from_message(
             MetadataSectionKind::PublicSymbols,
             public_symbols,
-        ));
+        )?);
     }
-    sections
+    Ok(sections)
 }
 
 pub fn package_metadata_from_package_graph_payload(
@@ -155,6 +161,7 @@ pub fn package_metadata_from_package_graph_payload(
             format!("package_graph protobuf payload is invalid: {source}"),
         )
     })?;
+    validate_proto_package_metadata_graph(&graph)?;
     package_metadata_from_proto(graph)
 }
 
@@ -1557,42 +1564,14 @@ fn type_to_proto(ty: &Type) -> ProtoType {
     }
 }
 
-const MAX_METADATA_GRAPH_DEPTH: usize = 64;
-const MAX_METADATA_GRAPH_NODES: usize = 100_000;
-
-#[derive(Default)]
-struct DecodeGraphBudget {
-    nodes: usize,
-}
-
-impl DecodeGraphBudget {
-    fn enter(&mut self, depth: usize, graph: &str) -> Result<(), MetadataArtifactError> {
-        if depth > MAX_METADATA_GRAPH_DEPTH {
-            return Err(invalid(format!(
-                "package metadata {graph} exceeds the maximum depth"
-            )));
-        }
-        self.nodes = self
-            .nodes
-            .checked_add(1)
-            .ok_or_else(|| invalid(format!("package metadata {graph} node count overflow")))?;
-        if self.nodes > MAX_METADATA_GRAPH_NODES {
-            return Err(invalid(format!(
-                "package metadata {graph} exceeds the maximum node count"
-            )));
-        }
-        Ok(())
-    }
-}
-
 fn type_from_proto(ty: ProtoType) -> Result<Type, MetadataArtifactError> {
-    type_from_proto_with_budget(ty, 0, &mut DecodeGraphBudget::default())
+    type_from_proto_with_budget(ty, 0, &mut MetadataGraphBudget::default())
 }
 
 fn type_from_proto_with_budget(
     ty: ProtoType,
     depth: usize,
-    budget: &mut DecodeGraphBudget,
+    budget: &mut MetadataGraphBudget,
 ) -> Result<Type, MetadataArtifactError> {
     budget.enter(depth, "type graph")?;
     let kind = type_kind_from_wire(&ty.kind)?;
@@ -1644,7 +1623,7 @@ fn type_field_to_proto(field: &TypeField) -> ProtoTypeField {
 fn type_field_from_proto_with_budget(
     field: ProtoTypeField,
     depth: usize,
-    budget: &mut DecodeGraphBudget,
+    budget: &mut MetadataGraphBudget,
 ) -> Result<TypeField, MetadataArtifactError> {
     if field.name.is_empty() {
         return Err(invalid("record field name is required"));
@@ -1673,13 +1652,13 @@ fn effect_row_to_proto(row: &EffectRow) -> ProtoEffectRow {
 }
 
 fn effect_row_from_proto(row: ProtoEffectRow) -> Result<EffectRow, MetadataArtifactError> {
-    effect_row_from_proto_with_budget(row, 0, &mut DecodeGraphBudget::default())
+    effect_row_from_proto_with_budget(row, 0, &mut MetadataGraphBudget::default())
 }
 
 fn effect_row_from_proto_with_budget(
     row: ProtoEffectRow,
     depth: usize,
-    budget: &mut DecodeGraphBudget,
+    budget: &mut MetadataGraphBudget,
 ) -> Result<EffectRow, MetadataArtifactError> {
     Ok(EffectRow {
         effects: row
@@ -1699,13 +1678,13 @@ fn effect_ref_to_proto(effect: &EffectRef) -> ProtoEffectRef {
 }
 
 fn effect_ref_from_proto(effect: ProtoEffectRef) -> Result<EffectRef, MetadataArtifactError> {
-    effect_ref_from_proto_with_budget(effect, 0, &mut DecodeGraphBudget::default())
+    effect_ref_from_proto_with_budget(effect, 0, &mut MetadataGraphBudget::default())
 }
 
 fn effect_ref_from_proto_with_budget(
     effect: ProtoEffectRef,
     depth: usize,
-    budget: &mut DecodeGraphBudget,
+    budget: &mut MetadataGraphBudget,
 ) -> Result<EffectRef, MetadataArtifactError> {
     if effect.path.is_empty() {
         return Err(invalid("effect reference path is required"));
@@ -1730,13 +1709,13 @@ fn effect_arg_to_proto(arg: &EffectArg) -> ProtoEffectArg {
 }
 
 fn effect_arg_from_proto(arg: ProtoEffectArg) -> Result<EffectArg, MetadataArtifactError> {
-    effect_arg_from_proto_with_budget(arg, 0, &mut DecodeGraphBudget::default())
+    effect_arg_from_proto_with_budget(arg, 0, &mut MetadataGraphBudget::default())
 }
 
 fn effect_arg_from_proto_with_budget(
     arg: ProtoEffectArg,
     depth: usize,
-    budget: &mut DecodeGraphBudget,
+    budget: &mut MetadataGraphBudget,
 ) -> Result<EffectArg, MetadataArtifactError> {
     let kind = effect_arg_kind_from_wire(&arg.kind)?;
     let ty = arg
@@ -1887,13 +1866,13 @@ fn action_trace_to_proto(trace: &ActionTrace) -> ProtoActionTrace {
 }
 
 fn action_trace_from_proto(trace: ProtoActionTrace) -> Result<ActionTrace, MetadataArtifactError> {
-    action_trace_from_proto_with_budget(trace, 0, &mut DecodeGraphBudget::default())
+    action_trace_from_proto_with_budget(trace, 0, &mut MetadataGraphBudget::default())
 }
 
 fn action_trace_from_proto_with_budget(
     trace: ProtoActionTrace,
     depth: usize,
-    budget: &mut DecodeGraphBudget,
+    budget: &mut MetadataGraphBudget,
 ) -> Result<ActionTrace, MetadataArtifactError> {
     budget.enter(depth, "action trace")?;
     let kind = ProtoActionTraceKind::try_from(trace.kind)
@@ -2463,6 +2442,7 @@ fn invalid(message: impl Into<String>) -> MetadataArtifactError {
 
 #[cfg(test)]
 mod tests {
+    use super::super::budget::MAX_METADATA_GRAPH_NODES;
     use super::*;
 
     #[test]
@@ -2556,6 +2536,62 @@ mod tests {
         let error = package_metadata_from_proto(graph).unwrap_err();
 
         assert!(error.to_string().contains("tool binding provider"));
+    }
+
+    #[test]
+    fn encoder_and_decoder_share_the_artifact_wide_graph_budget() {
+        let mut metadata = PackageMetadata::default();
+        metadata.public_metadata.types = (0..MAX_METADATA_GRAPH_NODES)
+            .map(|_| NamedSignature {
+                ty: Some(Type::default()),
+                ..Default::default()
+            })
+            .collect();
+
+        let encode_error = package_metadata_to_sections(&metadata).unwrap_err();
+        assert!(
+            encode_error.to_string().contains("maximum node count"),
+            "{encode_error}"
+        );
+
+        let graph = package_metadata_to_proto(&metadata);
+        let payload = graph.encode_to_vec();
+        let decode_error = package_metadata_from_package_graph_payload(&payload).unwrap_err();
+        assert!(
+            decode_error.to_string().contains("maximum node count"),
+            "{decode_error}"
+        );
+    }
+
+    #[test]
+    fn decoder_checks_graph_depth_before_recursive_lowering() {
+        let mut ty = ProtoType {
+            kind: "primitive".to_owned(),
+            name: "i32".to_owned(),
+            ..Default::default()
+        };
+        for _ in 0..70 {
+            ty = ProtoType {
+                kind: "array".to_owned(),
+                children: vec![ty],
+                ..Default::default()
+            };
+        }
+        let graph = ProtoPackageGraphSection {
+            public_metadata: Some(ProtoPublicMetadataSection {
+                types: vec![ProtoNamedSignature {
+                    ty: Some(ty),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let error =
+            package_metadata_from_package_graph_payload(&graph.encode_to_vec()).unwrap_err();
+
+        assert!(error.to_string().contains("maximum depth"), "{error}");
     }
 
     fn valid_graph() -> ProtoPackageGraphSection {

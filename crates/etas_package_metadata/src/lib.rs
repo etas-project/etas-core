@@ -172,7 +172,7 @@ mod tests {
     #[test]
     fn metadata_artifact_rejects_duplicate_sections() {
         let metadata = sample_metadata();
-        let mut sections = package_metadata_to_sections(&metadata);
+        let mut sections = package_metadata_to_sections(&metadata).unwrap();
         sections.push(sections[0].clone());
         let bytes = encode_metadata_artifact(&sample_header(), sections).unwrap();
 
@@ -245,10 +245,7 @@ mod tests {
     fn metadata_artifact_rejects_malformed_action_selector_metadata() {
         let mut metadata = sample_metadata();
         metadata.public_metadata.actions[0].selector_defaults.pop();
-        let bytes = encode_sample(&metadata);
-
-        let error =
-            package_metadata_from_artifact(Path::new("package.etasmeta"), &bytes).unwrap_err();
+        let error = package_metadata_to_sections(&metadata).unwrap_err();
 
         assert!(
             error.to_string().contains("selector_defaults length"),
@@ -309,10 +306,7 @@ mod tests {
             trace = ActionTrace::Repeat(Box::new(trace));
         }
         metadata.public_metadata.effect_summaries[0].action_trace = trace;
-        let bytes = encode_sample(&metadata);
-
-        let error =
-            package_metadata_from_artifact(Path::new("package.etasmeta"), &bytes).unwrap_err();
+        let error = package_metadata_to_sections(&metadata).unwrap_err();
 
         assert!(error.to_string().contains("maximum depth"), "{error}");
     }
@@ -333,16 +327,17 @@ mod tests {
             };
         }
         metadata.public_metadata.flows[0].input = vec![ty];
-        let bytes = encode_sample(&metadata);
-
-        let error =
-            package_metadata_from_artifact(Path::new("package.etasmeta"), &bytes).unwrap_err();
+        let error = package_metadata_to_sections(&metadata).unwrap_err();
 
         assert!(error.to_string().contains("maximum depth"), "{error}");
     }
 
     fn encode_sample(metadata: &PackageMetadata) -> Vec<u8> {
-        encode_metadata_artifact(&sample_header(), package_metadata_to_sections(metadata)).unwrap()
+        encode_metadata_artifact(
+            &sample_header(),
+            package_metadata_to_sections(metadata).unwrap(),
+        )
+        .unwrap()
     }
 
     fn sample_header() -> MetadataArtifactHeader {
