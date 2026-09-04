@@ -29,6 +29,7 @@ pub struct OpenAiProtocolAdapter {
     pub base_url: String,
     pub transport: HttpTransport,
     pub dialect: OpenAiProviderDialect,
+    pub omlx_options: Option<OmlxRequestOptions>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -36,6 +37,11 @@ pub enum OpenAiProviderDialect {
     OpenAiTools,
     LegacyFunctions,
     OmlxCompatible,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct OmlxRequestOptions {
+    pub enable_thinking: Option<bool>,
 }
 
 impl OpenAiProtocolAdapter {
@@ -54,6 +60,7 @@ impl OpenAiProtocolAdapter {
             transport: HttpTransport::try_new(&base_url, policy)?,
             base_url,
             dialect: OpenAiProviderDialect::OpenAiTools,
+            omlx_options: None,
         })
     }
 
@@ -62,10 +69,11 @@ impl OpenAiProtocolAdapter {
     }
 
     pub fn omlx_compatible(base_url: impl Into<String>) -> Result<Self, HostError> {
-        Ok(
+        let mut adapter =
             Self::try_new_with_policy(base_url, PrivateResolutionPolicy::AllowPrivate)?
-                .with_dialect(OpenAiProviderDialect::OmlxCompatible),
-        )
+                .with_dialect(OpenAiProviderDialect::OmlxCompatible);
+        adapter.omlx_options = Some(OmlxRequestOptions::default());
+        Ok(adapter)
     }
 
     pub fn legacy_functions(base_url: impl Into<String>) -> Result<Self, HostError> {
@@ -74,7 +82,21 @@ impl OpenAiProtocolAdapter {
 
     pub fn with_dialect(mut self, dialect: OpenAiProviderDialect) -> Self {
         self.dialect = dialect;
+        if !matches!(dialect, OpenAiProviderDialect::OmlxCompatible) {
+            self.omlx_options = None;
+        }
         self
+    }
+
+    pub fn with_omlx_options(mut self, options: OmlxRequestOptions) -> Result<Self, HostError> {
+        if !matches!(self.dialect, OpenAiProviderDialect::OmlxCompatible) {
+            return Err(HostError::new(
+                HostErrorCode::InvalidRequest,
+                "oMLX request options require the oMLX-compatible OpenAI dialect",
+            ));
+        }
+        self.omlx_options = Some(options);
+        Ok(self)
     }
 
     pub fn capabilities() -> ModelProviderCapabilities {
@@ -125,7 +147,11 @@ impl OpenAiProtocolAdapter {
 
     async fn complete_request(&self, request: ModelRequest) -> Result<ModelResponse, HostError> {
         let id = request.id;
-        let body = encode_openai_chat_request_with_dialect(&request, self.dialect)?;
+        let body = encode_openai_chat_request_with_dialect(
+            &request,
+            self.dialect,
+            self.omlx_options.as_ref(),
+        )?;
         let response = self.transport.send_json("/chat/completions", body).await?;
         if !(200..300).contains(&response.status) {
             return Err(HostError::new(
@@ -151,6 +177,7 @@ impl ModelClient for OpenAiProtocolAdapter {
 fn encode_openai_chat_request_with_dialect(
     request: &ModelRequest,
     dialect: OpenAiProviderDialect,
+    omlx_options: Option<&OmlxRequestOptions>,
 ) -> Result<String, HostError> {
     let require_model_tool =
         !request.tools.is_empty() && !matches!(request.tool_choice, ModelToolChoice::Auto);
@@ -184,6 +211,14 @@ fn encode_openai_chat_request_with_dialect(
         body.insert(
             "max_tokens".to_owned(),
             Value::Number(serde_json::Number::from(max_tokens)),
+        );
+    }
+    if matches!(dialect, OpenAiProviderDialect::OmlxCompatible)
+        && let Some(enable_thinking) = omlx_options.and_then(|options| options.enable_thinking)
+    {
+        body.insert(
+            "chat_template_kwargs".to_owned(),
+            json!({ "enable_thinking": enable_thinking }),
         );
     }
     if !request.options.metadata.is_empty() {
@@ -656,9 +691,12 @@ mod tests {
             budget: ExecutionBudget::default(),
         };
 
-        let body =
-            encode_openai_chat_request_with_dialect(&request, OpenAiProviderDialect::OpenAiTools)
-                .expect("request should encode");
+        let body = encode_openai_chat_request_with_dialect(
+            &request,
+            OpenAiProviderDialect::OpenAiTools,
+            None,
+        )
+        .expect("request should encode");
         let body: Value = serde_json::from_str(&body).expect("encoded request should be JSON");
         assert_eq!(body["messages"][0]["role"], "system");
         assert!(
@@ -677,6 +715,67 @@ mod tests {
             body["response_format"]["json_schema"]["schema"]["properties"]["summary"]["type"],
             "string"
         );
+        assert!(body.get("chat_template_kwargs").is_none());
+    }
+
+    #[test]
+    fn omlx_request_encodes_explicit_thinking_control() {
+        let request = ModelRequest {
+            id: HostRequestId(1),
+            provider: None,
+            model: ModelName("qwen-thinking-model".to_owned()),
+            messages: vec![ModelMessage {
+                role: ModelRole::User,
+                content: vec![ModelContent::Text("reply briefly".to_owned())],
+                tool_call_id: None,
+                tool_calls: Vec::new(),
+            }],
+            tools: Vec::new(),
+            tool_choice: Default::default(),
+            response_schema: None,
+            policy_ref: None,
+            options: ModelOptions::default(),
+            authority: AuthorityContext {
+                grants: Vec::new(),
+                approvals: Vec::new(),
+                sandbox: SandboxPolicy::deny_all(),
+                policy: Default::default(),
+            },
+            trace: TraceContext::root(TraceId(1)),
+            budget: ExecutionBudget::default(),
+        };
+
+        let body = encode_openai_chat_request_with_dialect(
+            &request,
+            OpenAiProviderDialect::OmlxCompatible,
+            Some(&OmlxRequestOptions {
+                enable_thinking: Some(false),
+            }),
+        )
+        .expect("oMLX request should encode");
+        let body: Value = serde_json::from_str(&body).expect("encoded request should be JSON");
+        assert_eq!(body["chat_template_kwargs"]["enable_thinking"], false);
+
+        let body = encode_openai_chat_request_with_dialect(
+            &request,
+            OpenAiProviderDialect::OmlxCompatible,
+            Some(&OmlxRequestOptions::default()),
+        )
+        .expect("oMLX request without an override should encode");
+        let body: Value = serde_json::from_str(&body).expect("encoded request should be JSON");
+        assert!(body.get("chat_template_kwargs").is_none());
+    }
+
+    #[test]
+    fn openai_dialect_rejects_omlx_request_options() {
+        let error = OpenAiProtocolAdapter::new("https://api.example.com/v1")
+            .expect("public endpoint should be valid")
+            .with_omlx_options(OmlxRequestOptions {
+                enable_thinking: Some(false),
+            })
+            .expect_err("oMLX options must not be accepted by the OpenAI dialect");
+
+        assert_eq!(error.code, HostErrorCode::InvalidRequest);
     }
 
     #[test]
@@ -718,9 +817,12 @@ mod tests {
             budget: ExecutionBudget::default(),
         };
 
-        let body =
-            encode_openai_chat_request_with_dialect(&request, OpenAiProviderDialect::OpenAiTools)
-                .expect("request should encode");
+        let body = encode_openai_chat_request_with_dialect(
+            &request,
+            OpenAiProviderDialect::OpenAiTools,
+            None,
+        )
+        .expect("request should encode");
         let body: Value = serde_json::from_str(&body).expect("encoded request should be JSON");
         assert_eq!(body["messages"][0]["role"], "user");
         assert_eq!(body["tools"][0]["function"]["name"], "host.echo");
@@ -768,6 +870,7 @@ mod tests {
         let body = encode_openai_chat_request_with_dialect(
             &request,
             OpenAiProviderDialect::LegacyFunctions,
+            None,
         )
         .expect("legacy request should encode");
         let body: Value = serde_json::from_str(&body).expect("encoded request should be JSON");

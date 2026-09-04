@@ -8,7 +8,9 @@ pub use anthropic::{
     AnthropicProtocolAdapter, AnthropicProviderRequest, AnthropicProviderResponse,
 };
 pub use client::ModelClient;
-pub use openai::{OpenAiProtocolAdapter, OpenAiProviderRequest, OpenAiProviderResponse};
+pub use openai::{
+    OmlxRequestOptions, OpenAiProtocolAdapter, OpenAiProviderRequest, OpenAiProviderResponse,
+};
 pub use protocol::{
     ModelContent, ModelCostUsage, ModelMessage, ModelName, ModelOptions, ModelProviderCapabilities,
     ModelProviderId, ModelRequest, ModelResponse, ModelRole, ModelToolCall, ModelToolChoice,
