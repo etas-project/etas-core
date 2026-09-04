@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, time::Duration};
+use std::{cmp, net::SocketAddr, time::Duration};
 
 use reqwest::{
     Client, Method,
@@ -6,7 +6,8 @@ use reqwest::{
 };
 
 use crate::{
-    AuthConfig, HostError, HostErrorCode, PrivateResolutionPolicy, RetryPolicy, TimeoutConfig,
+    AuthConfig, HostError, HostErrorCode, PrivateResolutionPolicy, RetryPolicy,
+    TransportTimeoutPolicy,
 };
 
 use super::{TransportEndpointAuthority, TransportEndpointResolver};
@@ -15,7 +16,7 @@ use super::{TransportEndpointAuthority, TransportEndpointResolver};
 pub struct HttpTransport {
     authority: TransportEndpointAuthority,
     pub auth: AuthConfig,
-    pub timeout: TimeoutConfig,
+    pub timeout: TransportTimeoutPolicy,
     pub retry: RetryPolicy,
 }
 
@@ -27,7 +28,7 @@ impl HttpTransport {
         Ok(Self {
             authority: TransportEndpointAuthority::try_new(base_url, private_resolution)?,
             auth: AuthConfig::None,
-            timeout: TimeoutConfig::local(),
+            timeout: TransportTimeoutPolicy::default(),
             retry: RetryPolicy::none(),
         })
     }
@@ -41,7 +42,7 @@ impl HttpTransport {
         self
     }
 
-    pub fn with_timeout(mut self, timeout: TimeoutConfig) -> Self {
+    pub fn with_timeout(mut self, timeout: TransportTimeoutPolicy) -> Self {
         self.timeout = timeout;
         self
     }
@@ -52,28 +53,41 @@ impl HttpTransport {
     }
 
     pub async fn send_json(&self, path: &str, body: String) -> Result<HttpResponse, HostError> {
+        self.send_json_with_deadline(path, body, None).await
+    }
+
+    pub async fn send_json_with_deadline(
+        &self,
+        path: &str,
+        body: String,
+        outer_deadline: Option<tokio::time::Instant>,
+    ) -> Result<HttpResponse, HostError> {
         if self.retry.attempts == 0 {
             return Err(HostError::new(
                 HostErrorCode::InvalidRequest,
                 "HTTP retry policy must attempt each request at least once",
             ));
         }
+        let deadline = self.effective_deadline(outer_deadline);
         let mut last_error = None;
         for attempt in 0..self.retry.attempts {
             match self
-                .send_once(HttpRequest {
-                    method: "POST".to_owned(),
-                    path: path.to_owned(),
-                    headers: vec![("Content-Type".to_owned(), "application/json".to_owned())],
-                    body: body.clone(),
-                })
+                .send_once_before(
+                    HttpRequest {
+                        method: "POST".to_owned(),
+                        path: path.to_owned(),
+                        headers: vec![("Content-Type".to_owned(), "application/json".to_owned())],
+                        body: body.clone(),
+                    },
+                    deadline,
+                )
                 .await
             {
                 Ok(response) => return Ok(response),
                 Err(error) => {
                     last_error = Some(error);
                     if attempt + 1 < self.retry.attempts {
-                        tokio::time::sleep(self.retry.delay).await;
+                        sleep_before_deadline(self.retry.delay, deadline, self.timeout).await?;
                     }
                 }
             }
@@ -88,38 +102,30 @@ impl HttpTransport {
     }
 
     pub async fn send_once(&self, request: HttpRequest) -> Result<HttpResponse, HostError> {
+        let deadline = self.effective_deadline(None);
+        self.send_once_before(request, deadline).await
+    }
+
+    async fn send_once_before(
+        &self,
+        request: HttpRequest,
+        deadline: tokio::time::Instant,
+    ) -> Result<HttpResponse, HostError> {
         let url = self.authority.join(&request.path)?;
-        let client = resolved_http_client(&self.authority)?;
         let method = Method::from_bytes(request.method.as_bytes()).map_err(|error| {
             HostError::new(HostErrorCode::InvalidRequest, "invalid HTTP method")
                 .with_detail("error", error.to_string())
         })?;
-        let mut builder = client
-            .request(method, url)
-            .timeout(total_timeout(self.timeout))
-            .body(request.body);
-
-        for (name, value) in request.headers.into_iter().chain(self.auth.headers()) {
-            builder = builder.header(
-                parse_header_name(&name)?,
-                parse_header_value(&name, &value)?,
-            );
-        }
-
-        let response = builder.send().await.map_err(|error| {
-            HostError::new(HostErrorCode::ProviderUnavailable, "HTTP request failed")
-                .with_detail("error", error.to_string())
-        })?;
-        let status = response.status().as_u16();
-        let headers = response_headers(response.headers())?;
-        let bytes = response.bytes().await.map_err(|error| {
-            HostError::new(
-                HostErrorCode::ProviderUnavailable,
-                "failed to read HTTP response",
+        let response = self
+            .send_request_before(
+                method,
+                url,
+                request.headers,
+                request.body.into_bytes(),
+                deadline,
             )
-            .with_detail("error", error.to_string())
-        })?;
-        let body = String::from_utf8(bytes.to_vec()).map_err(|error| {
+            .await?;
+        let body = String::from_utf8(response.body).map_err(|error| {
             HostError::new(
                 HostErrorCode::InvalidResponse,
                 "HTTP response body is not valid UTF-8",
@@ -127,8 +133,8 @@ impl HttpTransport {
             .with_detail("error", error.to_string())
         })?;
         Ok(HttpResponse {
-            status,
-            headers,
+            status: response.status,
+            headers: response.headers,
             body,
         })
     }
@@ -140,40 +146,62 @@ impl HttpTransport {
         headers: Vec<(String, String)>,
         body: Vec<u8>,
     ) -> Result<HttpRawResponse, HostError> {
+        let deadline = self.effective_deadline(None);
         let url = self.authority.parse_and_authorize(url.as_ref())?;
-        let client = resolved_http_client(&self.authority)?;
         let method = Method::from_bytes(method.as_ref().as_bytes()).map_err(|error| {
             HostError::new(HostErrorCode::InvalidRequest, "invalid HTTP method")
                 .with_detail("error", error.to_string())
         })?;
-        let mut builder = client
-            .request(method, url)
-            .timeout(total_timeout(self.timeout))
-            .body(body);
-        for (name, value) in headers.into_iter().chain(self.auth.headers()) {
-            builder = builder.header(
-                parse_header_name(&name)?,
-                parse_header_value(&name, &value)?,
-            );
-        }
-        let response = builder.send().await.map_err(|error| {
-            HostError::new(HostErrorCode::ProviderUnavailable, "HTTP request failed")
-                .with_detail("error", error.to_string())
-        })?;
-        let status = response.status().as_u16();
-        let headers = response_headers(response.headers())?;
-        let body = response.bytes().await.map_err(|error| {
-            HostError::new(
-                HostErrorCode::ProviderUnavailable,
-                "failed to read HTTP response",
-            )
-            .with_detail("error", error.to_string())
-        })?;
-        Ok(HttpRawResponse {
-            status,
-            headers,
-            body: body.to_vec(),
-        })
+        self.send_request_before(method, url, headers, body, deadline)
+            .await
+    }
+
+    async fn send_request_before(
+        &self,
+        method: Method,
+        url: reqwest::Url,
+        headers: Vec<(String, String)>,
+        body: Vec<u8>,
+        deadline: tokio::time::Instant,
+    ) -> Result<HttpRawResponse, HostError> {
+        let operation = async {
+            let remaining = remaining_until(deadline, self.timeout)?;
+            let connect_timeout = cmp::min(self.timeout.connect_timeout(), remaining);
+            let client = resolved_http_client(&self.authority, connect_timeout).await?;
+            let mut builder = client.request(method, url).body(body);
+            for (name, value) in headers.into_iter().chain(self.auth.headers()) {
+                builder = builder.header(
+                    parse_header_name(&name)?,
+                    parse_header_value(&name, &value)?,
+                );
+            }
+            let response = builder
+                .send()
+                .await
+                .map_err(|error| request_error("HTTP request failed", error))?;
+            let status = response.status().as_u16();
+            let headers = response_headers(response.headers())?;
+            let body = response
+                .bytes()
+                .await
+                .map_err(|error| request_error("failed to read HTTP response", error))?;
+            Ok(HttpRawResponse {
+                status,
+                headers,
+                body: body.to_vec(),
+            })
+        };
+        tokio::time::timeout_at(deadline, operation)
+            .await
+            .map_err(|_| request_deadline_exceeded(self.timeout))?
+    }
+
+    fn effective_deadline(
+        &self,
+        outer_deadline: Option<tokio::time::Instant>,
+    ) -> tokio::time::Instant {
+        let configured = tokio::time::Instant::now() + self.timeout.request_deadline();
+        outer_deadline.map_or(configured, |outer| cmp::min(configured, outer))
     }
 }
 
@@ -199,15 +227,23 @@ pub struct HttpRawResponse {
     pub body: Vec<u8>,
 }
 
-fn resolved_http_client(authority: &TransportEndpointAuthority) -> Result<Client, HostError> {
+async fn resolved_http_client(
+    authority: &TransportEndpointAuthority,
+    connect_timeout: Duration,
+) -> Result<Client, HostError> {
     let (_, host, _) = authority.endpoint();
-    let addresses = TransportEndpointResolver::resolve(authority)?;
-    build_resolved_http_client(host, &addresses)
+    let addresses = TransportEndpointResolver::resolve(authority).await?;
+    build_resolved_http_client(host, &addresses, connect_timeout)
 }
 
-fn build_resolved_http_client(host: &str, addresses: &[SocketAddr]) -> Result<Client, HostError> {
+fn build_resolved_http_client(
+    host: &str,
+    addresses: &[SocketAddr],
+    connect_timeout: Duration,
+) -> Result<Client, HostError> {
     Client::builder()
         .redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(connect_timeout)
         .resolve_to_addrs(host, addresses)
         .build()
         .map_err(|error| {
@@ -220,8 +256,44 @@ fn build_resolved_http_client(host: &str, addresses: &[SocketAddr]) -> Result<Cl
         })
 }
 
-fn total_timeout(timeout: TimeoutConfig) -> Duration {
-    timeout.connect + timeout.read + timeout.write
+fn remaining_until(
+    deadline: tokio::time::Instant,
+    timeout: TransportTimeoutPolicy,
+) -> Result<Duration, HostError> {
+    deadline
+        .checked_duration_since(tokio::time::Instant::now())
+        .filter(|remaining| !remaining.is_zero())
+        .ok_or_else(|| request_deadline_exceeded(timeout))
+}
+
+async fn sleep_before_deadline(
+    delay: Duration,
+    deadline: tokio::time::Instant,
+    timeout: TransportTimeoutPolicy,
+) -> Result<(), HostError> {
+    tokio::time::timeout_at(deadline, tokio::time::sleep(delay))
+        .await
+        .map_err(|_| request_deadline_exceeded(timeout))
+}
+
+fn request_error(message: &'static str, error: reqwest::Error) -> HostError {
+    let code = if error.is_timeout() {
+        HostErrorCode::TimedOut
+    } else {
+        HostErrorCode::ProviderUnavailable
+    };
+    HostError::new(code, message).with_detail("error", error.to_string())
+}
+
+fn request_deadline_exceeded(timeout: TransportTimeoutPolicy) -> HostError {
+    HostError::new(
+        HostErrorCode::TimedOut,
+        "HTTP transport request deadline exceeded",
+    )
+    .with_detail(
+        "configured_request_deadline_ms",
+        timeout.request_deadline().as_millis().to_string(),
+    )
 }
 
 fn response_headers(

@@ -5,8 +5,8 @@ use serde_json::{Value, json};
 use crate::{
     AuthConfig, HostError, HostErrorCode, HostValue, HttpTransport, ModelClient, ModelContent,
     ModelMessage, ModelProviderCapabilities, ModelRequest, ModelResponse, ModelRole, ModelToolCall,
-    ModelToolChoice, ModelUsage, PrivateResolutionPolicy, RetryPolicy, host_json_to_value,
-    host_value_to_json,
+    ModelToolChoice, ModelUsage, PrivateResolutionPolicy, RetryPolicy, TransportTimeoutPolicy,
+    host_json_to_value, host_value_to_json,
 };
 
 use super::tool_schema::{host_schema_to_json_schema, openai_legacy_functions, openai_tools};
@@ -112,6 +112,11 @@ impl OpenAiProtocolAdapter {
         self
     }
 
+    pub fn with_timeout(mut self, timeout: TransportTimeoutPolicy) -> Self {
+        self.transport = self.transport.with_timeout(timeout);
+        self
+    }
+
     pub fn encode_request(&self, request: ModelRequest) -> OpenAiProviderRequest {
         OpenAiProviderRequest {
             base_url: self.base_url.clone(),
@@ -125,8 +130,12 @@ impl OpenAiProtocolAdapter {
 
     async fn complete_request(&self, request: ModelRequest) -> Result<ModelResponse, HostError> {
         let id = request.id;
+        let budget_deadline = request.budget.deadline()?;
         let body = encode_openai_chat_request_with_dialect(&request, self.dialect)?;
-        let response = self.transport.send_json("/chat/completions", body).await?;
+        let response = self
+            .transport
+            .send_json_with_deadline("/chat/completions", body, budget_deadline)
+            .await?;
         if !(200..300).contains(&response.status) {
             return Err(HostError::new(
                 HostErrorCode::ProviderRejected,

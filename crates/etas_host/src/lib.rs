@@ -91,7 +91,7 @@ pub use tool::{
 };
 pub use transport::{
     AuthConfig, HttpRawResponse, HttpRequest, HttpResponse, HttpTransport, PrivateResolutionPolicy,
-    RetryPolicy, SseEvent, TimeoutConfig,
+    RetryPolicy, SseEvent, TransportTimeoutPolicy,
 };
 pub use value::{
     HostFieldSchema, HostJsonValue, HostSchema, HostValue, HostValueCodec, HostVariantSchema,
