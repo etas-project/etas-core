@@ -16,4 +16,4 @@ pub use network::{NetworkEndpoint, NetworkPolicy, NetworkSandbox};
 pub use platform::{PlatformSandbox, PlatformSandboxHook};
 pub use policy::{DestructiveOpPolicy, SandboxMode, SandboxPolicy};
 pub use snapshot::{WorkspaceSnapshot, WorkspaceSnapshotEntry};
-pub use workspace::{WorkspacePath, WorkspaceRoot};
+pub use workspace::{WorkspacePath, WorkspacePathRef, WorkspaceRegionId, WorkspaceRoot};
