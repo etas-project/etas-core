@@ -18,11 +18,11 @@ use etas_host::{
     HttpTransport, InMemoryMemoryClient, LocalFilesystemClient, MemoryClient, MemoryOperation,
     MemoryRequest, MemoryResult, MemoryVersion, ModelClient, ModelContent, ModelMessage, ModelName,
     ModelOptions, ModelRequest, ModelRole, NetworkPolicy, OpenAiProtocolAdapter,
-    ProcessToolProtocolAdapter, SandboxPolicy, SecretClient, SecretOperation, SecretRequest,
-    SecretValue, StoreRef, StreamClient, StreamOperation, StreamRequest, TcpClient,
+    ProcessToolProtocolAdapter, RetryPolicy, SandboxPolicy, SecretClient, SecretOperation,
+    SecretRequest, SecretValue, StoreRef, StreamClient, StreamOperation, StreamRequest, TcpClient,
     TcpConnectOperation, TcpConnectRequest, TcpEndpoint, TestWorkspace, ToolClient, ToolRef,
-    ToolRequest, TraceContext, TraceId, UnavailableBrowserProtocolClient, UnavailableSecretClient,
-    UnavailableStreamClient, UnavailableTcpClient, WorkspacePath,
+    ToolRequest, TraceContext, TraceId, TransportTimeoutPolicy, UnavailableBrowserProtocolClient,
+    UnavailableSecretClient, UnavailableStreamClient, UnavailableTcpClient, WorkspacePath,
 };
 
 #[tokio::test]
@@ -580,6 +580,105 @@ async fn http_transport_does_not_follow_redirects_outside_adapter_authority() {
         .expect("redirect target server completed");
     assert_eq!(response.status, 302);
     assert!(!target_reached.load(Ordering::SeqCst));
+}
+
+#[tokio::test]
+async fn http_transport_uses_configured_request_deadline() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind delayed endpoint");
+    let address = listener.local_addr().expect("delayed endpoint address");
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept delayed request");
+        let mut request = [0_u8; 1024];
+        let _ = stream.read(&mut request);
+        thread::sleep(Duration::from_millis(150));
+        let _ = stream.write_all(
+            b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}",
+        );
+    });
+    let timeout = TransportTimeoutPolicy::try_from_millis(100, 500)
+        .expect("configured deadline should be valid");
+    let transport = HttpTransport::try_new(
+        format!("http://{address}"),
+        etas_host::PrivateResolutionPolicy::AllowPrivate,
+    )
+    .expect("delayed endpoint should be valid")
+    .with_timeout(timeout);
+
+    let response = transport
+        .send_json("/v1/test", "{}".to_owned())
+        .await
+        .expect("response within configured deadline should succeed");
+
+    server.join().expect("delayed server completed");
+    assert_eq!(response.status, 200);
+}
+
+#[tokio::test]
+async fn execution_deadline_tightens_transport_deadline() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind delayed endpoint");
+    let address = listener.local_addr().expect("delayed endpoint address");
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept delayed request");
+        let mut request = [0_u8; 1024];
+        let _ = stream.read(&mut request);
+        thread::sleep(Duration::from_millis(250));
+        let _ = stream.write_all(
+            b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}",
+        );
+    });
+    let timeout = TransportTimeoutPolicy::try_from_millis(100, 500)
+        .expect("configured deadline should be valid");
+    let transport = HttpTransport::try_new(
+        format!("http://{address}"),
+        etas_host::PrivateResolutionPolicy::AllowPrivate,
+    )
+    .expect("delayed endpoint should be valid")
+    .with_timeout(timeout);
+
+    let error = transport
+        .send_json_with_deadline(
+            "/v1/test",
+            "{}".to_owned(),
+            Some(tokio::time::Instant::now() + Duration::from_millis(100)),
+        )
+        .await
+        .expect_err("execution deadline must tighten transport deadline");
+
+    server.join().expect("delayed server completed");
+    assert_eq!(error.code, HostErrorCode::TimedOut);
+}
+
+#[tokio::test]
+async fn retry_delay_does_not_reset_request_deadline() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind failing endpoint");
+    let address = listener.local_addr().expect("failing endpoint address");
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept failing request");
+        let mut request = [0_u8; 1024];
+        let _ = stream.read(&mut request);
+    });
+    let timeout = TransportTimeoutPolicy::try_from_millis(100, 100)
+        .expect("configured deadline should be valid");
+    let transport = HttpTransport::try_new(
+        format!("http://{address}"),
+        etas_host::PrivateResolutionPolicy::AllowPrivate,
+    )
+    .expect("failing endpoint should be valid")
+    .with_timeout(timeout)
+    .with_retry(RetryPolicy {
+        attempts: 2,
+        delay: Duration::from_millis(200),
+    });
+    let started = Instant::now();
+
+    let error = transport
+        .send_json("/v1/test", "{}".to_owned())
+        .await
+        .expect_err("retry delay must remain inside the original deadline");
+
+    server.join().expect("failing server completed");
+    assert_eq!(error.code, HostErrorCode::TimedOut);
+    assert!(started.elapsed() < Duration::from_millis(300));
 }
 
 fn model_request(id: HostRequestId, sandbox: SandboxPolicy) -> ModelRequest {

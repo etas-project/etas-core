@@ -1,6 +1,6 @@
 use std::{
     collections::BTreeSet,
-    net::{IpAddr, SocketAddr, ToSocketAddrs},
+    net::{IpAddr, SocketAddr},
 };
 
 use crate::network_address::{is_public_address, resembles_noncanonical_ip_literal};
@@ -11,7 +11,7 @@ use super::{PrivateResolutionPolicy, TransportEndpointAuthority};
 pub(crate) struct TransportEndpointResolver;
 
 impl TransportEndpointResolver {
-    pub(crate) fn resolve(
+    pub(crate) async fn resolve(
         authority: &TransportEndpointAuthority,
     ) -> Result<Vec<SocketAddr>, HostError> {
         let (scheme, host, port) = authority.endpoint();
@@ -25,8 +25,8 @@ impl TransportEndpointResolver {
             .with_detail("port", port.to_string()));
         }
         let canonical_ip = host.parse::<IpAddr>().ok();
-        let addresses = (host, port)
-            .to_socket_addrs()
+        let addresses = tokio::net::lookup_host((host, port))
+            .await
             .map_err(|error| {
                 HostError::new(
                     HostErrorCode::ProviderUnavailable,
