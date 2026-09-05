@@ -23,7 +23,8 @@ pub use browser::{
     BrowserProtocolRequest, BrowserProtocolResponse, UnavailableBrowserProtocolClient,
 };
 pub use command::{
-    CommandClient, CommandOutput, CommandRequest, CommandResponse, LocalCommandClient,
+    CommandClient, CommandExecutionPolicy, CommandOutput, CommandRequest, CommandResponse,
+    LocalCommandClient,
 };
 pub use context::{
     ActionArgPattern, ActionInstance, ActionPattern, ApprovalDecision, ApprovalGrant,

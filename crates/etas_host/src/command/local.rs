@@ -1,18 +1,56 @@
+mod output;
+mod process_tree;
+mod supervisor;
+
 use std::{future::Future, pin::Pin, process::Stdio};
 
-use tokio::{io::AsyncWriteExt, process::Command as TokioCommand};
+use tokio::process::Command as TokioCommand;
 
 use crate::{
-    ActionInstance, CommandClient, CommandOutput, CommandRequest, CommandResponse, HostError,
-    HostErrorCode, SandboxBroker,
+    ActionInstance, CommandClient, CommandRequest, CommandResponse, HostError, HostErrorCode,
+    SandboxBroker,
 };
 
+use self::{process_tree::ProcessTreeController, supervisor::SupervisedCommand};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CommandExecutionPolicy {
+    pub max_stdout_bytes: usize,
+    pub max_stderr_bytes: usize,
+}
+
+impl CommandExecutionPolicy {
+    pub const DEFAULT_MAX_OUTPUT_BYTES: usize = 1024 * 1024;
+
+    pub const fn new(max_stdout_bytes: usize, max_stderr_bytes: usize) -> Self {
+        Self {
+            max_stdout_bytes,
+            max_stderr_bytes,
+        }
+    }
+}
+
+impl Default for CommandExecutionPolicy {
+    fn default() -> Self {
+        Self::new(
+            Self::DEFAULT_MAX_OUTPUT_BYTES,
+            Self::DEFAULT_MAX_OUTPUT_BYTES,
+        )
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct LocalCommandClient;
+pub struct LocalCommandClient {
+    policy: CommandExecutionPolicy,
+}
 
 impl LocalCommandClient {
     pub fn new() -> Self {
-        Self
+        Self::default()
+    }
+
+    pub const fn with_policy(policy: CommandExecutionPolicy) -> Self {
+        Self { policy }
     }
 
     async fn execute_local(&self, request: CommandRequest) -> Result<CommandResponse, HostError> {
@@ -31,6 +69,8 @@ impl LocalCommandClient {
             .with_detail("program", program.clone()));
         }
         SandboxBroker::new(request.authority.sandbox.clone()).check_command(program)?;
+        request.budget.check_time()?;
+        let deadline = request.budget.deadline()?;
 
         let mut command = TokioCommand::new(program);
         command.args(request.argv.iter().skip(1));
@@ -48,43 +88,20 @@ impl LocalCommandClient {
         });
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());
+        ProcessTreeController::configure(&mut command);
 
-        let mut child = command.spawn().map_err(|error| {
-            HostError::new(
-                HostErrorCode::ProviderUnavailable,
-                "failed to spawn command",
-            )
-            .with_detail("program", program.clone())
-            .with_detail("error", error.to_string())
-        })?;
-        if let Some(stdin) = request.stdin
-            && let Some(child_stdin) = child.stdin.as_mut()
-        {
-            child_stdin.write_all(&stdin).await.map_err(|error| {
-                HostError::new(
-                    HostErrorCode::ProviderUnavailable,
-                    "failed to write command stdin",
-                )
-                .with_detail("program", program.clone())
-                .with_detail("error", error.to_string())
-            })?;
-        }
-        let output = child.wait_with_output().await.map_err(|error| {
-            HostError::new(
-                HostErrorCode::ProviderUnavailable,
-                "failed to wait for command output",
-            )
-            .with_detail("program", program.clone())
-            .with_detail("error", error.to_string())
-        })?;
+        let supervised = SupervisedCommand::spawn(
+            command,
+            request.stdin,
+            deadline,
+            self.policy,
+            program.clone(),
+        )?;
+        let output = supervised.wait().await?;
 
         Ok(CommandResponse {
             id: request.id,
-            result: Ok(CommandOutput {
-                exit_code: output.status.code().unwrap_or(-1),
-                stdout: output.stdout,
-                stderr: output.stderr,
-            }),
+            result: Ok(output),
         })
     }
 }
