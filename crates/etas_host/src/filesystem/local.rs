@@ -27,7 +27,11 @@ impl WorkspaceRegionRegistry {
         Ok(())
     }
 
-    fn resolve(&self, path: &WorkspacePathRef, create: bool) -> Result<WorkspacePath, HostError> {
+    pub(crate) fn resolve(
+        &self,
+        path: &WorkspacePathRef,
+        create: bool,
+    ) -> Result<WorkspacePath, HostError> {
         let root = self.roots.get(&path.region).ok_or_else(|| {
             HostError::new(
                 HostErrorCode::AuthorityDenied,

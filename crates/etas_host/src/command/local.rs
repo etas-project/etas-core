@@ -8,7 +8,7 @@ use tokio::process::Command as TokioCommand;
 
 use crate::{
     ActionInstance, CommandClient, CommandRequest, CommandResponse, HostError, HostErrorCode,
-    SandboxBroker,
+    SandboxBroker, WorkspaceRegionRegistry,
 };
 
 use self::{process_tree::ProcessTreeController, supervisor::SupervisedCommand};
@@ -42,6 +42,7 @@ impl Default for CommandExecutionPolicy {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LocalCommandClient {
     policy: CommandExecutionPolicy,
+    regions: WorkspaceRegionRegistry,
 }
 
 impl LocalCommandClient {
@@ -49,8 +50,18 @@ impl LocalCommandClient {
         Self::default()
     }
 
-    pub const fn with_policy(policy: CommandExecutionPolicy) -> Self {
-        Self { policy }
+    pub fn with_policy(policy: CommandExecutionPolicy) -> Self {
+        Self {
+            policy,
+            regions: WorkspaceRegionRegistry::default(),
+        }
+    }
+
+    pub fn with_regions(regions: WorkspaceRegionRegistry) -> Self {
+        Self {
+            policy: CommandExecutionPolicy::default(),
+            regions,
+        }
     }
 
     async fn execute_local(&self, request: CommandRequest) -> Result<CommandResponse, HostError> {
@@ -78,7 +89,12 @@ impl LocalCommandClient {
         for (key, value) in &request.env {
             command.env(key, value);
         }
-        if let Some(cwd) = &request.cwd {
+        let cwd = request
+            .cwd
+            .as_ref()
+            .map(|path| self.regions.resolve(path, false))
+            .transpose()?;
+        if let Some(cwd) = &cwd {
             command.current_dir(cwd.absolute());
         }
         command.stdin(if request.stdin.is_some() {
