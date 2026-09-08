@@ -1,10 +1,11 @@
 use std::{
-    fs,
-    io::Write,
-    path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
+    io::{Read, Write},
+    path::Path,
 };
 
+use cap_std::fs::{Dir, OpenOptions};
+
+use super::workspace::{normalize_relative, read_options, workspace_io_error};
 use crate::{HostError, HostErrorCode, WorkspacePath, WorkspaceRoot};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -58,24 +59,27 @@ impl FilesystemSandbox {
     }
 
     pub fn read_file(&self, root: &WorkspaceRoot, path: &Path) -> Result<Vec<u8>, HostError> {
-        self.ensure_read_root(root)?;
-        let workspace_path = root.resolve_existing(path)?;
-        let absolute = workspace_path.absolute();
-        if !absolute.is_file() {
+        ensure_root_allowed(
+            &self.policy.read_roots,
+            root,
+            "filesystem read is not allowed",
+        )?;
+        let relative = normalize_relative(path)?;
+        let mut file = root
+            .directory()
+            .open_with(&relative, &read_options())
+            .map_err(workspace_io_error)?;
+        if !file.metadata().map_err(workspace_io_error)?.is_file() {
             return Err(HostError::new(
                 HostErrorCode::InvalidRequest,
                 "workspace read target is not a file",
-            )
-            .with_detail("path", absolute.display().to_string()));
+            ));
         }
-        fs::read(&absolute).map_err(|error| {
-            HostError::new(
-                HostErrorCode::ProviderUnavailable,
-                "failed to read workspace file",
-            )
-            .with_detail("path", absolute.display().to_string())
-            .with_detail("error", error.to_string())
-        })
+        #[cfg(test)]
+        tests::after_resolution();
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes).map_err(workspace_io_error)?;
+        Ok(bytes)
     }
 
     pub fn atomic_write(
@@ -84,34 +88,20 @@ impl FilesystemSandbox {
         path: &Path,
         bytes: &[u8],
     ) -> Result<WorkspacePath, HostError> {
-        self.ensure_write_root(root)?;
-        let workspace_path = root.resolve_for_create(path)?;
-        let absolute = workspace_path.absolute();
-        let parent = absolute.parent().ok_or_else(|| {
-            HostError::new(
-                HostErrorCode::InvalidRequest,
-                "workspace write target has no parent directory",
-            )
-        })?;
-        root.ensure_inside(&fs::canonicalize(parent).map_err(|error| {
-            HostError::new(
-                HostErrorCode::InvalidRequest,
-                "workspace write parent does not exist",
-            )
-            .with_detail("path", parent.display().to_string())
-            .with_detail("error", error.to_string())
-        })?)?;
-
-        let temp_path = temp_write_path(parent, &absolute)?;
-        let write_result = write_temp_file(&temp_path, bytes)
-            .and_then(|_| fs::rename(&temp_path, &absolute).map_err(fs_error));
-        match write_result {
-            Ok(()) => Ok(workspace_path),
-            Err(error) => {
-                let _ = fs::remove_file(&temp_path);
-                Err(error)
-            }
-        }
+        ensure_root_allowed(
+            &self.policy.write_roots,
+            root,
+            "filesystem write is not allowed",
+        )?;
+        let relative = normalize_relative(path)?;
+        let (parent, name) = root.open_parent(&relative)?;
+        #[cfg(test)]
+        tests::after_resolution();
+        atomic_write_at(&parent, Path::new(&name), bytes)?;
+        Ok(WorkspacePath {
+            root: root.clone(),
+            relative,
+        })
     }
 
     pub fn create_dir_all(
@@ -119,68 +109,60 @@ impl FilesystemSandbox {
         root: &WorkspaceRoot,
         path: &Path,
     ) -> Result<WorkspacePath, HostError> {
-        self.ensure_write_root(root)?;
-        let workspace_path = root.resolve_for_create(path)?;
-        let absolute = workspace_path.absolute();
-        fs::create_dir_all(&absolute).map_err(|error| {
-            HostError::new(
-                HostErrorCode::ProviderUnavailable,
-                "failed to create workspace directory",
-            )
-            .with_detail("path", absolute.display().to_string())
-            .with_detail("error", error.to_string())
-        })?;
-        root.ensure_inside(&fs::canonicalize(&absolute).map_err(|error| {
-            HostError::new(
-                HostErrorCode::InvalidRequest,
-                "created workspace directory could not be canonicalized",
-            )
-            .with_detail("path", absolute.display().to_string())
-            .with_detail("error", error.to_string())
-        })?)?;
-        Ok(workspace_path)
+        ensure_root_allowed(
+            &self.policy.write_roots,
+            root,
+            "filesystem write is not allowed",
+        )?;
+        let relative = normalize_relative(path)?;
+        // Each component is created and opened relative to the retained parent.
+        let mut parent = root.directory().try_clone().map_err(workspace_io_error)?;
+        for component in &relative {
+            match parent.create_dir(component) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(error) => return Err(workspace_io_error(error)),
+            }
+            #[cfg(test)]
+            tests::after_resolution();
+            parent = parent.open_dir(component).map_err(workspace_io_error)?;
+        }
+        Ok(WorkspacePath {
+            root: root.clone(),
+            relative,
+        })
     }
 
     pub fn read_dir(&self, root: &WorkspaceRoot, path: &Path) -> Result<Vec<String>, HostError> {
-        self.ensure_read_root(root)?;
-        let workspace_path = root.resolve_existing(path)?;
-        let absolute = workspace_path.absolute();
-        if !absolute.is_dir() {
-            return Err(HostError::new(
-                HostErrorCode::InvalidRequest,
-                "workspace read_dir target is not a directory",
-            )
-            .with_detail("path", absolute.display().to_string()));
-        }
-        let mut entries = fs::read_dir(&absolute)
-            .map_err(|error| {
-                HostError::new(
-                    HostErrorCode::ProviderUnavailable,
-                    "failed to read workspace directory",
-                )
-                .with_detail("path", absolute.display().to_string())
-                .with_detail("error", error.to_string())
-            })?
+        ensure_root_allowed(
+            &self.policy.read_roots,
+            root,
+            "filesystem read is not allowed",
+        )?;
+        let directory = root
+            .directory()
+            .open_dir(normalize_relative(path)?)
+            .map_err(workspace_io_error)?;
+        #[cfg(test)]
+        tests::after_resolution();
+        let mut names = directory
+            .entries()
+            .map_err(workspace_io_error)?
             .map(|entry| {
-                let entry = entry.map_err(|error| {
-                    HostError::new(
-                        HostErrorCode::ProviderUnavailable,
-                        "failed to read workspace directory entry",
-                    )
-                    .with_detail("path", absolute.display().to_string())
-                    .with_detail("error", error.to_string())
-                })?;
-                entry.file_name().into_string().map_err(|_| {
-                    HostError::new(
-                        HostErrorCode::InvalidResponse,
-                        "workspace directory entry name is not valid UTF-8",
-                    )
-                    .with_detail("path", absolute.display().to_string())
-                })
+                entry
+                    .map_err(workspace_io_error)?
+                    .file_name()
+                    .into_string()
+                    .map_err(|_| {
+                        HostError::new(
+                            HostErrorCode::InvalidResponse,
+                            "workspace directory entry name is not valid UTF-8",
+                        )
+                    })
             })
             .collect::<Result<Vec<_>, _>>()?;
-        entries.sort();
-        Ok(entries)
+        names.sort();
+        Ok(names)
     }
 
     pub fn stat(
@@ -188,17 +170,17 @@ impl FilesystemSandbox {
         root: &WorkspaceRoot,
         path: &Path,
     ) -> Result<WorkspaceFileMetadata, HostError> {
-        self.ensure_read_root(root)?;
-        let workspace_path = root.resolve_existing(path)?;
-        let absolute = workspace_path.absolute();
-        let metadata = fs::metadata(&absolute).map_err(|error| {
-            HostError::new(
-                HostErrorCode::ProviderUnavailable,
-                "failed to stat workspace path",
-            )
-            .with_detail("path", absolute.display().to_string())
-            .with_detail("error", error.to_string())
-        })?;
+        ensure_root_allowed(
+            &self.policy.read_roots,
+            root,
+            "filesystem read is not allowed",
+        )?;
+        let metadata = root
+            .directory()
+            .metadata(normalize_relative(path)?)
+            .map_err(workspace_io_error)?;
+        #[cfg(test)]
+        tests::after_resolution();
         Ok(WorkspaceFileMetadata {
             is_file: metadata.is_file(),
             is_dir: metadata.is_dir(),
@@ -211,58 +193,37 @@ impl FilesystemSandbox {
         root: &WorkspaceRoot,
         path: &Path,
     ) -> Result<WorkspacePath, HostError> {
-        self.ensure_delete_root(root)?;
-        let workspace_path = root.resolve_existing(path)?;
-        let absolute = workspace_path.absolute();
-        if !absolute.is_file() {
-            return Err(HostError::new(
-                HostErrorCode::InvalidRequest,
-                "workspace delete target is not a file",
-            )
-            .with_detail("path", absolute.display().to_string()));
-        }
-        fs::remove_file(&absolute).map_err(|error| {
-            HostError::new(
-                HostErrorCode::ProviderUnavailable,
-                "failed to delete workspace file",
-            )
-            .with_detail("path", absolute.display().to_string())
-            .with_detail("error", error.to_string())
-        })?;
-        Ok(workspace_path)
-    }
-
-    fn ensure_read_root(&self, root: &WorkspaceRoot) -> Result<(), HostError> {
-        ensure_root_allowed(
-            &self.policy.read_roots,
-            root,
-            "filesystem read is not allowed",
-        )
-    }
-
-    fn ensure_write_root(&self, root: &WorkspaceRoot) -> Result<(), HostError> {
-        ensure_root_allowed(
-            &self.policy.write_roots,
-            root,
-            "filesystem write is not allowed",
-        )
-    }
-
-    fn ensure_delete_root(&self, root: &WorkspaceRoot) -> Result<(), HostError> {
         ensure_root_allowed(
             &self.policy.delete_roots,
             root,
             "filesystem delete is not allowed",
-        )
+        )?;
+        let relative = normalize_relative(path)?;
+        let (parent, name) = root.open_parent(&relative)?;
+        let metadata = parent.symlink_metadata(&name).map_err(workspace_io_error)?;
+        if !metadata.is_file() && !metadata.is_symlink() {
+            return Err(HostError::new(
+                HostErrorCode::InvalidRequest,
+                "workspace delete target is not a file",
+            ));
+        }
+        #[cfg(test)]
+        tests::after_resolution();
+        // Unlink the entry in the authorized parent; never follow its target.
+        parent.remove_file(&name).map_err(workspace_io_error)?;
+        Ok(WorkspacePath {
+            root: root.clone(),
+            relative,
+        })
     }
 }
 
 fn ensure_root_allowed(
-    allowed_roots: &[WorkspaceRoot],
+    roots: &[WorkspaceRoot],
     root: &WorkspaceRoot,
     message: &'static str,
 ) -> Result<(), HostError> {
-    if allowed_roots.contains(root) {
+    if roots.contains(root) {
         Ok(())
     } else {
         Err(HostError::new(HostErrorCode::AuthorityDenied, message)
@@ -270,50 +231,28 @@ fn ensure_root_allowed(
     }
 }
 
-fn temp_write_path(parent: &Path, final_path: &Path) -> Result<PathBuf, HostError> {
-    let final_name = final_path.file_name().ok_or_else(|| {
+pub(super) fn atomic_write_at(parent: &Dir, name: &Path, bytes: &[u8]) -> Result<(), HostError> {
+    let mut random = [0u8; 16];
+    getrandom::fill(&mut random).map_err(|error| {
         HostError::new(
-            HostErrorCode::InvalidRequest,
-            "workspace write target has no file name",
+            HostErrorCode::ProviderUnavailable,
+            "failed to generate temporary file identity",
         )
+        .with_detail("error", error.to_string())
     })?;
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|error| {
-            HostError::new(
-                HostErrorCode::InvalidRequest,
-                "system clock is before UNIX epoch",
-            )
-            .with_detail("error", error.to_string())
-        })?
-        .as_nanos();
-    Ok(parent.join(format!(
-        ".{}.etas-tmp-{nanos}",
-        final_name.to_string_lossy()
-    )))
+    let temp = format!(".etas-tmp-{:032x}", u128::from_le_bytes(random));
+    let mut file = parent
+        .open_with(&temp, OpenOptions::new().create_new(true).write(true))
+        .map_err(workspace_io_error)?;
+    let result = file
+        .write_all(bytes)
+        .and_then(|_| file.sync_all())
+        .and_then(|_| parent.rename(&temp, parent, name));
+    if result.is_err() {
+        let _ = parent.remove_file(&temp);
+    }
+    result.map_err(workspace_io_error)
 }
 
-fn write_temp_file(path: &Path, bytes: &[u8]) -> Result<(), HostError> {
-    let mut file = fs::OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .open(path)
-        .map_err(|error| {
-            HostError::new(
-                HostErrorCode::ProviderUnavailable,
-                "failed to create temporary workspace file",
-            )
-            .with_detail("path", path.display().to_string())
-            .with_detail("error", error.to_string())
-        })?;
-    file.write_all(bytes).map_err(fs_error)?;
-    file.sync_all().map_err(fs_error)
-}
-
-fn fs_error(error: std::io::Error) -> HostError {
-    HostError::new(
-        HostErrorCode::ProviderUnavailable,
-        "filesystem operation failed",
-    )
-    .with_detail("error", error.to_string())
-}
+#[cfg(test)]
+mod tests;

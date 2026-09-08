@@ -1,7 +1,10 @@
 use std::{
     fs,
     path::{Component, Path, PathBuf},
+    sync::Arc,
 };
+
+use cap_std::fs::{Dir, OpenOptions};
 
 use crate::{HostError, HostErrorCode};
 
@@ -47,10 +50,20 @@ impl WorkspacePathRef {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug)]
 pub struct WorkspaceRoot {
     pub canonical_root: PathBuf,
+    directory: Arc<Dir>,
+    identity: Arc<same_file::Handle>,
 }
+
+impl PartialEq for WorkspaceRoot {
+    fn eq(&self, other: &Self) -> bool {
+        self.identity == other.identity
+    }
+}
+
+impl Eq for WorkspaceRoot {}
 
 impl WorkspaceRoot {
     pub fn new(root: impl AsRef<Path>) -> Result<Self, HostError> {
@@ -62,28 +75,27 @@ impl WorkspaceRoot {
             .with_detail("path", root.as_ref().display().to_string())
             .with_detail("error", error.to_string())
         })?;
-        if !canonical_root.is_dir() {
-            return Err(HostError::new(
-                HostErrorCode::InvalidRequest,
-                "workspace root is not a directory",
-            )
-            .with_detail("path", canonical_root.display().to_string()));
-        }
-        Ok(Self { canonical_root })
+        let directory = Dir::open_ambient_dir(&canonical_root, cap_std::ambient_authority())
+            .map_err(workspace_io_error)?;
+        let identity = same_file::Handle::from_file(
+            directory
+                .try_clone()
+                .map_err(workspace_io_error)?
+                .into_std_file(),
+        )
+        .map_err(workspace_io_error)?;
+        Ok(Self {
+            canonical_root,
+            directory: Arc::new(directory),
+            identity: Arc::new(identity),
+        })
     }
 
     pub fn resolve_existing(&self, path: impl AsRef<Path>) -> Result<WorkspacePath, HostError> {
         let relative = normalize_relative(path.as_ref())?;
-        let candidate = self.canonical_root.join(&relative);
-        let canonical = fs::canonicalize(&candidate).map_err(|error| {
-            HostError::new(
-                HostErrorCode::InvalidRequest,
-                "workspace path does not exist",
-            )
-            .with_detail("path", candidate.display().to_string())
-            .with_detail("error", error.to_string())
-        })?;
-        self.ensure_inside(&canonical)?;
+        self.directory
+            .metadata(&relative)
+            .map_err(workspace_io_error)?;
         Ok(WorkspacePath {
             root: self.clone(),
             relative,
@@ -92,39 +104,38 @@ impl WorkspaceRoot {
 
     pub fn resolve_for_create(&self, path: impl AsRef<Path>) -> Result<WorkspacePath, HostError> {
         let relative = normalize_relative(path.as_ref())?;
-        let candidate = self.canonical_root.join(&relative);
-        let parent = candidate.parent().ok_or_else(|| {
-            HostError::new(
-                HostErrorCode::InvalidRequest,
-                "workspace path has no parent directory",
-            )
-        })?;
-        let canonical_parent = fs::canonicalize(parent).map_err(|error| {
-            HostError::new(
-                HostErrorCode::InvalidRequest,
-                "workspace path parent does not exist",
-            )
-            .with_detail("path", parent.display().to_string())
-            .with_detail("error", error.to_string())
-        })?;
-        self.ensure_inside(&canonical_parent)?;
+        self.open_parent(&relative)?;
         Ok(WorkspacePath {
             root: self.clone(),
             relative,
         })
     }
 
-    pub fn ensure_inside(&self, canonical_path: &Path) -> Result<(), HostError> {
-        if canonical_path.starts_with(&self.canonical_root) {
-            Ok(())
-        } else {
-            Err(HostError::new(
-                HostErrorCode::AuthorityDenied,
-                "workspace path escapes the configured root",
-            )
-            .with_detail("root", self.canonical_root.display().to_string())
-            .with_detail("path", canonical_path.display().to_string()))
-        }
+    pub(crate) fn directory(&self) -> &Dir {
+        &self.directory
+    }
+
+    pub(crate) fn open_parent(&self, path: &Path) -> Result<(Dir, std::ffi::OsString), HostError> {
+        let relative = normalize_relative(path)?;
+        let name = relative
+            .file_name()
+            .ok_or_else(|| {
+                HostError::new(
+                    HostErrorCode::InvalidRequest,
+                    "workspace path has no file name",
+                )
+            })?
+            .to_owned();
+        let parent = relative
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(Path::new("."));
+        Ok((
+            self.directory
+                .open_dir(parent)
+                .map_err(workspace_io_error)?,
+            name,
+        ))
     }
 }
 
@@ -134,10 +145,28 @@ pub struct WorkspacePath {
     pub relative: PathBuf,
 }
 
-impl WorkspacePath {
-    pub fn absolute(&self) -> PathBuf {
-        self.root.canonical_root.join(&self.relative)
+pub(crate) fn workspace_io_error(error: std::io::Error) -> HostError {
+    let code = match error.kind() {
+        std::io::ErrorKind::PermissionDenied => HostErrorCode::AuthorityDenied,
+        std::io::ErrorKind::NotFound | std::io::ErrorKind::InvalidInput => {
+            HostErrorCode::InvalidRequest
+        }
+        _ => HostErrorCode::ProviderUnavailable,
+    };
+    HostError::new(code, "workspace capability operation failed")
+        .with_detail("error", error.to_string())
+}
+
+pub(super) fn read_options() -> OpenOptions {
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use cap_std::fs::OpenOptionsExt;
+        // Opening a raced-in FIFO must not block before its file kind is checked.
+        options.custom_flags(libc::O_NONBLOCK);
     }
+    options
 }
 
 pub fn normalize_relative(path: &Path) -> Result<PathBuf, HostError> {
