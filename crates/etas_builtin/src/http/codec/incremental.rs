@@ -25,6 +25,8 @@ pub enum HttpCodecFailureKind {
     UnsupportedTransferEncoding,
     ForbiddenResponseBody,
     InvalidChunkSize,
+    InvalidChunkExtension,
+    LimitExceeded,
     InvalidChunkTerminator,
     InvalidTrailer,
 }
@@ -163,7 +165,7 @@ pub fn decode_response_incremental(
     }
 }
 
-enum ParseStep<T> {
+pub(super) enum ParseStep<T> {
     NeedMore,
     Complete(T),
     Malformed {
@@ -245,7 +247,9 @@ fn parse_response_head(
     })
 }
 
-fn parse_status_line(line: &[u8]) -> Result<(String, u16, String), (HttpCodecFailureKind, usize)> {
+pub(super) fn parse_status_line(
+    line: &[u8],
+) -> Result<(String, u16, String), (HttpCodecFailureKind, usize)> {
     let Some(first_space) = line.iter().position(|byte| *byte == b' ') else {
         return Err((HttpCodecFailureKind::InvalidStatusLine, 0));
     };
@@ -290,7 +294,7 @@ fn parse_status_line(line: &[u8]) -> Result<(String, u16, String), (HttpCodecFai
     Ok((version.to_owned(), status, reason.to_owned()))
 }
 
-fn parse_header(line: &[u8]) -> Result<HttpHeader, HttpCodecFailureKind> {
+pub(super) fn parse_header(line: &[u8]) -> Result<HttpHeader, HttpCodecFailureKind> {
     let Some(colon) = line.iter().position(|byte| *byte == b':') else {
         return Err(HttpCodecFailureKind::InvalidHeader);
     };
@@ -359,18 +363,27 @@ fn decode_chunked_body(bytes: &[u8], end_of_stream: bool) -> DecodeStatus<Vec<u8
     let mut offset = 0;
     let mut decoded = Vec::new();
     loop {
-        let (line, next) = match read_crlf_line(bytes, offset) {
-            ParseStep::NeedMore => return incomplete(end_of_stream, bytes.len()),
-            ParseStep::Malformed { kind, offset } => {
-                return DecodeStatus::Malformed { kind, offset };
-            }
-            ParseStep::Complete(value) => value,
+        let (size, consumed) =
+            match super::decode_chunk_size_line_prefix(&bytes[offset..], usize::MAX) {
+                DecodeStatus::NeedMore => return incomplete(end_of_stream, bytes.len()),
+                DecodeStatus::Malformed {
+                    kind,
+                    offset: relative,
+                } => {
+                    return DecodeStatus::Malformed {
+                        kind,
+                        offset: offset + relative,
+                    };
+                }
+                DecodeStatus::Complete { value, consumed } => (value, consumed),
+            };
+        let Ok(size) = usize::try_from(size) else {
+            return DecodeStatus::Malformed {
+                kind: HttpCodecFailureKind::InvalidChunkSize,
+                offset,
+            };
         };
-        let size = match parse_chunk_size(line) {
-            Ok(size) => size,
-            Err(kind) => return DecodeStatus::Malformed { kind, offset },
-        };
-        offset = next;
+        offset += consumed;
         if size == 0 {
             loop {
                 let (trailer, next) = match read_crlf_line(bytes, offset) {
@@ -428,7 +441,7 @@ fn decode_chunked_body(bytes: &[u8], end_of_stream: bool) -> DecodeStatus<Vec<u8
     }
 }
 
-fn read_crlf_line(bytes: &[u8], start: usize) -> ParseStep<(&[u8], usize)> {
+pub(super) fn read_crlf_line(bytes: &[u8], start: usize) -> ParseStep<(&[u8], usize)> {
     let mut offset = start;
     while offset < bytes.len() {
         match bytes[offset] {
@@ -454,15 +467,6 @@ fn read_crlf_line(bytes: &[u8], start: usize) -> ParseStep<(&[u8], usize)> {
     ParseStep::NeedMore
 }
 
-fn parse_chunk_size(line: &[u8]) -> Result<usize, HttpCodecFailureKind> {
-    let size = line.split(|byte| *byte == b';').next().unwrap_or_default();
-    if size.is_empty() || !size.iter().all(u8::is_ascii_hexdigit) {
-        return Err(HttpCodecFailureKind::InvalidChunkSize);
-    }
-    let size = std::str::from_utf8(size).map_err(|_| HttpCodecFailureKind::InvalidChunkSize)?;
-    usize::from_str_radix(size, 16).map_err(|_| HttpCodecFailureKind::InvalidChunkSize)
-}
-
 fn trim_optional_whitespace(mut value: &[u8]) -> &[u8] {
     while value
         .first()
@@ -479,6 +483,6 @@ fn trim_optional_whitespace(mut value: &[u8]) -> &[u8] {
     value
 }
 
-fn is_token_byte(byte: u8) -> bool {
+pub(super) fn is_token_byte(byte: u8) -> bool {
     byte.is_ascii_graphic() && !b"()<>@,;:\\\"/[]?={} \t".contains(&byte)
 }

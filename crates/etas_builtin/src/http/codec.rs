@@ -1,6 +1,8 @@
 use crate::{BuiltinError, BuiltinTypeTag, BuiltinValue, error::expect_arity};
 
 mod incremental;
+mod prefix;
+pub use prefix::{decode_chunk_size_line_prefix, decode_response_head_prefix};
 
 pub use incremental::{
     DecodeStatus, HttpCodecFailureKind, HttpHeader, HttpWireResponse, HttpWireResponseHead,
@@ -65,6 +67,48 @@ pub fn decode_response_step(args: &[BuiltinValue]) -> Result<BuiltinValue, Built
         bytes,
         end_of_stream,
     )))
+}
+
+pub fn decode_response_head_prefix_step(
+    args: &[BuiltinValue],
+) -> Result<BuiltinValue, BuiltinError> {
+    let (bytes, limit) = prefix_args(args)?;
+    Ok(head_decode_status_value(decode_response_head_prefix(
+        bytes, limit,
+    )))
+}
+
+pub fn decode_chunk_size_line_prefix_step(
+    args: &[BuiltinValue],
+) -> Result<BuiltinValue, BuiltinError> {
+    let (bytes, limit) = prefix_args(args)?;
+    Ok(match decode_chunk_size_line_prefix(bytes, limit) {
+        DecodeStatus::NeedMore => decode_step_value("NeedMore", Vec::new()),
+        DecodeStatus::Complete { value, consumed } => decode_step_value(
+            "Complete",
+            vec![BuiltinValue::U64(value), BuiltinValue::Usize(consumed)],
+        ),
+        DecodeStatus::Malformed { kind, offset } => {
+            decode_step_value("Malformed", vec![decode_failure_value(kind, offset)])
+        }
+    })
+}
+
+fn prefix_args(args: &[BuiltinValue]) -> Result<(&[u8], usize), BuiltinError> {
+    expect_arity(args, 2)?;
+    let BuiltinValue::Bytes(bytes) = &args[0] else {
+        return Err(BuiltinError::TypeMismatch {
+            expected: BuiltinTypeTag::Bytes,
+            actual: args[0].type_tag(),
+        });
+    };
+    let BuiltinValue::Usize(limit) = args[1] else {
+        return Err(BuiltinError::TypeMismatch {
+            expected: BuiltinTypeTag::Usize,
+            actual: args[1].type_tag(),
+        });
+    };
+    Ok((bytes, limit))
 }
 
 fn incremental_args(args: &[BuiltinValue]) -> Result<(&[u8], bool), BuiltinError> {
@@ -150,6 +194,8 @@ fn failure_kind_name(kind: HttpCodecFailureKind) -> &'static str {
         HttpCodecFailureKind::UnsupportedTransferEncoding => "UnsupportedTransferEncoding",
         HttpCodecFailureKind::ForbiddenResponseBody => "ForbiddenResponseBody",
         HttpCodecFailureKind::InvalidChunkSize => "InvalidChunkSize",
+        HttpCodecFailureKind::InvalidChunkExtension => "InvalidChunkExtension",
+        HttpCodecFailureKind::LimitExceeded => "LimitExceeded",
         HttpCodecFailureKind::InvalidChunkTerminator => "InvalidChunkTerminator",
         HttpCodecFailureKind::InvalidTrailer => "InvalidTrailer",
     }

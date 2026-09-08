@@ -45,6 +45,8 @@ impl PureIntrinsicRegistry {
                 | intrinsic::pure::RESULT_UNWRAP
                 | intrinsic::pure::HTTP_DECODE_RESPONSE
                 | intrinsic::pure::HTTP_DECODE_RESPONSE_INCREMENTAL
+                | intrinsic::pure::HTTP_DECODE_RESPONSE_HEAD_PREFIX
+                | intrinsic::pure::HTTP_DECODE_CHUNK_SIZE_LINE_PREFIX
         )
     }
 }

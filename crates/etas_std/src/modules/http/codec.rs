@@ -101,6 +101,8 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         "UnsupportedTransferEncoding",
         "ForbiddenResponseBody",
         "InvalidChunkSize",
+        "InvalidChunkExtension",
+        "LimitExceeded",
         "InvalidChunkTerminator",
         "InvalidTrailer",
     ] {
@@ -156,6 +158,24 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         "HttpDecodeStep[HttpWireResponse]",
         intrinsic::pure::HTTP_DECODE_RESPONSE_INCREMENTAL,
         "Incrementally decode a framed HTTP response and report consumed input bytes.",
+    );
+    pure_flow(
+        builder,
+        module,
+        "decode_response_head_prefix",
+        &["bytes", "usize"],
+        "HttpDecodeStep[HttpWireResponseHead]",
+        intrinsic::pure::HTTP_DECODE_RESPONSE_HEAD_PREFIX,
+        "Decode one response head within a byte limit including its terminator, preserving following bytes.",
+    );
+    pure_flow(
+        builder,
+        module,
+        "decode_chunk_size_line_prefix",
+        &["bytes", "usize"],
+        "HttpDecodeStep[u64]",
+        intrinsic::pure::HTTP_DECODE_CHUNK_SIZE_LINE_PREFIX,
+        "Decode one chunk size and validate extensions within a byte limit including CRLF, without consuming data.",
     );
 }
 
