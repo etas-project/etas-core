@@ -241,14 +241,8 @@ async fn terminate_and_reap(
     child: &mut Child,
     process_tree: ProcessTreeController,
 ) -> Result<(), HostError> {
-    if child.try_wait().map_err(wait_error)?.is_some() {
-        return Ok(());
-    }
-    if let Err(control_error) = process_tree.kill(child)
-        && child.try_wait().map_err(wait_error)?.is_none()
-    {
-        return Err(control_error);
-    }
+    // Descendants can retain output pipes after the direct child has exited.
+    process_tree.kill(child)?;
     wait_result(child.wait().await)?;
     Ok(())
 }
@@ -263,14 +257,6 @@ fn wait_result(
         )
         .with_detail("error", error.to_string())
     })
-}
-
-fn wait_error(error: std::io::Error) -> HostError {
-    HostError::new(
-        HostErrorCode::ProviderUnavailable,
-        "failed to query command process state",
-    )
-    .with_detail("error", error.to_string())
 }
 
 fn missing_pipe(stream: &'static str) -> HostError {

@@ -1,6 +1,6 @@
 use std::{
     future::Future,
-    io::{BufRead, Write},
+    io::Write,
     pin::Pin,
     sync::{Arc, OnceLock},
 };
@@ -23,7 +23,9 @@ struct ConsoleInputBroker {
 
 #[derive(Debug)]
 struct ConsoleInputState {
-    receiver: mpsc::UnboundedReceiver<ConsoleInputEvent>,
+    receiver: mpsc::Receiver<ConsoleInputEvent>,
+    requests: Option<mpsc::Sender<()>>,
+    pending: bool,
     eof: bool,
 }
 
@@ -46,10 +48,16 @@ impl LocalStdioClient {
     }
 
     #[cfg(test)]
-    fn with_input(receiver: mpsc::UnboundedReceiver<ConsoleInputEvent>) -> Self {
+    fn with_input(receiver: mpsc::Receiver<ConsoleInputEvent>) -> Self {
         Self {
-            input: Arc::new(ConsoleInputBroker::new(receiver)),
+            input: Arc::new(ConsoleInputBroker::new(receiver, None)),
         }
+    }
+
+    /// Read host UI input through the same stdin owner as Console requests.
+    /// This does not grant Console authority to an Etas program.
+    pub async fn read_prompt_line(&self) -> Result<String, HostError> {
+        self.input.read_serialized(false).await
     }
 
     fn require_console_authority(request: &ConsoleRequest) -> Result<(), HostError> {
@@ -70,10 +78,10 @@ impl LocalStdioClient {
         request.budget.check_time()?;
         let result = match request.operation {
             ConsoleOperation::ReadAllStdin => {
-                ConsoleResult::Input(self.input.read_all(&request.budget, request.id).await?)
+                ConsoleResult::Input(self.input.read(&request.budget, request.id, true).await?)
             }
             ConsoleOperation::ReadLineStdin => {
-                ConsoleResult::Input(self.input.read_line(&request.budget, request.id).await?)
+                ConsoleResult::Input(self.input.read(&request.budget, request.id, false).await?)
             }
             ConsoleOperation::WriteStdout { text, newline } => {
                 write_output(OutputStream::Stdout, text, newline)?;
@@ -100,104 +108,125 @@ impl Default for LocalStdioClient {
 
 impl ConsoleInputBroker {
     fn system_stdin() -> Self {
-        let (sender, receiver) = mpsc::unbounded_channel();
+        Self::with_reader(|line| std::io::stdin().read_line(line))
+    }
+
+    fn with_reader(
+        mut read_line: impl FnMut(&mut String) -> std::io::Result<usize> + Send + 'static,
+    ) -> Self {
+        let (sender, receiver) = mpsc::channel(1);
+        let (requests, mut demand) = mpsc::channel(1);
         let input_sender = sender.clone();
         if let Err(error) = std::thread::Builder::new()
             .name("etas-console-stdin".into())
             .spawn(move || {
-                let stdin = std::io::stdin();
-                let mut input = stdin.lock();
-                loop {
+                while demand.blocking_recv().is_some() {
                     let mut line = String::new();
-                    match input.read_line(&mut line) {
+                    match read_line(&mut line) {
                         Ok(0) => {
-                            let _ = input_sender.send(ConsoleInputEvent::Eof);
+                            let _ = input_sender.blocking_send(ConsoleInputEvent::Eof);
                             break;
                         }
                         Ok(_) => {
-                            if input_sender.send(ConsoleInputEvent::Line(line)).is_err() {
+                            if input_sender
+                                .blocking_send(ConsoleInputEvent::Line(line))
+                                .is_err()
+                            {
                                 break;
                             }
                         }
                         Err(error) => {
-                            let _ = input_sender.send(ConsoleInputEvent::Failed(error.to_string()));
+                            let _ = input_sender
+                                .blocking_send(ConsoleInputEvent::Failed(error.to_string()));
                             break;
                         }
                     }
                 }
             })
         {
-            let _ = sender.send(ConsoleInputEvent::Failed(format!(
+            let _ = sender.try_send(ConsoleInputEvent::Failed(format!(
                 "failed to start stdin broker: {error}"
             )));
+            return Self::new(receiver, None);
         }
-        Self::new(receiver)
+        Self::new(receiver, Some(requests))
     }
 
-    fn new(receiver: mpsc::UnboundedReceiver<ConsoleInputEvent>) -> Self {
+    fn new(
+        receiver: mpsc::Receiver<ConsoleInputEvent>,
+        requests: Option<mpsc::Sender<()>>,
+    ) -> Self {
         Self {
             state: Mutex::new(ConsoleInputState {
                 receiver,
+                requests,
+                pending: false,
                 eof: false,
             }),
         }
     }
 
-    async fn read_line(
+    async fn read(
         &self,
         budget: &ExecutionBudget,
         request_id: HostRequestId,
+        all: bool,
     ) -> Result<String, HostError> {
-        match self.next_event(budget, request_id).await? {
-            ConsoleInputEvent::Line(line) => Ok(line),
-            ConsoleInputEvent::Eof => Ok(String::new()),
-            ConsoleInputEvent::Failed(error) => Err(stdin_error(error)),
+        budget.check_time()?;
+        let deadline = budget.deadline()?;
+        let read = self.read_serialized(all);
+        match deadline {
+            Some(deadline) => tokio::select! {
+                biased;
+                _ = tokio::time::sleep_until(deadline) => Err(console_deadline_exceeded(request_id)),
+                result = read => result,
+            },
+            None => read.await,
         }
     }
 
-    async fn read_all(
-        &self,
-        budget: &ExecutionBudget,
-        request_id: HostRequestId,
-    ) -> Result<String, HostError> {
+    async fn read_serialized(&self, all: bool) -> Result<String, HostError> {
+        // One operation owns input; dropping its future releases the async lock.
+        let mut state = self.state.lock().await;
         let mut input = String::new();
         loop {
-            match self.next_event(budget, request_id).await? {
-                ConsoleInputEvent::Line(line) => input.push_str(&line),
+            match state.next_event().await? {
+                ConsoleInputEvent::Line(line) => {
+                    input.push_str(&line);
+                    if !all {
+                        return Ok(input);
+                    }
+                }
                 ConsoleInputEvent::Eof => return Ok(input),
                 ConsoleInputEvent::Failed(error) => return Err(stdin_error(error)),
             }
         }
     }
+}
 
-    async fn next_event(
-        &self,
-        budget: &ExecutionBudget,
-        request_id: HostRequestId,
-    ) -> Result<ConsoleInputEvent, HostError> {
-        budget.check_time()?;
-        let deadline = budget.deadline()?;
-        let mut state = self.state.lock().await;
-        if state.eof {
+impl ConsoleInputState {
+    async fn next_event(&mut self) -> Result<ConsoleInputEvent, HostError> {
+        if self.eof {
             return Ok(ConsoleInputEvent::Eof);
         }
-        let event = match deadline {
-            Some(deadline) => tokio::select! {
-                event = state.receiver.recv() => event,
-                _ = tokio::time::sleep_until(deadline) => {
-                    return Err(console_deadline_exceeded(request_id));
-                }
-            },
-            None => state.receiver.recv().await,
+        if !self.pending {
+            if let Some(requests) = &self.requests {
+                requests
+                    .try_send(())
+                    .map_err(|error| stdin_error(error.to_string()))?;
+            }
+            // Retain the in-flight read across cancellation of its async consumer.
+            self.pending = true;
         }
-        .ok_or_else(|| {
+        let event = self.receiver.recv().await.ok_or_else(|| {
             HostError::new(
                 HostErrorCode::ProviderUnavailable,
                 "console stdin broker stopped before reaching end of input",
             )
         })?;
+        self.pending = false;
         if matches!(event, ConsoleInputEvent::Eof) {
-            state.eof = true;
+            self.eof = true;
         }
         Ok(event)
     }
@@ -298,7 +327,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn read_line_respects_run_owned_deadline_without_blocking_executor() {
-        let (_sender, receiver) = mpsc::unbounded_channel();
+        let (_sender, receiver) = mpsc::channel(1);
         let client = LocalStdioClient::with_input(receiver);
         let budget = ExecutionBudget::start(Budget {
             time: Some(TimeBudget { max_millis: 25 }),
@@ -314,8 +343,71 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    async fn broker_reads_only_on_demand_and_shares_input_with_host_prompts() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let reads = Arc::new(AtomicUsize::new(0));
+        let calls = Arc::clone(&reads);
+        let (started, reader_started) = std::sync::mpsc::channel();
+        let broker = ConsoleInputBroker::with_reader(move |line| {
+            let index = calls.fetch_add(1, Ordering::SeqCst);
+            started.send(index).unwrap();
+            line.push_str(if index == 0 { "alpha\n" } else { "yes\n" });
+            Ok(line.len())
+        });
+        let client = LocalStdioClient {
+            input: Arc::new(broker),
+        };
+        // No request means no stdin read, even after giving the worker time to run.
+        tokio::time::sleep(Duration::from_millis(25)).await;
+        assert_eq!(reads.load(Ordering::SeqCst), 0);
+        let response = client
+            .execute(read_request(1, ExecutionBudget::default()))
+            .await
+            .unwrap();
+        assert_eq!(response.result, ConsoleResult::Input("alpha\n".into()));
+        assert_eq!(reader_started.try_recv().unwrap(), 0);
+        tokio::time::sleep(Duration::from_millis(25)).await;
+        assert_eq!(reads.load(Ordering::SeqCst), 1, "broker must not prefetch");
+        let approval = client.read_prompt_line().await.unwrap();
+        assert_eq!(approval, "yes\n");
+        assert_eq!(reads.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn queued_read_obeys_its_deadline_while_another_read_waits() {
+        let (_sender, receiver) = mpsc::channel(1);
+        let client = LocalStdioClient::with_input(receiver);
+        let pending = tokio::spawn({
+            let client = client.clone();
+            async move {
+                client
+                    .execute(read_request(1, ExecutionBudget::default()))
+                    .await
+            }
+        });
+        tokio::task::yield_now().await;
+        let outcome = tokio::time::timeout(
+            Duration::from_secs(1),
+            client.execute(read_request(
+                2,
+                ExecutionBudget::start(Budget {
+                    time: Some(TimeBudget { max_millis: 25 }),
+                    ..Budget::default()
+                }),
+            )),
+        )
+        .await;
+        pending.abort();
+        let _ = pending.await;
+        let error = outcome
+            .expect("waiting for the input lock must honor the deadline")
+            .expect_err("queued request must expire");
+        assert_eq!(error.code, HostErrorCode::BudgetExceeded);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
     async fn cancelled_read_does_not_consume_the_next_line() {
-        let (sender, receiver) = mpsc::unbounded_channel();
+        let (sender, receiver) = mpsc::channel(1);
         let client = LocalStdioClient::with_input(receiver);
         let pending = tokio::spawn({
             let client = client.clone();
@@ -331,6 +423,7 @@ mod tests {
 
         sender
             .send(ConsoleInputEvent::Line("next\n".into()))
+            .await
             .expect("test input receiver");
         let response = tokio::time::timeout(
             Duration::from_secs(1),

@@ -224,6 +224,45 @@ async fn cancelling_command_future_terminates_and_reaps_process_tree() {
     cleanup.0.clear();
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn command_deadline_kills_descendants_after_parent_has_exited() {
+    let pid_file = unique_pid_file();
+    let request = authorized_command_request(
+        vec![
+            "/bin/sh".into(),
+            "-c".into(),
+            "/bin/sleep 30 & child=$!; printf '%s %s\\n' \"$$\" \"$child\" > \"$1\"; exit 0".into(),
+            "fixture".into(),
+            pid_file.display().to_string(),
+        ],
+        ExecutionBudget::start(Budget {
+            time: Some(TimeBudget { max_millis: 500 }),
+            ..Budget::default()
+        }),
+    );
+    let task = tokio::spawn(async move { LocalCommandClient::new().execute(request).await });
+    let (parent, descendant) = wait_for_pids(&pid_file).await;
+    let _cleanup = ProcessCleanup(vec![descendant]);
+    wait_until_process_exits(parent).await;
+    assert!(
+        !process_is_live(parent),
+        "parent must exit before the deadline"
+    );
+    let error = tokio::time::timeout(Duration::from_secs(2), task)
+        .await
+        .expect("deadline must finish command supervision")
+        .expect("supervisor task")
+        .expect_err("descendant keeps stdout open beyond the deadline");
+    assert_eq!(error.code, HostErrorCode::BudgetExceeded);
+    wait_until_process_exits(descendant).await;
+    std::fs::remove_file(pid_file).ok();
+    assert!(
+        !process_is_live(descendant),
+        "descendant survived after its parent exited"
+    );
+}
+
 fn command_request(
     program: &str,
     grants: Vec<HostActionGrant>,
