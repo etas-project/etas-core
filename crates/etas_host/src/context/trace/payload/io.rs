@@ -4,7 +4,7 @@ use crate::{
     CommandRequest, FilesystemOperation, FilesystemRequest, HostTraceFieldSensitivity,
     HostTracePayload, HostValue, SecretOperation, SecretRequest, StreamOperation, StreamRequest,
     TcpConnectOperation, TcpConnectRequest, TcpStreamRef, TlsConnectOperation, TlsConnectRequest,
-    WorkspacePath,
+    WorkspacePathRef,
 };
 
 use super::{HostTraceRequest, option, record, variant};
@@ -294,12 +294,9 @@ impl HostTraceRequest for BrowserProtocolRequest {
     }
 }
 
-fn workspace_path(path: &WorkspacePath) -> HostValue {
+fn workspace_path(path: &WorkspacePathRef) -> HostValue {
     record([
-        (
-            "root",
-            HostValue::String(path.root.canonical_root.to_string_lossy().into_owned()),
-        ),
+        ("region", HostValue::String(path.region.as_str().to_owned())),
         (
             "relative",
             HostValue::String(path.relative.to_string_lossy().into_owned()),

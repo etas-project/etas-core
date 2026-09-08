@@ -23,7 +23,8 @@ pub use browser::{
     BrowserProtocolRequest, BrowserProtocolResponse, UnavailableBrowserProtocolClient,
 };
 pub use command::{
-    CommandClient, CommandOutput, CommandRequest, CommandResponse, LocalCommandClient,
+    CommandClient, CommandExecutionPolicy, CommandOutput, CommandRequest, CommandResponse,
+    LocalCommandClient,
 };
 pub use context::{
     ActionArgPattern, ActionInstance, ActionPattern, ApprovalDecision, ApprovalGrant,
@@ -36,7 +37,7 @@ pub use context::{
 };
 pub use filesystem::{
     FilesystemClient, FilesystemEntry, FilesystemOperation, FilesystemRequest, FilesystemResponse,
-    FilesystemStat, LocalFilesystemClient,
+    FilesystemStat, LocalFilesystemClient, WorkspaceRegionRegistry,
 };
 pub use memory::{
     InMemoryMemoryClient, MemoryClient, MemoryConflict, MemoryCursor, MemoryEntry, MemoryOperation,
@@ -63,7 +64,8 @@ pub use sandbox::{
     CommandPolicy, CommandSandbox, DestructiveOpPolicy, FilesystemPolicy, FilesystemSandbox,
     NetworkEndpoint, NetworkPolicy, NetworkSandbox, PlatformSandbox, PlatformSandboxHook,
     SandboxBroker, SandboxMode, SandboxPolicy, WorkspaceDiff, WorkspaceDiffEntry,
-    WorkspaceDiffKind, WorkspacePath, WorkspaceRoot, WorkspaceSnapshot, WorkspaceSnapshotEntry,
+    WorkspaceDiffKind, WorkspacePath, WorkspacePathRef, WorkspaceRegionId, WorkspaceRoot,
+    WorkspaceSnapshot, WorkspaceSnapshotEntry,
 };
 pub use secret::{
     SecretClient, SecretOperation, SecretPayload, SecretRef, SecretRequest, SecretResponse,

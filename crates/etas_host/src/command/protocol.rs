@@ -1,5 +1,5 @@
 use crate::{
-    AuthorityContext, ExecutionBudget, HostError, HostRequestId, TraceContext, WorkspacePath,
+    AuthorityContext, ExecutionBudget, HostError, HostRequestId, TraceContext, WorkspacePathRef,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -7,7 +7,7 @@ pub struct CommandRequest {
     pub id: HostRequestId,
     pub argv: Vec<String>,
     pub env: Vec<(String, String)>,
-    pub cwd: Option<WorkspacePath>,
+    pub cwd: Option<WorkspacePathRef>,
     pub stdin: Option<Vec<u8>>,
     pub authority: AuthorityContext,
     pub trace: TraceContext,

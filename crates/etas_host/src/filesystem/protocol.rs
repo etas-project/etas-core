@@ -1,5 +1,5 @@
 use crate::{
-    AuthorityContext, ExecutionBudget, HostError, HostRequestId, TraceContext, WorkspacePath,
+    AuthorityContext, ExecutionBudget, HostError, HostRequestId, TraceContext, WorkspacePathRef,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -14,24 +14,24 @@ pub struct FilesystemRequest {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FilesystemOperation {
     Read {
-        path: WorkspacePath,
+        path: WorkspacePathRef,
     },
     Write {
-        path: WorkspacePath,
+        path: WorkspacePathRef,
         contents: Vec<u8>,
         create_dirs: bool,
     },
     Delete {
-        path: WorkspacePath,
+        path: WorkspacePathRef,
     },
     ReadDir {
-        path: WorkspacePath,
+        path: WorkspacePathRef,
     },
     Stat {
-        path: WorkspacePath,
+        path: WorkspacePathRef,
     },
     AtomicReplace {
-        path: WorkspacePath,
+        path: WorkspacePathRef,
         contents: Vec<u8>,
     },
 }
@@ -45,7 +45,7 @@ pub struct FilesystemResponse {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FilesystemEntry {
     Bytes(Vec<u8>),
-    Entries(Vec<String>),
+    Entries(Vec<WorkspacePathRef>),
     Stat(FilesystemStat),
     Unit,
 }

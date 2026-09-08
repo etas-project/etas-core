@@ -17,20 +17,46 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         StdDecl::Type(TypeDecl::generic("Region", &[], TypeDeclKind::Spec)),
         "Static filesystem authority-region specification.",
     );
-    for name in ["WorkspacePath", "FsEntry", "FsStat", "IOError"] {
-        let params = if name == "WorkspacePath" {
-            &["R"][..]
-        } else {
-            &[]
-        };
+    builder.symbol(
+        module,
+        "WorkspacePath",
+        StdSymbolKind::Type,
+        StdDecl::Type(TypeDecl {
+            name: "WorkspacePath".to_owned(),
+            params: vec![region_param()],
+            kind: TypeDeclKind::Support,
+            representation: None,
+            derivable: false,
+        }),
+        "Opaque project-scoped path indexed by its filesystem authority region.",
+    );
+    for name in ["FsEntry", "FsStat", "IOError"] {
         builder.symbol(
             module,
             name,
             StdSymbolKind::Type,
-            StdDecl::Type(TypeDecl::generic(name, params, TypeDeclKind::Support)),
+            StdDecl::Type(TypeDecl::generic(name, &[], TypeDeclKind::Support)),
             "Filesystem substrate support type.",
         );
     }
+    register_intrinsic_flow(
+        builder,
+        module,
+        &["std", "fs"],
+        IntrinsicFlowRegistration {
+            name: "path",
+            type_params: &[region_param()],
+            params: &["string"],
+            output: "Result[std.fs.WorkspacePath[R], std.fs.IOError]",
+            public_effects: &[],
+            requested_actions: &[],
+            intrinsic_id: intrinsic::runtime::FS_PATH,
+            summary: "Construct an opaque region-indexed workspace path from a relative path.",
+            purity: IntrinsicPurity::Runtime,
+            dispatch: IntrinsicDispatch::Runtime,
+            lowering: LoweringHint::RuntimeCall,
+        },
+    );
     register_intrinsic_flow(
         builder,
         module,

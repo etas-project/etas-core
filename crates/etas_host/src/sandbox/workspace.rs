@@ -5,6 +5,48 @@ use std::{
 
 use crate::{HostError, HostErrorCode};
 
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct WorkspaceRegionId(String);
+
+impl WorkspaceRegionId {
+    pub fn new(identity: impl Into<String>) -> Result<Self, HostError> {
+        let identity = identity.into();
+        if identity.is_empty() || identity.split('.').any(|segment| !is_identifier(segment)) {
+            return Err(HostError::new(
+                HostErrorCode::InvalidRequest,
+                "workspace region identity must be a non-empty canonical type path",
+            )
+            .with_detail("region", identity));
+        }
+        Ok(Self(identity))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+fn is_identifier(segment: &str) -> bool {
+    let mut characters = segment.chars();
+    matches!(characters.next(), Some(first) if first == '_' || first.is_ascii_alphabetic())
+        && characters.all(|character| character == '_' || character.is_ascii_alphanumeric())
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WorkspacePathRef {
+    pub region: WorkspaceRegionId,
+    pub relative: PathBuf,
+}
+
+impl WorkspacePathRef {
+    pub fn new(region: WorkspaceRegionId, relative: impl AsRef<Path>) -> Result<Self, HostError> {
+        Ok(Self {
+            region,
+            relative: normalize_relative(relative.as_ref())?,
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct WorkspaceRoot {
     pub canonical_root: PathBuf,
@@ -127,4 +169,30 @@ pub fn normalize_relative(path: &Path) -> Result<PathBuf, HostError> {
         ));
     }
     Ok(relative)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn workspace_region_identity_uses_canonical_language_identifiers() {
+        assert!(WorkspaceRegionId::new("app.workspace.ProjectRoot").is_ok());
+        assert!(WorkspaceRegionId::new("app._private.Root2").is_ok());
+
+        for invalid in ["", ".app.Root", "app..Root", "app.1Root", "app.Root-name"] {
+            assert!(
+                WorkspaceRegionId::new(invalid).is_err(),
+                "`{invalid}` must not be accepted as a canonical region identity"
+            );
+        }
+    }
+
+    #[test]
+    fn workspace_path_ref_rejects_absolute_and_parent_paths() {
+        let region = WorkspaceRegionId::new("app.workspace.ProjectRoot").expect("valid region");
+        assert!(WorkspacePathRef::new(region.clone(), "src/main.es").is_ok());
+        assert!(WorkspacePathRef::new(region.clone(), "../secret").is_err());
+        assert!(WorkspacePathRef::new(region, "/tmp/secret").is_err());
+    }
 }

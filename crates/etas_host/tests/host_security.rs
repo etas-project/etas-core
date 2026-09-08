@@ -12,17 +12,18 @@ use std::{
 
 use etas_host::console::{ConsoleClient, ConsoleOperation, ConsoleRequest, LocalStdioClient};
 use etas_host::{
-    AnthropicProtocolAdapter, AuthorityContext, BrowserProtocolClient, BrowserProtocolOperation,
-    BrowserProtocolRequest, FilesystemClient, FilesystemEntry, FilesystemOperation,
-    FilesystemRequest, HostActionGrant, HostErrorCode, HostRequestId, HttpToolProtocolAdapter,
-    HttpTransport, InMemoryMemoryClient, LocalFilesystemClient, MemoryClient, MemoryOperation,
-    MemoryRequest, MemoryResult, MemoryVersion, ModelClient, ModelContent, ModelMessage, ModelName,
-    ModelOptions, ModelRequest, ModelRole, NetworkPolicy, OpenAiProtocolAdapter,
-    ProcessToolProtocolAdapter, RetryPolicy, SandboxPolicy, SecretClient, SecretOperation,
-    SecretRequest, SecretValue, StoreRef, StreamClient, StreamOperation, StreamRequest, TcpClient,
-    TcpConnectOperation, TcpConnectRequest, TcpEndpoint, TestWorkspace, ToolClient, ToolRef,
-    ToolRequest, TraceContext, TraceId, TransportTimeoutPolicy, UnavailableBrowserProtocolClient,
-    UnavailableSecretClient, UnavailableStreamClient, UnavailableTcpClient, WorkspacePath,
+    ActionArgPattern, AnthropicProtocolAdapter, AuthorityContext, BrowserProtocolClient,
+    BrowserProtocolOperation, BrowserProtocolRequest, FilesystemClient, FilesystemEntry,
+    FilesystemOperation, FilesystemRequest, HostActionGrant, HostErrorCode, HostRequestId,
+    HostValue, HttpToolProtocolAdapter, HttpTransport, InMemoryMemoryClient, LocalFilesystemClient,
+    MemoryClient, MemoryOperation, MemoryRequest, MemoryResult, MemoryVersion, ModelClient,
+    ModelContent, ModelMessage, ModelName, ModelOptions, ModelRequest, ModelRole, NetworkPolicy,
+    OpenAiProtocolAdapter, ProcessToolProtocolAdapter, RetryPolicy, SandboxPolicy, SecretClient,
+    SecretOperation, SecretRequest, SecretValue, StoreRef, StreamClient, StreamOperation,
+    StreamRequest, TcpClient, TcpConnectOperation, TcpConnectRequest, TcpEndpoint, TestWorkspace,
+    ToolClient, ToolRef, ToolRequest, TraceContext, TraceId, TransportTimeoutPolicy,
+    UnavailableBrowserProtocolClient, UnavailableSecretClient, UnavailableStreamClient,
+    UnavailableTcpClient, WorkspacePathRef, WorkspaceRegionId, WorkspaceRegionRegistry,
 };
 
 #[tokio::test]
@@ -126,13 +127,13 @@ async fn local_stdio_client_rejects_mismatched_console_action_grant() {
 async fn local_filesystem_client_rejects_path_escape() {
     let workspace = TestWorkspace::create("fs-escape").expect("workspace");
     let root = workspace.root().expect("root");
-    let adapter = LocalFilesystemClient::new();
+    let (adapter, region) = fs_adapter(root.clone());
     let response = adapter
         .execute(FilesystemRequest {
             id: HostRequestId(7),
             operation: FilesystemOperation::Read {
-                path: WorkspacePath {
-                    root: root.clone(),
+                path: WorkspacePathRef {
+                    region: region.clone(),
                     relative: PathBuf::from("../outside"),
                 },
             },
@@ -169,13 +170,13 @@ async fn local_filesystem_client_rejects_path_escape() {
 async fn local_filesystem_client_writes_root_file_with_create_dirs() {
     let workspace = TestWorkspace::create("fs-root-write").expect("workspace");
     let root = workspace.root().expect("root");
-    let adapter = LocalFilesystemClient::new();
+    let (adapter, region) = fs_adapter(root.clone());
     let response = adapter
         .execute(FilesystemRequest {
             id: HostRequestId(8),
             operation: FilesystemOperation::Write {
-                path: WorkspacePath {
-                    root: root.clone(),
+                path: WorkspacePathRef {
+                    region: region.clone(),
                     relative: PathBuf::from("out.txt"),
                 },
                 contents: b"ok".to_vec(),
@@ -212,18 +213,151 @@ async fn local_filesystem_client_writes_root_file_with_create_dirs() {
 }
 
 #[tokio::test]
+async fn local_filesystem_client_requires_exact_region_action_grant() {
+    let workspace = TestWorkspace::create("fs-region-grant").expect("workspace");
+    let root = workspace.root().expect("root");
+    std::fs::write(root.canonical_root.join("data.bin"), b"private").expect("fixture file");
+    let (adapter, region) = fs_adapter(root.clone());
+    let other_region = WorkspaceRegionId::new("app.workspace.OtherRoot").expect("other region");
+    let response = adapter
+        .execute(FilesystemRequest {
+            id: HostRequestId(81),
+            operation: FilesystemOperation::Read {
+                path: WorkspacePathRef::new(region, "data.bin").expect("workspace path"),
+            },
+            authority: AuthorityContext {
+                grants: vec![HostActionGrant::allow_with_args(
+                    "Fs",
+                    "read",
+                    vec![ActionArgPattern::Exact(HostValue::String(
+                        other_region.as_str().to_owned(),
+                    ))],
+                )],
+                approvals: Vec::new(),
+                sandbox: SandboxPolicy::allow_listed(
+                    etas_host::FilesystemPolicy {
+                        read_roots: vec![root],
+                        write_roots: Vec::new(),
+                        delete_roots: Vec::new(),
+                    },
+                    NetworkPolicy::deny_all(),
+                    etas_host::CommandPolicy::allow_programs(Vec::new()),
+                    etas_host::DestructiveOpPolicy::deny_all(),
+                ),
+                policy: Default::default(),
+            },
+            trace: TraceContext::root(TraceId(81)),
+            budget: etas_host::ExecutionBudget::default(),
+        })
+        .await
+        .expect("filesystem response");
+
+    assert_eq!(
+        response
+            .result
+            .expect_err("a grant for another region must not authorize the read")
+            .code,
+        HostErrorCode::AuthorityDenied
+    );
+}
+
+#[tokio::test]
+async fn local_filesystem_client_rejects_unmapped_region_even_with_grant() {
+    let region = WorkspaceRegionId::new("app.workspace.UnmappedRoot").expect("region identity");
+    let response = LocalFilesystemClient::new(WorkspaceRegionRegistry::default())
+        .execute(FilesystemRequest {
+            id: HostRequestId(82),
+            operation: FilesystemOperation::Read {
+                path: WorkspacePathRef::new(region.clone(), "data.bin").expect("workspace path"),
+            },
+            authority: AuthorityContext {
+                grants: vec![HostActionGrant::allow_with_args(
+                    "Fs",
+                    "read",
+                    vec![ActionArgPattern::Exact(HostValue::String(
+                        region.as_str().to_owned(),
+                    ))],
+                )],
+                approvals: Vec::new(),
+                sandbox: SandboxPolicy::deny_all(),
+                policy: Default::default(),
+            },
+            trace: TraceContext::root(TraceId(82)),
+            budget: etas_host::ExecutionBudget::default(),
+        })
+        .await
+        .expect("filesystem response");
+
+    assert_eq!(
+        response
+            .result
+            .expect_err("an unmapped region must fail closed")
+            .code,
+        HostErrorCode::AuthorityDenied
+    );
+}
+
+#[tokio::test]
+async fn local_filesystem_list_preserves_region_identity_on_every_entry() {
+    let workspace = TestWorkspace::create("fs-region-list").expect("workspace");
+    let root = workspace.root().expect("root");
+    std::fs::create_dir(root.canonical_root.join("data")).expect("fixture directory");
+    std::fs::write(root.canonical_root.join("data/input.txt"), b"contents").expect("fixture file");
+    let (adapter, region) = fs_adapter(root.clone());
+    let response = adapter
+        .execute(FilesystemRequest {
+            id: HostRequestId(83),
+            operation: FilesystemOperation::ReadDir {
+                path: WorkspacePathRef::new(region.clone(), "data").expect("workspace path"),
+            },
+            authority: AuthorityContext {
+                grants: vec![HostActionGrant::allow_with_args(
+                    "Fs",
+                    "list",
+                    vec![ActionArgPattern::Exact(HostValue::String(
+                        region.as_str().to_owned(),
+                    ))],
+                )],
+                approvals: Vec::new(),
+                sandbox: SandboxPolicy::allow_listed(
+                    etas_host::FilesystemPolicy {
+                        read_roots: vec![root],
+                        write_roots: Vec::new(),
+                        delete_roots: Vec::new(),
+                    },
+                    NetworkPolicy::deny_all(),
+                    etas_host::CommandPolicy::allow_programs(Vec::new()),
+                    etas_host::DestructiveOpPolicy::deny_all(),
+                ),
+                policy: Default::default(),
+            },
+            trace: TraceContext::root(TraceId(83)),
+            budget: etas_host::ExecutionBudget::default(),
+        })
+        .await
+        .expect("filesystem response");
+
+    assert_eq!(
+        response.result.expect("directory list"),
+        FilesystemEntry::Entries(vec![
+            WorkspacePathRef::new(region, "data/input.txt").expect("listed workspace path")
+        ])
+    );
+}
+
+#[tokio::test]
 async fn local_filesystem_client_stats_and_atomic_replaces_under_workspace_policy() {
     let workspace = TestWorkspace::create("fs-stat-replace").expect("workspace");
     let root = workspace.root().expect("root");
-    let adapter = LocalFilesystemClient::new();
+    let (adapter, region) = fs_adapter(root.clone());
     std::fs::write(root.canonical_root.join("data.bin"), b"old").expect("fixture file");
 
     let stat = adapter
         .execute(FilesystemRequest {
             id: HostRequestId(9),
             operation: FilesystemOperation::Stat {
-                path: WorkspacePath {
-                    root: root.clone(),
+                path: WorkspacePathRef {
+                    region: region.clone(),
                     relative: PathBuf::from("data.bin"),
                 },
             },
@@ -244,8 +378,8 @@ async fn local_filesystem_client_stats_and_atomic_replaces_under_workspace_polic
         .execute(FilesystemRequest {
             id: HostRequestId(10),
             operation: FilesystemOperation::AtomicReplace {
-                path: WorkspacePath {
-                    root: root.clone(),
+                path: WorkspacePathRef {
+                    region: region.clone(),
                     relative: PathBuf::from("data.bin"),
                 },
                 contents: b"new".to_vec(),
@@ -748,7 +882,9 @@ fn fs_authority(root: etas_host::WorkspaceRoot) -> AuthorityContext {
     AuthorityContext {
         grants: vec![
             HostActionGrant::allow("Fs", "read"),
+            HostActionGrant::allow("Fs", "stat"),
             HostActionGrant::allow("Fs", "write"),
+            HostActionGrant::allow("Fs", "atomic_replace"),
         ],
         approvals: Vec::new(),
         sandbox: SandboxPolicy::allow_listed(
@@ -763,4 +899,13 @@ fn fs_authority(root: etas_host::WorkspaceRoot) -> AuthorityContext {
         ),
         policy: Default::default(),
     }
+}
+
+fn fs_adapter(root: etas_host::WorkspaceRoot) -> (LocalFilesystemClient, WorkspaceRegionId) {
+    let region = WorkspaceRegionId::new("test.workspace.Root").expect("region identity");
+    let mut regions = WorkspaceRegionRegistry::default();
+    regions
+        .insert(region.clone(), root)
+        .expect("region registration");
+    (LocalFilesystemClient::new(regions), region)
 }

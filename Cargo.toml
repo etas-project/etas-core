@@ -26,6 +26,7 @@ etas_std = { path = "crates/etas_std" }
 etas_utils = { path = "crates/etas_utils" }
 blake3 = "1"
 getrandom = "0.3"
+libc = "0.2"
 prost = "0.13"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
