@@ -1,8 +1,15 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs,
+    io::Read,
     path::{Path, PathBuf},
 };
+
+use super::{
+    filesystem::atomic_write_at,
+    workspace::{read_options, workspace_io_error},
+};
+use cap_fs_ext::{DirExt, FollowSymlinks, OpenOptionsFollowExt};
+use cap_std::fs::Dir;
 
 use crate::{
     HostError, HostErrorCode, WorkspaceDiff, WorkspaceDiffEntry, WorkspaceDiffKind, WorkspaceRoot,
@@ -17,7 +24,7 @@ pub struct WorkspaceSnapshot {
 impl WorkspaceSnapshot {
     pub fn capture(root: WorkspaceRoot) -> Result<Self, HostError> {
         let mut entries = BTreeMap::new();
-        capture_dir(&root, Path::new(""), &mut entries)?;
+        capture_dir(root.directory(), Path::new(""), &mut entries)?;
         Ok(Self { root, entries })
     }
 
@@ -62,14 +69,27 @@ impl WorkspaceSnapshot {
 
     pub fn rollback(&self) -> Result<WorkspaceDiff, HostError> {
         let diff = self.diff_current()?;
-        for entry in diff.entries.iter().rev() {
-            let absolute = self.root.canonical_root.join(&entry.path);
-            match &entry.kind {
-                WorkspaceDiffKind::Added { after } => remove_snapshot_entry(&absolute, after)?,
-                WorkspaceDiffKind::Deleted { before }
-                | WorkspaceDiffKind::Modified { before, .. } => {
-                    restore_snapshot_entry(&absolute, before)?;
-                }
+        // Remove children before their directories; restore directories before
+        // their children. Every operation stays relative to a retained parent.
+        for entry in diff
+            .entries
+            .iter()
+            .rev()
+            .filter(|entry| matches!(entry.kind, WorkspaceDiffKind::Added { .. }))
+        {
+            let (parent, name) = self.root.open_parent(&entry.path)?;
+            #[cfg(test)]
+            tests::after_parent_resolution();
+            remove_existing(&parent, Path::new(&name))?;
+        }
+        for entry in &diff.entries {
+            if let WorkspaceDiffKind::Deleted { before }
+            | WorkspaceDiffKind::Modified { before, .. } = &entry.kind
+            {
+                let (parent, name) = self.root.open_parent(&entry.path)?;
+                #[cfg(test)]
+                tests::after_parent_resolution();
+                restore_snapshot_entry(&parent, Path::new(&name), before)?;
             }
         }
         Ok(diff)
@@ -84,129 +104,88 @@ pub enum WorkspaceSnapshotEntry {
 }
 
 fn capture_dir(
-    root: &WorkspaceRoot,
+    directory: &Dir,
     relative: &Path,
     entries: &mut BTreeMap<PathBuf, WorkspaceSnapshotEntry>,
 ) -> Result<(), HostError> {
-    let absolute = root.canonical_root.join(relative);
-    for entry in fs::read_dir(&absolute).map_err(|error| {
-        HostError::new(
-            HostErrorCode::ProviderUnavailable,
-            "failed to read workspace directory for snapshot",
-        )
-        .with_detail("path", absolute.display().to_string())
-        .with_detail("error", error.to_string())
-    })? {
-        let entry = entry.map_err(|error| {
-            HostError::new(
-                HostErrorCode::ProviderUnavailable,
-                "failed to inspect workspace directory entry",
-            )
-            .with_detail("error", error.to_string())
-        })?;
-        let file_name = entry.file_name();
-        let entry_relative = relative.join(file_name);
-        let file_type = entry.file_type().map_err(|error| {
-            HostError::new(
-                HostErrorCode::ProviderUnavailable,
-                "failed to read workspace entry type",
-            )
-            .with_detail("path", entry.path().display().to_string())
-            .with_detail("error", error.to_string())
-        })?;
+    for entry in directory.entries().map_err(workspace_io_error)? {
+        let entry = entry.map_err(workspace_io_error)?;
+        let name = entry.file_name();
+        let entry_relative = relative.join(&name);
+        let file_type = entry.file_type().map_err(workspace_io_error)?;
+        #[cfg(test)]
+        tests::after_resolution();
         if file_type.is_symlink() {
-            let target = fs::read_link(entry.path()).map_err(|error| {
-                HostError::new(
-                    HostErrorCode::ProviderUnavailable,
-                    "failed to read workspace symlink",
-                )
-                .with_detail("path", entry.path().display().to_string())
-                .with_detail("error", error.to_string())
-            })?;
+            let target = directory
+                .read_link_contents(&name)
+                .map_err(workspace_io_error)?;
             entries.insert(entry_relative, WorkspaceSnapshotEntry::Symlink { target });
         } else if file_type.is_dir() {
+            let child = directory
+                .open_dir_nofollow(&name)
+                .map_err(workspace_io_error)?;
             entries.insert(entry_relative.clone(), WorkspaceSnapshotEntry::Directory);
-            capture_dir(root, &entry_relative, entries)?;
+            capture_dir(&child, &entry_relative, entries)?;
         } else if file_type.is_file() {
-            let bytes = fs::read(entry.path()).map_err(|error| {
-                HostError::new(
-                    HostErrorCode::ProviderUnavailable,
-                    "failed to read workspace file for snapshot",
-                )
-                .with_detail("path", entry.path().display().to_string())
-                .with_detail("error", error.to_string())
-            })?;
+            let mut file = directory
+                .open_with(&name, read_options().follow(FollowSymlinks::No))
+                .map_err(workspace_io_error)?;
+            if !file.metadata().map_err(workspace_io_error)?.is_file() {
+                return Err(HostError::new(
+                    HostErrorCode::InvalidRequest,
+                    "workspace snapshot file changed kind during capture",
+                ));
+            }
+            let mut bytes = Vec::new();
+            file.read_to_end(&mut bytes).map_err(workspace_io_error)?;
             entries.insert(entry_relative, WorkspaceSnapshotEntry::File { bytes });
+        } else {
+            return Err(HostError::new(
+                HostErrorCode::InvalidRequest,
+                "workspace snapshot contains an unsupported file kind",
+            ));
         }
     }
     Ok(())
 }
 
-fn remove_snapshot_entry(path: &Path, entry: &WorkspaceSnapshotEntry) -> Result<(), HostError> {
-    match entry {
-        WorkspaceSnapshotEntry::Directory => fs::remove_dir_all(path),
-        WorkspaceSnapshotEntry::File { .. } | WorkspaceSnapshotEntry::Symlink { .. } => {
-            fs::remove_file(path)
-        }
-    }
-    .map_err(|error| {
-        HostError::new(
-            HostErrorCode::ProviderUnavailable,
-            "failed to remove workspace rollback entry",
-        )
-        .with_detail("path", path.display().to_string())
-        .with_detail("error", error.to_string())
-    })
-}
-
-fn restore_snapshot_entry(path: &Path, entry: &WorkspaceSnapshotEntry) -> Result<(), HostError> {
-    if path.exists() {
-        remove_existing(path)?;
+fn restore_snapshot_entry(
+    parent: &Dir,
+    name: &Path,
+    entry: &WorkspaceSnapshotEntry,
+) -> Result<(), HostError> {
+    match parent.symlink_metadata(name) {
+        Ok(_) => remove_existing(parent, name)?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(workspace_io_error(error)),
     }
     match entry {
-        WorkspaceSnapshotEntry::Directory => fs::create_dir_all(path),
-        WorkspaceSnapshotEntry::File { bytes } => {
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent).map_err(rollback_error)?;
-            }
-            fs::write(path, bytes)
+        WorkspaceSnapshotEntry::Directory => parent.create_dir(name).map_err(workspace_io_error),
+        WorkspaceSnapshotEntry::File { bytes } => atomic_write_at(parent, name, bytes),
+        WorkspaceSnapshotEntry::Symlink { target } => {
+            restore_symlink(parent, name, target).map_err(workspace_io_error)
         }
-        WorkspaceSnapshotEntry::Symlink { target } => restore_symlink(path, target),
     }
-    .map_err(|error| {
-        HostError::new(
-            HostErrorCode::ProviderUnavailable,
-            "failed to restore workspace rollback entry",
-        )
-        .with_detail("path", path.display().to_string())
-        .with_detail("error", error.to_string())
-    })
 }
 
-fn remove_existing(path: &Path) -> Result<(), HostError> {
-    let metadata = fs::symlink_metadata(path).map_err(rollback_error)?;
-    let result = if metadata.is_dir() && !metadata.file_type().is_symlink() {
-        fs::remove_dir_all(path)
+fn remove_existing(parent: &Dir, name: &Path) -> Result<(), HostError> {
+    let metadata = parent.symlink_metadata(name).map_err(workspace_io_error)?;
+    if metadata.is_dir() {
+        parent.remove_dir_all(name).map_err(workspace_io_error)
     } else {
-        fs::remove_file(path)
-    };
-    result.map_err(rollback_error)
+        parent.remove_file(name).map_err(workspace_io_error)
+    }
 }
 
 #[cfg(unix)]
-fn restore_symlink(path: &Path, target: &Path) -> Result<(), std::io::Error> {
-    std::os::unix::fs::symlink(target, path)
+fn restore_symlink(parent: &Dir, name: &Path, target: &Path) -> Result<(), std::io::Error> {
+    parent.symlink_contents(target, name)
 }
 
 #[cfg(windows)]
-fn restore_symlink(path: &Path, target: &Path) -> Result<(), std::io::Error> {
-    std::os::windows::fs::symlink_file(target, path)
+fn restore_symlink(parent: &Dir, name: &Path, target: &Path) -> Result<(), std::io::Error> {
+    parent.symlink_file(target, name)
 }
 
-fn rollback_error(error: std::io::Error) -> HostError {
-    HostError::new(
-        HostErrorCode::ProviderUnavailable,
-        "workspace rollback filesystem operation failed",
-    )
-    .with_detail("error", error.to_string())
-}
+#[cfg(test)]
+mod tests;

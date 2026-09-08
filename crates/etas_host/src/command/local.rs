@@ -1,3 +1,4 @@
+mod cwd;
 mod output;
 mod process_tree;
 mod supervisor;
@@ -92,10 +93,10 @@ impl LocalCommandClient {
         let cwd = request
             .cwd
             .as_ref()
-            .map(|path| self.regions.resolve(path, false))
+            .map(|path| self.regions.bind(path))
             .transpose()?;
         if let Some(cwd) = &cwd {
-            command.current_dir(cwd.absolute());
+            cwd::configure(&mut command, cwd)?;
         }
         command.stdin(if request.stdin.is_some() {
             Stdio::piped()

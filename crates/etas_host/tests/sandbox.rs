@@ -315,3 +315,40 @@ fn workspace_broker(root: WorkspaceRoot) -> SandboxBroker {
         DestructiveOpPolicy::deny_all(),
     ))
 }
+
+#[cfg(unix)]
+#[test]
+fn filesystem_keeps_authorized_root_when_its_path_is_replaced() {
+    let fixture = TestWorkspace::create("root-replacement").unwrap();
+    let outside = TestWorkspace::create("root-replacement-outside").unwrap();
+    let original = fixture.path().join("root");
+    fs::create_dir(&original).unwrap();
+    fs::write(original.join("data"), b"authorized").unwrap();
+    fs::write(outside.path().join("data"), b"outside").unwrap();
+    let root = WorkspaceRoot::new(&original).unwrap();
+    let broker = workspace_broker(root.clone());
+
+    fs::rename(&original, fixture.path().join("retained")).unwrap();
+    std::os::unix::fs::symlink(outside.path(), &original).unwrap();
+
+    assert_eq!(
+        broker.read_file(&root, Path::new("data")).unwrap(),
+        b"authorized"
+    );
+    broker
+        .atomic_write(&root, Path::new("data"), b"updated")
+        .unwrap();
+    assert_eq!(fs::read(outside.path().join("data")).unwrap(), b"outside");
+    assert_eq!(
+        fs::read(fixture.path().join("retained/data")).unwrap(),
+        b"updated"
+    );
+    let replacement = WorkspaceRoot::new(&original).unwrap();
+    assert_eq!(
+        broker
+            .read_file(&replacement, Path::new("data"))
+            .unwrap_err()
+            .code,
+        HostErrorCode::AuthorityDenied
+    );
+}

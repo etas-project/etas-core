@@ -27,11 +27,7 @@ impl WorkspaceRegionRegistry {
         Ok(())
     }
 
-    pub(crate) fn resolve(
-        &self,
-        path: &WorkspacePathRef,
-        create: bool,
-    ) -> Result<WorkspacePath, HostError> {
+    pub(crate) fn bind(&self, path: &WorkspacePathRef) -> Result<WorkspacePath, HostError> {
         let root = self.roots.get(&path.region).ok_or_else(|| {
             HostError::new(
                 HostErrorCode::AuthorityDenied,
@@ -39,11 +35,10 @@ impl WorkspaceRegionRegistry {
             )
             .with_detail("region", path.region.as_str())
         })?;
-        if create {
-            root.resolve_for_create(&path.relative)
-        } else {
-            root.resolve_existing(&path.relative)
-        }
+        Ok(WorkspacePath {
+            root: root.clone(),
+            relative: crate::sandbox::workspace::normalize_relative(&path.relative)?,
+        })
     }
 }
 
@@ -82,7 +77,7 @@ fn execute_local_filesystem(
     let broker = SandboxBroker::new(request.authority.sandbox);
     match request.operation {
         FilesystemOperation::Read { path } => {
-            let path = regions.resolve(&path, false)?;
+            let path = regions.bind(&path)?;
             broker
                 .read_file(&path.root, &path.relative)
                 .map(FilesystemEntry::Bytes)
@@ -92,7 +87,7 @@ fn execute_local_filesystem(
             contents,
             create_dirs,
         } => {
-            let path = regions.resolve(&path, true)?;
+            let path = regions.bind(&path)?;
             if create_dirs
                 && let Some(parent) = path.relative.parent()
                 && !parent.as_os_str().is_empty()
@@ -103,14 +98,14 @@ fn execute_local_filesystem(
             Ok(FilesystemEntry::Unit)
         }
         FilesystemOperation::Delete { path } => {
-            let path = regions.resolve(&path, false)?;
+            let path = regions.bind(&path)?;
             broker.delete_file(&path.root, &path.relative)?;
             Ok(FilesystemEntry::Unit)
         }
         FilesystemOperation::ReadDir { path } => {
             let region = path.region.clone();
             let parent = path.relative.clone();
-            let path = regions.resolve(&path, false)?;
+            let path = regions.bind(&path)?;
             if path.relative.as_os_str().is_empty() {
                 return Err(HostError::new(
                     HostErrorCode::InvalidRequest,
@@ -125,7 +120,7 @@ fn execute_local_filesystem(
             Ok(FilesystemEntry::Entries(entries))
         }
         FilesystemOperation::Stat { path } => {
-            let path = regions.resolve(&path, false)?;
+            let path = regions.bind(&path)?;
             let metadata = broker.stat(&path.root, &path.relative)?;
             Ok(FilesystemEntry::Stat(FilesystemStat {
                 is_file: metadata.is_file,
@@ -134,7 +129,7 @@ fn execute_local_filesystem(
             }))
         }
         FilesystemOperation::AtomicReplace { path, contents } => {
-            let path = regions.resolve(&path, true)?;
+            let path = regions.bind(&path)?;
             broker.atomic_write(&path.root, &path.relative, &contents)?;
             Ok(FilesystemEntry::Unit)
         }
