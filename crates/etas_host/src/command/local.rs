@@ -1,4 +1,6 @@
+mod cleanup;
 mod cwd;
+mod descriptors;
 mod output;
 mod process_tree;
 mod supervisor;
@@ -13,6 +15,35 @@ use crate::{
 };
 
 use self::{process_tree::ProcessTreeController, supervisor::SupervisedCommand};
+
+pub(crate) async fn execute_tool_process(
+    mut command: TokioCommand,
+    body: Vec<u8>,
+    budget: &crate::ExecutionBudget,
+    operation: Option<&crate::execution::OperationContext>,
+    program: String,
+) -> Result<crate::CommandOutput, HostError> {
+    if let Some(operation) = operation {
+        operation.signal().check()?;
+    }
+    budget.check_time()?;
+    command
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    ProcessTreeController::configure(&mut command);
+    SupervisedCommand::spawn(
+        command,
+        Some(body),
+        budget.deadline()?,
+        CommandExecutionPolicy::default(),
+        program,
+        crate::sandbox::platform::PreparedIsolation::TrustedUnconfined,
+        operation.cloned(),
+    )?
+    .wait(operation.map(|operation| operation.signal().clone()))
+    .await
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CommandExecutionPolicy {
@@ -65,7 +96,14 @@ impl LocalCommandClient {
         }
     }
 
-    async fn execute_local(&self, request: CommandRequest) -> Result<CommandResponse, HostError> {
+    async fn execute_local(
+        &self,
+        request: CommandRequest,
+        operation: Option<&crate::execution::OperationContext>,
+    ) -> Result<CommandResponse, HostError> {
+        if let Some(operation) = operation {
+            operation.signal().check()?;
+        }
         let program = request.argv.first().ok_or_else(|| {
             HostError::new(
                 HostErrorCode::InvalidRequest,
@@ -81,6 +119,8 @@ impl LocalCommandClient {
             .with_detail("program", program.clone()));
         }
         SandboxBroker::new(request.authority.sandbox.clone()).check_command(program)?;
+        let isolation =
+            crate::sandbox::platform::PreparedIsolation::prepare(&request.authority.sandbox)?;
         request.budget.check_time()?;
         let deadline = request.budget.deadline()?;
 
@@ -107,19 +147,39 @@ impl LocalCommandClient {
         command.stderr(Stdio::piped());
         ProcessTreeController::configure(&mut command);
 
+        if let Some(operation) = operation {
+            operation.signal().check()?;
+        }
         let supervised = SupervisedCommand::spawn(
             command,
             request.stdin,
             deadline,
             self.policy,
             program.clone(),
+            isolation,
+            operation.cloned(),
         )?;
-        let output = supervised.wait().await?;
+        let output = supervised
+            .wait(operation.map(|context| context.signal().clone()))
+            .await?;
 
         Ok(CommandResponse {
             id: request.id,
             result: Ok(output),
         })
+    }
+
+    pub async fn execute_scoped(
+        &self,
+        request: CommandRequest,
+        operation: &crate::execution::OperationContext,
+    ) -> Result<CommandResponse, HostError> {
+        let client = self.clone();
+        operation
+            .supervise(
+                move |context| async move { client.execute_local(request, Some(&context)).await },
+            )
+            .await
     }
 }
 
@@ -129,6 +189,6 @@ impl CommandClient for LocalCommandClient {
         Pin<Box<dyn Future<Output = Result<CommandResponse, Self::Error>> + Send + 'a>>;
 
     fn execute(&self, request: CommandRequest) -> Self::ExecuteFuture<'_> {
-        Box::pin(async move { self.execute_local(request).await })
+        Box::pin(async move { self.execute_local(request, None).await })
     }
 }

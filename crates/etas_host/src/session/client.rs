@@ -9,4 +9,11 @@ pub trait SessionClient {
         Self: 'a;
 
     fn execute(&self, request: SessionRequest) -> Self::ExecuteFuture<'_>;
+
+    type WriteFuture<'a>: Future<Output = Result<super::SessionWriteResponse, Self::Error>>
+        + Send
+        + 'a
+    where
+        Self: 'a;
+    fn write(&self, request: super::SessionWriteRequest) -> Self::WriteFuture<'_>;
 }

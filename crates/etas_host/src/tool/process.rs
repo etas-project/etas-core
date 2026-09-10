@@ -1,6 +1,6 @@
-use std::{future::Future, pin::Pin, process::Stdio};
+use std::{future::Future, pin::Pin};
 
-use tokio::{io::AsyncWriteExt, process::Command};
+use tokio::process::Command;
 
 use crate::{
     HostError, HostErrorCode, SandboxBroker, ToolClient, ToolRequest, ToolResponse,
@@ -41,47 +41,29 @@ impl ProcessToolProtocolAdapter {
         Ok(response.response)
     }
 
-    async fn invoke_process(&self, request: ToolRequest) -> Result<ToolResponse, HostError> {
+    async fn invoke_process(
+        &self,
+        request: ToolRequest,
+        operation: Option<&crate::execution::OperationContext>,
+    ) -> Result<ToolResponse, HostError> {
         SandboxBroker::new(request.authority.sandbox.clone()).check_command(&self.program)?;
-        let mut child = Command::new(&self.program)
-            .args(&self.args)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .spawn()
-            .map_err(|error| {
-                HostError::new(
-                    HostErrorCode::ToolUnavailable,
-                    "failed to spawn process tool",
-                )
-                .with_detail("error", error.to_string())
-            })?;
-        let stdin = child.stdin.as_mut().ok_or_else(|| {
-            HostError::new(
-                HostErrorCode::ToolUnavailable,
-                "process tool stdin pipe was not available",
-            )
-        })?;
+        let mut command = Command::new(&self.program);
+        command.args(&self.args);
         let body = host_value_to_json(&request.args)?.to_string();
-        stdin.write_all(body.as_bytes()).await.map_err(|error| {
-            HostError::new(
-                HostErrorCode::ToolRejected,
-                "failed to write process tool input",
-            )
-            .with_detail("error", error.to_string())
-        })?;
-        let output = child.wait_with_output().await.map_err(|error| {
-            HostError::new(
-                HostErrorCode::ToolRejected,
-                "failed to wait for process tool output",
-            )
-            .with_detail("error", error.to_string())
-        })?;
-        if !output.status.success() {
+        let output = crate::command::execute_tool_process(
+            command,
+            body.into_bytes(),
+            &request.budget,
+            operation,
+            self.program.clone(),
+        )
+        .await?;
+        if output.exit_code != 0 {
             return Err(HostError::new(
                 HostErrorCode::ToolRejected,
                 "process tool exited with failure",
             )
-            .with_detail("status", output.status.to_string()));
+            .with_detail("status", output.exit_code.to_string()));
         }
         let body = String::from_utf8(output.stdout).map_err(|error| {
             HostError::new(
@@ -102,6 +84,19 @@ impl ProcessToolProtocolAdapter {
             result: Ok(host_json_to_value(result_json)?),
         })
     }
+
+    pub async fn invoke_scoped(
+        &self,
+        request: ToolRequest,
+        operation: &crate::execution::OperationContext,
+    ) -> Result<ToolResponse, HostError> {
+        let client = self.clone();
+        operation
+            .supervise(move |context| async move {
+                client.invoke_process(request, Some(&context)).await
+            })
+            .await
+    }
 }
 
 impl ToolClient for ProcessToolProtocolAdapter {
@@ -110,6 +105,6 @@ impl ToolClient for ProcessToolProtocolAdapter {
         Pin<Box<dyn Future<Output = Result<ToolResponse, Self::Error>> + Send + 'a>>;
 
     fn invoke(&self, request: ToolRequest) -> Self::InvokeFuture<'_> {
-        Box::pin(async move { self.invoke_process(request).await })
+        Box::pin(async move { self.invoke_process(request, None).await })
     }
 }

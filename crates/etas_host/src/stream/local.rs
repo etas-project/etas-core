@@ -22,7 +22,11 @@ impl LocalStreamClient {
         Self { streams }
     }
 
-    async fn execute_request(&self, request: StreamRequest) -> Result<StreamResponse, HostError> {
+    async fn execute_request(
+        &self,
+        request: StreamRequest,
+        operation: Option<&crate::execution::OperationContext>,
+    ) -> Result<StreamResponse, HostError> {
         if let StreamOperation::Close { stream } = &request.operation {
             let result = match self.streams.stream_slot(stream.handle()).await {
                 Some(slot) => match slot.begin_close(stream.handle()) {
@@ -40,6 +44,10 @@ impl LocalStreamClient {
             });
         }
 
+        if let Some(operation) = operation {
+            operation.signal().check()?;
+        }
+
         let stream = match &request.operation {
             StreamOperation::Read { stream, .. }
             | StreamOperation::ReadUntilLimit { stream, .. }
@@ -52,7 +60,8 @@ impl LocalStreamClient {
             | StreamOperation::ReadUntilLimit { timeout_ms, .. } => *timeout_ms,
             _ => None,
         };
-        let deadlines = OperationDeadlines::new(&request.budget, timeout_ms);
+        let deadlines =
+            OperationDeadlines::new(&request.budget, timeout_ms).with_operation(operation);
         let Some(slot) = self.streams.stream_slot(stream.handle()).await else {
             return Ok(StreamResponse {
                 id: request.id,
@@ -112,17 +121,14 @@ impl LocalStreamClient {
                 timeout_ms: _,
             } => read_until_limit(connection, *limit_bytes, &slot.cancellation, deadlines).await,
             StreamOperation::WriteAll { stream: _, body } => {
-                match await_io(
-                    connection.write_all_and_flush(body),
-                    Some(&slot.cancellation),
+                write_body(
+                    connection,
+                    body,
+                    &slot.cancellation,
                     deadlines.clone(),
-                    "stream write failed",
+                    operation,
                 )
                 .await
-                {
-                    Ok(()) => Ok(StreamPayload::Unit),
-                    Err(error) => Err(StreamFailure::from_host(error)),
-                }
             }
             StreamOperation::Flush { stream: _ } => match await_io(
                 connection.flush(),
@@ -140,10 +146,33 @@ impl LocalStreamClient {
                 "stream close dispatch invariant violated",
             ))),
         };
+        // A partially written frame cannot be reused. Read cancellation preserves
+        // buffered input and does not close a stream shared with other requests.
+        if response.is_err() && matches!(request.operation, StreamOperation::WriteAll { .. }) {
+            drop(state);
+            match slot.begin_close(stream.handle()) {
+                Ok(()) => slot.finish_close().await,
+                Err(error) if error.code == HostErrorCode::Closed => slot.finish_close().await,
+                Err(error) => return Err(error),
+            }
+        }
         Ok(StreamResponse {
             id: request.id,
             result: response,
         })
+    }
+
+    pub async fn execute_scoped(
+        &self,
+        request: StreamRequest,
+        operation: &crate::execution::OperationContext,
+    ) -> Result<StreamResponse, HostError> {
+        let client = self.clone();
+        operation
+            .supervise(move |context| async move {
+                client.execute_request(request, Some(&context)).await
+            })
+            .await
     }
 }
 
@@ -153,8 +182,46 @@ impl StreamClient for LocalStreamClient {
         Pin<Box<dyn Future<Output = Result<StreamResponse, Self::Error>> + Send + 'a>>;
 
     fn execute(&self, request: StreamRequest) -> Self::ExecuteFuture<'_> {
-        Box::pin(self.execute_request(request))
+        Box::pin(self.execute_request(request, None))
     }
+}
+
+async fn write_body(
+    connection: &mut ManagedStream,
+    body: &[u8],
+    cancellation: &CancellationToken,
+    deadlines: OperationDeadlines,
+    operation: Option<&crate::execution::OperationContext>,
+) -> Result<StreamPayload, StreamFailure> {
+    let mut written = 0;
+    while written < body.len() {
+        let count = await_io(
+            connection.write(&body[written..]),
+            Some(cancellation),
+            deadlines.clone(),
+            "stream write failed",
+        )
+        .await
+        .map_err(StreamFailure::from_host)?;
+        if count == 0 {
+            return Err(StreamFailure::Closed);
+        }
+        written += count;
+        if let Some(operation) = operation {
+            operation
+                .record_progress(written as u64)
+                .map_err(StreamFailure::from_host)?;
+        }
+    }
+    await_io(
+        connection.flush(),
+        Some(cancellation),
+        deadlines,
+        "stream flush failed",
+    )
+    .await
+    .map_err(StreamFailure::from_host)?;
+    Ok(StreamPayload::Unit)
 }
 
 pub(super) async fn read_until_limit(

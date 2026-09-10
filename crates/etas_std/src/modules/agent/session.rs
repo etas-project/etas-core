@@ -4,6 +4,9 @@ use crate::{
     StdStaticArg, StdSymbolKind, StdType, TypeDecl, TypeDeclKind, intrinsic,
 };
 
+mod history;
+mod publication;
+
 pub fn register(builder: &mut StdRegistryBuilder) {
     let module = builder.module(
         &["std", "agent", "session"],
@@ -17,7 +20,6 @@ pub fn register(builder: &mut StdRegistryBuilder) {
                 ("id", "SessionId"),
                 ("context", "ContextPolicy"),
                 ("retention", "RetentionPolicy"),
-                ("compaction", "CompactionPolicy"),
             ])),
         ),
         (
@@ -25,14 +27,16 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             Some(record(&[
                 ("session", "SessionId"),
                 ("messages", "Array[Message[std.json.JsonValue]]"),
-                ("summary", "Option[SessionSummary]"),
+                ("summary", "Option[SessionPublishedContext]"),
                 ("cursor", "Option[string]"),
             ])),
         ),
-        ("SessionSummary", None),
+        (
+            "SessionSummary",
+            Some(record(&[("text", "string"), ("message_count", "usize")])),
+        ),
         ("ContextPolicy", None),
         ("RetentionPolicy", None),
-        ("CompactionPolicy", None),
     ] {
         let mut decl = TypeDecl::generic(name, &[], TypeDeclKind::Support);
         if let Some(representation) = representation {
@@ -47,6 +51,8 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         );
         builder.prelude(name, symbol);
     }
+    history::register(builder, module);
+    publication::register(builder, module);
     for (name, params, output, docs) in [
         (
             "continue_or_new",
@@ -73,30 +79,15 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             "Retain session history for a number of days.",
         ),
         (
-            "SummarizeWhen",
-            &["std.runtime.limits.Limit"][..],
-            "CompactionPolicy",
-            "Compact session history when the given limit is reached.",
-        ),
-        (
             "load",
             &["SessionConfig"][..],
             "Conversation",
             "Load selected conversation history for a session.",
         ),
-        (
-            "compact",
-            &["SessionConfig"][..],
-            "Conversation",
-            "Compact conversation history for a session.",
-        ),
     ] {
         let decl = match name {
             "load" => {
                 FlowDecl::with_actions(name, params, output, &[], &[session_memory_action("read")])
-            }
-            "compact" => {
-                FlowDecl::with_actions(name, params, output, &[], &[session_memory_action("write")])
             }
             "continue_or_new" => FlowDecl::with_type_params_actions(
                 name,
@@ -167,7 +158,6 @@ fn session_policy_intrinsic(name: &str) -> Option<IntrinsicDescriptor> {
         "LastTurns" => intrinsic::pure::SESSION_LAST_TURNS,
         "SummaryPlusRecent" => intrinsic::pure::SESSION_SUMMARY_PLUS_RECENT,
         "Days" => intrinsic::pure::SESSION_DAYS,
-        "SummarizeWhen" => intrinsic::pure::SESSION_SUMMARIZE_WHEN,
         _ => return None,
     };
     Some(IntrinsicDescriptor {

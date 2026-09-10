@@ -1,0 +1,34 @@
+name: Linux isolation acceptance
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  enforcement:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        run: rustup update stable --no-self-update
+      - name: Validate gate accounting
+        run: python3 -B -m unittest discover -s scripts -p 'test_linux_isolation_gate.py'
+      - name: Enforce actual kernel isolation
+        run: python3 -B scripts/linux_isolation_gate.py
+      - name: Preserve platform and enforcement evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-isolation-${{ matrix.runner }}
+          path: target/linux-isolation-acceptance/
+          if-no-files-found: error

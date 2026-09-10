@@ -126,16 +126,10 @@ impl ManagedStream {
         )
     }
 
-    pub(crate) async fn write_all_and_flush(&mut self, body: &[u8]) -> std::io::Result<()> {
+    pub(crate) async fn write(&mut self, body: &[u8]) -> std::io::Result<usize> {
         match self {
-            ManagedStream::Tcp { stream, .. } => {
-                stream.write_all(body).await?;
-                stream.flush().await
-            }
-            ManagedStream::Tls { stream, .. } => {
-                stream.write_all(body).await?;
-                stream.flush().await
-            }
+            Self::Tcp { stream, .. } => stream.write(body).await,
+            Self::Tls { stream, .. } => stream.write(body).await,
         }
     }
 
@@ -332,6 +326,7 @@ impl StreamSlot {
 
 #[derive(Clone)]
 pub(crate) struct OperationDeadlines {
+    scope_signal: Option<crate::execution::CancelSignal>,
     budget: Option<Instant>,
     budget_error: Option<HostError>,
     operation: Option<Instant>,
@@ -349,6 +344,7 @@ impl OperationDeadlines {
         let operation = operation_timeout_ms
             .and_then(|timeout| now.checked_add(Duration::from_millis(timeout)));
         Self {
+            scope_signal: None,
             budget,
             budget_error,
             operation,
@@ -356,9 +352,53 @@ impl OperationDeadlines {
             operation_timeout_ms,
         }
     }
+
+    pub(crate) fn with_operation(
+        mut self,
+        operation: Option<&crate::execution::OperationContext>,
+    ) -> Self {
+        self.scope_signal = operation.map(|context| context.signal().clone());
+        self
+    }
 }
 
 impl ByteStreamStore {
+    pub(crate) async fn own_stream(
+        &self,
+        handle: &StreamHandleRef,
+        operation: &crate::execution::OperationContext,
+    ) -> Result<(), HostError> {
+        let slot = self
+            .stream_slot(handle)
+            .await
+            .ok_or_else(|| unknown_stream(handle))?;
+        let registration = match operation.register_work() {
+            Ok(registration) => registration,
+            Err(error) => {
+                slot.cancellation.cancel();
+                slot.finish_close().await;
+                return Err(error);
+            }
+        };
+        if let Err(error) = registration.begin_dispatch() {
+            slot.cancellation.cancel();
+            slot.finish_close().await;
+            registration.complete(crate::execution::ExternalOutcome::NotDispatched, vec![])?;
+            return Err(error);
+        }
+        let context = registration.context().clone();
+        let streams = self.streams.clone();
+        let token = handle.token().to_owned();
+        tokio::spawn(async move {
+            let release = context.signal().release_requested().await;
+            slot.cancellation.cancel();
+            slot.finish_close().await;
+            streams.write().await.remove(&token);
+            let errors = release.err().into_iter().collect();
+            let _ = registration.complete(crate::execution::ExternalOutcome::Confirmed, errors);
+        });
+        Ok(())
+    }
     pub fn new() -> Self {
         Self::default()
     }
@@ -466,6 +506,7 @@ pub(crate) async fn lock_stream_state<'a>(
     check_expired_deadlines(&deadlines)?;
     tokio::select! {
         biased;
+        _ = scope_cancelled(&deadlines) => Err(stream_cancelled()),
         _ = slot.cancellation.cancelled() => Err(stream_cancelled()),
         _ = wait_until(deadlines.budget) => Err(time_budget_exceeded()),
         _ = wait_until(deadlines.operation) => Err(stream_timeout(deadlines.operation_timeout_ms)),
@@ -489,6 +530,7 @@ pub(crate) async fn await_io<T>(
     check_expired_deadlines(&deadlines)?;
     tokio::select! {
         biased;
+        _ = scope_cancelled(&deadlines) => Err(stream_cancelled()),
         _ = wait_for_cancellation(cancellation) => Err(stream_cancelled()),
         _ = wait_until(deadlines.budget) => Err(time_budget_exceeded()),
         _ = wait_until(deadlines.operation) => Err(stream_timeout(deadlines.operation_timeout_ms)),
@@ -497,6 +539,9 @@ pub(crate) async fn await_io<T>(
 }
 
 fn check_expired_deadlines(deadlines: &OperationDeadlines) -> Result<(), HostError> {
+    if let Some(signal) = &deadlines.scope_signal {
+        signal.check()?;
+    }
     if let Some(error) = &deadlines.budget_error {
         return Err(error.clone());
     }
@@ -514,6 +559,15 @@ fn check_expired_deadlines(deadlines: &OperationDeadlines) -> Result<(), HostErr
         return Err(stream_timeout(deadlines.operation_timeout_ms));
     }
     Ok(())
+}
+
+async fn scope_cancelled(deadlines: &OperationDeadlines) {
+    match &deadlines.scope_signal {
+        Some(signal) => {
+            let _ = signal.cancelled().await;
+        }
+        None => pending::<()>().await,
+    }
 }
 
 async fn wait_for_cancellation(cancellation: Option<&CancellationToken>) {
@@ -1286,6 +1340,202 @@ mod tests {
         let client = client.expect("connect client");
         let (server, _) = accepted.expect("accept client");
         (ManagedStream::tcp(client), server)
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn cancelled_partial_write_records_progress_and_invalidates_stream() {
+        use crate::execution::{CancellationReason, ExecutionScope, ExternalOutcome};
+        let store = ByteStreamStore::new();
+        let client = LocalStreamClient::new(store.clone());
+        let (connection, _peer) = connected_stream().await;
+        let handle = store
+            .insert_stream(connection, ByteStreamOrigin::Opaque)
+            .await
+            .unwrap();
+        let stream = ByteStreamRef::issued(handle.clone(), ByteStreamOrigin::Opaque);
+        let scope = ExecutionScope::new();
+        let parent = scope
+            .register(
+                None,
+                Some(HostRequestId(200)),
+                TraceContext::root(TraceId(1)),
+            )
+            .unwrap();
+        parent.begin_dispatch().unwrap();
+        let context = parent.context().clone();
+        let task = tokio::spawn(async move {
+            client
+                .execute_scoped(
+                    stream_request(
+                        200,
+                        StreamOperation::WriteAll {
+                            stream,
+                            body: vec![42; 32 * 1024 * 1024],
+                        },
+                    ),
+                    &context,
+                )
+                .await
+        });
+        timeout(Duration::from_secs(2), async {
+            loop {
+                if scope
+                    .pending()
+                    .unwrap()
+                    .operations()
+                    .iter()
+                    .any(|op| op.completed_units().is_some_and(|bytes| bytes > 0))
+                {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        scope
+            .cancel_source()
+            .stop(CancellationReason::Requested)
+            .unwrap();
+        let response = timeout(Duration::from_secs(2), task)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert_eq!(response.result, Err(StreamFailure::Cancelled));
+        parent.complete(ExternalOutcome::Unknown, vec![]).unwrap();
+        scope.finish_body(true).unwrap();
+        let report = scope.join().await.unwrap();
+        assert!(report.operations().iter().any(|op| matches!(op.outcome(), Some(ExternalOutcome::Partial { completed_units }) if *completed_units > 0)));
+        assert_eq!(
+            store.stream_slot(&handle).await.unwrap().lifecycle(),
+            StreamLifecycle::Closed
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn scope_cancelled_read_preserves_shared_stream_and_sibling_progress() {
+        use crate::execution::{CancellationReason, ExecutionScope, ExternalOutcome};
+        let store = ByteStreamStore::new();
+        let client = LocalStreamClient::new(store.clone());
+        let (stream, mut peer) = connected_stream().await;
+        let handle = store
+            .insert_stream(stream, ByteStreamOrigin::Opaque)
+            .await
+            .unwrap();
+        let stream = ByteStreamRef::issued(handle.clone(), ByteStreamOrigin::Opaque);
+        let scope = ExecutionScope::new();
+        let registration = scope
+            .register(
+                None,
+                Some(HostRequestId(101)),
+                TraceContext::root(TraceId(1)),
+            )
+            .unwrap();
+        registration.begin_dispatch().unwrap();
+        let read = tokio::spawn({
+            let client = client.clone();
+            let stream = stream.clone();
+            let context = registration.context().clone();
+            async move {
+                client
+                    .execute_scoped(
+                        stream_request(
+                            101,
+                            StreamOperation::Read {
+                                stream,
+                                max_bytes: 16,
+                                timeout_ms: None,
+                            },
+                        ),
+                        &context,
+                    )
+                    .await
+            }
+        });
+        // Poll the actual read on this executor before cancellation.
+        tokio::task::yield_now().await;
+        scope
+            .cancel_source()
+            .stop(CancellationReason::Requested)
+            .unwrap();
+        let response = timeout(Duration::from_secs(1), read)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert_eq!(response.result, Err(StreamFailure::Cancelled));
+        registration
+            .complete(ExternalOutcome::Unknown, vec![])
+            .unwrap();
+        scope.finish_body(true).unwrap();
+        scope.join().await.unwrap();
+        assert_eq!(
+            store.stream_slot(&handle).await.unwrap().lifecycle(),
+            StreamLifecycle::OpenTcp
+        );
+        peer.write_all(b"still open").await.unwrap();
+        let next = timeout(
+            Duration::from_secs(1),
+            client.execute(stream_request(
+                102,
+                StreamOperation::Read {
+                    stream,
+                    max_bytes: 16,
+                    timeout_ms: None,
+                },
+            )),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            next.result,
+            Ok(StreamPayload::Read(StreamRead::Data(
+                b"still open".to_vec()
+            )))
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn owned_stream_is_closed_before_scope_join_returns() {
+        use crate::execution::{ExecutionScope, ExternalOutcome};
+        let store = ByteStreamStore::new();
+        let (stream, mut peer) = connected_stream().await;
+        let handle = store
+            .insert_stream(stream, ByteStreamOrigin::Opaque)
+            .await
+            .unwrap();
+        let scope = ExecutionScope::new();
+        let registration = scope
+            .register(
+                None,
+                Some(HostRequestId(103)),
+                TraceContext::root(TraceId(1)),
+            )
+            .unwrap();
+        registration.begin_dispatch().unwrap();
+        store
+            .own_stream(&handle, registration.context())
+            .await
+            .unwrap();
+        registration
+            .complete(ExternalOutcome::Confirmed, vec![])
+            .unwrap();
+        scope.finish_body(true).unwrap();
+        timeout(Duration::from_secs(1), scope.join())
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(store.stream_slot(&handle).await.is_none());
+        let mut byte = [0];
+        assert_eq!(
+            timeout(Duration::from_secs(1), peer.read(&mut byte))
+                .await
+                .unwrap()
+                .unwrap(),
+            0
+        );
     }
 
     fn stream_request(id: u32, operation: StreamOperation) -> StreamRequest {

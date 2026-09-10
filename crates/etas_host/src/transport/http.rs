@@ -62,6 +62,27 @@ impl HttpTransport {
         body: String,
         outer_deadline: Option<tokio::time::Instant>,
     ) -> Result<HttpResponse, HostError> {
+        self.send_json_inner(path, body, outer_deadline, None).await
+    }
+
+    pub async fn send_json_scoped(
+        &self,
+        path: &str,
+        body: String,
+        outer_deadline: Option<tokio::time::Instant>,
+        operation: &crate::execution::OperationContext,
+    ) -> Result<HttpResponse, HostError> {
+        self.send_json_inner(path, body, outer_deadline, Some(operation))
+            .await
+    }
+
+    async fn send_json_inner(
+        &self,
+        path: &str,
+        body: String,
+        outer_deadline: Option<tokio::time::Instant>,
+        operation: Option<&crate::execution::OperationContext>,
+    ) -> Result<HttpResponse, HostError> {
         if self.retry.attempts == 0 {
             return Err(HostError::new(
                 HostErrorCode::InvalidRequest,
@@ -71,7 +92,16 @@ impl HttpTransport {
         let deadline = self.effective_deadline(outer_deadline);
         let mut last_error = None;
         for attempt in 0..self.retry.attempts {
-            match self
+            let registration = operation
+                .map(|operation| operation.register_work())
+                .transpose()?;
+            if let Some(registration) = &registration {
+                registration.begin_dispatch()?;
+            }
+            let attempt_context = registration
+                .as_ref()
+                .map(|registration| registration.context());
+            let result = self
                 .send_once_before(
                     HttpRequest {
                         method: "POST".to_owned(),
@@ -80,14 +110,37 @@ impl HttpTransport {
                         body: body.clone(),
                     },
                     deadline,
+                    attempt_context,
                 )
-                .await
-            {
+                .await;
+            if let Some(registration) = registration {
+                registration.complete(
+                    if result.is_ok() {
+                        crate::execution::ExternalOutcome::Confirmed
+                    } else {
+                        crate::execution::ExternalOutcome::Unknown
+                    },
+                    vec![],
+                )?;
+            }
+            match result {
                 Ok(response) => return Ok(response),
                 Err(error) => {
+                    if error.code == HostErrorCode::Cancelled {
+                        return Err(error);
+                    }
                     last_error = Some(error);
                     if attempt + 1 < self.retry.attempts {
-                        sleep_before_deadline(self.retry.delay, deadline, self.timeout).await?;
+                        match operation {
+                            Some(operation) => tokio::select! {
+                                _ = operation.signal().cancelled() => return Err(cancelled_request()),
+                                result = sleep_before_deadline(self.retry.delay, deadline, self.timeout) => result?,
+                            },
+                            None => {
+                                sleep_before_deadline(self.retry.delay, deadline, self.timeout)
+                                    .await?
+                            }
+                        }
                     }
                 }
             }
@@ -103,13 +156,14 @@ impl HttpTransport {
 
     pub async fn send_once(&self, request: HttpRequest) -> Result<HttpResponse, HostError> {
         let deadline = self.effective_deadline(None);
-        self.send_once_before(request, deadline).await
+        self.send_once_before(request, deadline, None).await
     }
 
     async fn send_once_before(
         &self,
         request: HttpRequest,
         deadline: tokio::time::Instant,
+        context: Option<&crate::execution::OperationContext>,
     ) -> Result<HttpResponse, HostError> {
         let url = self.authority.join(&request.path)?;
         let method = Method::from_bytes(request.method.as_bytes()).map_err(|error| {
@@ -123,6 +177,7 @@ impl HttpTransport {
                 request.headers,
                 request.body.into_bytes(),
                 deadline,
+                context,
             )
             .await?;
         let body = String::from_utf8(response.body).map_err(|error| {
@@ -152,7 +207,7 @@ impl HttpTransport {
             HostError::new(HostErrorCode::InvalidRequest, "invalid HTTP method")
                 .with_detail("error", error.to_string())
         })?;
-        self.send_request_before(method, url, headers, body, deadline)
+        self.send_request_before(method, url, headers, body, deadline, None)
             .await
     }
 
@@ -163,7 +218,11 @@ impl HttpTransport {
         headers: Vec<(String, String)>,
         body: Vec<u8>,
         deadline: tokio::time::Instant,
+        context: Option<&crate::execution::OperationContext>,
     ) -> Result<HttpRawResponse, HostError> {
+        if let Some(context) = context {
+            context.signal().check()?;
+        }
         let operation = async {
             let remaining = remaining_until(deadline, self.timeout)?;
             let connect_timeout = cmp::min(self.timeout.connect_timeout(), remaining);
@@ -174,6 +233,9 @@ impl HttpTransport {
                     parse_header_name(&name)?,
                     parse_header_value(&name, &value)?,
                 );
+            }
+            if let Some(context) = context {
+                context.signal().check()?;
             }
             let response = builder
                 .send()
@@ -191,9 +253,12 @@ impl HttpTransport {
                 body: body.to_vec(),
             })
         };
-        tokio::time::timeout_at(deadline, operation)
-            .await
-            .map_err(|_| request_deadline_exceeded(self.timeout))?
+        // Reqwest's request/body future owns local transport I/O. Dropping it
+        // stops the local wait, but does not assert remote rollback or completion.
+        tokio::select! {
+            _ = async { match context { Some(context) => { let _ = context.signal().cancelled().await; }, None => std::future::pending::<()>().await } } => Err(cancelled_request()),
+            result = tokio::time::timeout_at(deadline, operation) => result.map_err(|_| request_deadline_exceeded(self.timeout))?,
+        }
     }
 
     fn effective_deadline(
@@ -203,6 +268,13 @@ impl HttpTransport {
         let configured = tokio::time::Instant::now() + self.timeout.request_deadline();
         outer_deadline.map_or(configured, |outer| cmp::min(configured, outer))
     }
+}
+
+fn cancelled_request() -> HostError {
+    HostError::new(
+        HostErrorCode::Cancelled,
+        "HTTP transport wait cancelled; remote completion is unknown",
+    )
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

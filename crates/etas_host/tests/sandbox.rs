@@ -201,7 +201,7 @@ fn network_and_command_sandboxes_deny_by_default_and_allow_exact_matches() {
     let allow_broker = SandboxBroker::new(SandboxPolicy::allow_listed(
         FilesystemPolicy::allow_workspace(workspace),
         NetworkPolicy::allow_endpoints(vec![NetworkEndpoint::new("http", "127.0.0.1", 8848)]),
-        CommandPolicy::allow_programs(vec!["python3".to_owned()]),
+        CommandPolicy::allow_trusted_programs(vec!["python3".to_owned()]),
         DestructiveOpPolicy::deny_all(),
     ));
     allow_broker
@@ -266,17 +266,22 @@ fn network_sandbox_rejects_alternative_ip_encodings_and_private_dns_results() {
 }
 
 #[test]
-fn snapshot_diff_and_rollback_restore_workspace_state() {
+fn staged_snapshot_diff_and_rollback_do_not_restore_live_workspace_state() {
     let fixture = TestWorkspace::create("snapshot").expect("test workspace should create");
-    let root = fixture.root().expect("workspace root should canonicalize");
-    let broker = workspace_broker(root.clone());
+    let stage = etas_host::WorkspaceStage::create(&fixture.root().unwrap()).unwrap();
+    let root = stage.root().clone();
+    let path = root.display_path().to_path_buf();
+    let broker = SandboxBroker::new(SandboxPolicy::allow_listed(
+        FilesystemPolicy::allow_destructive_workspace(root.clone()),
+        NetworkPolicy::deny_all(),
+        CommandPolicy::deny_all(),
+        DestructiveOpPolicy::allow_workspace_delete(),
+    ));
 
     broker
         .atomic_write(&root, Path::new("existing.txt"), b"before")
         .expect("initial file should write");
-    let snapshot = broker
-        .snapshot(root.clone())
-        .expect("snapshot should capture workspace");
+    let snapshot = stage.snapshot().expect("snapshot should capture workspace");
 
     broker
         .atomic_write(&root, Path::new("existing.txt"), b"after")
@@ -285,7 +290,7 @@ fn snapshot_diff_and_rollback_restore_workspace_state() {
         .atomic_write(&root, Path::new("added.txt"), b"new")
         .expect("added file should write");
 
-    let diff = broker.diff(&snapshot).expect("diff should compute");
+    let diff = snapshot.diff_current().expect("diff should compute");
     assert_eq!(diff.entries.len(), 2);
     assert!(
         diff.entries
@@ -301,10 +306,10 @@ fn snapshot_diff_and_rollback_restore_workspace_state() {
     let rollback_diff = broker.rollback(&snapshot).expect("rollback should restore");
     assert_eq!(rollback_diff.entries.len(), 2);
     assert_eq!(
-        fs::read(fixture.path().join("existing.txt")).expect("existing file should remain"),
+        fs::read(path.join("existing.txt")).expect("existing file should remain"),
         b"before"
     );
-    assert!(!fixture.path().join("added.txt").exists());
+    assert!(!path.join("added.txt").exists());
 }
 
 fn workspace_broker(root: WorkspaceRoot) -> SandboxBroker {
@@ -314,6 +319,34 @@ fn workspace_broker(root: WorkspaceRoot) -> SandboxBroker {
         CommandPolicy::deny_all(),
         DestructiveOpPolicy::deny_all(),
     ))
+}
+
+#[test]
+fn snapshot_and_staged_rollback_require_the_registered_binding_and_operation_grants() {
+    let fixture = TestWorkspace::create("snapshot-grant-boundary").unwrap();
+    let root = fixture.root().unwrap();
+    let broker = workspace_broker(root.clone());
+    let reopened = WorkspaceRoot::new(fixture.path()).unwrap();
+    assert_eq!(
+        broker.snapshot(reopened).unwrap_err().code,
+        HostErrorCode::AuthorityDenied
+    );
+    let stage = etas_host::WorkspaceStage::create(&root).unwrap();
+    let baseline = stage.snapshot().unwrap();
+    fs::write(stage.root().display_path().join("data"), "keep").unwrap();
+    assert_eq!(
+        broker.rollback(&baseline).unwrap_err().code,
+        HostErrorCode::AuthorityDenied
+    );
+    let read_write_only = workspace_broker(stage.root().clone());
+    assert_eq!(
+        read_write_only.rollback(&baseline).unwrap_err().code,
+        HostErrorCode::AuthorityDenied
+    );
+    assert_eq!(
+        fs::read_to_string(stage.root().display_path().join("data")).unwrap(),
+        "keep"
+    );
 }
 
 #[cfg(unix)]

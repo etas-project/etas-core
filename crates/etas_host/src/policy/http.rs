@@ -48,10 +48,18 @@ impl HttpPolicyClient {
     async fn evaluate_request(
         &self,
         request: PolicyEvaluationRequest,
+        operation: Option<&crate::execution::OperationContext>,
     ) -> Result<PolicyResponse, HostError> {
         let id = request.id;
         let body = encode_policy_request(&request)?.to_string();
-        let response = self.transport.send_json(&self.path, body).await?;
+        let response = match operation {
+            Some(operation) => {
+                self.transport
+                    .send_json_scoped(&self.path, body, None, operation)
+                    .await?
+            }
+            None => self.transport.send_json(&self.path, body).await?,
+        };
         if !(200..300).contains(&response.status) {
             return Err(HostError::new(
                 HostErrorCode::ProviderRejected,
@@ -61,6 +69,19 @@ impl HttpPolicyClient {
         }
         decode_policy_response(id, request.trace, &response.body)
     }
+
+    pub async fn evaluate_scoped(
+        &self,
+        request: PolicyEvaluationRequest,
+        operation: &crate::execution::OperationContext,
+    ) -> Result<PolicyResponse, HostError> {
+        let client = self.clone();
+        operation
+            .supervise(move |context| async move {
+                client.evaluate_request(request, Some(&context)).await
+            })
+            .await
+    }
 }
 
 impl PolicyClient for HttpPolicyClient {
@@ -69,7 +90,7 @@ impl PolicyClient for HttpPolicyClient {
         Pin<Box<dyn Future<Output = Result<PolicyResponse, Self::Error>> + Send + 'a>>;
 
     fn evaluate(&self, request: PolicyEvaluationRequest) -> Self::EvaluateFuture<'_> {
-        Box::pin(async move { self.evaluate_request(request).await })
+        Box::pin(async move { self.evaluate_request(request, None).await })
     }
 }
 

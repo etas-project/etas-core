@@ -4,12 +4,12 @@ Status: `Draft`
 
 Owner: `Architect`
 
-Last updated: `2026-07-02`
+Last updated: `2026-09-10`
 
 ## 1. Purpose
 
-`etas_host` is the shared crate for host-facing protocol values and reusable
-host adapters.
+`etas_host` is the shared crate for host-facing protocol values, reusable
+host adapters, and engine-neutral execution lifecycle mechanisms.
 
 It is shared by:
 
@@ -31,8 +31,8 @@ capabilities.
 The core rule:
 
 ```text
-Provider adapter is shared.
-Engine adapter is not shared.
+Provider adapters and execution-scope lifecycle mechanisms are shared.
+Engine value adapters, evaluators, and language schedulers remain engine-owned.
 ```
 
 In concrete terms:
@@ -100,8 +100,12 @@ etas-runtime     -> etas_host
   adapters;
 - reusable memory backend adapters where the protocol is generic enough, such
   as SQLite, Postgres, and vector-store style adapters;
-- workspace boundaries, path normalization, snapshots, diffs, and rollback
-  primitives;
+- bounded database execution, scoped versions/conditional writes and explicit
+  commit evidence shared by Memory and Session, as specified in
+  [Bounded Versioned Storage](etas-storage-design.md);
+- opened-directory workspace bindings, handle-relative filesystem access and
+  platform isolation contracts, plus explicitly staged snapshot/diff primitives,
+  as specified in [Workspace Binding And Isolation](etas-workspace-design.md);
 - sandbox policy values and reusable sandbox brokers for filesystem, network,
   and command execution;
 - action grant and authority context values;
@@ -109,6 +113,8 @@ etas-runtime     -> etas_host
 - console/stdin/stdout/stderr request values and reusable client interfaces;
 - trace context and host trace events;
 - budget values for tokens, time, and cost;
+- execution scopes, cancellation propagation, operation ownership and shutdown
+  observation, as specified in [Shared Execution Lifecycle](etas-execution-design.md);
 - rendering-neutral host errors.
 
 `etas_host` does not own:
@@ -121,11 +127,14 @@ etas-runtime     -> etas_host
 - Etas memory effect inference such as `Memory.read[R]` or `Memory.write[R]`;
 - interpreter or runtime value models;
 - interpreter or runtime value codec implementations;
-- runtime scheduling;
+- scheduling of language computation and HIR/AIR tasks;
 - checkpoint/resume implementation;
 - continuation machinery;
 - language-level trace-spec decisions, approval decisions, or grant derivation;
 - provider configuration discovery policy;
+- application workspace leases, takeover, persistent logical identity and
+  recovery/retention decisions;
+- application storage schema, retry/reconciliation policy, backup and disk quotas;
 - CLI output formatting.
 
 ## 4. Internal Layout
@@ -142,14 +151,48 @@ crates/etas_host/
       host_value.rs
       schema.rs
       codec.rs
+      tagged/
+        mod.rs
+        encode.rs
+        decode.rs
 
     context/
       mod.rs
-      request.rs
-      authority.rs
-      budget.rs
-      trace.rs
-      error.rs
+      request/
+        mod.rs
+        id.rs
+        context.rs
+        error.rs
+      authority/
+        mod.rs
+      budget/
+        mod.rs
+        execution.rs
+      trace/
+        mod.rs
+        event.rs
+
+    execution/
+      mod.rs
+      cancellation/
+        mod.rs
+        source.rs
+        reason.rs
+      scope/
+        mod.rs
+        identity.rs
+        state.rs
+        registry.rs
+      operation/
+        mod.rs
+        context.rs
+        registration.rs
+        outcome.rs
+      shutdown/
+        mod.rs
+        policy.rs
+        report.rs
+        wait.rs
 
     transport/
       mod.rs
@@ -180,9 +223,38 @@ crates/etas_host/
       mod.rs
       protocol.rs
       client.rs
-      sqlite.rs
+      in_memory.rs
+      sqlite/
+        mod.rs
+        schema.rs
+        read.rs
+        write.rs
+        scan.rs
+        query.rs
       postgres.rs
       vector.rs
+
+    storage/
+      mod.rs
+      version/
+        mod.rs
+        token.rs
+        condition.rs
+      transaction/
+        mod.rs
+        outcome.rs
+        receipt.rs
+      limits/
+        mod.rs
+        config.rs
+        accounting.rs
+      sqlite/
+        mod.rs
+        config.rs
+        worker.rs
+        transaction.rs
+        cancellation.rs
+        receipt.rs
 
     console/
       mod.rs
@@ -207,7 +279,13 @@ crates/etas_host/
       mod.rs
       protocol.rs
       client.rs
-      sqlite.rs
+      in_memory.rs
+      sqlite/
+        mod.rs
+        schema.rs
+        append.rs
+        history.rs
+        compact.rs
       retention.rs
 
     filesystem/
@@ -246,13 +324,21 @@ crates/etas_host/
       mod.rs
       policy.rs
       broker.rs
-      workspace.rs
+      workspace/
+        mod.rs
+        root.rs
+        path.rs
+        registry.rs
+        tests.rs
       filesystem.rs
       network.rs
       command.rs
       snapshot.rs
       diff.rs
-      platform.rs
+      platform/
+        mod.rs
+        requirements.rs
+        activation.rs
 
     testing/
       mod.rs
@@ -264,15 +350,24 @@ crates/etas_host/
 
 Layering:
 
-- `value` defines shared wire-facing values and schemas.
+- `value` defines shared wire-facing values, schemas and bounded lossless
+  stored-value codecs. Memory and Session do not maintain duplicate codecs.
 - `context` defines request ids, action-grant context, approval values, trace
   context, budget values, and rendering-neutral errors.
+- `execution` owns the shared live scope/cancellation/operation/shutdown
+  contract. It does not execute handlers or schedule language tasks; adapters
+  keep their concrete stop/cleanup implementation in their service domain.
 - `transport` defines reusable HTTP/SSE/auth/timeout/retry mechanics used by
   provider and tool clients, including network allowlist checks.
 - `model` defines model protocols and model provider clients.
 - `tool` defines tool protocols and reusable tool clients.
 - `memory` defines typed persistent-memory protocols and reusable backend
   clients.
+- `storage` defines shared version/condition contracts, resource limits,
+  transaction evidence and managed SQLite execution. It does not import Memory
+  or Session operation enums, interpret HIR/AIR, or define application state.
+  Database statements remain in their service domain; cancellation ownership
+  continues to come from `execution`.
 - `console` defines console/std-stream protocols used by `std.io` declarations,
   including stdin reads and stdout/stderr writes.
 - `command` defines the source-visible command execution host protocol for
@@ -284,7 +379,8 @@ Layering:
   frontend effect inference or trace-spec fact materialization.
 - `session` defines reusable session/conversation storage protocols for agent
   execution, replay, and checkpoint metadata. It is storage and protocol
-  plumbing, not continuation or scheduler ownership.
+  plumbing, not continuation or scheduler ownership. History paging and append
+  deduplication follow [Bounded Versioned Storage](etas-storage-design.md#7-session-semantics).
 - `filesystem` defines the source-visible host protocol for `std.fs` and local
   workspace-scoped filesystem implementations. Existing filesystem clients
   should be extended here; do not add parallel `fs` protocol types elsewhere.
@@ -298,7 +394,10 @@ Layering:
 - `browser` defines the source-visible browser protocol/session transport for
   `std.browser.protocol`.
 - `sandbox` defines workspace boundaries and reusable safety brokers for
-  filesystem, network, and command execution.
+  filesystem, network, and command execution. `sandbox::workspace` owns the
+  shared region-to-opened-root registry; `sandbox::platform` distinguishes
+  required restrictions from backend-activated guarantees. Service domains
+  retain their protocols and concrete operation ownership.
 - `testing` defines fake transports, fake sandboxes, fixtures, and assertions
   used to test host behavior without touching the user's real system.
 
@@ -327,6 +426,28 @@ budget context. `LocalStdioClient` is one local implementation. Console clients
 must be testable with fake input/output buffers so interpreter, runtime, and CLI
 tests do not touch the user's real terminal unless explicitly wired by the
 user-facing `etas` command.
+
+### 4.1 Execution Lifecycle Integration
+
+The authoritative state machine, structures, file responsibilities and tests
+are in [Shared Execution Lifecycle](etas-execution-design.md). All host request
+kinds receive its local `OperationContext`; this live context is not serialized
+to external providers. Existing authority, trace and budget contracts remain
+distinct. Request examples below show domain payloads, not an exhaustive live
+execution envelope.
+
+Extend existing service clients and supervisors to observe the same scope signal.
+Remove superseded per-service invocation cancellation protocols; do not create a
+second Host scheduler or duplicate cancellation under `context/`. Preserve
+resource-specific ownership: cancelling a console wait does not stop the shared
+stdin broker, and cancelling one operation does not implicitly close a shared
+stream. Backend work must remain observable until actual local completion.
+
+An adapter reports external completion evidence independently of local cleanup.
+Cancellation is neither rollback nor proof that a remote model/tool stopped.
+Database work must use managed blocking execution and a backend interruption/
+completion strategy, not synchronous I/O inside an async body or a detached
+`spawn_blocking` call. A cleanup timeout leaves the operation owned and pending.
 
 ## 5. Host Value Boundary
 
@@ -396,6 +517,13 @@ etas-runtime     implements HostValueCodec<AirValue>
 
 This keeps host adapters reusable while allowing interpreter and runtime values
 to stay different.
+
+Storage-facing conversions and the stored-value codec additionally enforce the
+[storage resource contract](etas-storage-design.md#5-resource-limits-and-stored-values).
+Validate byte/depth/node budgets before cloning large values and during encoding
+and decoding. A complete temporary JSON tree followed by a size check does not
+meet this contract. The engine-facing sketch above is not permission to bypass
+limits, type-directed decoding or sensitive-data handling.
 
 `HostValue` is protocol-shaped, not source-language-shaped. It may use
 `List(Vec<HostValue>)` for JSON arrays, model tool arrays, and HTTP payloads, but
@@ -656,8 +784,8 @@ controller enforces it.
 ## 8. Typed Persistent Memory Protocol
 
 Typed persistent memory is also a host boundary. The Etas source language
-models memory through ordinary types such as `MemoryRegion[S]` and
-`Store[K, V]`, then binds immutable resource handles with top-level `let`.
+models memory through ordinary types such as `MemoryRegion<S>` and
+`Store<K, V>`, then binds immutable resource handles with top-level `let`.
 `etas_host` does not derive those types and does not infer memory effects. It
 only owns the engine-neutral protocol used when an execution engine talks to a
 concrete backend.
@@ -680,170 +808,73 @@ etas-runtime:
     -> AirValue
 ```
 
-The request protocol should preserve region, store, version, authority, trace,
-and budget information:
+The authoritative protocol, algorithms and file responsibilities are in
+[Bounded Versioned Storage](etas-storage-design.md). Retain the existing
+`MemoryClient`/`SessionClient` boundaries and domain references, while replacing
+the old nullable-version/mode and success/error-only write contracts.
 
-```rust
-pub struct MemoryRegionRef {
-    pub stable_id: String,
-    pub schema_fingerprint: Option<String>,
-}
+| Contract | Required behavior |
+|---|---|
+| Request | Preserve backend/region/Store/schema identity, action authority, trace/request identity and effective byte/work/time limits |
+| Version | Opaque Store generation plus Store-wide revision; no reuse after entry deletion/recreation and no per-process generation reset |
+| Conditional mutation | One `Any / Missing / Exists / Match(version)` condition, checked atomically with the write/delete |
+| Write evidence | Structurally distinguish confirmed commit with receipt, confirmed non-commit and unknown commit outcome; operation identity exists before dispatch |
+| Reconciliation | Reauthorize scoped lookup; query retained evidence without replaying a mutation; missing/expired evidence is not non-commit |
+| Conflict | Typed condition/version evidence; returning the current value requires explicit read authority and bounds |
+| Read/page | Typed values with versions; bounded keyset continuation with declared revision/context consistency |
+| Execution | One managed, bounded database path for every entry point; no synchronous-SQL async bypass |
+| Encoding | Shared bounded lossless codec, including reads of pre-existing oversized/corrupt data |
 
-pub struct StoreRef {
-    pub region: MemoryRegionRef,
-    pub path: Vec<String>,
-}
+`MemoryQuery` is a host query description, not an Etas expression tree. The
+backend declares supported predicates, ordering, vector and transaction
+features; an unsupported request fails explicitly. Exact vector queries use
+bounded top-k selection and a work budget, not a full collection followed by
+sorting. An incomplete search is not a successful complete answer.
 
-pub struct MemoryRequest {
-    pub id: HostRequestId,
-    pub store: StoreRef,
-    pub operation: MemoryOperation,
-    pub authority: AuthorityContext,
-    pub trace: TraceContext,
-    pub budget: Budget,
-}
+SQLite is a persistent local adapter with actual cross-process transaction
+semantics, not a single-client mock. Domain SQL lives under `memory/sqlite/`
+and `session/sqlite/`; connection ownership, verified durability settings and
+transaction cleanup live under shared `storage/sqlite/`. PostgreSQL and vector
+adapters may implement the same protocols where supported, but must document
+their actual token, consistency and durability guarantees. A backend-native
+MVCC field alone is not proof of the required token scope or ABA protection.
 
-pub enum MemoryOperation {
-    Get {
-        key: HostValue,
-    },
-    Put {
-        key: HostValue,
-        value: HostValue,
-        expected: Option<MemoryVersion>,
-    },
-    Delete {
-        key: HostValue,
-        expected: Option<MemoryVersion>,
-    },
-    Scan {
-        cursor: Option<MemoryCursor>,
-        limit: Option<u32>,
-    },
-    Query {
-        query: MemoryQuery,
-        limit: Option<u32>,
-    },
-    VectorSearch {
-        embedding: Vec<f32>,
-        limit: u32,
-        filter: Option<HostValue>,
-    },
-}
+The engine supplies checked action grants and type-directed conversions; Host
+does not infer `Memory.read<R>` / `Memory.write<R>` or execute HIR/AIR. Session
+uses the same storage mechanisms without losing its message, dedup and history
+semantics. Host provides bounded typed history and conditional publication of
+caller-produced context against a history/context revision fence. Publication
+and its receipt are atomic; concurrent history changes conflict, and publication
+does not implicitly delete messages.
 
-pub struct MemoryResponse {
-    pub id: HostRequestId,
-    pub result: Result<MemoryResult, HostError>,
-}
+The current Session SPEC names `history_page`, `prepare_context`,
+`publish_context` and `reconcile_context`. Bind prepared content/fence to the
+operation reference before dispatch, retain provenance/trust and report actual
+durability in the receipt. Publication is not a semantic validation or trust
+upgrade. `SummaryPlusRecent` selects only existing context; absent summary means
+a recent-only view with visible absence, not an implicit model request.
 
-pub enum MemoryResult {
-    None,
-    Value {
-        value: HostValue,
-        version: MemoryVersion,
-    },
-    Entries {
-        entries: Vec<MemoryEntry>,
-        cursor: Option<MemoryCursor>,
-    },
-    Written {
-        version: MemoryVersion,
-    },
-    Deleted {
-        version: MemoryVersion,
-    },
-    Conflict(MemoryConflict),
-}
+EDK/applications choose schema, context selection, retention, summarization,
+tokenization and recovery policy. Host does not call a production summarizer or
+tokenizer from Session storage. Such calls use ordinary checked model/tool
+services in application flows outside database transactions. No production
+summarizer configuration is required to complete the Etas Host implementation.
+Host/runtime still executes configured retention, archival, deletion and storage
+compaction, preserving required evidence and reporting replay limitations. Only
+semantic summary generation moves out; do not delete storage maintenance code.
 
-pub struct MemoryEntry {
-    pub key: HostValue,
-    pub value: HostValue,
-    pub version: MemoryVersion,
-}
-
-pub struct MemoryVersion {
-    pub opaque: String,
-}
-
-pub struct MemoryConflict {
-    pub expected: Option<MemoryVersion>,
-    pub actual: Option<MemoryVersion>,
-    pub current_value: Option<HostValue>,
-}
-
-pub struct MemoryCursor {
-    pub opaque: String,
-}
-```
-
-`MemoryQuery` should be a host protocol query shape, not an Etas expression
-tree. It may support a conservative portable subset first:
-
-```rust
-pub struct MemoryQuery {
-    pub predicate: Option<HostValue>,
-    pub order_by: Vec<MemoryOrderKey>,
-}
-
-pub struct MemoryOrderKey {
-    pub field_path: Vec<String>,
-    pub descending: bool,
-}
-```
-
-Backends can expose richer backend features later through explicit feature
-descriptors. The shared protocol should not assume every backend supports
-full SQL, vector search, transactions, or secondary indexes.
-
-Memory clients implement one reusable trait:
-
-```rust
-pub trait MemoryClient {
-    type Error;
-
-    async fn execute(
-        &self,
-        request: MemoryRequest,
-    ) -> Result<MemoryResponse, Self::Error>;
-}
-```
-
-Reusable backend adapters can live under `etas_host::memory` where the
-protocol is generic enough:
-
-```text
-memory::sqlite::SqliteMemoryClient
-  useful for local development, tests, and single-user prototypes
-  maps StoreRef to tables or namespaced key-value tables
-  preserves MemoryVersion with row/version metadata
-
-memory::postgres::PostgresMemoryClient
-  useful for server deployments
-  maps StoreRef to schemas/tables or configured relation bindings
-  preserves MemoryVersion with MVCC/version columns or backend-specific tokens
-
-memory::vector::VectorMemoryClient
-  useful for retrieval memory
-  supports VectorSearch and metadata filters where configured
-  still preserves StoreRef, trace, authority, and budget
-```
-
-Backend adapters may translate `MemoryRequest` to SQL, key-value operations, or
-vector-store APIs. They must not:
-
-- depend on HIR or AIR;
-- decide language-level authority;
-- infer `Memory.read[R]` / `Memory.write[R]` actions;
-- know interpreter frames or runtime scheduler state;
-- render diagnostics;
-- silently ignore version preconditions.
-
-The execution engine or host controller supplies `AuthorityContext` with checked
-action grants and policy/sandbox context. The memory client must preserve
-request ids, trace context, budget context, and rendering-neutral errors.
-Version conflicts should be returned as structured `MemoryConflict` results or
-mapped to `HostError` with enough detail for the engine to decide whether to
-retry, resume, or report a conflict.
+Cancellation cannot erase a confirmed receipt or prove rollback. Unknown writes
+must not become generic retryable errors, unconditional retries or empty-store
+fallbacks. Preserve commit evidence through shared execution reporting and
+engine checkpoint/trace records. The
+[public API contract](etas-storage-design.md#8-standard-library-and-engine-integration)
+retains `get_entry` and bounded pages and adds immutable `prepare_put` /
+`prepare_delete` intents, `commit` and query-only `reconcile`. The engine
+allocates/preserves operation identity and converts typed intent payloads; Host
+owns canonical request validation and atomic evidence persistence. The full
+general Memory intent declarations/errors still require SPEC synchronization.
+Session publication and removal of `SessionConfig.compaction` are already in
+the SPEC; delete the old model-driven callbacks without a compatibility branch.
 
 ### 8.1 Memory Authority
 
@@ -867,9 +898,9 @@ pub enum ActionPattern {
 For memory this means grants such as:
 
 ```text
-Memory.read[ProjectMemory]
-Memory.read[ProjectMemory.Papers]
-Memory.write[ProjectMemory.Drafts]
+Memory.read<ProjectMemory>
+Memory.read<ProjectMemory.Papers>
+Memory.write<ProjectMemory.Drafts>
 ```
 
 `etas_host` defines reusable request/grant values. The interpreter/runtime
@@ -883,10 +914,16 @@ Default memory tests should be deterministic and local:
 - fake `MemoryClient` request/response roundtrips;
 - request id, authority, trace, and budget preservation;
 - `HostValue` key/value encoding;
-- version precondition success and conflict cases;
+- version scope, atomic conditions, deletion/recreation and concurrent conflicts;
 - denied authority mapped to `HostError`;
 - sqlite adapter tests using temporary database files only;
 - vector adapter protocol tests with fake transport or in-memory fixtures.
+
+The [storage acceptance matrix](etas-storage-design.md#10-acceptance-matrix)
+is mandatory: real multi-process SQLite CAS, bounded allocation and paging,
+commit/cancellation races, lost acknowledgements, Session dedup and the public
+source-to-adapter-to-typed-result chain. Fake protocol tests alone do not
+establish these guarantees.
 
 No default test should connect to a user's production database or external
 vector service. Live backend tests must be opt-in and require explicit
@@ -1069,23 +1106,26 @@ pub enum TlsOperation {
 }
 
 pub enum FilesystemOperation {
-    ReadBytes {
-        path: WorkspacePath,
+    Read {
+        path: WorkspacePathRef,
     },
-    WriteBytes {
-        path: WorkspacePath,
-        body: Vec<u8>,
-        atomic: bool,
+    Write {
+        path: WorkspacePathRef,
+        contents: Vec<u8>,
+        create_dirs: bool,
     },
-    List {
-        path: WorkspacePath,
+    Delete {
+        path: WorkspacePathRef,
+    },
+    ReadDir {
+        path: WorkspacePathRef,
     },
     Stat {
-        path: WorkspacePath,
+        path: WorkspacePathRef,
     },
     AtomicReplace {
-        path: WorkspacePath,
-        body: Vec<u8>,
+        path: WorkspacePathRef,
+        contents: Vec<u8>,
     },
 }
 
@@ -1124,6 +1164,10 @@ pub enum BrowserProtocolOperation {
 }
 ```
 
+Filesystem request payloads carry `WorkspacePathRef`, a region and relative
+path, not a root handle supplied by the caller. Host registry binding produces
+the internal `WorkspacePath` used by filesystem and command implementations.
+
 `StreamRef`, `BrowserSessionRef`, and `SecretValue[K]` are opaque host handles.
 They may be serializable as trace references, but they must not expose raw OS
 file descriptors, raw sockets, raw browser process handles, or secret bytes in
@@ -1142,8 +1186,10 @@ failures are typed `StreamError` failures. `ReadUntilLimit` returns accumulated
 bytes if EOF arrives first and fails on timeout, cancellation, limit overflow, or
 host failure.
 
-Filesystem substrate must pass through workspace canonicalization and escape
-checks before any host filesystem access. Network and browser substrate must
+Filesystem substrate must resolve authorized region bindings and operate
+relative to retained directory handles, enforcing path/link restrictions during
+the actual operation. Canonicalization of a locator followed by ambient access
+is not a confinement mechanism. Network and browser substrate must
 pass through the sandbox network policy before opening sockets or connecting to
 protocol endpoints. Secret substrate must redact by default in traces,
 checkpoints, and diagnostics.
@@ -1171,8 +1217,8 @@ Standard substrate host-service tests must include:
 - timeout and cancellation behavior for TCP, stream, TLS, and browser protocol
   requests;
 - bounded read behavior for streams;
-- path canonicalization, symlink escape, atomic write, and rollback behavior for
-  `std.fs`;
+- root/parent replacement, symlink escape, handle-relative atomic publication
+  and explicitly staged rollback behavior for `std.fs`;
 - secret redaction in debug output, trace payloads, and checkpoint-like
   snapshots;
 - browser session/origin binding and denial of unapproved profile/session use;
@@ -1181,9 +1227,10 @@ Standard substrate host-service tests must include:
 
 ## 10. Sandbox And Workspace
 
-`etas_host` should provide default sandbox and workspace building blocks
-because model, tool, and memory-backend execution are among the highest-risk
-host boundaries. The default posture must be deny-by-default and
+The authoritative identity, operation, platform, recovery and test contracts
+are in [Workspace Binding And Isolation](etas-workspace-design.md). These are
+shared Host mechanisms, not new source keywords or application workspace
+management. The default filesystem posture is deny-by-default and explicitly
 workspace-scoped.
 
 The split is:
@@ -1191,21 +1238,26 @@ The split is:
 ```text
 etas_host owns:
   WorkspaceRoot
-  WorkspacePath
-  WorkspaceSnapshot
-  WorkspaceDiff
+  WorkspaceRegionId / WorkspacePathRef / WorkspacePath
+  WorkspaceRegionRegistry
+  staged WorkspaceSnapshot / WorkspaceDiff mechanisms
   SandboxPolicy
   SandboxBroker
   filesystem/network/command sandbox adapters
-  path canonicalization and escape checks
+  handle-relative path confinement and verified platform activation
   reusable test fakes and assertions
 
 interpreter/runtime own:
   deriving action grants from checked program facts and deployment manifests
   deciding whether approval is required
   deciding whether a request may proceed
-  deciding whether to commit or roll back produced changes
+  enforcing the caller's staged-change commit/abort decisions
   mapping sandbox failures into language-level diagnostics or runtime failures
+
+applications own:
+  logical workspace identity and provisioning
+  lease/fencing, takeover, recovery and retention policy
+  associating approvals with conversation turns and workspace changes
 ```
 
 `etas_host` therefore provides runtime admission mechanics for supplied
@@ -1214,30 +1266,28 @@ language authority. The caller chooses active trace specs, action grants,
 approval records, and sandbox profiles; `etas_host` performs low-level safety
 checks and returns rendering-neutral results.
 
-Recommended sandbox types:
+Required binding rules:
 
-```rust
-pub struct WorkspaceRoot {
-    pub canonical_root: PathBuf,
-}
-
-pub struct WorkspacePath {
-    pub root: WorkspaceRoot,
-    pub relative: PathBuf,
-}
-
-pub struct SandboxPolicy {
-    pub filesystem: FilesystemPolicy,
-    pub network: NetworkPolicy,
-    pub command: CommandPolicy,
-    pub destructive_ops: DestructiveOpPolicy,
-}
-
-pub struct SandboxBroker {
-    // Owns configured policies and delegates to filesystem/network/command
-    // sandbox implementations.
-}
-```
+- `WorkspaceRoot` retains a private opened directory binding; a canonical path
+  is only its initial locator/display text, never its continuing authority.
+- A checked static region, the opened OS object and an application's durable
+  logical workspace identity are distinct. Host grants bind the actual opened
+  root. `same-file`, path equality and copied identity files must not silently
+  transfer those grants to a new binding.
+- Root rename/replacement cannot retarget an existing binding. Reopen/resume
+  creates a newly authorized binding, not a reconstructed OS handle.
+- `WorkspaceRegionRegistry` is shared by filesystem and command domains.
+  Duplicate registration fails without replacing the previous root or grants;
+  missing regions do not fall back to the current directory.
+- Resolve relative paths and perform operations through retained root/parent/
+  leaf handles. Lexical normalization or a canonical-prefix check alone cannot
+  prevent time-of-check/time-of-use races.
+- `CommandSandbox` program admission and descriptor-bound child cwd do not
+  establish process isolation. Required restrictions must be activated by a
+  real backend before execution. Configuration labels are not enforcement
+  evidence; missing guarantees fail explicitly without an unrestricted retry.
+- Child descriptor inheritance is an explicit allowlist. Root and unrelated
+  service handles must not leak to the executed program.
 
 Default policy:
 
@@ -1253,49 +1303,17 @@ secret access:    deny unless explicit Secret.read/use action grant exists
 approval:         required for destructive or authority-expanding requests
 ```
 
-Workspace operations should be designed around snapshots and diffs:
+A directory handle is not a snapshot, transaction or lease. Snapshot/diff and
+rollback guarantees apply only to explicitly staged changes. Ordinary directory
+copies cannot promise snapshot consistency under concurrent writers. Atomic
+replace publishes one entry; it does not imply multi-file atomicity, conflict
+prevention or crash durability. Cancellation cannot undo a committed write or
+arbitrary subprocess side effects. Report publication, durability and cleanup
+evidence separately using the shared execution lifecycle contract.
 
-```text
-begin snapshot
-  run tool/model-side workspace operation
-  collect writes as staged changes
-  produce diff
-commit only if caller accepts
-rollback otherwise
-```
-
-`etas_host` should support safe workspace primitives:
-
-```text
-sandbox::workspace
-  canonicalize root
-  resolve relative paths
-  reject absolute paths outside root
-  reject `..` traversal
-  reject symlink escapes
-
-sandbox::filesystem
-  read file within workspace
-  atomic write within workspace
-  create directory within workspace
-  delete/move-to-trash within workspace policy
-
-sandbox::network
-  check host/port/scheme allowlist
-  reject metadata IPs, private ranges, and localhost unless explicitly allowed
-  integrate with transport::network_policy
-
-sandbox::command
-  deny by default
-  support allowlisted commands only
-  provide hooks for platform sandboxes such as Landlock, container execution,
-  or WASI-style preopened directories when available
-
-sandbox::snapshot / sandbox::diff
-  compute staged file changes
-  expose readable audit diffs
-  support rollback on failure or rejection
-```
+Network checks remain under `sandbox::network` and transport policy: enforce
+host/port/scheme rules, and reject metadata IPs, private ranges and localhost
+unless explicitly authorized. Filesystem binding does not grant network access.
 
 The default network allowlist for local model tests may include:
 
@@ -1388,8 +1406,16 @@ approval, filesystem, network, command, and checkpoint-related host boundaries
 so traces can distinguish externally visible operations without inspecting
 engine-local state.
 
-`etas_host` defines the values. Runtime policy decides how budgets are
-reserved, consumed, exceeded, reported, or checkpointed.
+`etas_host` owns shared execution-budget accounting and lifecycle mechanisms.
+The engine applies language budget semantics, and checkpoint codecs preserve
+durable consumption without persisting live cancellation state. Runtime policy
+and application configuration choose limits; child scopes cannot widen them.
+
+Extend trace records with scope/parent identity, cancellation requested and
+observed, correlated operation evidence, and termination/cleanup state. Reuse
+existing request/trace identities and redaction. A request can be confirmed
+successful even when its enclosing run is cancelled. Cancellation must not add
+a synthetic action to the compiler's requested-action summary.
 
 ## 13. Relationship To Other Core Crates
 
@@ -1402,7 +1428,7 @@ etas_builtin
 
 etas_host
   defines host protocol values, reusable provider/tool/memory adapters, and
-  reusable workspace/sandbox safety mechanics
+  reusable workspace/sandbox and execution-lifecycle mechanisms
 ```
 
 Do not mix these responsibilities:
@@ -1425,13 +1451,24 @@ execution engine:
 - authority context preservation;
 - trace id and request id preservation;
 - rendering-neutral host error construction.
-- workspace path canonicalization and escape rejection;
-- symlink escape rejection;
-- atomic write and rollback behavior;
+- workspace binding, root replacement and handle-relative path confinement;
+- symlink races and descriptor inheritance rejection;
+- atomic publication and explicitly staged rollback behavior;
 - destructive operation denial by default;
 - network allowlist denial by default;
 - command execution denial by default;
 - snapshot/diff audit output.
+
+The lifecycle acceptance matrix in [Shared Execution Lifecycle](etas-execution-design.md#8-implementation-and-acceptance)
+is required in addition to protocol tests, including actual cancellation races,
+managed blocking work, partial/unknown external outcomes and pending cleanup.
+The [Workspace acceptance matrix](etas-workspace-design.md#7-acceptance-matrix)
+also requires real filesystem and child-process evidence for each advertised
+platform guarantee, including duplicate registration, reopen, rename races,
+isolation activation failure and the absence of ambient/unrestricted fallbacks.
+The [storage acceptance matrix](etas-storage-design.md#10-acceptance-matrix)
+adds database concurrency, commit certainty, allocation limits and source-level
+version/receipt coverage. These are durable-state tests, not cache-miss tests.
 
 Default tests should also cover concrete client request construction and
 response decoding using a local fake transport. They should not require network

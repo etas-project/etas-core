@@ -23,6 +23,7 @@ struct ConsoleInputBroker {
 
 #[derive(Debug)]
 struct ConsoleInputState {
+    buffered: String,
     receiver: mpsc::Receiver<ConsoleInputEvent>,
     requests: Option<mpsc::Sender<()>>,
     pending: bool,
@@ -60,6 +61,17 @@ impl LocalStdioClient {
         self.input.read_serialized(false).await
     }
 
+    pub async fn read_prompt_line_scoped(
+        &self,
+        operation: &crate::execution::OperationContext,
+    ) -> Result<String, HostError> {
+        operation.signal().check()?;
+        tokio::select! {
+            _ = operation.signal().cancelled() => Err(HostError::new(HostErrorCode::Cancelled, "approval input cancelled")),
+            result = self.input.read_serialized(false) => result,
+        }
+    }
+
     fn require_console_authority(request: &ConsoleRequest) -> Result<(), HostError> {
         let action = console_action(&request.operation);
         if request.authority.allows(&action) {
@@ -73,22 +85,33 @@ impl LocalStdioClient {
         .with_detail("request_id", request.id.0.to_string()))
     }
 
-    async fn execute_local(&self, request: ConsoleRequest) -> Result<ConsoleResponse, HostError> {
+    async fn execute_local(
+        &self,
+        request: ConsoleRequest,
+        operation: Option<&crate::execution::OperationContext>,
+    ) -> Result<ConsoleResponse, HostError> {
+        if let Some(operation) = operation {
+            operation.signal().check()?;
+        }
         Self::require_console_authority(&request)?;
         request.budget.check_time()?;
         let result = match request.operation {
-            ConsoleOperation::ReadAllStdin => {
-                ConsoleResult::Input(self.input.read(&request.budget, request.id, true).await?)
-            }
-            ConsoleOperation::ReadLineStdin => {
-                ConsoleResult::Input(self.input.read(&request.budget, request.id, false).await?)
-            }
+            ConsoleOperation::ReadAllStdin => ConsoleResult::Input(
+                self.input
+                    .read(&request.budget, request.id, true, operation)
+                    .await?,
+            ),
+            ConsoleOperation::ReadLineStdin => ConsoleResult::Input(
+                self.input
+                    .read(&request.budget, request.id, false, operation)
+                    .await?,
+            ),
             ConsoleOperation::WriteStdout { text, newline } => {
-                write_output(OutputStream::Stdout, text, newline)?;
+                write_output_async(OutputStream::Stdout, text, newline).await?;
                 ConsoleResult::Written
             }
             ConsoleOperation::WriteStderr { text, newline } => {
-                write_output(OutputStream::Stderr, text, newline)?;
+                write_output_async(OutputStream::Stderr, text, newline).await?;
                 ConsoleResult::Written
             }
         };
@@ -97,6 +120,19 @@ impl LocalStdioClient {
             id: request.id,
             result,
         })
+    }
+
+    pub async fn execute_scoped(
+        &self,
+        request: ConsoleRequest,
+        operation: &crate::execution::OperationContext,
+    ) -> Result<ConsoleResponse, HostError> {
+        let client = self.clone();
+        operation
+            .supervise(
+                move |context| async move { client.execute_local(request, Some(&context)).await },
+            )
+            .await
     }
 }
 
@@ -158,6 +194,7 @@ impl ConsoleInputBroker {
     ) -> Self {
         Self {
             state: Mutex::new(ConsoleInputState {
+                buffered: String::new(),
                 receiver,
                 requests,
                 pending: false,
@@ -171,10 +208,19 @@ impl ConsoleInputBroker {
         budget: &ExecutionBudget,
         request_id: HostRequestId,
         all: bool,
+        operation: Option<&crate::execution::OperationContext>,
     ) -> Result<String, HostError> {
         budget.check_time()?;
         let deadline = budget.deadline()?;
-        let read = self.read_serialized(all);
+        let read = async {
+            match operation {
+                Some(operation) => tokio::select! {
+                    _ = operation.signal().cancelled() => Err(HostError::new(HostErrorCode::Cancelled, "console input cancelled")),
+                    result = self.read_serialized(all) => result,
+                },
+                None => self.read_serialized(all).await,
+            }
+        };
         match deadline {
             Some(deadline) => tokio::select! {
                 biased;
@@ -188,16 +234,18 @@ impl ConsoleInputBroker {
     async fn read_serialized(&self, all: bool) -> Result<String, HostError> {
         // One operation owns input; dropping its future releases the async lock.
         let mut state = self.state.lock().await;
-        let mut input = String::new();
         loop {
+            if !all && let Some(end) = state.buffered.find('\n') {
+                return Ok(state.buffered.drain(..=end).collect());
+            }
             match state.next_event().await? {
                 ConsoleInputEvent::Line(line) => {
-                    input.push_str(&line);
+                    state.buffered.push_str(&line);
                     if !all {
-                        return Ok(input);
+                        return Ok(std::mem::take(&mut state.buffered));
                     }
                 }
-                ConsoleInputEvent::Eof => return Ok(input),
+                ConsoleInputEvent::Eof => return Ok(std::mem::take(&mut state.buffered)),
                 ConsoleInputEvent::Failed(error) => return Err(stdin_error(error)),
             }
         }
@@ -236,6 +284,22 @@ impl ConsoleInputState {
 enum OutputStream {
     Stdout,
     Stderr,
+}
+
+async fn write_output_async(
+    stream: OutputStream,
+    text: String,
+    newline: bool,
+) -> Result<(), HostError> {
+    tokio::task::spawn_blocking(move || write_output(stream, text, newline))
+        .await
+        .map_err(|error| {
+            HostError::new(
+                HostErrorCode::ProviderUnavailable,
+                "console output worker failed",
+            )
+            .with_detail("error", error.to_string())
+        })?
 }
 
 fn write_output(stream: OutputStream, text: String, newline: bool) -> Result<(), HostError> {
@@ -296,7 +360,7 @@ impl ConsoleClient for LocalStdioClient {
         Pin<Box<dyn Future<Output = Result<ConsoleResponse, Self::Error>> + Send + 'a>>;
 
     fn execute(&self, request: ConsoleRequest) -> Self::ExecuteFuture<'_> {
-        Box::pin(async move { self.execute_local(request).await })
+        Box::pin(async move { self.execute_local(request, None).await })
     }
 }
 
@@ -434,5 +498,57 @@ mod tests {
         .expect("second read must succeed");
 
         assert_eq!(response.result, ConsoleResult::Input("next\n".into()));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn scoped_read_all_cancellation_preserves_already_consumed_lines() {
+        use crate::execution::{CancellationReason, ExecutionScope, ExternalOutcome};
+        let (sender, receiver) = mpsc::channel(1);
+        let client = LocalStdioClient::with_input(receiver);
+        let scope = ExecutionScope::new();
+        let registration = scope
+            .register(None, Some(HostRequestId(1)), TraceContext::root(TraceId(1)))
+            .unwrap();
+        registration.begin_dispatch().unwrap();
+        let mut request = read_request(1, ExecutionBudget::default());
+        request.operation = ConsoleOperation::ReadAllStdin;
+        request.authority.grants = vec![HostActionGrant::allow("Console", "stdin_read_all")];
+        let pending = tokio::spawn({
+            let client = client.clone();
+            let context = registration.context().clone();
+            async move { client.execute_scoped(request, &context).await }
+        });
+        sender
+            .send(ConsoleInputEvent::Line("first\n".into()))
+            .await
+            .unwrap();
+        // Capacity is returned only when the broker consumes the first line.
+        let permit = sender.reserve().await.unwrap();
+        drop(permit);
+        scope
+            .cancel_source()
+            .stop(CancellationReason::Interrupt)
+            .unwrap();
+        let error = tokio::time::timeout(Duration::from_secs(1), pending)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap_err();
+        assert_eq!(error.code, HostErrorCode::Cancelled);
+        registration
+            .complete(ExternalOutcome::Unknown, vec![])
+            .unwrap();
+        scope.finish_body(true).unwrap();
+        scope.join().await.unwrap();
+        let next = client
+            .execute(read_request(2, ExecutionBudget::default()))
+            .await
+            .unwrap();
+        assert_eq!(next.result, ConsoleResult::Input("first\n".into()));
+        sender
+            .send(ConsoleInputEvent::Line("second\n".into()))
+            .await
+            .unwrap();
+        assert_eq!(client.read_prompt_line().await.unwrap(), "second\n");
     }
 }

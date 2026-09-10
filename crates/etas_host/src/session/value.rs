@@ -73,21 +73,29 @@ pub fn message_envelope_from_host_value(value: HostValue) -> Result<MessageEnvel
 }
 
 pub fn session_message_to_host_value(message: &SessionMessage) -> HostValue {
-    let mut fields = message_envelope_fields(&MessageEnvelope {
-        id: message.id.clone(),
-        from: message.from.clone(),
-        to: message.to.clone(),
-        role: message.role,
-        session: Some(message.session.clone()),
-        created_at: message.created_at.clone(),
-        payload: message.payload.clone(),
-        provenance: message.provenance.clone(),
-    });
-    fields.push((
-        "dedup_key".to_owned(),
-        optional_string(message.dedup_key.as_deref()),
-    ));
-    HostValue::Record(fields)
+    HostValue::Record(
+        session_message_fields(message)
+            .into_iter()
+            .map(|(name, value)| (name.to_owned(), value.into_owned()))
+            .collect(),
+    )
+}
+
+pub(crate) fn session_message_fields(
+    message: &SessionMessage,
+) -> [(&'static str, crate::value::tagged::RecordValueRef<'_>); 9] {
+    use crate::value::tagged::RecordValueRef::*;
+    [
+        ("id", String(&message.id)),
+        ("from", OptionalString(message.from.as_deref())),
+        ("to", OptionalString(message.to.as_deref())),
+        ("role", String(role_name(message.role))),
+        ("session", OptionalString(Some(&message.session.id))),
+        ("created_at", String(&message.created_at)),
+        ("payload", Value(&message.payload)),
+        ("provenance", OptionalValue(message.provenance.as_ref())),
+        ("dedup_key", OptionalString(message.dedup_key.as_deref())),
+    ]
 }
 
 pub fn session_message_from_host_value(value: HostValue) -> Result<SessionMessage, HostError> {

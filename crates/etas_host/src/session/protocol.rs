@@ -10,7 +10,6 @@ pub struct SessionConfig {
     pub id: String,
     pub context: ContextPolicy,
     pub retention: RetentionPolicy,
-    pub compaction: CompactionPolicy,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -24,12 +23,6 @@ pub enum ContextPolicy {
 pub enum RetentionPolicy {
     Forever,
     Days(u64),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum CompactionPolicy {
-    None,
-    SummarizeWhen { max_context_tokens: u64 },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -76,10 +69,6 @@ pub enum SessionOperation {
         cursor: Option<SessionCursor>,
         limit: Option<u32>,
     },
-    Compact {
-        session: SessionRef,
-        policy: CompactionPolicy,
-    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -100,13 +89,11 @@ pub enum SessionResult {
     },
     History {
         session: SessionRef,
+        fence: super::SessionHistoryFence,
+        published_context: Option<super::SessionPublishedContext>,
         messages: Vec<SessionMessage>,
         summary: Option<SessionSummary>,
         cursor: Option<SessionCursor>,
-    },
-    Compacted {
-        session: SessionRef,
-        summary: SessionSummary,
     },
 }
 

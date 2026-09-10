@@ -2,6 +2,7 @@ pub mod browser;
 pub mod command;
 pub mod console;
 pub mod context;
+pub mod execution;
 pub mod filesystem;
 pub mod memory;
 pub mod model;
@@ -11,6 +12,13 @@ pub mod policy;
 pub mod sandbox;
 pub mod secret;
 pub mod session;
+mod storage;
+pub use storage::limits::StorageLimits;
+pub use storage::outcome::{
+    CommitStatus, ConfirmedOutcome, ReceiptLookup, StorageDurability, StorageWriteEvidence,
+    WriteOutcome,
+};
+pub use storage::receipt::{StorageOperationKey, StorageOperationRef};
 pub mod stream;
 pub mod testing;
 pub mod tls;
@@ -37,12 +45,12 @@ pub use context::{
 };
 pub use filesystem::{
     FilesystemClient, FilesystemEntry, FilesystemOperation, FilesystemRequest, FilesystemResponse,
-    FilesystemStat, LocalFilesystemClient, WorkspaceRegionRegistry,
+    FilesystemStat, LocalFilesystemClient,
 };
 pub use memory::{
     InMemoryMemoryClient, MemoryClient, MemoryConflict, MemoryCursor, MemoryEntry, MemoryOperation,
     MemoryOrderKey, MemoryQuery, MemoryRegionRef, MemoryRequest, MemoryResponse, MemoryResult,
-    MemoryVersion, MemoryWriteMode, SqliteMemoryClient, StoreRef,
+    MemoryVersion, SqliteMemoryClient, StoreRef, WriteCondition,
 };
 pub use model::{
     AnthropicProtocolAdapter, AnthropicProviderRequest, AnthropicProviderResponse, ModelClient,
@@ -61,19 +69,20 @@ pub use policy::{
     PolicySubject, TRACE_SPEC_RUNTIME_REF, TraceSpecRuntimeClient, UnsafeAllowAllLocalPolicyClient,
 };
 pub use sandbox::{
-    CommandPolicy, CommandSandbox, DestructiveOpPolicy, FilesystemPolicy, FilesystemSandbox,
-    NetworkEndpoint, NetworkPolicy, NetworkSandbox, PlatformSandbox, PlatformSandboxHook,
-    SandboxBroker, SandboxMode, SandboxPolicy, WorkspaceDiff, WorkspaceDiffEntry,
-    WorkspaceDiffKind, WorkspacePath, WorkspacePathRef, WorkspaceRegionId, WorkspaceRoot,
-    WorkspaceSnapshot, WorkspaceSnapshotEntry,
+    CommandIsolation, CommandIsolationReport, CommandPolicy, CommandSandbox, DestructiveOpPolicy,
+    FilesystemPolicy, FilesystemSandbox, IsolationRequirements, NetworkEndpoint, NetworkPolicy,
+    NetworkSandbox, PlatformSandboxHook, SandboxBroker, SandboxMode, SandboxPolicy,
+    StagedWorkspaceSnapshot, WorkspaceDiff, WorkspaceDiffEntry, WorkspaceDiffKind, WorkspacePath,
+    WorkspacePathRef, WorkspaceRegionId, WorkspaceRegionRegistry, WorkspaceRoot, WorkspaceSnapshot,
+    WorkspaceSnapshotEntry, WorkspaceStage,
 };
 pub use secret::{
     SecretClient, SecretOperation, SecretPayload, SecretRef, SecretRequest, SecretResponse,
     SecretValue, UnavailableSecretClient,
 };
 pub use session::{
-    CompactionPolicy, ContextPolicy, InMemorySessionClient, RetentionPolicy, SessionClient,
-    SessionConfig, SessionCursor, SessionMessage, SessionMessageRole, SessionOperation, SessionRef,
+    ContextPolicy, InMemorySessionClient, RetentionPolicy, SessionClient, SessionConfig,
+    SessionCursor, SessionMessage, SessionMessageRole, SessionOperation, SessionRef,
     SessionRequest, SessionResponse, SessionResult, SessionSummary, SqliteSessionClient,
 };
 pub use stream::{

@@ -1,46 +1,10 @@
-use std::{collections::BTreeMap, future::Future, pin::Pin, sync::Arc};
+use std::{future::Future, pin::Pin, sync::Arc};
 
 use crate::{
     ActionInstance, FilesystemClient, FilesystemEntry, FilesystemOperation, FilesystemRequest,
     FilesystemResponse, FilesystemStat, HostError, HostErrorCode, HostValue, SandboxBroker,
-    WorkspacePath, WorkspacePathRef, WorkspaceRegionId, WorkspaceRoot,
+    WorkspacePathRef, WorkspaceRegionRegistry,
 };
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct WorkspaceRegionRegistry {
-    roots: BTreeMap<WorkspaceRegionId, WorkspaceRoot>,
-}
-
-impl WorkspaceRegionRegistry {
-    pub fn insert(
-        &mut self,
-        region: WorkspaceRegionId,
-        root: WorkspaceRoot,
-    ) -> Result<(), HostError> {
-        if self.roots.insert(region.clone(), root).is_some() {
-            return Err(HostError::new(
-                HostErrorCode::InvalidRequest,
-                "workspace region is configured more than once",
-            )
-            .with_detail("region", region.as_str()));
-        }
-        Ok(())
-    }
-
-    pub(crate) fn bind(&self, path: &WorkspacePathRef) -> Result<WorkspacePath, HostError> {
-        let root = self.roots.get(&path.region).ok_or_else(|| {
-            HostError::new(
-                HostErrorCode::AuthorityDenied,
-                "workspace region is not configured",
-            )
-            .with_detail("region", path.region.as_str())
-        })?;
-        Ok(WorkspacePath {
-            root: root.clone(),
-            relative: crate::sandbox::workspace::normalize_relative(&path.relative)?,
-        })
-    }
-}
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LocalFilesystemClient {
@@ -48,6 +12,20 @@ pub struct LocalFilesystemClient {
 }
 
 impl LocalFilesystemClient {
+    pub async fn execute_scoped(
+        &self,
+        request: FilesystemRequest,
+        operation: &crate::execution::OperationContext,
+    ) -> Result<FilesystemResponse, HostError> {
+        let client = self.clone();
+        operation
+            .run_blocking(request.budget.clone(), move |_| {
+                let id = request.id;
+                let result = execute_local_filesystem(&client.regions, request);
+                Ok(FilesystemResponse { id, result })
+            })
+            .await
+    }
     pub fn new(regions: WorkspaceRegionRegistry) -> Self {
         Self {
             regions: Arc::new(regions),

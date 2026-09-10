@@ -244,6 +244,7 @@ fn authority_trace_and_errors_are_rendering_neutral_values() {
     let error = HostError::new(HostErrorCode::AuthorityDenied, "approval denied")
         .with_detail("grant", "file-write");
     let event = TraceEvent::HostRequestFinished {
+        command_isolation: None,
         id: HostRequestId(5),
         outcome: etas_host::HostOutcome::Failed(error.clone()),
         finished_at_unix_micros: 11,

@@ -218,7 +218,7 @@ impl FilesystemSandbox {
     }
 }
 
-fn ensure_root_allowed(
+pub(super) fn ensure_root_allowed(
     roots: &[WorkspaceRoot],
     root: &WorkspaceRoot,
     message: &'static str,
@@ -227,7 +227,7 @@ fn ensure_root_allowed(
         Ok(())
     } else {
         Err(HostError::new(HostErrorCode::AuthorityDenied, message)
-            .with_detail("root", root.canonical_root.display().to_string()))
+            .with_detail("root", root.display_path().display().to_string()))
     }
 }
 
@@ -244,14 +244,35 @@ pub(super) fn atomic_write_at(parent: &Dir, name: &Path, bytes: &[u8]) -> Result
     let mut file = parent
         .open_with(&temp, OpenOptions::new().create_new(true).write(true))
         .map_err(workspace_io_error)?;
-    let result = file
-        .write_all(bytes)
-        .and_then(|_| file.sync_all())
-        .and_then(|_| parent.rename(&temp, parent, name));
-    if result.is_err() {
-        let _ = parent.remove_file(&temp);
-    }
-    result.map_err(workspace_io_error)
+    let mut published = false;
+    let result = (|| {
+        #[cfg(test)]
+        tests::atomic_stage("pre-write")?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        drop(file);
+        #[cfg(test)]
+        tests::atomic_stage("pre-rename")?;
+        parent.rename(&temp, parent, name)?;
+        published = true;
+        #[cfg(test)]
+        tests::atomic_stage("post-rename")?;
+        // Linux directory capabilities may be O_PATH descriptors, which cannot
+        // be fsynced. Open the bound directory itself, never its display path.
+        parent.open(".")?.sync_all()
+    })();
+    result.map_err(|error| {
+        let mut error = workspace_io_error(error).with_detail(
+            "publication",
+            if published { "committed" } else { "unchanged" },
+        );
+        if published {
+            error = error.with_detail("durability", "uncertain");
+        } else if let Err(cleanup) = parent.remove_file(&temp) {
+            error = error.with_detail("cleanup_error", cleanup.to_string());
+        }
+        error
+    })
 }
 
 #[cfg(test)]

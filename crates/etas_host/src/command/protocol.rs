@@ -25,4 +25,5 @@ pub struct CommandOutput {
     pub exit_code: i32,
     pub stdout: Vec<u8>,
     pub stderr: Vec<u8>,
+    pub isolation: crate::CommandIsolationReport,
 }

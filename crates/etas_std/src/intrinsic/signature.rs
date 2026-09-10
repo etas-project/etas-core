@@ -40,6 +40,7 @@ pub enum IntrinsicMemoryAccess {
     None,
     ReadFirstArgStore,
     WriteFirstArgStore,
+    WriteFirstArgIntent,
     ReadWriteFirstArgStore,
 }
 

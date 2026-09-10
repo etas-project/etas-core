@@ -54,13 +54,6 @@ impl ProcessTreeController {
         }
     }
 
-    pub(super) fn kill_from_drop(&self) {
-        #[cfg(unix)]
-        {
-            let _ = self.signal_group(libc::SIGKILL);
-        }
-    }
-
     #[cfg(unix)]
     fn signal_group(&self, signal: libc::c_int) -> Result<(), HostError> {
         // SAFETY: the child was placed in a process group whose ID is its validated PID.

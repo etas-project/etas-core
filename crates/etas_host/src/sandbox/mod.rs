@@ -13,7 +13,13 @@ pub use command::{CommandPolicy, CommandSandbox};
 pub use diff::{WorkspaceDiff, WorkspaceDiffEntry, WorkspaceDiffKind};
 pub use filesystem::{FilesystemPolicy, FilesystemSandbox, WorkspaceFileMetadata};
 pub use network::{NetworkEndpoint, NetworkPolicy, NetworkSandbox};
-pub use platform::{PlatformSandbox, PlatformSandboxHook};
+pub use platform::{
+    CommandIsolation, CommandIsolationReport, IsolationRequirements, PlatformSandboxHook,
+};
 pub use policy::{DestructiveOpPolicy, SandboxMode, SandboxPolicy};
-pub use snapshot::{WorkspaceSnapshot, WorkspaceSnapshotEntry};
-pub use workspace::{WorkspacePath, WorkspacePathRef, WorkspaceRegionId, WorkspaceRoot};
+pub use snapshot::{
+    StagedWorkspaceSnapshot, WorkspaceSnapshot, WorkspaceSnapshotEntry, WorkspaceStage,
+};
+pub use workspace::{
+    WorkspacePath, WorkspacePathRef, WorkspaceRegionId, WorkspaceRegionRegistry, WorkspaceRoot,
+};

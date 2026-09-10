@@ -39,5 +39,7 @@ pub enum ProfileSpanStatus {
     Running,
     Ok,
     Error,
+    Cancelled,
+    Forced,
     Abandoned,
 }

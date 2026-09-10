@@ -150,7 +150,11 @@ impl OpenAiProtocolAdapter {
         Ok(response.response)
     }
 
-    async fn complete_request(&self, request: ModelRequest) -> Result<ModelResponse, HostError> {
+    async fn complete_request(
+        &self,
+        request: ModelRequest,
+        operation: Option<&crate::execution::OperationContext>,
+    ) -> Result<ModelResponse, HostError> {
         let id = request.id;
         let budget_deadline = request.budget.deadline()?;
         let body = encode_openai_chat_request_with_dialect(
@@ -158,10 +162,18 @@ impl OpenAiProtocolAdapter {
             self.dialect,
             self.omlx_options.as_ref(),
         )?;
-        let response = self
-            .transport
-            .send_json_with_deadline("/chat/completions", body, budget_deadline)
-            .await?;
+        let response = match operation {
+            Some(operation) => {
+                self.transport
+                    .send_json_scoped("/chat/completions", body, budget_deadline, operation)
+                    .await?
+            }
+            None => {
+                self.transport
+                    .send_json_with_deadline("/chat/completions", body, budget_deadline)
+                    .await?
+            }
+        };
         if !(200..300).contains(&response.status) {
             return Err(HostError::new(
                 HostErrorCode::ProviderRejected,
@@ -171,6 +183,19 @@ impl OpenAiProtocolAdapter {
         }
         decode_openai_chat_response(id, &response.body)
     }
+
+    pub async fn complete_scoped(
+        &self,
+        request: ModelRequest,
+        operation: &crate::execution::OperationContext,
+    ) -> Result<ModelResponse, HostError> {
+        let client = self.clone();
+        operation
+            .supervise(move |context| async move {
+                client.complete_request(request, Some(&context)).await
+            })
+            .await
+    }
 }
 
 impl ModelClient for OpenAiProtocolAdapter {
@@ -179,7 +204,7 @@ impl ModelClient for OpenAiProtocolAdapter {
         Pin<Box<dyn Future<Output = Result<ModelResponse, Self::Error>> + Send + 'a>>;
 
     fn complete(&self, request: ModelRequest) -> Self::CompleteFuture<'_> {
-        Box::pin(async move { self.complete_request(request).await })
+        Box::pin(async move { self.complete_request(request, None).await })
     }
 }
 

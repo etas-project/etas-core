@@ -1,4 +1,5 @@
 pub mod builder;
+mod enum_constructor;
 pub mod lookup;
 pub mod module;
 pub mod prelude;
@@ -23,6 +24,7 @@ pub struct StdRegistry {
     prelude: StdPrelude,
     qualified: BTreeMap<Vec<String>, StdSymbolId>,
     intrinsics: BTreeMap<StdIntrinsicId, IntrinsicDescriptor>,
+    memory_place_results: BTreeMap<StdIntrinsicId, usize>,
     spec_impls: Vec<StdImplFact>,
 }
 
@@ -58,6 +60,18 @@ impl StdRegistry {
         self.symbols.get(id.0 as usize)
     }
 
+    pub fn enum_constructor(&self, owner: StdSymbolId, name: &str) -> Option<&StdSymbol> {
+        let mut path = self.symbol(owner)?.qualified_path.clone();
+        path.push(name.to_owned());
+        self.lookup_qualified(&path)
+            .filter(|symbol| symbol.enum_owner == Some(owner))
+    }
+
+    pub fn enum_constructors(&self, owner: StdSymbolId) -> impl Iterator<Item = &StdSymbol> {
+        self.symbols()
+            .filter(move |symbol| symbol.enum_owner == Some(owner))
+    }
+
     pub fn lookup_qualified(&self, path: &[impl AsRef<str>]) -> Option<&StdSymbol> {
         let key = path
             .iter()
@@ -74,6 +88,12 @@ impl StdRegistry {
 
     pub fn intrinsic(&self, id: StdIntrinsicId) -> Option<&IntrinsicDescriptor> {
         self.intrinsics.get(&id)
+    }
+
+    /// The result retains the Store identity of this argument without granting access.
+    pub fn memory_place_result_argument(&self, symbol: StdSymbolId) -> Option<usize> {
+        let intrinsic = self.symbol(symbol)?.intrinsic.as_ref()?;
+        self.memory_place_results.get(&intrinsic.id).copied()
     }
 
     pub fn spec_impls(&self) -> impl Iterator<Item = &StdImplFact> {

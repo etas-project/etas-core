@@ -32,6 +32,17 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
     validate_stable_ids(registry)?;
     let logical_effects = LogicalEffectIndex::build(registry)?;
     for symbol in registry.symbols() {
+        super::enum_constructor::validate(registry, symbol)?;
+        if let Some(argument) = registry.memory_place_result_argument(symbol.id)
+            && !matches!(&symbol.decl, StdDecl::Flow(flow) if matches!(flow.params.get(argument), Some(StdType::Store { .. })))
+        {
+            return Err(StdRegistryValidationError {
+                symbol: symbol.qualified_path.join("."),
+                reason:
+                    "intrinsic memory provenance requires the same Store argument in every alias"
+                        .into(),
+            });
+        }
         match &symbol.decl {
             StdDecl::Type(declaration) => {
                 validate_generic_params(registry, &symbol.qualified_path, &declaration.params)?;

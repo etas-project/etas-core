@@ -27,6 +27,7 @@ pub struct StdModule {
 pub struct StdSymbol {
     pub id: StdSymbolId,
     pub module: StdModuleId,
+    pub enum_owner: Option<StdSymbolId>,
     pub name: String,
     pub qualified_path: Vec<String>,
     pub kind: StdSymbolKind,

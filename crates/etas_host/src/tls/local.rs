@@ -27,7 +27,11 @@ impl LocalTlsClient {
     async fn execute_request(
         &self,
         request: TlsConnectRequest,
+        operation: Option<&crate::execution::OperationContext>,
     ) -> Result<TlsConnectResponse, HostError> {
+        if let Some(operation) = operation {
+            operation.signal().check()?;
+        }
         match &request.operation {
             TlsConnectOperation::Connect {
                 stream,
@@ -84,6 +88,9 @@ impl LocalTlsClient {
                         result: Err(error),
                     });
                 }
+                if let Some(operation) = operation {
+                    operation.signal().check()?;
+                }
                 let (tcp_stream, origin) = match slot.begin_tls_upgrade(stream.handle()) {
                     Ok((tcp_stream, origin)) => (tcp_stream, origin),
                     Err(error) => {
@@ -120,7 +127,8 @@ impl LocalTlsClient {
                         )),
                     });
                 }
-                let deadlines = OperationDeadlines::new(&request.budget, None);
+                let deadlines =
+                    OperationDeadlines::new(&request.budget, None).with_operation(operation);
                 let tls_stream = match tls_handshake(
                     tcp_stream,
                     server_name_value,
@@ -171,6 +179,19 @@ impl LocalTlsClient {
             }
         }
     }
+
+    pub async fn execute_scoped(
+        &self,
+        request: TlsConnectRequest,
+        operation: &crate::execution::OperationContext,
+    ) -> Result<TlsConnectResponse, HostError> {
+        let client = self.clone();
+        operation
+            .supervise(move |context| async move {
+                client.execute_request(request, Some(&context)).await
+            })
+            .await
+    }
 }
 
 impl TlsClient for LocalTlsClient {
@@ -179,7 +200,7 @@ impl TlsClient for LocalTlsClient {
         Pin<Box<dyn Future<Output = Result<TlsConnectResponse, Self::Error>> + Send + 'a>>;
 
     fn execute(&self, request: TlsConnectRequest) -> Self::ExecuteFuture<'_> {
-        Box::pin(self.execute_request(request))
+        Box::pin(self.execute_request(request, None))
     }
 }
 
