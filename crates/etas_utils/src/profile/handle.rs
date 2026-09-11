@@ -128,6 +128,7 @@ pub struct ProfileSpanGuard {
     handle: ProfileHandle,
     id: Option<u64>,
     finished: bool,
+    unfinished_status: ProfileSpanStatus,
 }
 
 impl ProfileSpanGuard {
@@ -136,6 +137,7 @@ impl ProfileSpanGuard {
             handle: ProfileHandle::disabled(),
             id: None,
             finished: true,
+            unfinished_status: ProfileSpanStatus::Ok,
         }
     }
 
@@ -144,11 +146,18 @@ impl ProfileSpanGuard {
             handle,
             id: Some(id),
             finished: false,
+            unfinished_status: ProfileSpanStatus::Ok,
         }
     }
 
     pub fn finish_ok(mut self) {
         self.finish(ProfileSpanStatus::Ok);
+    }
+
+    /// Async work can be dropped without completing its operation.
+    pub fn unfinished_status(mut self, status: ProfileSpanStatus) -> Self {
+        self.unfinished_status = status;
+        self
     }
 
     pub fn finish_error(mut self) {
@@ -168,6 +177,6 @@ impl ProfileSpanGuard {
 
 impl Drop for ProfileSpanGuard {
     fn drop(&mut self) {
-        self.finish(ProfileSpanStatus::Ok);
+        self.finish(self.unfinished_status.clone());
     }
 }

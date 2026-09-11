@@ -3,17 +3,22 @@ use crate::{HostError, HostErrorCode};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CommandPolicy {
     pub allowed_programs: Vec<String>,
+    pub isolation: super::platform::CommandIsolation,
 }
 
 impl CommandPolicy {
     pub fn deny_all() -> Self {
         Self {
             allowed_programs: Vec::new(),
+            isolation: super::platform::CommandIsolation::Denied,
         }
     }
 
-    pub fn allow_programs(allowed_programs: Vec<String>) -> Self {
-        Self { allowed_programs }
+    pub fn allow_trusted_programs(allowed_programs: Vec<String>) -> Self {
+        Self {
+            allowed_programs,
+            isolation: super::platform::CommandIsolation::TrustedUnconfined,
+        }
     }
 }
 

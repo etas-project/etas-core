@@ -21,6 +21,13 @@ pub struct McpToolProtocolAdapter {
 }
 
 impl McpToolProtocolAdapter {
+    pub async fn invoke_scoped(
+        &self,
+        request: ToolRequest,
+        operation: &crate::execution::OperationContext,
+    ) -> Result<ToolResponse, HostError> {
+        self.http.invoke_scoped(request, operation).await
+    }
     pub fn new(base_url: impl AsRef<str>) -> Result<Self, HostError> {
         Self::try_new_with_policy(base_url, PrivateResolutionPolicy::PublicOnly)
     }
@@ -49,6 +56,6 @@ impl ToolClient for McpToolProtocolAdapter {
         Pin<Box<dyn Future<Output = Result<ToolResponse, Self::Error>> + Send + 'a>>;
 
     fn invoke(&self, request: ToolRequest) -> Self::InvokeFuture<'_> {
-        Box::pin(async move { self.http.invoke_request(request).await })
+        Box::pin(async move { self.http.invoke_request(request, None).await })
     }
 }

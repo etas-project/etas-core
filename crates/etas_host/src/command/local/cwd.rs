@@ -48,6 +48,8 @@ mod tests {
         let mut command = Command::new("/bin/cat");
         command.arg("data");
         configure(&mut command, &cwd).unwrap();
+        super::super::descriptors::configure(&mut command).unwrap();
+        let parent_cwd = std::env::current_dir().unwrap();
         fs::rename(fixture.path().join("cwd"), fixture.path().join("retained")).unwrap();
         std::os::unix::fs::symlink(outside.path(), fixture.path().join("cwd")).unwrap();
         let runtime = tokio::runtime::Builder::new_current_thread()
@@ -57,5 +59,6 @@ mod tests {
         let output = runtime.block_on(async { command.output().await }).unwrap();
         assert!(output.status.success());
         assert_eq!(output.stdout, b"authorized");
+        assert_eq!(std::env::current_dir().unwrap(), parent_cwd);
     }
 }

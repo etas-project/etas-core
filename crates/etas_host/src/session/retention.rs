@@ -1,44 +1,8 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::{HostError, HostErrorCode, RetentionPolicy, SessionMessage};
+use crate::{HostError, HostErrorCode};
 
-const SECONDS_PER_DAY: i128 = 86_400;
-
-pub(super) fn retain_messages(
-    messages: &[SessionMessage],
-    policy: &RetentionPolicy,
-) -> Result<Vec<SessionMessage>, HostError> {
-    match policy {
-        RetentionPolicy::Forever => Ok(messages.to_vec()),
-        RetentionPolicy::Days(days) => {
-            let now = current_unix_seconds()?;
-            let retained_after =
-                now.saturating_sub(i128::from(*days).saturating_mul(SECONDS_PER_DAY));
-            messages
-                .iter()
-                .filter_map(|message| match session_message_timestamp(message) {
-                    Ok(created_at) if created_at >= retained_after => Some(Ok(message.clone())),
-                    Ok(_) => None,
-                    Err(error) => Some(Err(error)),
-                })
-                .collect()
-        }
-    }
-}
-
-fn session_message_timestamp(message: &SessionMessage) -> Result<i128, HostError> {
-    parse_session_timestamp(&message.created_at).ok_or_else(|| {
-        HostError::new(
-            HostErrorCode::InvalidRequest,
-            "session message timestamp is not valid for retention",
-        )
-        .with_detail("session", message.session.id.clone())
-        .with_detail("message", message.id.clone())
-        .with_detail("created_at", message.created_at.clone())
-    })
-}
-
-fn current_unix_seconds() -> Result<i128, HostError> {
+pub(super) fn current_unix_seconds() -> Result<i128, HostError> {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| i128::from(duration.as_secs()))
@@ -51,7 +15,7 @@ fn current_unix_seconds() -> Result<i128, HostError> {
         })
 }
 
-fn parse_session_timestamp(value: &str) -> Option<i128> {
+pub(super) fn parse_session_timestamp(value: &str) -> Option<i128> {
     let value = value.trim();
     if !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()) {
         return value.parse::<i128>().ok();

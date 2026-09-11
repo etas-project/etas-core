@@ -1,10 +1,57 @@
 use crate::{
-    CompactionPolicy, ContextPolicy, HostTraceFieldSensitivity, HostTracePayload, HostValue,
-    MemoryOperation, MemoryQuery, MemoryRequest, MemoryVersion, MemoryWriteMode, RetentionPolicy,
-    SessionConfig, SessionMessage, SessionMessageRole, SessionOperation, SessionRequest,
+    ContextPolicy, HostTraceFieldSensitivity, HostTracePayload, HostValue, MemoryOperation,
+    MemoryQuery, MemoryRequest, MemoryVersion, RetentionPolicy, SessionConfig, SessionMessage,
+    SessionMessageRole, SessionOperation, SessionRequest, WriteCondition,
 };
 
 use super::{HostTraceRequest, option, record, strings, variant};
+
+impl HostTraceRequest for crate::session::SessionContextPublication {
+    fn trace_payload(&self) -> HostTracePayload {
+        HostTracePayload::new("session", "Session.publish_context")
+            .with_field(
+                "session",
+                HostValue::String(self.session.id.clone()),
+                HostTraceFieldSensitivity::Sensitive,
+            )
+            .with_field(
+                "fence",
+                HostValue::String(self.fence.as_token().to_owned()),
+                HostTraceFieldSensitivity::Sensitive,
+            )
+            .with_field(
+                "content",
+                record([
+                    ("text", HostValue::String(self.content.text.clone())),
+                    (
+                        "provenance",
+                        HostValue::Record(
+                            self.content
+                                .provenance
+                                .iter()
+                                .map(|(k, v)| (k.clone(), HostValue::String(v.clone())))
+                                .collect(),
+                        ),
+                    ),
+                ]),
+                HostTraceFieldSensitivity::Sensitive,
+            )
+            .with_field(
+                "operation",
+                record([
+                    (
+                        "key",
+                        HostValue::String(self.operation.key.as_str().to_owned()),
+                    ),
+                    (
+                        "fingerprint",
+                        HostValue::String(self.operation.request_fingerprint.clone()),
+                    ),
+                ]),
+                HostTraceFieldSensitivity::Sensitive,
+            )
+    }
+}
 
 impl HostTraceRequest for MemoryRequest {
     fn trace_payload(&self) -> HostTracePayload {
@@ -13,26 +60,17 @@ impl HostTraceRequest for MemoryRequest {
             MemoryOperation::Put {
                 key,
                 value,
-                expected,
-                mode,
+                condition,
             } => (
                 "Memory.write",
                 variant(
                     "Put",
-                    vec![
-                        key.clone(),
-                        value.clone(),
-                        option(expected.as_ref().map(version)),
-                        HostValue::String(write_mode_name(*mode).to_owned()),
-                    ],
+                    vec![key.clone(), value.clone(), condition_value(condition)],
                 ),
             ),
-            MemoryOperation::Delete { key, expected } => (
+            MemoryOperation::Delete { key, condition } => (
                 "Memory.write",
-                variant(
-                    "Delete",
-                    vec![key.clone(), option(expected.as_ref().map(version))],
-                ),
+                variant("Delete", vec![key.clone(), condition_value(condition)]),
             ),
             MemoryOperation::Scan { cursor, limit } => (
                 "Memory.read",
@@ -79,30 +117,76 @@ impl HostTraceRequest for MemoryRequest {
                 ),
             ),
         };
-        HostTracePayload::new("memory", action)
-            .with_field(
-                "store",
-                record([
-                    (
-                        "region",
-                        HostValue::String(self.store.region.stable_id.clone()),
-                    ),
-                    (
-                        "schema_fingerprint",
-                        option(
-                            self.store
-                                .region
-                                .schema_fingerprint
-                                .clone()
-                                .map(HostValue::String),
-                        ),
-                    ),
-                    ("path", strings(&self.store.path)),
-                ]),
-                HostTraceFieldSensitivity::Sensitive,
-            )
-            .with_field("operation", operation, HostTraceFieldSensitivity::Sensitive)
+        memory_payload(&self.store, action, operation)
     }
+}
+
+impl HostTraceRequest for crate::memory::MemoryWriteRequest {
+    fn trace_payload(&self) -> HostTracePayload {
+        use crate::memory::{MemoryMutation, MemoryWriteOperation};
+        let (action, operation) = match &self.operation {
+            MemoryWriteOperation::Mutate { key, mutation } => {
+                let value = match mutation {
+                    MemoryMutation::Put {
+                        key,
+                        value,
+                        condition,
+                    } => variant(
+                        "Put",
+                        vec![key.clone(), value.clone(), condition_value(condition)],
+                    ),
+                    MemoryMutation::Delete { key, condition } => {
+                        variant("Delete", vec![key.clone(), condition_value(condition)])
+                    }
+                };
+                (
+                    "Memory.write",
+                    variant(
+                        "Commit",
+                        vec![HostValue::String(key.as_str().into()), value],
+                    ),
+                )
+            }
+            MemoryWriteOperation::Reconcile { operation } => (
+                "Memory.read",
+                variant(
+                    "Reconcile",
+                    vec![
+                        HostValue::String(operation.key.as_str().into()),
+                        HostValue::String(operation.request_fingerprint.clone()),
+                    ],
+                ),
+            ),
+        };
+        memory_payload(&self.store, action, operation)
+    }
+}
+
+fn memory_payload(
+    store: &crate::StoreRef,
+    action: &'static str,
+    operation: HostValue,
+) -> HostTracePayload {
+    HostTracePayload::new("memory", action)
+        .with_field(
+            "store",
+            record([
+                ("region", HostValue::String(store.region.stable_id.clone())),
+                (
+                    "schema_fingerprint",
+                    option(
+                        store
+                            .region
+                            .schema_fingerprint
+                            .clone()
+                            .map(HostValue::String),
+                    ),
+                ),
+                ("path", strings(&store.path)),
+            ]),
+            HostTraceFieldSensitivity::Sensitive,
+        )
+        .with_field("operation", operation, HostTraceFieldSensitivity::Sensitive)
 }
 
 impl HostTraceRequest for SessionRequest {
@@ -137,16 +221,6 @@ impl HostTraceRequest for SessionRequest {
                     ],
                 ),
             ),
-            SessionOperation::Compact { session, policy } => (
-                "Session.compact",
-                variant(
-                    "Compact",
-                    vec![
-                        HostValue::String(session.id.clone()),
-                        compaction_value(policy),
-                    ],
-                ),
-            ),
         };
         HostTracePayload::new("session", action).with_field(
             "operation",
@@ -157,15 +231,15 @@ impl HostTraceRequest for SessionRequest {
 }
 
 fn version(value: &MemoryVersion) -> HostValue {
-    HostValue::String(value.opaque.clone())
+    HostValue::String(value.as_token().to_owned())
 }
 
-fn write_mode_name(mode: MemoryWriteMode) -> &'static str {
-    match mode {
-        MemoryWriteMode::Put => "put",
-        MemoryWriteMode::Insert => "insert",
-        MemoryWriteMode::Update => "update",
-        MemoryWriteMode::Upsert => "upsert",
+fn condition_value(condition: &WriteCondition) -> HostValue {
+    match condition {
+        WriteCondition::Any => variant("Any", vec![]),
+        WriteCondition::Missing => variant("Missing", vec![]),
+        WriteCondition::Exists => variant("Exists", vec![]),
+        WriteCondition::Match(value) => variant("Match", vec![version(value)]),
     }
 }
 
@@ -195,7 +269,6 @@ fn config_value(config: &SessionConfig) -> HostValue {
         ("id", HostValue::String(config.id.clone())),
         ("context", context_value(&config.context)),
         ("retention", retention_value(&config.retention)),
-        ("compaction", compaction_value(&config.compaction)),
     ])
 }
 
@@ -215,16 +288,6 @@ fn retention_value(policy: &RetentionPolicy) -> HostValue {
     match policy {
         RetentionPolicy::Forever => variant("Forever", Vec::new()),
         RetentionPolicy::Days(days) => variant("Days", vec![HostValue::UInt(*days as u128)]),
-    }
-}
-
-fn compaction_value(policy: &CompactionPolicy) -> HostValue {
-    match policy {
-        CompactionPolicy::None => variant("None", Vec::new()),
-        CompactionPolicy::SummarizeWhen { max_context_tokens } => variant(
-            "SummarizeWhen",
-            vec![HostValue::UInt(*max_context_tokens as u128)],
-        ),
     }
 }
 

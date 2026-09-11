@@ -9,16 +9,25 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         &["std", "codec", "text"],
         "Deterministic text codec helpers.",
     );
+    let mut enum_owners = std::collections::BTreeMap::new();
     for name in ["MalformedInput", "TextCodecError"] {
-        builder.symbol(
+        let symbol = builder.symbol(
             module,
             name,
             StdSymbolKind::Type,
             StdDecl::Type(TypeDecl::generic(name, &[], TypeDeclKind::Enum)),
             "Text codec support type.",
         );
+        enum_owners.insert(name, symbol);
     }
     for name in ["Strict", "Replace"] {
+        builder
+            .enum_constructor(
+                enum_owners["MalformedInput"],
+                FlowDecl::pure(name, &[], "std.codec.text.MalformedInput"),
+                "Malformed-input decoding mode.",
+            )
+            .expect("registered text enum");
         builder.symbol(
             module,
             name,
@@ -27,6 +36,13 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             "Malformed-input decoding mode.",
         );
     }
+    builder
+        .enum_constructor(
+            enum_owners["TextCodecError"],
+            FlowDecl::pure("InvalidUtf8", &[], "std.codec.text.TextCodecError"),
+            "UTF-8 decoder error variant.",
+        )
+        .expect("registered text enum");
     builder.symbol(
         module,
         "InvalidUtf8",

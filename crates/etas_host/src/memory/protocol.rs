@@ -1,3 +1,4 @@
+pub use crate::storage::version::{MemoryVersion, WriteCondition};
 use crate::{AuthorityContext, ExecutionBudget, HostError, HostRequestId, HostValue, TraceContext};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -30,12 +31,11 @@ pub enum MemoryOperation {
     Put {
         key: HostValue,
         value: HostValue,
-        expected: Option<MemoryVersion>,
-        mode: MemoryWriteMode,
+        condition: WriteCondition,
     },
     Delete {
         key: HostValue,
-        expected: Option<MemoryVersion>,
+        condition: WriteCondition,
     },
     Scan {
         cursor: Option<MemoryCursor>,
@@ -50,14 +50,6 @@ pub enum MemoryOperation {
         limit: u32,
         filter: Option<HostValue>,
     },
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum MemoryWriteMode {
-    Put,
-    Insert,
-    Update,
-    Upsert,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -83,6 +75,7 @@ pub enum MemoryResult {
     Deleted {
         version: MemoryVersion,
     },
+    Unchanged,
     Conflict(MemoryConflict),
 }
 
@@ -91,11 +84,6 @@ pub struct MemoryEntry {
     pub key: HostValue,
     pub value: HostValue,
     pub version: MemoryVersion,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MemoryVersion {
-    pub opaque: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]

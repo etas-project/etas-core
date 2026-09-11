@@ -5,6 +5,75 @@ use std::fs;
 
 thread_local! {
     static AFTER_RESOLUTION: RefCell<Option<Box<dyn FnOnce()>>> = RefCell::new(None);
+    static ATOMIC_FAILURE: RefCell<Option<&'static str>> = const { RefCell::new(None) };
+}
+
+pub(super) fn atomic_stage(stage: &'static str) -> std::io::Result<()> {
+    ATOMIC_FAILURE.with(|slot| {
+        if *slot.borrow() == Some(stage) {
+            slot.borrow_mut().take();
+            Err(std::io::Error::other(format!("injected {stage} failure")))
+        } else {
+            Ok(())
+        }
+    })
+}
+
+#[test]
+fn atomic_replace_reports_publication_and_cleans_temporary_entries_on_failure() {
+    for stage in ["pre-write", "pre-rename", "post-rename"] {
+        let fixture = TestWorkspace::create(stage).unwrap();
+        fs::write(fixture.path().join("data"), b"old").unwrap();
+        let root = fixture.root().unwrap();
+        let sandbox = FilesystemSandbox::new(FilesystemPolicy::allow_workspace(root.clone()));
+        ATOMIC_FAILURE.with(|slot| *slot.borrow_mut() = Some(stage));
+        let error = sandbox
+            .atomic_write(&root, Path::new("data"), b"new")
+            .unwrap_err();
+        let committed = stage == "post-rename";
+        assert!(
+            error
+                .details
+                .iter()
+                .any(|detail| detail.key == "publication"
+                    && detail.value == if committed { "committed" } else { "unchanged" })
+        );
+        assert_eq!(
+            fs::read(fixture.path().join("data")).unwrap(),
+            if committed { b"new" } else { b"old" }
+        );
+        assert_eq!(fs::read_dir(fixture.path()).unwrap().count(), 1);
+        if committed {
+            assert!(
+                error
+                    .details
+                    .iter()
+                    .any(|detail| detail.key == "durability" && detail.value == "uncertain")
+            );
+        }
+    }
+}
+
+#[test]
+fn concurrent_replace_publishes_complete_entries_with_shared_binding() {
+    let fixture = TestWorkspace::create("concurrent-replace").unwrap();
+    let root = fixture.root().unwrap();
+    let sandbox = FilesystemSandbox::new(FilesystemPolicy::allow_workspace(root.clone()));
+    std::thread::scope(|scope| {
+        for byte in 0..8u8 {
+            let root = root.clone();
+            let sandbox = &sandbox;
+            scope.spawn(move || {
+                sandbox
+                    .atomic_write(&root, Path::new("data"), &vec![byte; 8192])
+                    .unwrap();
+            });
+        }
+    });
+    let bytes = sandbox.read_file(&root, Path::new("data")).unwrap();
+    assert_eq!(bytes.len(), 8192);
+    assert!(bytes.iter().all(|byte| *byte == bytes[0]));
+    assert_eq!(fs::read_dir(fixture.path()).unwrap().count(), 1);
 }
 
 pub(super) fn after_resolution() {

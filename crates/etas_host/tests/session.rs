@@ -1,8 +1,8 @@
 use etas_host::{
-    AuthorityContext, CompactionPolicy, ContextPolicy, HostRequestId, HostValue,
-    InMemorySessionClient, RetentionPolicy, SessionClient, SessionConfig, SessionCursor,
-    SessionMessage, SessionMessageRole, SessionOperation, SessionRef, SessionRequest,
-    SessionResult, SqliteSessionClient, TraceContext, TraceId,
+    AuthorityContext, ContextPolicy, HostRequestId, HostValue, InMemorySessionClient,
+    RetentionPolicy, SessionClient, SessionConfig, SessionMessage, SessionMessageRole,
+    SessionOperation, SessionRef, SessionRequest, SessionResult, SqliteSessionClient, TraceContext,
+    TraceId,
 };
 use std::path::PathBuf;
 
@@ -66,7 +66,7 @@ async fn in_memory_session_append_is_deduplicated_by_key() {
 
     let second = append(
         &client,
-        message("case-2", "msg-b", "second", Some("turn:1".to_owned())),
+        message("case-2", "msg-b", "first", Some("turn:1".to_owned())),
     )
     .await;
     let SessionResult::Appended {
@@ -98,6 +98,25 @@ async fn in_memory_session_load_supports_cursor_and_limit() {
         .await;
     }
 
+    let first = execute(
+        &client,
+        SessionOperation::Load {
+            session: SessionRef {
+                id: "case-3".to_owned(),
+            },
+            context: ContextPolicy::All,
+            cursor: None,
+            limit: Some(1),
+        },
+    )
+    .await;
+    let SessionResult::History {
+        cursor: Some(first_cursor),
+        ..
+    } = first
+    else {
+        panic!("first page cursor")
+    };
     let result = execute(
         &client,
         SessionOperation::Load {
@@ -105,9 +124,7 @@ async fn in_memory_session_load_supports_cursor_and_limit() {
                 id: "case-3".to_owned(),
             },
             context: ContextPolicy::All,
-            cursor: Some(SessionCursor {
-                opaque: "1".to_owned(),
-            }),
+            cursor: Some(first_cursor),
             limit: Some(2),
         },
     )
@@ -125,74 +142,11 @@ async fn in_memory_session_load_supports_cursor_and_limit() {
             .collect::<Vec<_>>(),
         vec!["msg-1", "msg-2"]
     );
-    assert_eq!(cursor.expect("next cursor").opaque, "3");
+    assert!(cursor.is_some());
 }
 
 #[tokio::test]
-async fn in_memory_session_compacts_and_returns_summary_with_recent_history() {
-    let client = InMemorySessionClient::new();
-    resolve(&client, config("case-4")).await;
-    append(
-        &client,
-        SessionMessage {
-            from: Some("customer".to_owned()),
-            to: Some("triage".to_owned()),
-            ..message("case-4", "msg-0", "hello", None)
-        },
-    )
-    .await;
-    append(
-        &client,
-        SessionMessage {
-            from: Some("triage".to_owned()),
-            to: Some("customer".to_owned()),
-            ..message("case-4", "msg-1", "reply", None)
-        },
-    )
-    .await;
-
-    let compacted = execute(
-        &client,
-        SessionOperation::Compact {
-            session: SessionRef {
-                id: "case-4".to_owned(),
-            },
-            policy: CompactionPolicy::SummarizeWhen {
-                max_context_tokens: 1024,
-            },
-        },
-    )
-    .await;
-    let SessionResult::Compacted { summary, .. } = compacted else {
-        panic!("expected compacted result");
-    };
-    assert_eq!(summary.message_count, 2);
-    assert!(summary.text.contains("customer"));
-
-    let loaded = execute(
-        &client,
-        SessionOperation::Load {
-            session: SessionRef {
-                id: "case-4".to_owned(),
-            },
-            context: ContextPolicy::SummaryPlusRecent { recent: 1 },
-            cursor: None,
-            limit: None,
-        },
-    )
-    .await;
-    let SessionResult::History {
-        messages, summary, ..
-    } = loaded
-    else {
-        panic!("expected history result");
-    };
-    assert_eq!(messages.len(), 2);
-    assert_eq!(summary.expect("summary").message_count, 2);
-}
-
-#[tokio::test]
-async fn in_memory_session_retention_filters_expired_history_and_compaction() {
+async fn in_memory_session_retention_filters_expired_history() {
     let client = InMemorySessionClient::new();
     resolve(
         &client,
@@ -238,23 +192,6 @@ async fn in_memory_session_retention_filters_expired_history_and_compaction() {
             .collect::<Vec<_>>(),
         vec!["msg-new"]
     );
-
-    let compacted = execute(
-        &client,
-        SessionOperation::Compact {
-            session: SessionRef {
-                id: "case-retention".to_owned(),
-            },
-            policy: CompactionPolicy::SummarizeWhen {
-                max_context_tokens: 1024,
-            },
-        },
-    )
-    .await;
-    let SessionResult::Compacted { summary, .. } = compacted else {
-        panic!("expected compacted result");
-    };
-    assert_eq!(summary.message_count, 1);
 }
 
 #[tokio::test]
@@ -271,7 +208,7 @@ async fn in_memory_session_rejects_append_before_resolve() {
 }
 
 #[tokio::test]
-async fn sqlite_session_persists_history_and_summary_across_clients() {
+async fn sqlite_session_persists_history_without_generating_summary() {
     let path = sqlite_session_path("history");
     let first = SqliteSessionClient::open(&path).expect("open first SQLite session client");
     resolve_sqlite(&first, config("sqlite-history")).await;
@@ -283,18 +220,6 @@ async fn sqlite_session_persists_history_and_summary_across_clients() {
             "hello",
             Some("turn:0".to_owned()),
         ),
-    )
-    .await;
-    execute_sqlite(
-        &first,
-        SessionOperation::Compact {
-            session: SessionRef {
-                id: "sqlite-history".to_owned(),
-            },
-            policy: CompactionPolicy::SummarizeWhen {
-                max_context_tokens: 1024,
-            },
-        },
     )
     .await;
     drop(first);
@@ -321,7 +246,7 @@ async fn sqlite_session_persists_history_and_summary_across_clients() {
     assert_eq!(messages.len(), 1);
     assert_eq!(messages[0].id, "msg-0");
     assert_eq!(messages[0].payload, HostValue::String("hello".to_owned()));
-    assert_eq!(summary.expect("summary").message_count, 1);
+    assert!(summary.is_none());
 }
 
 #[tokio::test]
@@ -347,7 +272,7 @@ async fn sqlite_session_deduplicates_append_across_clients() {
         message(
             "sqlite-dedup",
             "msg-replay",
-            "second",
+            "first",
             Some("agent-turn:1".to_owned()),
         ),
     )
@@ -415,7 +340,7 @@ async fn sqlite_session_retention_filters_expired_history() {
 }
 
 #[tokio::test]
-async fn sqlite_session_compaction_none_reports_retained_history_count() {
+async fn sqlite_session_summary_view_without_publication_returns_recent_history() {
     let path = sqlite_session_path("compact-none");
     let client = SqliteSessionClient::open(&path).expect("open SQLite session client");
     resolve_sqlite(
@@ -442,23 +367,92 @@ async fn sqlite_session_compaction_none_reports_retained_history_count() {
 
     let compacted = execute_sqlite(
         &client,
-        SessionOperation::Compact {
+        SessionOperation::Load {
             session: SessionRef {
                 id: "sqlite-compact-none".to_owned(),
             },
-            policy: CompactionPolicy::None,
+            context: ContextPolicy::SummaryPlusRecent { recent: 1 },
+            cursor: None,
+            limit: None,
         },
     )
     .await;
-    let SessionResult::Compacted { summary, .. } = compacted else {
-        panic!("expected compacted result");
+    let SessionResult::History {
+        messages, summary, ..
+    } = compacted
+    else {
+        panic!("expected unmodified history");
     };
-    assert_eq!(summary.message_count, 1);
-    assert!(summary.text.contains("new"));
+    assert_eq!(messages.len(), 1);
+    assert!(summary.is_none());
+    assert_eq!(messages[0].payload, HostValue::String("new".into()));
 }
 
 async fn resolve(client: &InMemorySessionClient, config: SessionConfig) -> SessionResult {
     execute(client, SessionOperation::Resolve { config }).await
+}
+
+#[tokio::test]
+async fn session_resolve_and_dedup_reject_conflicting_content() {
+    async fn check<C: SessionClient<Error = etas_host::HostError>>(client: &C) {
+        client
+            .execute(request(SessionOperation::Resolve {
+                config: config("conflict"),
+            }))
+            .await
+            .unwrap()
+            .result
+            .unwrap();
+        let result = client
+            .execute(request(SessionOperation::Resolve {
+                config: config_with_retention("conflict", RetentionPolicy::Forever),
+            }))
+            .await
+            .unwrap()
+            .result;
+        assert_eq!(
+            result.unwrap_err().code,
+            etas_host::HostErrorCode::InvalidRequest
+        );
+        let first = message("conflict", "one", "first", Some("logical-append".into()));
+        client
+            .execute(request(SessionOperation::Append { message: first }))
+            .await
+            .unwrap()
+            .result
+            .unwrap();
+        let changed = message("conflict", "two", "changed", Some("logical-append".into()));
+        let result = client
+            .execute(request(SessionOperation::Append { message: changed }))
+            .await
+            .unwrap()
+            .result;
+        assert_eq!(
+            result.unwrap_err().code,
+            etas_host::HostErrorCode::InvalidRequest
+        );
+    }
+    check(&InMemorySessionClient::new()).await;
+    let workspace = etas_host::TestWorkspace::create("session-atomic").unwrap();
+    check(&SqliteSessionClient::open(workspace.path().join("db")).unwrap()).await;
+}
+
+#[tokio::test]
+async fn sqlite_session_ordinal_does_not_reset_after_message_deletion() {
+    let workspace = etas_host::TestWorkspace::create("session-ordinal").unwrap();
+    let path = workspace.path().join("db");
+    let client = SqliteSessionClient::open(&path).unwrap();
+    resolve_sqlite(&client, config("ordinal")).await;
+    append_sqlite(&client, message("ordinal", "one", "first", None)).await;
+    let connection = rusqlite::Connection::open(&path).unwrap();
+    connection
+        .execute("DELETE FROM session_messages", [])
+        .unwrap();
+    append_sqlite(&client, message("ordinal", "two", "second", None)).await;
+    let ordinal: i64 = connection
+        .query_row("SELECT ordinal FROM session_messages", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(ordinal, 1);
 }
 
 async fn append(client: &InMemorySessionClient, message: SessionMessage) -> SessionResult {
@@ -494,6 +488,114 @@ async fn execute_sqlite(
         .unwrap()
 }
 
+#[tokio::test]
+async fn sqlite_session_reads_use_configured_limits_for_history_id_and_dedup() {
+    let path = sqlite_session_path("read-limits");
+    let writer = SqliteSessionClient::open(&path).unwrap();
+    execute_sqlite(
+        &writer,
+        SessionOperation::Resolve {
+            config: config_with_retention("limits", RetentionPolicy::Forever),
+        },
+    )
+    .await;
+    append_sqlite(
+        &writer,
+        message(
+            "limits",
+            "large",
+            &"x".repeat(1024),
+            Some("dedup".to_owned()),
+        ),
+    )
+    .await;
+    let reader = SqliteSessionClient::open_with_limits(
+        &path,
+        etas_host::StorageLimits {
+            max_value_bytes: 512,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    for operation in [
+        SessionOperation::Load {
+            session: SessionRef {
+                id: "limits".to_owned(),
+            },
+            context: ContextPolicy::All,
+            cursor: None,
+            limit: Some(1),
+        },
+        SessionOperation::Append {
+            message: message("limits", "large", "small", None),
+        },
+        SessionOperation::Append {
+            message: message("limits", "another", "small", Some("dedup".to_owned())),
+        },
+    ] {
+        let error = reader
+            .execute(request(operation))
+            .await
+            .unwrap()
+            .result
+            .unwrap_err();
+        assert_eq!(
+            error.code,
+            etas_host::HostErrorCode::BudgetExceeded,
+            "{error:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn sqlite_session_codec_honors_limits_larger_than_defaults() {
+    let path = sqlite_session_path("large-value-limits");
+    let client = SqliteSessionClient::open_with_limits(
+        &path,
+        etas_host::StorageLimits {
+            max_value_bytes: 2 * 1024 * 1024,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    execute_sqlite(
+        &client,
+        SessionOperation::Resolve {
+            config: config_with_retention("large-limits", RetentionPolicy::Forever),
+        },
+    )
+    .await;
+    let original = message(
+        "large-limits",
+        "large",
+        &"x".repeat(1024 * 1024 + 1),
+        Some("dedup".to_owned()),
+    );
+    append_sqlite(&client, original.clone()).await;
+    let result = execute_sqlite(
+        &client,
+        SessionOperation::Load {
+            session: original.session.clone(),
+            context: ContextPolicy::All,
+            cursor: None,
+            limit: Some(1),
+        },
+    )
+    .await;
+    let SessionResult::History { messages, .. } = result else {
+        panic!("history")
+    };
+    assert_eq!(messages, vec![original.clone()]);
+    let result = append_sqlite(&client, original).await;
+    assert!(matches!(
+        result,
+        SessionResult::Appended {
+            deduplicated: true,
+            ..
+        }
+    ));
+}
+
 fn request(operation: SessionOperation) -> SessionRequest {
     SessionRequest {
         id: HostRequestId(1),
@@ -513,9 +615,6 @@ fn config_with_retention(id: &str, retention: RetentionPolicy) -> SessionConfig 
         id: id.to_owned(),
         context: ContextPolicy::SummaryPlusRecent { recent: 4 },
         retention,
-        compaction: CompactionPolicy::SummarizeWhen {
-            max_context_tokens: 24_000,
-        },
     }
 }
 

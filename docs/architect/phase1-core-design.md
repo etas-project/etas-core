@@ -4,9 +4,9 @@
 
 Phase 1 implements the Etas language frontend and AST/HIR interpreter. In this
 phase, `etas-core` provides shared infrastructure, shared language contracts,
-and reusable pure builtin kernels. It must stay free of frontend, interpreter,
-runtime, and CLI ownership so dependent repositories can share contracts without
-creating cycles.
+reusable pure builtin kernels, and engine-neutral Host lifecycle mechanisms.
+It must stay free of frontend analysis, engine evaluation/scheduling, and CLI
+policy so dependent repositories can share contracts without creating cycles.
 
 ## 2. Crates
 
@@ -18,7 +18,7 @@ etas-core/
     etas_cache/      # generic artifact cache and dependency primitives
     etas_std/        # declaration-only standard language support surface
     etas_builtin/    # reusable pure builtin implementations
-    etas_host/       # shared host protocols and reusable host adapters
+    etas_host/       # shared host protocols, adapters, execution lifecycle
 ```
 
 Phase 1 should keep this repository small. The frontend, interpreter, and CLI
@@ -644,11 +644,18 @@ API and error taxonomy should be shaped for the complete primitive surface.
 
 ### 2.5 `etas_host`
 
-`etas_host` owns shared host-facing protocol values and reusable host adapters
-for external capabilities such as model calls and tool invocation. It exists so
-the Phase 1 checked-HIR interpreter and future AIR runtime can use the same
-external protocol surface without sharing their execution loops or internal
-value models.
+`etas_host` owns shared host-facing protocol values, reusable host adapters,
+and execution scope/cancellation/operation ownership mechanisms. The Phase 1
+checked-HIR interpreter and future AIR runtime share these implementations
+while retaining their execution loops, language scheduling and internal values.
+The complete contract is [Shared Execution Lifecycle](etas-execution-design.md).
+Workspace bindings and platform guarantees are specified in
+[Workspace Binding And Isolation](etas-workspace-design.md). These remain
+inside `etas_host`; no separate workspace crate or language keyword is added.
+Memory and Session share [Bounded Versioned Storage](etas-storage-design.md):
+scoped versions, atomic conditional writes, bounded backend execution and
+explicit commit evidence. This is durable-state infrastructure, not `etas_cache`
+or an application-owned conversation/lease framework.
 
 The important boundary is:
 
@@ -662,6 +669,12 @@ shared:
   AuthorityContext
   TraceContext
   Budget
+  ExecutionScope / CancelSource / CancelSignal
+  OperationContext / OperationRegistration / TerminationReport / StopWait
+  WorkspaceRoot / WorkspaceRegionRegistry / WorkspacePathRef
+  MemoryVersion / write conditions / commit receipts and reconciliation evidence
+  bounded storage execution, paging and lossless stored-value codecs
+  handle-relative filesystem operations and verified platform sandbox activation
   provider/tool/memory/console protocol adapters such as OpenAI, MCP, HTTP tools,
   SQLite, Postgres, vector-store adapters, and fake/std process streams
 
@@ -680,75 +693,47 @@ not shared:
 host protocol types. They must not depend on HIR, AIR, interpreter frames,
 runtime scheduler state, CLI rendering, or frontend type/effect facts.
 
-Recommended layout:
+Host layout (service internals are specified in
+[Host Design](etas-host-design.md#4-internal-layout)):
 
 ```text
 crates/etas_host/
   src/
     lib.rs
-
     value/
-      mod.rs
-      host_value.rs
-      schema.rs
-      codec.rs
-
-    request/
-      mod.rs
-      id.rs
-      context.rs
-      error.rs
-
+    context/
+      request/
+      authority/
+      trace/
+      budget/
+    execution/
+      cancellation/
+      scope/
+      operation/
+      shutdown/
+    storage/
+      version/
+      transaction/
+      limits/
+      sqlite/
     transport/
-      mod.rs
-      http.rs
-      sse.rs
-      retry.rs
-      timeout.rs
-      auth.rs
-
     model/
-      mod.rs
-      protocol.rs
-      client.rs
-      openai.rs
-      anthropic.rs
-      local.rs
-
     tool/
-      mod.rs
-      protocol.rs
-      client.rs
-      mcp.rs
-      http.rs
-      process.rs
-
     memory/
-      mod.rs
-      protocol.rs
-      client.rs
-      sqlite.rs
-      postgres.rs
-      vector.rs
-
-    authority/
-      mod.rs
-      grant.rs
-      action.rs
-      approval.rs
-      sandbox.rs
-      policy.rs
-
-    trace/
-      mod.rs
-      context.rs
-      event.rs
-
-    budget/
-      mod.rs
-      token.rs
-      time.rs
-      cost.rs
+    session/
+    console/
+    command/
+    filesystem/
+    network/
+    stream/
+    tls/
+    secret/
+    browser/
+    sandbox/
+      workspace/
+      platform/
+    policy/
+    testing/
 ```
 
 Host protocol values are engine-neutral:
@@ -919,12 +904,41 @@ pub trait MemoryClient {
 }
 ```
 
-`etas_host::memory` owns engine-neutral references such as
-`MemoryRegionRef`, `StoreRef`, `MemoryVersion`, and `MemoryConflict`, plus
-backend adapters where the protocol is reusable. SQLite is appropriate for
-local tests and prototypes, Postgres for server deployments, and vector-store
-adapters for retrieval memory. These adapters must not depend on HIR, AIR,
-interpreter frames, runtime scheduler state, or Etas type/effect inference.
+The envelope above omits the live managed operation context; every entry must
+use the same bounded execution path. Mutation results preserve confirmed commit,
+confirmed non-commit and unknown outcome as structured evidence, not only a
+generic `HostError` or `Result::is_ok()` interpretation.
+
+`etas_host::memory` owns engine-neutral `MemoryRegionRef`, `StoreRef` and memory
+operations/conflicts. Shared version/condition/receipt mechanics live under
+`storage/`, with existing public exports retained. SQLite supports persistent
+local use and real multi-process conditional writes; Postgres and vector-store
+adapters declare their actual supported contracts. None may depend on HIR, AIR,
+interpreter frames, language scheduler state or Etas type/effect inference.
+
+Storage revisions survive entry deletion, and ordinary reopen preserves Store
+generation. The same transaction checks the condition, mutates state and records
+its receipt. Encoding, reading, decoding, query work and pagination are bounded
+before unbounded materialization. Source APIs must expose useful versioned
+values and receipts after SPEC synchronization; an internal Host version that
+the engine discards is not a complete public CAS API.
+
+The accepted public workflow in [Storage Design](etas-storage-design.md) retains
+`get_entry`, adds prepared immutable write intents, and separates `commit` from
+query-only `reconcile`. Operation references survive explicit checkpoints;
+missing/expired receipts never authorize blind retry. These source declarations
+still require SPEC synchronization.
+
+Session reuses this evidence model through the now-specified `history_page`,
+`prepare_context`, `publish_context` and `reconcile_context` APIs. Preserve
+content provenance/trust and backend-confirmed receipt durability. Etas supplies
+the data, execution and accounting primitives, not a production summarizer/tokenizer or its model
+selection. EDK/application source owns that orchestration; Host storage must not
+make hidden model calls or require production summarizer configuration.
+Remove `SessionConfig.compaction` and old automatic summary callbacks per the
+updated SPEC. Retain configured retention/storage compaction as bounded runtime
+maintenance. `SummaryPlusRecent` reads existing context and exposes absence;
+`ContextTokens` still enforces a budget rather than triggering inference.
 
 Usage by execution engines:
 
@@ -940,8 +954,21 @@ etas-runtime:
   runtime scheduler enforces authority, checkpointing, tracing, and budgeting
 ```
 
-`etas_host` is therefore the shared protocol and adapter layer; execution
-policy remains in the engine that uses it.
+`etas_host` shares protocols, adapters and live lifecycle mechanisms; language
+execution policy remains in the engine that uses them. Ordinary calls inherit
+their dynamic execution scope, and handled actions remain tracked even when
+their escaping effect row is empty. Applications own session recovery decisions,
+workspace takeover, and business retry policy. Scope cancellation is not a
+transaction rollback or a language `Cancel` effect.
+
+Workspace grants bind retained opened-directory objects, not canonical path
+strings. Static region identity, live directory binding and application-owned
+persistent identity are distinct. Existing bindings cannot silently follow root
+replacement; resume/reopen requires a fresh authorized binding. Command cwd
+binding is not process isolation, and configured backend labels are not proof
+of active restrictions. Staged rollback applies only to isolated changes, not
+arbitrary external side effects. Applications retain lease and recovery policy;
+engines consume Host guarantees without depending on platform file IDs.
 
 ## 3. Dependency Direction
 

@@ -17,11 +17,19 @@ use crate::{
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WorkspaceSnapshot {
-    pub root: WorkspaceRoot,
-    pub entries: BTreeMap<PathBuf, WorkspaceSnapshotEntry>,
+    root: WorkspaceRoot,
+    entries: BTreeMap<PathBuf, WorkspaceSnapshotEntry>,
 }
 
 impl WorkspaceSnapshot {
+    pub fn root(&self) -> &WorkspaceRoot {
+        &self.root
+    }
+
+    pub fn entries(&self) -> &BTreeMap<PathBuf, WorkspaceSnapshotEntry> {
+        &self.entries
+    }
+
     pub fn capture(root: WorkspaceRoot) -> Result<Self, HostError> {
         let mut entries = BTreeMap::new();
         capture_dir(root.directory(), Path::new(""), &mut entries)?;
@@ -67,7 +75,7 @@ impl WorkspaceSnapshot {
         })
     }
 
-    pub fn rollback(&self) -> Result<WorkspaceDiff, HostError> {
+    fn rollback_staged(&self) -> Result<WorkspaceDiff, HostError> {
         let diff = self.diff_current()?;
         // Remove children before their directories; restore directories before
         // their children. Every operation stays relative to a retained parent.
@@ -93,6 +101,69 @@ impl WorkspaceSnapshot {
             }
         }
         Ok(diff)
+    }
+}
+
+/// A separately provisioned, initially empty staging directory. Applications
+/// control its lifetime and exclude competing writers; no live tree is copied
+/// or automatically published to a destination.
+#[derive(Debug)]
+pub struct WorkspaceStage {
+    root: WorkspaceRoot,
+}
+
+impl WorkspaceStage {
+    pub fn create(parent: &WorkspaceRoot) -> Result<Self, HostError> {
+        let mut identity = [0u8; 16];
+        getrandom::fill(&mut identity).map_err(|error| {
+            HostError::new(
+                HostErrorCode::ProviderUnavailable,
+                "cannot create staging identity",
+            )
+            .with_detail("error", error.to_string())
+        })?;
+        let name = format!(".etas-stage-{:032x}", u128::from_le_bytes(identity));
+        let mut builder = cap_std::fs::DirBuilder::new();
+        #[cfg(unix)]
+        {
+            use cap_std::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        parent
+            .directory()
+            .create_dir_with(&name, &builder)
+            .map_err(workspace_io_error)?;
+        let root = parent.open_child(&name)?;
+        Ok(Self { root })
+    }
+
+    pub fn root(&self) -> &WorkspaceRoot {
+        &self.root
+    }
+
+    pub fn snapshot(&self) -> Result<StagedWorkspaceSnapshot, HostError> {
+        Ok(StagedWorkspaceSnapshot {
+            snapshot: WorkspaceSnapshot::capture(self.root.clone())?,
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StagedWorkspaceSnapshot {
+    snapshot: WorkspaceSnapshot,
+}
+
+impl StagedWorkspaceSnapshot {
+    pub fn root(&self) -> &WorkspaceRoot {
+        self.snapshot.root()
+    }
+
+    pub fn diff_current(&self) -> Result<WorkspaceDiff, HostError> {
+        self.snapshot.diff_current()
+    }
+
+    pub fn rollback(&self) -> Result<WorkspaceDiff, HostError> {
+        self.snapshot.rollback_staged()
     }
 }
 

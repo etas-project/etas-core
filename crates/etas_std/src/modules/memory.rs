@@ -4,6 +4,12 @@ use crate::{
     StdStaticArg, StdSymbolKind, StdType, TypeDecl, TypeDeclKind, intrinsic,
 };
 
+mod commit;
+mod intent;
+mod outcome;
+mod paging;
+mod receipt;
+
 pub fn register(builder: &mut StdRegistryBuilder) {
     let module = builder.module(
         &["std", "memory"],
@@ -65,6 +71,11 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         "Typed persistent memory conflict information.",
     );
     builder.prelude("MemoryConflict", conflict_symbol);
+    paging::register(builder, module);
+    intent::register(builder, module);
+    outcome::register(builder, module);
+    receipt::register(builder, module);
+    commit::register(builder, module);
 
     builder.symbol_with_intrinsic(
         module,
@@ -398,7 +409,8 @@ fn register_store_flow(
 
 fn memory_effects(name: &str) -> Vec<StdEffectRef> {
     match name {
-        "get" | "contains" | "keys" | "select" | "query" | "scan" | "related_to" => {
+        "get" | "get_entry" | "page" | "contains" | "keys" | "select" | "query" | "scan"
+        | "related_to" => {
             vec![store_action("read")]
         }
         "put" | "put_versioned" | "insert" | "delete" | "delete_versioned" | "update" | "clear" => {
@@ -418,9 +430,8 @@ fn store_action(action: &str) -> StdEffectRef {
 
 fn memory_access(name: &str) -> IntrinsicMemoryAccess {
     match name {
-        "get" | "contains" | "keys" | "select" | "query" | "scan" | "related_to" => {
-            IntrinsicMemoryAccess::ReadFirstArgStore
-        }
+        "get" | "get_entry" | "page" | "contains" | "keys" | "select" | "query" | "scan"
+        | "related_to" => IntrinsicMemoryAccess::ReadFirstArgStore,
         "put" | "put_versioned" | "insert" | "delete" | "delete_versioned" | "update" | "clear" => {
             IntrinsicMemoryAccess::WriteFirstArgStore
         }

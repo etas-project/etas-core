@@ -40,7 +40,7 @@ pub const JSON_STRINGIFY: u32 = 38;
 pub const SESSION_LAST_TURNS: u32 = 39;
 pub const SESSION_SUMMARY_PLUS_RECENT: u32 = 40;
 pub const SESSION_DAYS: u32 = 41;
-pub const SESSION_SUMMARIZE_WHEN: u32 = 42;
+// ID 42 is retired; never reuse it for a different intrinsic.
 pub const MEMORY_VERSION: u32 = 43;
 pub const STREAM_ERROR_HOST: u32 = 44;
 pub const TRUST_TRUSTED: u32 = 45;

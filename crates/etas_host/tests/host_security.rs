@@ -16,8 +16,8 @@ use etas_host::{
     BrowserProtocolOperation, BrowserProtocolRequest, FilesystemClient, FilesystemEntry,
     FilesystemOperation, FilesystemRequest, HostActionGrant, HostErrorCode, HostRequestId,
     HostValue, HttpToolProtocolAdapter, HttpTransport, InMemoryMemoryClient, LocalFilesystemClient,
-    MemoryClient, MemoryOperation, MemoryRequest, MemoryResult, MemoryVersion, ModelClient,
-    ModelContent, ModelMessage, ModelName, ModelOptions, ModelRequest, ModelRole, NetworkPolicy,
+    MemoryClient, MemoryOperation, MemoryRequest, MemoryResult, ModelClient, ModelContent,
+    ModelMessage, ModelName, ModelOptions, ModelRequest, ModelRole, NetworkPolicy,
     OpenAiProtocolAdapter, ProcessToolProtocolAdapter, RetryPolicy, SandboxPolicy, SecretClient,
     SecretOperation, SecretRequest, SecretValue, StoreRef, StreamClient, StreamOperation,
     StreamRequest, TcpClient, TcpConnectOperation, TcpConnectRequest, TcpEndpoint, TestWorkspace,
@@ -147,7 +147,7 @@ async fn local_filesystem_client_rejects_path_escape() {
                         delete_roots: Vec::new(),
                     },
                     NetworkPolicy::deny_all(),
-                    etas_host::CommandPolicy::allow_programs(Vec::new()),
+                    etas_host::CommandPolicy::allow_trusted_programs(Vec::new()),
                     etas_host::DestructiveOpPolicy::deny_all(),
                 ),
                 policy: Default::default(),
@@ -192,7 +192,7 @@ async fn local_filesystem_client_writes_root_file_with_create_dirs() {
                         delete_roots: Vec::new(),
                     },
                     NetworkPolicy::deny_all(),
-                    etas_host::CommandPolicy::allow_programs(Vec::new()),
+                    etas_host::CommandPolicy::allow_trusted_programs(Vec::new()),
                     etas_host::DestructiveOpPolicy::deny_all(),
                 ),
                 policy: Default::default(),
@@ -207,7 +207,7 @@ async fn local_filesystem_client_writes_root_file_with_create_dirs() {
         FilesystemEntry::Unit
     );
     assert_eq!(
-        std::fs::read_to_string(root.canonical_root.join("out.txt")).expect("written file"),
+        std::fs::read_to_string(root.display_path().join("out.txt")).expect("written file"),
         "ok"
     );
 }
@@ -216,7 +216,7 @@ async fn local_filesystem_client_writes_root_file_with_create_dirs() {
 async fn local_filesystem_client_requires_exact_region_action_grant() {
     let workspace = TestWorkspace::create("fs-region-grant").expect("workspace");
     let root = workspace.root().expect("root");
-    std::fs::write(root.canonical_root.join("data.bin"), b"private").expect("fixture file");
+    std::fs::write(root.display_path().join("data.bin"), b"private").expect("fixture file");
     let (adapter, region) = fs_adapter(root.clone());
     let other_region = WorkspaceRegionId::new("app.workspace.OtherRoot").expect("other region");
     let response = adapter
@@ -241,7 +241,7 @@ async fn local_filesystem_client_requires_exact_region_action_grant() {
                         delete_roots: Vec::new(),
                     },
                     NetworkPolicy::deny_all(),
-                    etas_host::CommandPolicy::allow_programs(Vec::new()),
+                    etas_host::CommandPolicy::allow_trusted_programs(Vec::new()),
                     etas_host::DestructiveOpPolicy::deny_all(),
                 ),
                 policy: Default::default(),
@@ -301,8 +301,8 @@ async fn local_filesystem_client_rejects_unmapped_region_even_with_grant() {
 async fn local_filesystem_list_preserves_region_identity_on_every_entry() {
     let workspace = TestWorkspace::create("fs-region-list").expect("workspace");
     let root = workspace.root().expect("root");
-    std::fs::create_dir(root.canonical_root.join("data")).expect("fixture directory");
-    std::fs::write(root.canonical_root.join("data/input.txt"), b"contents").expect("fixture file");
+    std::fs::create_dir(root.display_path().join("data")).expect("fixture directory");
+    std::fs::write(root.display_path().join("data/input.txt"), b"contents").expect("fixture file");
     let (adapter, region) = fs_adapter(root.clone());
     let response = adapter
         .execute(FilesystemRequest {
@@ -326,7 +326,7 @@ async fn local_filesystem_list_preserves_region_identity_on_every_entry() {
                         delete_roots: Vec::new(),
                     },
                     NetworkPolicy::deny_all(),
-                    etas_host::CommandPolicy::allow_programs(Vec::new()),
+                    etas_host::CommandPolicy::allow_trusted_programs(Vec::new()),
                     etas_host::DestructiveOpPolicy::deny_all(),
                 ),
                 policy: Default::default(),
@@ -350,7 +350,7 @@ async fn local_filesystem_client_stats_and_atomic_replaces_under_workspace_polic
     let workspace = TestWorkspace::create("fs-stat-replace").expect("workspace");
     let root = workspace.root().expect("root");
     let (adapter, region) = fs_adapter(root.clone());
-    std::fs::write(root.canonical_root.join("data.bin"), b"old").expect("fixture file");
+    std::fs::write(root.display_path().join("data.bin"), b"old").expect("fixture file");
 
     let stat = adapter
         .execute(FilesystemRequest {
@@ -395,7 +395,7 @@ async fn local_filesystem_client_stats_and_atomic_replaces_under_workspace_polic
         FilesystemEntry::Unit
     );
     assert_eq!(
-        std::fs::read(root.canonical_root.join("data.bin")).expect("replaced file"),
+        std::fs::read(root.display_path().join("data.bin")).expect("replaced file"),
         b"new"
     );
 }
@@ -418,7 +418,7 @@ async fn tcp_client_rejects_unallowlisted_endpoint_before_provider_lookup() {
                 sandbox: SandboxPolicy::allow_listed(
                     etas_host::FilesystemPolicy::deny_all(),
                     NetworkPolicy::deny_all(),
-                    etas_host::CommandPolicy::allow_programs(Vec::new()),
+                    etas_host::CommandPolicy::allow_trusted_programs(Vec::new()),
                     etas_host::DestructiveOpPolicy::deny_all(),
                 ),
                 policy: Default::default(),
@@ -585,14 +585,33 @@ async fn in_memory_client_detects_version_conflict() {
             MemoryOperation::Put {
                 key: etas_host::HostValue::String("k".to_owned()),
                 value: etas_host::HostValue::String("v1".to_owned()),
-                expected: None,
-                mode: etas_host::MemoryWriteMode::Put,
+                condition: etas_host::WriteCondition::Any,
             },
         ))
         .await
         .expect("memory response");
     assert!(matches!(first.result, Ok(MemoryResult::Written { .. })));
 
+    let unrelated = adapter
+        .execute(memory_request(
+            HostRequestId(10),
+            store.clone(),
+            MemoryOperation::Put {
+                key: etas_host::HostValue::String("other".into()),
+                value: etas_host::HostValue::Unit,
+                condition: etas_host::WriteCondition::Any,
+            },
+        ))
+        .await
+        .unwrap()
+        .result
+        .unwrap();
+    let MemoryResult::Written {
+        version: stale_version,
+    } = unrelated
+    else {
+        panic!("expected written")
+    };
     let stale = adapter
         .execute(memory_request(
             HostRequestId(9),
@@ -600,10 +619,7 @@ async fn in_memory_client_detects_version_conflict() {
             MemoryOperation::Put {
                 key: etas_host::HostValue::String("k".to_owned()),
                 value: etas_host::HostValue::String("v2".to_owned()),
-                expected: Some(MemoryVersion {
-                    opaque: "99".to_owned(),
-                }),
-                mode: etas_host::MemoryWriteMode::Put,
+                condition: etas_host::WriteCondition::Match(stale_version),
             },
         ))
         .await
@@ -894,7 +910,7 @@ fn fs_authority(root: etas_host::WorkspaceRoot) -> AuthorityContext {
                 delete_roots: Vec::new(),
             },
             NetworkPolicy::deny_all(),
-            etas_host::CommandPolicy::allow_programs(Vec::new()),
+            etas_host::CommandPolicy::allow_trusted_programs(Vec::new()),
             etas_host::DestructiveOpPolicy::deny_all(),
         ),
         policy: Default::default(),

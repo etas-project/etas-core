@@ -14,6 +14,7 @@ pub enum TraceEvent {
         started_at_unix_micros: u64,
     },
     HostRequestFinished {
+        command_isolation: Option<crate::CommandIsolationReport>,
         id: HostRequestId,
         outcome: HostOutcome,
         finished_at_unix_micros: u64,

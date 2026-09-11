@@ -1,34 +1,87 @@
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     future::Future,
     pin::Pin,
     sync::{Arc, RwLock},
 };
 
 use crate::{
-    CompactionPolicy, ContextPolicy, HostError, HostErrorCode, SessionClient, SessionConfig,
-    SessionCursor, SessionMessage, SessionOperation, SessionRef, SessionRequest, SessionResponse,
-    SessionResult, SessionSummary,
+    ContextPolicy, HostError, HostErrorCode, SessionClient, SessionConfig, SessionCursor,
+    SessionMessage, SessionOperation, SessionRef, SessionRequest, SessionResponse, SessionResult,
+    SessionSummary,
 };
 
-use super::retention::retain_messages;
+mod context;
+mod maintenance;
+mod paging;
+mod resolve;
+mod write;
 
 #[derive(Clone, Debug, Default)]
 pub struct InMemorySessionClient {
+    executor: crate::storage::volatile::VolatileExecutor,
     sessions: Arc<RwLock<BTreeMap<String, SessionState>>>,
+    limits: crate::StorageLimits,
 }
 
 #[derive(Clone, Debug)]
 struct SessionState {
+    retention_receipts: BTreeMap<String, super::SessionRetentionReceipt>,
+    context_receipts: BTreeMap<String, super::SessionContextEvidence>,
+    published_context: Option<super::SessionPublishedContext>,
+    history_key: super::context::fence::HistoryKey,
+    context_version: u64,
+    generation: crate::storage::version::StoreGeneration,
+    storage_generation: crate::storage::version::StoreGeneration,
+    receipts: BTreeMap<String, super::SessionWriteReceipt>,
     config: SessionConfig,
-    messages: Vec<SessionMessage>,
+    messages: BTreeMap<i64, SessionMessage>,
+    last_ordinal: i64,
     dedup: BTreeMap<String, String>,
     summary: Option<SessionSummary>,
 }
 
 impl InMemorySessionClient {
+    pub async fn execute_scoped(
+        &self,
+        request: SessionRequest,
+        operation: &crate::execution::OperationContext,
+    ) -> Result<SessionResponse, HostError> {
+        self.dispatch(request, Some(operation)).await
+    }
+    async fn dispatch(
+        &self,
+        request: SessionRequest,
+        operation: Option<&crate::execution::OperationContext>,
+    ) -> Result<SessionResponse, HostError> {
+        let bytes = request.storage_size(&self.limits)?;
+        let client = self.clone();
+        self.executor
+            .execute(
+                operation,
+                request.id,
+                request.trace.clone(),
+                request.budget.clone(),
+                bytes,
+                move |_| {
+                    let id = request.id;
+                    let result = client.execute_operation(request.operation);
+                    Ok(SessionResponse { id, result })
+                },
+            )
+            .await
+            .map_err(crate::execution::DispatchError::into_host_error)
+    }
     pub fn new() -> Self {
         Self::default()
+    }
+    pub fn with_limits(limits: crate::StorageLimits) -> Result<Self, HostError> {
+        limits.validate()?;
+        Ok(Self {
+            executor: crate::storage::volatile::VolatileExecutor::new(limits.clone()),
+            sessions: Default::default(),
+            limits,
+        })
     }
 }
 
@@ -37,12 +90,14 @@ impl SessionClient for InMemorySessionClient {
     type ExecuteFuture<'a> =
         Pin<Box<dyn Future<Output = Result<SessionResponse, Self::Error>> + Send + 'a>>;
 
+    type WriteFuture<'a> =
+        Pin<Box<dyn Future<Output = Result<super::SessionWriteResponse, HostError>> + Send + 'a>>;
+    fn write(&self, request: super::SessionWriteRequest) -> Self::WriteFuture<'_> {
+        Box::pin(self.dispatch_write(request, None))
+    }
+
     fn execute(&self, request: SessionRequest) -> Self::ExecuteFuture<'_> {
-        Box::pin(async move {
-            let id = request.id;
-            let result = self.execute_operation(request.operation);
-            Ok(SessionResponse { id, result })
-        })
+        Box::pin(self.dispatch(request, None))
     }
 }
 
@@ -57,7 +112,6 @@ impl InMemorySessionClient {
                 cursor,
                 limit,
             } => self.load(session, context, cursor, limit),
-            SessionOperation::Compact { session, policy } => self.compact(session, policy),
         }
     }
 
@@ -67,15 +121,33 @@ impl InMemorySessionClient {
         }
         let mut sessions = self.sessions.write().map_err(lock_error)?;
         let created = !sessions.contains_key(&config.id);
-        sessions
-            .entry(config.id.clone())
-            .and_modify(|state| state.config = config.clone())
-            .or_insert_with(|| SessionState {
-                config: config.clone(),
-                messages: Vec::new(),
-                dedup: BTreeMap::new(),
-                summary: None,
-            });
+        if let Some(existing) = sessions.get(&config.id) {
+            if existing.config != config {
+                return Err(invalid_request(
+                    "session identity already has a different configuration",
+                ));
+            }
+        }
+        if created {
+            sessions.insert(
+                config.id.clone(),
+                SessionState {
+                    retention_receipts: BTreeMap::new(),
+                    context_receipts: BTreeMap::new(),
+                    published_context: None,
+                    history_key: super::context::fence::HistoryKey::new()?,
+                    context_version: 0,
+                    generation: crate::storage::version::StoreGeneration::new()?,
+                    storage_generation: crate::storage::version::StoreGeneration::new()?,
+                    receipts: BTreeMap::new(),
+                    config: config.clone(),
+                    messages: BTreeMap::new(),
+                    last_ordinal: -1,
+                    dedup: BTreeMap::new(),
+                    summary: None,
+                },
+            );
+        }
         Ok(SessionResult::Resolved {
             session: SessionRef { id: config.id },
             created,
@@ -83,52 +155,18 @@ impl InMemorySessionClient {
     }
 
     fn append(&self, message: SessionMessage) -> Result<SessionResult, HostError> {
-        if message.id.is_empty() {
-            return Err(invalid_request("message id must not be empty"));
-        }
-        if message.session.id.is_empty() {
-            return Err(invalid_request("message session id must not be empty"));
-        }
+        message.storage_size(&self.limits)?;
         let mut sessions = self.sessions.write().map_err(lock_error)?;
-        let Some(state) = sessions.get_mut(&message.session.id) else {
-            return Err(HostError::new(
-                HostErrorCode::InvalidRequest,
-                "cannot append message to an unresolved session",
-            )
-            .with_detail("session", message.session.id));
-        };
-        if let Some(dedup_key) = &message.dedup_key
-            && let Some(existing_id) = state.dedup.get(dedup_key)
-            && let Some(existing) = state
-                .messages
-                .iter()
-                .find(|candidate| &candidate.id == existing_id)
-                .cloned()
-        {
-            return Ok(SessionResult::Appended {
-                message: existing,
-                deduplicated: true,
-            });
+        let state = sessions
+            .get_mut(&message.session.id)
+            .ok_or_else(|| invalid_request("cannot append message to an unresolved session"))?;
+        let (message, deduplicated, _) = write::prepare_append(state, message)?;
+        if !deduplicated {
+            write::apply_append(state, &message);
         }
-        if state
-            .messages
-            .iter()
-            .any(|candidate| candidate.id == message.id)
-        {
-            return Err(HostError::new(
-                HostErrorCode::InvalidRequest,
-                "session message id already exists",
-            )
-            .with_detail("session", message.session.id)
-            .with_detail("message", message.id));
-        }
-        if let Some(dedup_key) = &message.dedup_key {
-            state.dedup.insert(dedup_key.clone(), message.id.clone());
-        }
-        state.messages.push(message.clone());
         Ok(SessionResult::Appended {
             message,
-            deduplicated: false,
+            deduplicated,
         })
     }
 
@@ -140,132 +178,11 @@ impl InMemorySessionClient {
         limit: Option<u32>,
     ) -> Result<SessionResult, HostError> {
         let sessions = self.sessions.read().map_err(lock_error)?;
-        let Some(state) = sessions.get(&session.id) else {
-            return Err(HostError::new(
-                HostErrorCode::InvalidRequest,
-                "cannot load unresolved session history",
-            )
-            .with_detail("session", session.id));
-        };
-        let start = cursor
-            .as_ref()
-            .map(|cursor| parse_cursor(cursor, state.messages.len()))
-            .transpose()?
-            .unwrap_or(0);
-        let retained = retain_messages(&state.messages, &state.config.retention)?;
-        let selected = select_context(&retained, &context);
-        let mut messages = selected.into_iter().skip(start).collect::<Vec<_>>();
-        let limit = limit.map(|limit| limit as usize);
-        let next_cursor = if let Some(limit) = limit.filter(|limit| messages.len() > *limit) {
-            messages.truncate(limit);
-            Some(SessionCursor {
-                opaque: (start + limit).to_string(),
-            })
-        } else {
-            None
-        };
-        let summary = match context {
-            ContextPolicy::SummaryPlusRecent { .. } => state.summary.clone(),
-            ContextPolicy::All | ContextPolicy::LastTurns(_) => None,
-        };
-        Ok(SessionResult::History {
-            session,
-            messages,
-            summary,
-            cursor: next_cursor,
-        })
+        let state = sessions
+            .get(&session.id)
+            .ok_or_else(|| invalid_request("cannot load unresolved session history"))?;
+        paging::load(state, session, context, cursor, limit, &self.limits)
     }
-
-    fn compact(
-        &self,
-        session: SessionRef,
-        policy: CompactionPolicy,
-    ) -> Result<SessionResult, HostError> {
-        let mut sessions = self.sessions.write().map_err(lock_error)?;
-        let Some(state) = sessions.get_mut(&session.id) else {
-            return Err(HostError::new(
-                HostErrorCode::InvalidRequest,
-                "cannot compact unresolved session history",
-            )
-            .with_detail("session", session.id));
-        };
-        match policy {
-            CompactionPolicy::None => {
-                let retained = retain_messages(&state.messages, &state.config.retention)?;
-                let summary = state.summary.clone().unwrap_or_else(|| SessionSummary {
-                    text: String::new(),
-                    message_count: retained.len(),
-                });
-                Ok(SessionResult::Compacted { session, summary })
-            }
-            CompactionPolicy::SummarizeWhen { max_context_tokens } => {
-                if max_context_tokens == 0 {
-                    return Err(invalid_request(
-                        "session compaction token budget must be nonzero",
-                    ));
-                }
-                let retained = retain_messages(&state.messages, &state.config.retention)?;
-                let summary = summarize_messages(&retained);
-                state.summary = Some(summary.clone());
-                Ok(SessionResult::Compacted { session, summary })
-            }
-        }
-    }
-}
-
-fn select_context(messages: &[SessionMessage], context: &ContextPolicy) -> Vec<SessionMessage> {
-    match context {
-        ContextPolicy::All => messages.to_vec(),
-        ContextPolicy::LastTurns(turns) | ContextPolicy::SummaryPlusRecent { recent: turns } => {
-            let message_count = turns.saturating_mul(2);
-            let start = messages.len().saturating_sub(message_count);
-            messages[start..].to_vec()
-        }
-    }
-}
-
-fn summarize_messages(messages: &[SessionMessage]) -> SessionSummary {
-    let mut participants = BTreeSet::new();
-    for message in messages {
-        if let Some(from) = &message.from {
-            participants.insert(from.clone());
-        }
-        if let Some(to) = &message.to {
-            participants.insert(to.clone());
-        }
-    }
-    let text = if participants.is_empty() {
-        format!("{} message(s)", messages.len())
-    } else {
-        format!(
-            "{} message(s); participants: {}",
-            messages.len(),
-            participants.into_iter().collect::<Vec<_>>().join(", ")
-        )
-    };
-    SessionSummary {
-        text,
-        message_count: messages.len(),
-    }
-}
-
-fn parse_cursor(cursor: &SessionCursor, len: usize) -> Result<usize, HostError> {
-    let value = cursor.opaque.parse::<usize>().map_err(|_| {
-        HostError::new(
-            HostErrorCode::InvalidRequest,
-            "invalid session history cursor",
-        )
-        .with_detail("cursor", cursor.opaque.clone())
-    })?;
-    if value > len {
-        return Err(HostError::new(
-            HostErrorCode::InvalidRequest,
-            "session history cursor is beyond the end of the history",
-        )
-        .with_detail("cursor", cursor.opaque.clone())
-        .with_detail("message_count", len.to_string()));
-    }
-    Ok(value)
 }
 
 fn invalid_request(message: impl Into<String>) -> HostError {

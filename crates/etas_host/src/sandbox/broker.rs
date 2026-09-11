@@ -116,16 +116,51 @@ impl SandboxBroker {
 
     pub fn snapshot(&self, root: WorkspaceRoot) -> Result<WorkspaceSnapshot, HostError> {
         self.ensure_not_deny_all()?;
+        super::filesystem::ensure_root_allowed(
+            &self.policy.filesystem.read_roots,
+            &root,
+            "snapshot read is not allowed",
+        )?;
         WorkspaceSnapshot::capture(root)
     }
 
     pub fn diff(&self, snapshot: &WorkspaceSnapshot) -> Result<WorkspaceDiff, HostError> {
         self.ensure_not_deny_all()?;
+        super::filesystem::ensure_root_allowed(
+            &self.policy.filesystem.read_roots,
+            snapshot.root(),
+            "snapshot diff read is not allowed",
+        )?;
         snapshot.diff_current()
     }
 
-    pub fn rollback(&self, snapshot: &WorkspaceSnapshot) -> Result<WorkspaceDiff, HostError> {
+    pub fn rollback(
+        &self,
+        snapshot: &crate::StagedWorkspaceSnapshot,
+    ) -> Result<WorkspaceDiff, HostError> {
         self.ensure_not_deny_all()?;
+        for (roots, message) in [
+            (
+                &self.policy.filesystem.read_roots,
+                "staging rollback read is not allowed",
+            ),
+            (
+                &self.policy.filesystem.write_roots,
+                "staging rollback write is not allowed",
+            ),
+            (
+                &self.policy.filesystem.delete_roots,
+                "staging rollback delete is not allowed",
+            ),
+        ] {
+            super::filesystem::ensure_root_allowed(roots, snapshot.root(), message)?;
+        }
+        if !self.policy.destructive_ops.allow_delete {
+            return Err(HostError::new(
+                HostErrorCode::AuthorityDenied,
+                "staging rollback requires delete authority",
+            ));
+        }
         snapshot.rollback()
     }
 

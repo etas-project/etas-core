@@ -9,6 +9,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         &["std", "http", "codec"],
         "Deterministic HTTP message codec helpers.",
     );
+    let mut enum_owners = std::collections::BTreeMap::new();
     for (name, representation) in [
         (
             "HttpHeader",
@@ -59,15 +60,18 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         if let Some(representation) = representation {
             decl = decl.with_representation(representation);
         }
-        builder.symbol(
+        let symbol = builder.symbol(
             module,
             name,
             StdSymbolKind::Type,
             StdDecl::Type(decl),
             "HTTP codec support type.",
         );
+        if kind == TypeDeclKind::Enum {
+            enum_owners.insert(name, symbol);
+        }
     }
-    builder.symbol(
+    let decode_step = builder.symbol(
         module,
         "HttpDecodeStep",
         StdSymbolKind::Type,
@@ -85,9 +89,22 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         StdDecl::Value(ValueDecl::new("MalformedMessage", "HttpCodecError")),
         "HTTP wire codec parse/validation error variant.",
     );
-    decode_step_constructor(builder, module, "NeedMore", &[]);
-    decode_step_constructor(builder, module, "Complete", &["T", "usize"]);
-    decode_step_constructor(builder, module, "Malformed", &["HttpDecodeFailure"]);
+    builder
+        .enum_constructor(
+            enum_owners["HttpCodecError"],
+            FlowDecl::pure("MalformedMessage", &[], "std.http.codec.HttpCodecError"),
+            "HTTP wire codec error variant.",
+        )
+        .expect("registered HTTP enum");
+    decode_step_constructor(builder, module, decode_step, "NeedMore", &[]);
+    decode_step_constructor(builder, module, decode_step, "Complete", &["T", "usize"]);
+    decode_step_constructor(
+        builder,
+        module,
+        decode_step,
+        "Malformed",
+        &["HttpDecodeFailure"],
+    );
     for name in [
         "UnexpectedEof",
         "InvalidLineEnding",
@@ -106,6 +123,13 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         "InvalidChunkTerminator",
         "InvalidTrailer",
     ] {
+        builder
+            .enum_constructor(
+                enum_owners["HttpCodecFailureKind"],
+                FlowDecl::pure(name, &[], "std.http.codec.HttpCodecFailureKind"),
+                "Incremental HTTP codec failure kind.",
+            )
+            .expect("registered HTTP enum");
         builder.symbol(
             module,
             name,
@@ -182,21 +206,34 @@ pub fn register(builder: &mut StdRegistryBuilder) {
 fn decode_step_constructor(
     builder: &mut StdRegistryBuilder,
     module: crate::StdModuleId,
+    owner: crate::StdSymbolId,
     name: &str,
     params: &[&str],
 ) {
+    let declaration = FlowDecl {
+        name: name.into(),
+        type_params: vec![crate::StdGenericParam::new("T")],
+        params: params.iter().map(|param| StdType::parse(param)).collect(),
+        output: StdType::NamedApplied {
+            name: "std.http.codec.HttpDecodeStep".into(),
+            args: vec![StdType::Var("T".into())],
+        },
+        public_effects: Vec::new(),
+        requested_actions: Vec::new(),
+        source_method: None,
+    };
+    builder
+        .enum_constructor(
+            owner,
+            declaration.clone(),
+            "Incremental HTTP decode result constructor.",
+        )
+        .expect("registered HTTP enum");
     builder.symbol(
         module,
         name,
         StdSymbolKind::Constructor,
-        StdDecl::Flow(FlowDecl::with_type_params_actions(
-            name,
-            &[crate::StdGenericParam::new("T")],
-            params,
-            "HttpDecodeStep[T]",
-            &[],
-            &[],
-        )),
+        StdDecl::Flow(declaration),
         "Incremental HTTP decode result constructor.",
     );
 }

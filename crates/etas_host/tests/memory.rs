@@ -1,8 +1,7 @@
 use etas_host::{
     AuthorityContext, HostErrorCode, HostRequestId, HostValue, InMemoryMemoryClient, MemoryClient,
     MemoryOperation, MemoryOrderKey, MemoryQuery, MemoryRegionRef, MemoryRequest, MemoryResult,
-    MemoryVersion, MemoryWriteMode, SqliteMemoryClient, StoreRef, TestWorkspace, TraceContext,
-    TraceId,
+    SqliteMemoryClient, StoreRef, TestWorkspace, TraceContext, TraceId, WriteCondition,
 };
 
 fn store() -> StoreRef {
@@ -40,22 +39,16 @@ async fn sqlite_memory_persists_values_across_clients() {
                     "summary".to_owned(),
                     HostValue::String("stored".to_owned()),
                 )]),
-                expected: None,
-                mode: MemoryWriteMode::Put,
+                condition: WriteCondition::Any,
             },
         ))
         .await
         .expect("write should execute")
         .result
         .expect("write should succeed");
-    assert_eq!(
-        write,
-        MemoryResult::Written {
-            version: MemoryVersion {
-                opaque: "1".to_owned()
-            }
-        }
-    );
+    let MemoryResult::Written { version } = write else {
+        panic!("expected written")
+    };
 
     let second = SqliteMemoryClient::open(&db).expect("sqlite memory should reopen");
     let read = second
@@ -76,9 +69,7 @@ async fn sqlite_memory_persists_values_across_clients() {
                 "summary".to_owned(),
                 HostValue::String("stored".to_owned())
             )]),
-            version: MemoryVersion {
-                opaque: "1".to_owned()
-            },
+            version,
         }
     );
 }
@@ -88,30 +79,45 @@ async fn sqlite_memory_reports_optimistic_version_conflict() {
     let workspace = TestWorkspace::create("sqlite-memory-conflict").expect("workspace");
     let client =
         SqliteMemoryClient::open(workspace.path().join("memory.sqlite")).expect("sqlite memory");
-    client
+    let first = client
         .execute(request(
             1,
             MemoryOperation::Put {
                 key: HostValue::String("draft".to_owned()),
                 value: HostValue::String("v1".to_owned()),
-                expected: None,
-                mode: MemoryWriteMode::Put,
+                condition: WriteCondition::Any,
             },
         ))
         .await
         .expect("write should execute")
         .result
         .expect("write should succeed");
+    let MemoryResult::Written { version: current } = first else {
+        panic!("expected written")
+    };
+    let other = client
+        .execute(request(
+            2,
+            MemoryOperation::Put {
+                key: HostValue::String("other".into()),
+                value: HostValue::Unit,
+                condition: WriteCondition::Any,
+            },
+        ))
+        .await
+        .unwrap()
+        .result
+        .unwrap();
+    let MemoryResult::Written { version: stale } = other else {
+        panic!("expected written")
+    };
     let conflict = client
         .execute(request(
             2,
             MemoryOperation::Put {
                 key: HostValue::String("draft".to_owned()),
                 value: HostValue::String("v2".to_owned()),
-                expected: Some(MemoryVersion {
-                    opaque: "9".to_owned(),
-                }),
-                mode: MemoryWriteMode::Put,
+                condition: WriteCondition::Match(stale),
             },
         ))
         .await
@@ -121,16 +127,8 @@ async fn sqlite_memory_reports_optimistic_version_conflict() {
     let MemoryResult::Conflict(conflict) = conflict else {
         panic!("expected conflict, got {conflict:?}");
     };
-    assert_eq!(
-        conflict.actual,
-        Some(MemoryVersion {
-            opaque: "1".to_owned()
-        })
-    );
-    assert_eq!(
-        conflict.current_value,
-        Some(HostValue::String("v1".to_owned()))
-    );
+    assert_eq!(conflict.actual, Some(current));
+    assert_eq!(conflict.current_value, None);
 }
 
 #[tokio::test]
@@ -145,8 +143,7 @@ async fn sqlite_memory_enforces_insert_and_update_write_modes() {
             MemoryOperation::Put {
                 key: HostValue::String("draft".to_owned()),
                 value: HostValue::String("v1".to_owned()),
-                expected: None,
-                mode: MemoryWriteMode::Insert,
+                condition: WriteCondition::Missing,
             },
         ))
         .await
@@ -161,8 +158,7 @@ async fn sqlite_memory_enforces_insert_and_update_write_modes() {
             MemoryOperation::Put {
                 key: HostValue::String("draft".to_owned()),
                 value: HostValue::String("v2".to_owned()),
-                expected: None,
-                mode: MemoryWriteMode::Insert,
+                condition: WriteCondition::Missing,
             },
         ))
         .await
@@ -177,8 +173,7 @@ async fn sqlite_memory_enforces_insert_and_update_write_modes() {
             MemoryOperation::Put {
                 key: HostValue::String("missing".to_owned()),
                 value: HostValue::String("v1".to_owned()),
-                expected: None,
-                mode: MemoryWriteMode::Update,
+                condition: WriteCondition::Exists,
             },
         ))
         .await
@@ -193,8 +188,7 @@ async fn sqlite_memory_enforces_insert_and_update_write_modes() {
             MemoryOperation::Put {
                 key: HostValue::String("draft".to_owned()),
                 value: HostValue::String("v2".to_owned()),
-                expected: None,
-                mode: MemoryWriteMode::Update,
+                condition: WriteCondition::Exists,
             },
         ))
         .await
@@ -216,8 +210,7 @@ async fn sqlite_memory_scan_pages_stored_entries() {
                 MemoryOperation::Put {
                     key: HostValue::String(key.to_owned()),
                     value: HostValue::String(format!("value-{key}")),
-                    expected: None,
-                    mode: MemoryWriteMode::Put,
+                    condition: WriteCondition::Any,
                 },
             ))
             .await
@@ -257,8 +250,7 @@ async fn sqlite_memory_query_without_predicate_uses_scan_semantics() {
                 MemoryOperation::Put {
                     key: HostValue::String(key.to_owned()),
                     value: HostValue::String(format!("value-{key}")),
-                    expected: None,
-                    mode: MemoryWriteMode::Put,
+                    condition: WriteCondition::Any,
                 },
             ))
             .await
@@ -301,8 +293,7 @@ async fn sqlite_memory_query_predicate_filters_key_or_value() {
                 MemoryOperation::Put {
                     key: HostValue::String(key.to_owned()),
                     value: HostValue::String(value.to_owned()),
-                    expected: None,
-                    mode: MemoryWriteMode::Put,
+                    condition: WriteCondition::Any,
                 },
             ))
             .await
@@ -349,8 +340,7 @@ async fn sqlite_memory_vector_search_ranks_embedding_field() {
                 MemoryOperation::Put {
                     key: HostValue::String(key.to_owned()),
                     value: paper_record(title, embedding),
-                    expected: None,
-                    mode: MemoryWriteMode::Put,
+                    condition: WriteCondition::Any,
                 },
             ))
             .await
@@ -390,8 +380,7 @@ async fn in_memory_query_without_predicate_uses_scan_semantics() {
                 MemoryOperation::Put {
                     key: HostValue::String(key.to_owned()),
                     value: HostValue::String(format!("value-{key}")),
-                    expected: None,
-                    mode: MemoryWriteMode::Put,
+                    condition: WriteCondition::Any,
                 },
             ))
             .await
@@ -431,8 +420,7 @@ async fn in_memory_enforces_insert_and_update_write_modes() {
             MemoryOperation::Put {
                 key: HostValue::String("draft".to_owned()),
                 value: HostValue::String("v1".to_owned()),
-                expected: None,
-                mode: MemoryWriteMode::Insert,
+                condition: WriteCondition::Missing,
             },
         ))
         .await
@@ -447,8 +435,7 @@ async fn in_memory_enforces_insert_and_update_write_modes() {
             MemoryOperation::Put {
                 key: HostValue::String("draft".to_owned()),
                 value: HostValue::String("v2".to_owned()),
-                expected: None,
-                mode: MemoryWriteMode::Insert,
+                condition: WriteCondition::Missing,
             },
         ))
         .await
@@ -463,8 +450,7 @@ async fn in_memory_enforces_insert_and_update_write_modes() {
             MemoryOperation::Put {
                 key: HostValue::String("missing".to_owned()),
                 value: HostValue::String("v1".to_owned()),
-                expected: None,
-                mode: MemoryWriteMode::Update,
+                condition: WriteCondition::Exists,
             },
         ))
         .await
@@ -484,8 +470,7 @@ async fn in_memory_query_predicate_filters_key_or_value() {
                 MemoryOperation::Put {
                     key: HostValue::String(key.to_owned()),
                     value: HostValue::String(value.to_owned()),
-                    expected: None,
-                    mode: MemoryWriteMode::Put,
+                    condition: WriteCondition::Any,
                 },
             ))
             .await
@@ -531,8 +516,7 @@ async fn in_memory_vector_search_ranks_embedding_field_and_applies_filter() {
                 MemoryOperation::Put {
                     key: HostValue::String(key.to_owned()),
                     value: paper_record(title, embedding),
-                    expected: None,
-                    mode: MemoryWriteMode::Put,
+                    condition: WriteCondition::Any,
                 },
             ))
             .await

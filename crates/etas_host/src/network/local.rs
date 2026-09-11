@@ -24,7 +24,11 @@ impl LocalTcpClient {
     async fn execute_request(
         &self,
         request: TcpConnectRequest,
+        operation: Option<&crate::execution::OperationContext>,
     ) -> Result<TcpConnectResponse, HostError> {
+        if let Some(operation) = operation {
+            operation.signal().check()?;
+        }
         match &request.operation {
             TcpConnectOperation::Connect { endpoint } => {
                 let broker = SandboxBroker::new(request.authority.sandbox.clone());
@@ -36,7 +40,8 @@ impl LocalTcpClient {
                         result: Err(error),
                     });
                 }
-                let deadlines = OperationDeadlines::new(&request.budget, None);
+                let deadlines =
+                    OperationDeadlines::new(&request.budget, None).with_operation(operation);
                 let resolved = await_io(
                     tokio::net::lookup_host((endpoint.host.as_str(), endpoint.port)),
                     None,
@@ -75,7 +80,12 @@ impl LocalTcpClient {
                             stream = Some(connected);
                             break;
                         }
-                        Err(error) if error.code == HostErrorCode::BudgetExceeded => {
+                        Err(error)
+                            if matches!(
+                                error.code,
+                                HostErrorCode::BudgetExceeded | HostErrorCode::Cancelled
+                            ) =>
+                        {
                             return Ok(TcpConnectResponse {
                                 id: request.id,
                                 result: Err(error.with_detail("address", address.to_string())),
@@ -120,12 +130,28 @@ impl LocalTcpClient {
                         });
                     }
                 };
+                if let Some(operation) = operation {
+                    self.streams.own_stream(&handle, operation).await?;
+                }
                 Ok(TcpConnectResponse {
                     id: request.id,
                     result: Ok(TcpStreamRef::issued(handle, origin)),
                 })
             }
         }
+    }
+
+    pub async fn execute_scoped(
+        &self,
+        request: TcpConnectRequest,
+        operation: &crate::execution::OperationContext,
+    ) -> Result<TcpConnectResponse, HostError> {
+        let client = self.clone();
+        operation
+            .supervise(move |context| async move {
+                client.execute_request(request, Some(&context)).await
+            })
+            .await
     }
 }
 
@@ -135,7 +161,7 @@ impl TcpClient for LocalTcpClient {
         Pin<Box<dyn Future<Output = Result<TcpConnectResponse, Self::Error>> + Send + 'a>>;
 
     fn execute(&self, request: TcpConnectRequest) -> Self::ExecuteFuture<'_> {
-        Box::pin(self.execute_request(request))
+        Box::pin(self.execute_request(request, None))
     }
 }
 

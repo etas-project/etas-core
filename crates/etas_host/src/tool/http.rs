@@ -48,10 +48,22 @@ impl HttpToolProtocolAdapter {
     pub(crate) async fn invoke_request(
         &self,
         request: ToolRequest,
+        operation: Option<&crate::execution::OperationContext>,
     ) -> Result<ToolResponse, HostError> {
         let id = request.id;
         let body = host_value_to_json(&request.args)?.to_string();
-        let response = self.transport.send_json(&self.path, body).await?;
+        let response = match operation {
+            Some(operation) => {
+                self.transport
+                    .send_json_scoped(&self.path, body, request.budget.deadline()?, operation)
+                    .await?
+            }
+            None => {
+                self.transport
+                    .send_json_with_deadline(&self.path, body, request.budget.deadline()?)
+                    .await?
+            }
+        };
         if !(200..300).contains(&response.status) {
             return Err(HostError::new(
                 HostErrorCode::ToolRejected,
@@ -71,6 +83,19 @@ impl HttpToolProtocolAdapter {
             result: Ok(host_json_to_value(result_json)?),
         })
     }
+
+    pub async fn invoke_scoped(
+        &self,
+        request: ToolRequest,
+        operation: &crate::execution::OperationContext,
+    ) -> Result<ToolResponse, HostError> {
+        let client = self.clone();
+        operation
+            .supervise(move |context| async move {
+                client.invoke_request(request, Some(&context)).await
+            })
+            .await
+    }
 }
 
 impl ToolClient for HttpToolProtocolAdapter {
@@ -79,6 +104,6 @@ impl ToolClient for HttpToolProtocolAdapter {
         Pin<Box<dyn Future<Output = Result<ToolResponse, Self::Error>> + Send + 'a>>;
 
     fn invoke(&self, request: ToolRequest) -> Self::InvokeFuture<'_> {
-        Box::pin(async move { self.invoke_request(request).await })
+        Box::pin(async move { self.invoke_request(request, None).await })
     }
 }
