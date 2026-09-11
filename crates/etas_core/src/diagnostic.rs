@@ -195,6 +195,8 @@ pub enum NameDiagnosticCode {
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TypeDiagnosticCode {
+    NonExhaustiveMatch,
+    RedundantMatchArm,
     UnknownType,
     Mismatch,
     TypeMismatch,
