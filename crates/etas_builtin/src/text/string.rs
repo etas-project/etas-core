@@ -52,17 +52,21 @@ pub fn join(args: &[BuiltinValue]) -> Result<BuiltinValue, BuiltinError> {
             actual: args[1].type_tag(),
         });
     };
-    let mut rendered = Vec::with_capacity(parts.len());
-    for part in parts {
+    let rendered = parts.iter().map(|part| {
         let BuiltinValue::String(value) = part else {
             return Err(BuiltinError::TypeMismatch {
                 expected: BuiltinTypeTag::String,
                 actual: part.type_tag(),
             });
         };
-        rendered.push(value.as_str());
-    }
-    Ok(BuiltinValue::String(rendered.join(separator)))
+        Ok(value.as_str())
+    });
+    super::join::join_projected(rendered, separator)
+        .map(BuiltinValue::String)
+        .map_err(|error| match error {
+            super::join::JoinError::Projection(error) => error,
+            super::join::JoinError::OutputTooLarge => BuiltinError::NumericOverflow,
+        })
 }
 
 pub fn to_string_i32(args: &[BuiltinValue]) -> Result<BuiltinValue, BuiltinError> {
