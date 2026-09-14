@@ -6,7 +6,7 @@ use crate::{
     AuthConfig, HostError, HostErrorCode, HttpTransport, ModelClient, ModelContent, ModelMessage,
     ModelProviderCapabilities, ModelRequest, ModelResponse, ModelRole, ModelToolCall,
     ModelToolChoice, ModelUsage, PrivateResolutionPolicy, RetryPolicy, TransportTimeoutPolicy,
-    host_json_to_value, host_value_to_json,
+    host_json_to_value, host_value_to_json_string,
 };
 
 use super::{
@@ -288,7 +288,7 @@ fn encode_anthropic_tool_result_message(message: &ModelMessage) -> Result<Value,
                 .iter()
                 .map(|content| match content {
                     ModelContent::Text(text) => Ok(text.clone()),
-                    ModelContent::Value(value) => Ok(host_value_to_json(value)?.to_string()),
+                    ModelContent::Value(value) => host_value_to_json_string(value),
                 })
                 .collect::<Result<Vec<_>, HostError>>()?
                 .join("\n"),

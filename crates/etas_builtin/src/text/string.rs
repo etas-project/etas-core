@@ -1,64 +1,41 @@
+use super::query::TextQuery;
+use super::transform::TextTransform;
 use crate::{BuiltinError, BuiltinTypeTag, BuiltinValue, error::expect_arity};
 
 pub fn trim(args: &[BuiltinValue]) -> Result<BuiltinValue, BuiltinError> {
-    unary_string(args, |value| value.trim().to_owned())
+    text_transform(args, TextTransform::Trim)
 }
 
 pub fn len(args: &[BuiltinValue]) -> Result<BuiltinValue, BuiltinError> {
-    unary_string_value(args, |value| BuiltinValue::Usize(value.chars().count()))
+    text_query(args, TextQuery::Len)
 }
 
 pub fn lowercase(args: &[BuiltinValue]) -> Result<BuiltinValue, BuiltinError> {
-    unary_string(args, str::to_lowercase)
+    text_transform(args, TextTransform::Lowercase)
 }
 
 pub fn uppercase(args: &[BuiltinValue]) -> Result<BuiltinValue, BuiltinError> {
-    unary_string(args, str::to_uppercase)
+    text_transform(args, TextTransform::Uppercase)
 }
 
 pub fn contains(args: &[BuiltinValue]) -> Result<BuiltinValue, BuiltinError> {
-    binary_string_bool(args, |lhs, rhs| lhs.contains(rhs))
+    text_query(args, TextQuery::Contains)
 }
 
 pub fn starts_with(args: &[BuiltinValue]) -> Result<BuiltinValue, BuiltinError> {
-    binary_string_bool(args, |lhs, rhs| lhs.starts_with(rhs))
+    text_query(args, TextQuery::StartsWith)
 }
 
 pub fn ends_with(args: &[BuiltinValue]) -> Result<BuiltinValue, BuiltinError> {
-    binary_string_bool(args, |lhs, rhs| lhs.ends_with(rhs))
+    text_query(args, TextQuery::EndsWith)
 }
 
 pub fn lines(args: &[BuiltinValue]) -> Result<BuiltinValue, BuiltinError> {
-    unary_string_value(args, |value| {
-        BuiltinValue::Array(
-            value
-                .lines()
-                .map(|line| BuiltinValue::String(line.to_owned()))
-                .collect(),
-        )
-    })
+    text_transform(args, TextTransform::Lines)
 }
 
 pub fn split(args: &[BuiltinValue]) -> Result<BuiltinValue, BuiltinError> {
-    expect_arity(args, 2)?;
-    let BuiltinValue::String(value) = &args[0] else {
-        return Err(BuiltinError::TypeMismatch {
-            expected: BuiltinTypeTag::String,
-            actual: args[0].type_tag(),
-        });
-    };
-    let BuiltinValue::String(separator) = &args[1] else {
-        return Err(BuiltinError::TypeMismatch {
-            expected: BuiltinTypeTag::String,
-            actual: args[1].type_tag(),
-        });
-    };
-    Ok(BuiltinValue::Array(
-        value
-            .split(separator)
-            .map(|part| BuiltinValue::String(part.to_owned()))
-            .collect(),
-    ))
+    text_transform(args, TextTransform::Split)
 }
 
 pub fn join(args: &[BuiltinValue]) -> Result<BuiltinValue, BuiltinError> {
@@ -97,51 +74,42 @@ pub fn to_string_usize(args: &[BuiltinValue]) -> Result<BuiltinValue, BuiltinErr
 }
 
 pub fn parse_i32(args: &[BuiltinValue]) -> Result<BuiltinValue, BuiltinError> {
-    unary_string_value(args, |value| match value.parse::<i32>() {
-        Ok(parsed) => BuiltinValue::ResultOk(Box::new(BuiltinValue::I32(parsed))),
-        Err(error) => BuiltinValue::ResultErr(Box::new(BuiltinValue::String(error.to_string()))),
-    })
+    text_query(args, TextQuery::ParseI32)
 }
 
-fn unary_string(
+fn text_transform(
     args: &[BuiltinValue],
-    op: impl FnOnce(&str) -> String,
+    transform: TextTransform,
 ) -> Result<BuiltinValue, BuiltinError> {
-    unary_string_value(args, |value| BuiltinValue::String(op(value)))
-}
-
-fn unary_string_value(
-    args: &[BuiltinValue],
-    op: impl FnOnce(&str) -> BuiltinValue,
-) -> Result<BuiltinValue, BuiltinError> {
-    expect_arity(args, 1)?;
-    match &args[0] {
-        BuiltinValue::String(value) => Ok(op(value)),
-        other => Err(BuiltinError::TypeMismatch {
-            expected: BuiltinTypeTag::String,
-            actual: other.type_tag(),
-        }),
+    expect_arity(args, transform.arity())?;
+    let mut borrowed = [""; 2];
+    for (slot, arg) in borrowed.iter_mut().zip(args) {
+        let BuiltinValue::String(value) = arg else {
+            return Err(BuiltinError::TypeMismatch {
+                expected: BuiltinTypeTag::String,
+                actual: arg.type_tag(),
+            });
+        };
+        *slot = value;
     }
+    transform
+        .evaluate(&borrowed[..args.len()])
+        .map(|value| value.into_owned())
 }
 
-fn binary_string_bool(
-    args: &[BuiltinValue],
-    op: impl FnOnce(&str, &str) -> bool,
-) -> Result<BuiltinValue, BuiltinError> {
-    expect_arity(args, 2)?;
-    let BuiltinValue::String(lhs) = &args[0] else {
-        return Err(BuiltinError::TypeMismatch {
-            expected: BuiltinTypeTag::String,
-            actual: args[0].type_tag(),
-        });
-    };
-    let BuiltinValue::String(rhs) = &args[1] else {
-        return Err(BuiltinError::TypeMismatch {
-            expected: BuiltinTypeTag::String,
-            actual: args[1].type_tag(),
-        });
-    };
-    Ok(BuiltinValue::Bool(op(lhs, rhs)))
+fn text_query(args: &[BuiltinValue], query: TextQuery) -> Result<BuiltinValue, BuiltinError> {
+    expect_arity(args, query.arity())?;
+    let mut borrowed = [""; 2];
+    for (slot, arg) in borrowed.iter_mut().zip(args) {
+        let BuiltinValue::String(value) = arg else {
+            return Err(BuiltinError::TypeMismatch {
+                expected: BuiltinTypeTag::String,
+                actual: arg.type_tag(),
+            });
+        };
+        *slot = value;
+    }
+    query.evaluate(&borrowed[..args.len()])
 }
 
 fn unary_integer_to_string(

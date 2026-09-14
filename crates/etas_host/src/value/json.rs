@@ -4,6 +4,9 @@ use serde_json::{Number, Value};
 
 use crate::{HostError, HostErrorCode, HostJsonValue, HostValue};
 
+mod writer;
+pub use writer::{host_value_to_json_string, project_to_json_string};
+
 pub fn host_value_to_json(value: &HostValue) -> Result<Value, HostError> {
     match value {
         HostValue::Unit => Ok(Value::Null),

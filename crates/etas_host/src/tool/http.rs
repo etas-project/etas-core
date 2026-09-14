@@ -2,7 +2,7 @@ use std::{future::Future, pin::Pin};
 
 use crate::{
     HostError, HostErrorCode, HttpTransport, PrivateResolutionPolicy, ToolClient, ToolRequest,
-    ToolResponse, host_json_to_value, host_value_to_json,
+    ToolResponse, host_json_to_value, host_value_to_json_string,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -51,7 +51,7 @@ impl HttpToolProtocolAdapter {
         operation: Option<&crate::execution::OperationContext>,
     ) -> Result<ToolResponse, HostError> {
         let id = request.id;
-        let body = host_value_to_json(&request.args)?.to_string();
+        let body = host_value_to_json_string(&request.args)?;
         let response = match operation {
             Some(operation) => {
                 self.transport

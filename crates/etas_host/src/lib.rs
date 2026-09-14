@@ -107,5 +107,5 @@ pub use transport::{
 };
 pub use value::{
     HostFieldSchema, HostJsonValue, HostSchema, HostValue, HostValueCodec, HostVariantSchema,
-    host_json_to_value, host_value_to_json,
+    host_json_to_value, host_value_to_json, host_value_to_json_string,
 };

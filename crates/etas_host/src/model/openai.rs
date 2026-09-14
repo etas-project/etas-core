@@ -6,7 +6,7 @@ use crate::{
     AuthConfig, HostError, HostErrorCode, HostValue, HttpTransport, ModelClient, ModelContent,
     ModelMessage, ModelProviderCapabilities, ModelRequest, ModelResponse, ModelRole, ModelToolCall,
     ModelToolChoice, ModelUsage, PrivateResolutionPolicy, RetryPolicy, TransportTimeoutPolicy,
-    host_json_to_value, host_value_to_json,
+    host_json_to_value, host_value_to_json, host_value_to_json_string,
 };
 
 use super::tool_schema::{host_schema_to_json_schema, openai_legacy_functions, openai_tools};
@@ -472,7 +472,7 @@ fn encode_openai_tool_call(call: &ModelToolCall) -> Result<Value, HostError> {
         "type": "function",
         "function": {
             "name": call.tool,
-            "arguments": host_value_to_json(&call.args)?.to_string(),
+            "arguments": host_value_to_json_string(&call.args)?,
         },
     }))
 }
@@ -483,7 +483,7 @@ pub(crate) fn message_text(message: &ModelMessage) -> Result<String, HostError> 
         .iter()
         .map(|content| match content {
             ModelContent::Text(text) => Ok(text.clone()),
-            ModelContent::Value(value) => Ok(host_value_to_json(value)?.to_string()),
+            ModelContent::Value(value) => host_value_to_json_string(value),
         })
         .collect::<Result<Vec<String>, HostError>>()
         .map(|parts| parts.join("\n"))
