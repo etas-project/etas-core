@@ -10,7 +10,7 @@ pub mod value_decl;
 
 pub use effect_decl::{EffectActionArgKind, EffectActionDecl, EffectDecl, StdRuntimeRequirement};
 pub use effect_ref::{StdEffectRef, StdStaticArg};
-pub use flow_decl::{FlowDecl, FlowSourceMethod, FlowSourceMethodKind};
+pub use flow_decl::{FlowDecl, FlowSourceMethod, FlowSourceMethodKind, FlowSourceMethodOperation};
 pub use impl_decl::StdImplFact;
 pub use requirement::{RequirementDecl, RequirementKind, RequirementSemantics, StdLimitKind};
 pub use std_type::{
