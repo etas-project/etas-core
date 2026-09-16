@@ -139,6 +139,20 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             "Return a list element or raise Error[IndexError] when out of range.",
         ),
         (
+            "head",
+            &["List[T]"][..],
+            "Option[T]",
+            None,
+            "Return the first list element, or None for an empty list.",
+        ),
+        (
+            "tail",
+            &["List[T]"][..],
+            "Option[List[T]]",
+            None,
+            "Return the list without its head, or None for an empty list.",
+        ),
+        (
             "push",
             &["Array[T]", "T"][..],
             "Array[T]",
