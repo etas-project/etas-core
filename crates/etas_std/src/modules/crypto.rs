@@ -11,7 +11,17 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         &["std", "crypto"],
         "Deterministic and secret-backed cryptographic helpers.",
     );
-    for name in ["Digest", "SecretValue", "CryptoError"] {
+    builder.symbol(
+        module,
+        "Digest",
+        StdSymbolKind::Type,
+        StdDecl::Type(
+            TypeDecl::generic("Digest", &[], TypeDeclKind::Support)
+                .with_representation(StdType::parse("bytes")),
+        ),
+        "Nominal cryptographic digest backed by bytes.",
+    );
+    for name in ["SecretValue", "CryptoError"] {
         builder.symbol(
             module,
             name,
