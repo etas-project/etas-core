@@ -23,11 +23,17 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         ("OrderedMap", &["K", "V"][..]),
         ("OrderedSet", &["T"][..]),
     ] {
+        let declaration = TypeDecl::generic(name, params, TypeDeclKind::Support);
+        let declaration = if matches!(name, "Deque" | "Queue" | "Stack") {
+            declaration.iterable_elements(0)
+        } else {
+            declaration
+        };
         let symbol = builder.symbol(
             module,
             name,
             StdSymbolKind::Type,
-            StdDecl::Type(TypeDecl::generic(name, params, TypeDeclKind::Support)),
+            StdDecl::Type(declaration),
             "Standard generic collection type.",
         );
         builder.prelude(name, symbol);

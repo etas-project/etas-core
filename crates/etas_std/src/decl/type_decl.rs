@@ -7,6 +7,7 @@ pub struct TypeDecl {
     pub kind: TypeDeclKind,
     pub representation: Option<StdType>,
     pub derivable: bool,
+    pub iterable_element_param: Option<usize>,
 }
 
 impl TypeDecl {
@@ -17,6 +18,7 @@ impl TypeDecl {
             kind: TypeDeclKind::Primitive,
             representation: None,
             derivable: false,
+            iterable_element_param: None,
         }
     }
 
@@ -30,6 +32,7 @@ impl TypeDecl {
             kind,
             representation: None,
             derivable: false,
+            iterable_element_param: None,
         }
     }
 
@@ -40,6 +43,11 @@ impl TypeDecl {
 
     pub fn derivable(mut self) -> Self {
         self.derivable = true;
+        self
+    }
+
+    pub fn iterable_elements(mut self, parameter: usize) -> Self {
+        self.iterable_element_param = Some(parameter);
         self
     }
 }
