@@ -129,6 +129,8 @@ impl EffectActionDecl {
 
     pub fn with_effect_args(mut self, effect_args: &[EffectActionArgKind]) -> Self {
         self.effect_args = effect_args.to_vec();
+        // Non-Type selectors may be anonymous. Type selectors must subsequently
+        // name a declared type parameter; registry validation enforces this.
         self.selector_param_names = vec![String::new(); effect_args.len()];
         self
     }

@@ -1216,6 +1216,64 @@ fn registry_rejects_runtime_payload_names_as_static_action_selectors() {
 }
 
 #[test]
+fn registry_distinguishes_anonymous_selectors_from_type_parameter_bindings() {
+    for (kind, name, params, valid) in [
+        (EffectActionArgKind::MemoryPlace, "", vec![], true),
+        (EffectActionArgKind::StringPattern, "", vec![], true),
+        (
+            EffectActionArgKind::StaticResourcePath {
+                ty: "BrowserProfile",
+            },
+            "",
+            vec![],
+            true,
+        ),
+        (EffectActionArgKind::Type, "", vec![], false),
+        (EffectActionArgKind::Type, "Missing", vec![], false),
+        (
+            EffectActionArgKind::Type,
+            "R",
+            vec![StdGenericParam::new("R")],
+            true,
+        ),
+    ] {
+        let mut builder = StdRegistryBuilder::new(StdRegistryVersion::phase1());
+        let effects = builder.module(&["std", "effects"], "effects");
+        builder.symbol(
+            effects,
+            "Probe",
+            StdSymbolKind::Effect,
+            StdDecl::Effect(EffectDecl::standard("Probe", &[])),
+            "probe",
+        );
+        let actions = builder.module(&["std", "effects", "actions", "Probe"], "actions");
+        builder.symbol(
+            actions,
+            "read",
+            StdSymbolKind::EffectAction,
+            StdDecl::EffectAction(
+                EffectActionDecl::new("Probe", "read", &[], "unit")
+                    .with_effect_args(&[kind])
+                    .with_type_params(&params)
+                    .with_selector_param_names(&[name]),
+            ),
+            "read",
+        );
+        let result = builder.try_finish();
+        if valid {
+            result.unwrap();
+        } else {
+            assert!(
+                result
+                    .unwrap_err()
+                    .reason
+                    .contains("must name a declared action generic parameter")
+            );
+        }
+    }
+}
+
+#[test]
 fn registry_rejects_invalid_effect_extension_graphs() {
     let mut missing = StdRegistryBuilder::new(StdRegistryVersion::phase1());
     let module = missing.module(&["std", "effects"], "effects");
