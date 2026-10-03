@@ -48,6 +48,19 @@ impl StdRegistry {
         self.symbols.iter()
     }
 
+    /// Module-level declarations and explicit re-exports, retaining canonical identity.
+    pub fn module_exports(&self, module: StdModuleId) -> impl Iterator<Item = (&str, &StdSymbol)> {
+        let module = self.module(module);
+        self.qualified.iter().filter_map(move |(path, id)| {
+            let module = module?;
+            let (name, parent) = path.split_last()?;
+            if parent != module.path {
+                return None;
+            }
+            Some((name.as_str(), self.symbol(*id)?))
+        })
+    }
+
     pub fn prelude(&self) -> &StdPrelude {
         &self.prelude
     }

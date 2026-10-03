@@ -8,7 +8,6 @@ pub(super) fn register(builder: &mut StdRegistryBuilder, module: crate::StdModul
             TypeDeclKind::Support,
             None,
         ),
-        ("WriteCondition", &[][..], TypeDeclKind::Enum, None),
         (
             "StorageOperationRef",
             &[][..],
@@ -33,7 +32,22 @@ pub(super) fn register(builder: &mut StdRegistryBuilder, module: crate::StdModul
         );
         builder.prelude(name, symbol);
     }
+    let condition = builder.symbol(
+        module,
+        "WriteCondition",
+        StdSymbolKind::Type,
+        StdDecl::Type(TypeDecl::generic("WriteCondition", &[], TypeDeclKind::Enum)),
+        "Conditional mutation requirement.",
+    );
+    builder.prelude("WriteCondition", condition);
     for name in ["Any", "Missing", "Exists"] {
+        builder
+            .enum_constructor(
+                condition,
+                FlowDecl::pure(name, &[], "std.memory.WriteCondition"),
+                "Conditional mutation requirement.",
+            )
+            .expect("WriteCondition owner is registered");
         builder.symbol(
             module,
             name,
@@ -42,17 +56,16 @@ pub(super) fn register(builder: &mut StdRegistryBuilder, module: crate::StdModul
             "Conditional mutation requirement.",
         );
     }
-    builder.symbol(
-        module,
-        "Match",
-        StdSymbolKind::Constructor,
-        StdDecl::Flow(FlowDecl::pure(
-            "Match",
-            &["MemoryVersion"],
-            "WriteCondition",
-        )),
-        "Require the exact backend-issued version.",
-    );
+    let match_constructor = builder
+        .enum_constructor(
+            condition,
+            FlowDecl::pure("Match", &["MemoryVersion"], "std.memory.WriteCondition"),
+            "Require the exact backend-issued version.",
+        )
+        .expect("WriteCondition owner is registered");
+    builder
+        .re_export(module, "Match", match_constructor)
+        .expect("Match module export is unique");
     for (name, params, output, id, fallible) in [
         (
             "prepare_put",
