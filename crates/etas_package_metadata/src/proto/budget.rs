@@ -579,7 +579,7 @@ fn invalid(message: impl Into<String>) -> MetadataArtifactError {
     MetadataArtifactError::invalid(crate::PACKAGE_METADATA_FILE, message)
 }
 
-fn validate_model_action(action: &ActionSignature) -> Result<(), MetadataArtifactError> {
+pub(super) fn validate_model_action(action: &ActionSignature) -> Result<(), MetadataArtifactError> {
     if action.path.is_empty() || action.path.iter().any(String::is_empty) {
         return Err(invalid("action signature path is required"));
     }
@@ -612,9 +612,15 @@ fn validate_model_action(action: &ActionSignature) -> Result<(), MetadataArtifac
             action.path.join(".")
         )));
     }
+    let type_names = action
+        .generic_params
+        .iter()
+        .filter(|param| param.kind == GenericParamKind::Type)
+        .map(|param| param.name.as_str())
+        .collect::<std::collections::BTreeSet<_>>();
     for (kind, name) in action.effect_args.iter().zip(&action.selector_param_names) {
-        if name.is_empty()
-            || matches!(kind, ActionArgKind::Type) && !generic_names.contains(name.as_str())
+        if matches!(kind, ActionArgKind::Type)
+            && (name.is_empty() || !type_names.contains(name.as_str()))
         {
             return Err(invalid(format!(
                 "action signature `{}` selector `{name}` does not name a compatible generic parameter",

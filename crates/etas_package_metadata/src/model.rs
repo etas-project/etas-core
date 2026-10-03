@@ -216,6 +216,8 @@ pub struct ActionSignature {
     pub generic_params: Vec<ActionGenericParam>,
     pub params: Vec<Type>,
     pub effect_args: Vec<ActionArgKind>,
+    // Indexed by selector position. Type selectors name a declared type parameter;
+    // other kinds may have a label or an empty name (anonymous, not a type binding).
     pub selector_param_names: Vec<String>,
     pub selector_defaults: Vec<Option<EffectArg>>,
     pub output: Option<Type>,

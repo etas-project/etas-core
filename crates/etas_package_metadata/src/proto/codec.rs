@@ -8,10 +8,15 @@ use crate::{
 };
 
 use super::budget::{
-    MetadataGraphBudget, validate_package_metadata_graph, validate_proto_package_metadata_graph,
+    MetadataGraphBudget, validate_model_action, validate_package_metadata_graph,
+    validate_proto_package_metadata_graph,
 };
 use super::schema::*;
 use crate::model::*;
+
+#[cfg(test)]
+#[path = "selector_tests.rs"]
+mod selector_tests;
 
 pub(crate) fn package_metadata_to_proto(metadata: &PackageMetadata) -> ProtoPackageGraphSection {
     ProtoPackageGraphSection {
@@ -1360,7 +1365,7 @@ fn action_signature_from_proto(
         returns_never: signature.returns_never,
         visibility: visibility_from_wire(&signature.visibility)?,
     };
-    validate_action_selector_metadata(&signature)?;
+    validate_model_action(&signature)?;
     Ok(signature)
 }
 
@@ -1460,84 +1465,6 @@ fn action_arg_kind_from_proto(
         other => Err(invalid(format!(
             "action argument kind `{other}` is not supported"
         ))),
-    }
-}
-
-fn validate_action_selector_metadata(
-    signature: &ActionSignature,
-) -> Result<(), MetadataArtifactError> {
-    if signature.selector_param_names.len() != signature.effect_args.len() {
-        return Err(invalid(format!(
-            "action signature `{}` selector_param_names length {} does not match effect_args length {}",
-            signature.path.join("."),
-            signature.selector_param_names.len(),
-            signature.effect_args.len()
-        )));
-    }
-    if signature.selector_defaults.len() != signature.effect_args.len() {
-        return Err(invalid(format!(
-            "action signature `{}` selector_defaults length {} does not match effect_args length {}",
-            signature.path.join("."),
-            signature.selector_defaults.len(),
-            signature.effect_args.len()
-        )));
-    }
-    let generic_names = signature
-        .generic_params
-        .iter()
-        .map(|param| param.name.as_str())
-        .collect::<std::collections::BTreeSet<_>>();
-    if generic_names.len() != signature.generic_params.len() {
-        return Err(invalid(format!(
-            "action signature `{}` contains duplicate generic parameter names",
-            signature.path.join(".")
-        )));
-    }
-    for (kind, name) in signature
-        .effect_args
-        .iter()
-        .zip(&signature.selector_param_names)
-    {
-        if matches!(kind, ActionArgKind::Type)
-            && (name.is_empty() || !generic_names.contains(name.as_str()))
-        {
-            return Err(invalid(format!(
-                "action signature `{}` type selector `{name}` does not name a declared generic parameter",
-                signature.path.join(".")
-            )));
-        }
-    }
-    for (index, (kind, default)) in signature
-        .effect_args
-        .iter()
-        .zip(&signature.selector_defaults)
-        .enumerate()
-    {
-        let Some(default) = default else {
-            continue;
-        };
-        if !effect_arg_matches_action_arg_kind(default, kind) {
-            return Err(invalid(format!(
-                "action signature `{}` selector default at index {index} does not match selector kind",
-                signature.path.join(".")
-            )));
-        }
-    }
-    Ok(())
-}
-
-fn effect_arg_matches_action_arg_kind(arg: &EffectArg, kind: &ActionArgKind) -> bool {
-    if matches!(arg.kind, EffectArgKind::Wildcard) {
-        return true;
-    }
-    match kind {
-        ActionArgKind::Type => matches!(arg.kind, EffectArgKind::Type),
-        ActionArgKind::MemoryPlace => matches!(arg.kind, EffectArgKind::Path),
-        ActionArgKind::StaticResourcePath { .. } => matches!(arg.kind, EffectArgKind::Path),
-        ActionArgKind::StringPattern => matches!(
-            arg.kind,
-            EffectArgKind::String | EffectArgKind::Int | EffectArgKind::Path
-        ),
     }
 }
 
