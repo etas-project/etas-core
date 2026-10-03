@@ -119,6 +119,35 @@ impl StdRegistryBuilder {
         self.registry.prelude_mut().insert(name, symbol);
     }
 
+    pub fn re_export(
+        &mut self,
+        module: StdModuleId,
+        name: &str,
+        symbol: StdSymbolId,
+    ) -> Result<(), StdRegistryValidationError> {
+        let invalid = |reason: &str| StdRegistryValidationError {
+            symbol: name.into(),
+            reason: reason.into(),
+        };
+        let module = self
+            .registry
+            .module(module)
+            .ok_or_else(|| invalid("re-export module is not registered"))?;
+        if name.is_empty() || name.contains('.') {
+            return Err(invalid("re-export name must be a single nonempty segment"));
+        }
+        let mut path = module.path.clone();
+        path.push(name.into());
+        if self.registry.symbol(symbol).is_none() {
+            return Err(invalid("re-export target is not registered"));
+        }
+        if self.registry.qualified.contains_key(&path) {
+            return Err(invalid("re-export path is already registered"));
+        }
+        self.registry.qualified.insert(path, symbol);
+        Ok(())
+    }
+
     pub fn memory_place_result(
         &mut self,
         symbol: StdSymbolId,

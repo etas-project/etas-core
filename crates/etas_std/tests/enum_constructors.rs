@@ -4,6 +4,85 @@ use etas_std::{
 };
 
 #[test]
+fn memory_match_export_preserves_canonical_constructor_identity() {
+    let registry = etas_std::standard_registry();
+    let owner = registry
+        .lookup_qualified(&["std", "memory", "WriteCondition"])
+        .unwrap();
+    let constructor = registry.enum_constructor(owner.id, "Match").unwrap();
+    let exported = registry
+        .lookup_qualified(&["std", "memory", "Match"])
+        .unwrap();
+    assert_eq!(exported.id, constructor.id);
+    assert_eq!(exported.enum_owner, Some(owner.id));
+    assert_eq!(
+        constructor.qualified_path.join("."),
+        "std.memory.WriteCondition.Match"
+    );
+    assert_eq!(registry.enum_constructors(owner.id).count(), 4);
+    assert!(
+        registry
+            .module_exports(owner.module)
+            .any(|(name, symbol)| name == "Match" && symbol.id == constructor.id)
+    );
+    let StdDecl::Flow(signature) = &constructor.decl else {
+        panic!("constructor signature")
+    };
+    assert_eq!(
+        signature.params,
+        vec![etas_std::StdType::Named("MemoryVersion".into())]
+    );
+    assert_eq!(
+        signature.output,
+        etas_std::StdType::Named("std.memory.WriteCondition".into())
+    );
+}
+
+#[test]
+fn registry_re_exports_reject_missing_targets_and_path_collisions() {
+    let mut builder = StdRegistryBuilder::new(StdRegistryVersion::phase1());
+    let module = builder.module(&["std", "test"], "test");
+    let owner = builder.symbol(
+        module,
+        "Outcome",
+        StdSymbolKind::Type,
+        StdDecl::Type(TypeDecl::generic("Outcome", &[], TypeDeclKind::Enum)),
+        "test",
+    );
+    let constructor = builder
+        .enum_constructor(
+            owner,
+            FlowDecl::pure("Done", &[], "std.test.Outcome"),
+            "test",
+        )
+        .unwrap();
+    assert!(
+        builder
+            .re_export(module, "Done", etas_std::StdSymbolId(u32::MAX))
+            .is_err()
+    );
+    assert!(builder.re_export(module, "Outcome", constructor).is_err());
+    assert!(builder.re_export(module, "", constructor).is_err());
+    assert!(builder.re_export(module, "Bad.Path", constructor).is_err());
+    builder.re_export(module, "Done", constructor).unwrap();
+    assert!(builder.re_export(module, "Done", constructor).is_err());
+    builder.symbol(
+        module,
+        "Done",
+        StdSymbolKind::Value,
+        StdDecl::Value(etas_std::ValueDecl::new("Done", "std.test.Outcome")),
+        "test",
+    );
+    assert!(
+        builder
+            .try_finish()
+            .unwrap_err()
+            .reason
+            .contains("re-export")
+    );
+}
+
+#[test]
 fn storage_outcomes_have_distinct_owned_constructors_and_closed_confirmation() {
     let registry = etas_std::standard_registry();
     let write = registry
