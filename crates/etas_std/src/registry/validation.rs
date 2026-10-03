@@ -388,6 +388,16 @@ fn validate_unique_symbols(registry: &StdRegistry) -> Result<(), StdRegistryVali
                 "duplicate qualified standard symbol",
             );
         }
+        if registry
+            .lookup_qualified(&symbol.qualified_path)
+            .map(|found| found.id)
+            != Some(symbol.id)
+        {
+            return invalid(
+                symbol.qualified_path.join("."),
+                "standard declaration conflicts with an existing re-export",
+            );
+        }
     }
     Ok(())
 }
