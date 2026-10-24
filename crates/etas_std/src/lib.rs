@@ -6,10 +6,10 @@ pub mod registry;
 
 pub use decl::{
     EffectActionArgKind, EffectActionDecl, EffectDecl, FlowDecl, FlowSourceMethod,
-    FlowSourceMethodKind, RequirementDecl, RequirementKind, RequirementSemantics, StdDecl,
-    StdEffectRef, StdGenericParam, StdImplFact, StdLimitKind, StdPrimitiveType, StdRecordField,
-    StdRuntimeRequirement, StdSpecRef, StdStaticArg, StdSupportConstraint, StdTrustWrapper,
-    StdType, ToolDecl, TypeDecl, TypeDeclKind, ValueDecl,
+    FlowSourceMethodKind, FlowSourceMethodOperation, RequirementDecl, RequirementKind,
+    RequirementSemantics, StdDecl, StdEffectRef, StdGenericParam, StdImplFact, StdLimitKind,
+    StdPrimitiveType, StdRecordField, StdRuntimeRequirement, StdSpecRef, StdStaticArg,
+    StdSupportConstraint, StdTrustWrapper, StdType, ToolDecl, TypeDecl, TypeDeclKind, ValueDecl,
 };
 pub use intrinsic::{
     IntrinsicDescriptor, IntrinsicDispatch, IntrinsicLatentEffect, IntrinsicMemoryAccess,

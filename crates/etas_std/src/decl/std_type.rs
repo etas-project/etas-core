@@ -234,6 +234,14 @@ impl StdType {
 }
 
 impl StdSupportConstraint {
+    pub const fn spec_path(self) -> &'static [&'static str] {
+        match self {
+            Self::Index => &["std", "core", "Index"],
+            Self::LengthInput => &["std", "collections", "LengthInput"],
+            Self::EmptinessInput => &["std", "collections", "EmptinessInput"],
+        }
+    }
+
     pub const fn source_name(self) -> &'static str {
         match self {
             Self::Index => "Index",

@@ -27,6 +27,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             kind: TypeDeclKind::Support,
             representation: None,
             derivable: false,
+            iterable_element_param: None,
         }),
         "Opaque project-scoped path indexed by its filesystem authority region.",
     );

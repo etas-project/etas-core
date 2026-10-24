@@ -4,7 +4,7 @@ use tokio::process::Command;
 
 use crate::{
     HostError, HostErrorCode, SandboxBroker, ToolClient, ToolRequest, ToolResponse,
-    host_json_to_value, host_value_to_json,
+    host_json_to_value, host_value_to_json_string,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -49,7 +49,7 @@ impl ProcessToolProtocolAdapter {
         SandboxBroker::new(request.authority.sandbox.clone()).check_command(&self.program)?;
         let mut command = Command::new(&self.program);
         command.args(&self.args);
-        let body = host_value_to_json(&request.args)?.to_string();
+        let body = host_value_to_json_string(&request.args)?;
         let output = crate::command::execute_tool_process(
             command,
             body.into_bytes(),

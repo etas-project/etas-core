@@ -46,6 +46,16 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
         match &symbol.decl {
             StdDecl::Type(declaration) => {
                 validate_generic_params(registry, &symbol.qualified_path, &declaration.params)?;
+                if let Some(parameter) = declaration.iterable_element_param
+                    && (declaration.kind != TypeDeclKind::Support
+                        || parameter >= declaration.params.len())
+                {
+                    return Err(StdRegistryValidationError {
+                        symbol: symbol.qualified_path.join("."),
+                        reason: "iterable element must reference a declared support type parameter"
+                            .into(),
+                    });
+                }
                 let generics = generic_names(&declaration.params);
                 if let Some(representation) = &declaration.representation {
                     validate_type_expr(
@@ -69,6 +79,7 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                 }
                 if let Some(method) = &flow.source_method {
                     validate_type_expr(registry, &owner, &method.receiver, &generics)?;
+                    super::checked_index::validate(&owner, flow, method)?;
                 }
                 validate_effect_row(
                     registry,

@@ -23,11 +23,17 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         ("OrderedMap", &["K", "V"][..]),
         ("OrderedSet", &["T"][..]),
     ] {
+        let declaration = TypeDecl::generic(name, params, TypeDeclKind::Support);
+        let declaration = if matches!(name, "Deque" | "Queue" | "Stack") {
+            declaration.iterable_elements(0)
+        } else {
+            declaration
+        };
         let symbol = builder.symbol(
             module,
             name,
             StdSymbolKind::Type,
-            StdDecl::Type(TypeDecl::generic(name, params, TypeDeclKind::Support)),
+            StdDecl::Type(declaration),
             "Standard generic collection type.",
         );
         builder.prelude(name, symbol);
@@ -112,31 +118,45 @@ pub fn register(builder: &mut StdRegistryBuilder) {
     for (name, params, output, error_type, docs) in [
         (
             "get",
-            &["Array[T]", "Index"][..],
+            &["Array[T]", "I"][..],
             "Option[T]",
             None,
             "Return an array element when the checked index is in range.",
         ),
         (
             "get",
-            &["List[T]", "Index"][..],
+            &["List[T]", "I"][..],
             "Option[T]",
             None,
             "Return a list element when the checked index is in range.",
         ),
         (
             "at",
-            &["Array[T]", "Index"][..],
+            &["Array[T]", "I"][..],
             "T",
             Some("IndexError"),
             "Return an array element or raise Error[IndexError] when out of range.",
         ),
         (
             "at",
-            &["List[T]", "Index"][..],
+            &["List[T]", "I"][..],
             "T",
             Some("IndexError"),
             "Return a list element or raise Error[IndexError] when out of range.",
+        ),
+        (
+            "head",
+            &["List[T]"][..],
+            "Option[T]",
+            None,
+            "Return the first list element, or None for an empty list.",
+        ),
+        (
+            "tail",
+            &["List[T]"][..],
+            "Option[List[T]]",
+            None,
+            "Return the list without its head, or None for an empty list.",
         ),
         (
             "push",
@@ -182,14 +202,14 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         ),
         (
             "slice_get",
-            &["Slice[T]", "Index"][..],
+            &["Slice[T]", "I"][..],
             "Option[T]",
             None,
             "Return a slice element when the checked index is in range.",
         ),
         (
             "slice_at",
-            &["Slice[T]", "Index"][..],
+            &["Slice[T]", "I"][..],
             "T",
             Some("IndexError"),
             "Return a slice element or raise Error[IndexError] when out of range.",
@@ -224,16 +244,28 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             "List" => format!("list_{name}"),
             _ => name.to_owned(),
         };
-        let type_params = match receiver_name {
+        let mut type_params = match receiver_name {
             "Map" => vec![StdGenericParam::new("K"), StdGenericParam::new("V")],
             _ => vec![StdGenericParam::new("T")],
         };
+        if matches!(receiver_name, "Array" | "List" | "Slice")
+            && matches!(source_method, "get" | "at")
+        {
+            type_params.push(StdGenericParam::bounded(
+                "I",
+                &[StdSpecRef::new(&["std", "core", "Index"])],
+            ));
+        }
         let effects = error_type
             .map(|error_type| vec![StdEffectRef::typed(&["Error"], StdType::parse(error_type))])
             .unwrap_or_default();
         let decl =
-            FlowDecl::with_type_params_actions(name, &type_params, params, output, &effects, &[])
-                .with_value_method(receiver, source_method);
+            FlowDecl::with_type_params_actions(name, &type_params, params, output, &effects, &[]);
+        let decl = if source_method == "at" {
+            decl.with_checked_index_method(receiver, source_method)
+        } else {
+            decl.with_value_method(receiver, source_method)
+        };
         builder.symbol(
             module,
             &symbol_name,

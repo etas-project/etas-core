@@ -1,4 +1,5 @@
 pub mod builder;
+mod checked_index;
 mod enum_constructor;
 pub mod lookup;
 pub mod module;

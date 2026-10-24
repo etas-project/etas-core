@@ -8,6 +8,49 @@ use etas_std::{
 };
 
 #[test]
+fn registry_declares_generic_checked_index_methods() {
+    let registry = standard_registry();
+    for name in ["array_at", "list_at", "slice_at"] {
+        let symbol = registry
+            .lookup_qualified(&["std", "collections", name])
+            .unwrap();
+        let StdDecl::Flow(flow) = &symbol.decl else {
+            panic!("flow")
+        };
+        assert_eq!(
+            flow.source_method.as_ref().unwrap().operation,
+            etas_std::FlowSourceMethodOperation::CheckedIndex
+        );
+        assert!(flow.type_params.iter().any(|param| param.name == "I"
+            && param.bounds == [StdSpecRef::new(&["std", "core", "Index"])]));
+        assert_eq!(flow.params[1], StdType::Var("I".to_owned()));
+    }
+}
+
+#[test]
+fn registry_rejects_unchecked_index_method_marker() {
+    let mut builder = StdRegistryBuilder::new(StdRegistryVersion::phase1());
+    let module = builder.module(&["std", "probe"], "probe");
+    builder.symbol(
+        module,
+        "bad",
+        StdSymbolKind::Flow,
+        StdDecl::Flow(
+            FlowDecl::pure("bad", &["Array[i32]", "i32"], "i32")
+                .with_checked_index_method("Array[i32]", "bad"),
+        ),
+        "invalid marker",
+    );
+    assert!(
+        builder
+            .try_finish()
+            .unwrap_err()
+            .reason
+            .contains("checked index method requires")
+    );
+}
+
+#[test]
 fn registry_exposes_core_qualified_symbols_and_prelude() {
     let registry = standard_registry();
 

@@ -16,6 +16,14 @@ pub struct FlowSourceMethod {
     pub receiver: StdType,
     pub name: String,
     pub kind: FlowSourceMethodKind,
+    pub operation: FlowSourceMethodOperation,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum FlowSourceMethodOperation {
+    #[default]
+    Call,
+    CheckedIndex,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -80,6 +88,7 @@ impl FlowDecl {
             receiver: StdType::parse(receiver),
             name: name.to_owned(),
             kind: FlowSourceMethodKind::TypeMember,
+            operation: FlowSourceMethodOperation::Call,
         });
         self
     }
@@ -89,6 +98,17 @@ impl FlowDecl {
             receiver: StdType::parse(receiver),
             name: name.to_owned(),
             kind: FlowSourceMethodKind::ValueMethod,
+            operation: FlowSourceMethodOperation::Call,
+        });
+        self
+    }
+
+    pub fn with_checked_index_method(mut self, receiver: &str, name: &str) -> Self {
+        self.source_method = Some(FlowSourceMethod {
+            receiver: StdType::parse(receiver),
+            name: name.to_owned(),
+            kind: FlowSourceMethodKind::ValueMethod,
+            operation: FlowSourceMethodOperation::CheckedIndex,
         });
         self
     }

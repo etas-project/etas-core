@@ -13,6 +13,10 @@ pub fn constant_time_eq(args: &[BuiltinValue]) -> Result<BuiltinValue, BuiltinEr
             actual,
         });
     };
+    Ok(constant_time_eq_borrowed(lhs, rhs))
+}
+
+pub fn constant_time_eq_borrowed(lhs: &[u8], rhs: &[u8]) -> BuiltinValue {
     let mut diff = lhs.len() ^ rhs.len();
     let max_len = lhs.len().max(rhs.len());
     for index in 0..max_len {
@@ -20,7 +24,7 @@ pub fn constant_time_eq(args: &[BuiltinValue]) -> Result<BuiltinValue, BuiltinEr
         let right = rhs.get(index).copied().unwrap_or(0);
         diff |= usize::from(left ^ right);
     }
-    Ok(BuiltinValue::Bool(diff == 0))
+    BuiltinValue::Bool(diff == 0)
 }
 
 pub fn sha256_digest(args: &[BuiltinValue]) -> Result<BuiltinValue, BuiltinError> {
@@ -31,7 +35,11 @@ pub fn sha256_digest(args: &[BuiltinValue]) -> Result<BuiltinValue, BuiltinError
             actual: args[0].type_tag(),
         });
     };
-    Ok(BuiltinValue::Bytes(sha256(body).to_vec()))
+    Ok(sha256_digest_borrowed(body))
+}
+
+pub fn sha256_digest_borrowed(body: &[u8]) -> BuiltinValue {
+    BuiltinValue::Bytes(sha256(body).to_vec())
 }
 
 fn sha256(input: &[u8]) -> [u8; 32] {
@@ -52,16 +60,21 @@ fn sha256(input: &[u8]) -> [u8; 32] {
         0xc67178f2,
     ];
 
-    let mut data = input.to_vec();
-    let bit_len = (data.len() as u64) * 8;
-    data.push(0x80);
-    while data.len() % 64 != 56 {
-        data.push(0);
-    }
-    data.extend_from_slice(&bit_len.to_be_bytes());
+    // Complete blocks are borrowed. Padding needs at most two fixed-size blocks.
+    let remainder = input.len() % 64;
+    let prefix_len = input.len() - remainder;
+    let padded_len = if remainder < 56 { 64 } else { 128 };
+    let mut padding = [0u8; 128];
+    padding[..remainder].copy_from_slice(&input[prefix_len..]);
+    padding[remainder] = 0x80;
+    let bit_len = (input.len() as u64).wrapping_mul(8);
+    padding[padded_len - 8..padded_len].copy_from_slice(&bit_len.to_be_bytes());
 
     let mut h = H0;
-    for chunk in data.chunks_exact(64) {
+    for chunk in input[..prefix_len]
+        .chunks_exact(64)
+        .chain(padding[..padded_len].chunks_exact(64))
+    {
         let mut w = [0u32; 64];
         for (index, bytes) in chunk.chunks_exact(4).enumerate().take(16) {
             w[index] = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
