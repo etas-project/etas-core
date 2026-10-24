@@ -405,7 +405,7 @@ async fn session_resolve_and_dedup_reject_conflicting_content() {
             .unwrap();
         let result = client
             .execute(request(SessionOperation::Resolve {
-                config: config_with_retention("conflict", RetentionPolicy::Forever),
+                config: config_with_retention("conflict", RetentionPolicy::Days(90)),
             }))
             .await
             .unwrap()
@@ -607,7 +607,8 @@ fn request(operation: SessionOperation) -> SessionRequest {
 }
 
 fn config(id: &str) -> SessionConfig {
-    config_with_retention(id, RetentionPolicy::Days(90))
+    // History and pagination fixtures must not expire as the calendar advances.
+    config_with_retention(id, RetentionPolicy::Forever)
 }
 
 fn config_with_retention(id: &str, retention: RetentionPolicy) -> SessionConfig {
