@@ -8,9 +8,9 @@ pub use decl::{
     CodeTypeRole, CompilerActionRole, EffectActionArgKind, EffectActionDecl, EffectDecl, FlowDecl,
     FlowSourceMethod, FlowSourceMethodKind, FlowSourceMethodOperation, RequirementDecl,
     RequirementKind, RequirementSemantics, StdDecl, StdEffectRef, StdGenericParam, StdImplFact,
-    StdLimitKind, StdPrimitiveType, StdRecordField, StdRuntimeRequirement, StdSpecRef,
-    StdStaticArg, StdSupportConstraint, StdTrustWrapper, StdType, StdTypeConstruction, ToolDecl,
-    TypeDecl, TypeDeclKind, ValueDecl,
+    StdIterableItem, StdLimitKind, StdPrimitiveType, StdRecordField, StdRuntimeRequirement,
+    StdSpecRef, StdStaticArg, StdSupportConstraint, StdTrustWrapper, StdType, StdTypeConstruction,
+    ToolDecl, TypeDecl, TypeDeclKind, ValueDecl,
 };
 pub use intrinsic::{
     IntrinsicCompletionSemantics, IntrinsicDescriptor, IntrinsicDispatch, IntrinsicLatentEffect,

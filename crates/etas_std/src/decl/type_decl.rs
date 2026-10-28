@@ -9,7 +9,7 @@ pub struct TypeDecl {
     /// Canonical compiler type for a support declaration, not nominal storage.
     pub canonical_type: Option<StdType>,
     pub derivable: bool,
-    pub iterable_element_param: Option<usize>,
+    pub iterable_item: Option<StdIterableItem>,
     pub code_role: Option<CodeTypeRole>,
     pub construction: StdTypeConstruction,
     /// Read-only projections, not a constructor representation or Host decode schema.
@@ -25,7 +25,7 @@ impl TypeDecl {
             representation: None,
             canonical_type: None,
             derivable: false,
-            iterable_element_param: None,
+            iterable_item: None,
             code_role: None,
             construction: StdTypeConstruction::Public,
             projected_fields: Vec::new(),
@@ -43,7 +43,7 @@ impl TypeDecl {
             representation: None,
             canonical_type: None,
             derivable: false,
-            iterable_element_param: None,
+            iterable_item: None,
             code_role: None,
             construction: StdTypeConstruction::Public,
             projected_fields: Vec::new(),
@@ -66,7 +66,12 @@ impl TypeDecl {
     }
 
     pub fn iterable_elements(mut self, parameter: usize) -> Self {
-        self.iterable_element_param = Some(parameter);
+        self.iterable_item = Some(StdIterableItem::Element { parameter });
+        self
+    }
+
+    pub fn iterable_entries(mut self, key: usize, value: usize) -> Self {
+        self.iterable_item = Some(StdIterableItem::Entry { key, value });
         self
     }
 
@@ -82,6 +87,22 @@ impl TypeDecl {
     pub fn with_projected_fields(mut self, fields: Vec<super::std_type::StdRecordField>) -> Self {
         self.projected_fields = fields;
         self
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+pub enum StdIterableItem {
+    Element { parameter: usize },
+    Entry { key: usize, value: usize },
+}
+
+impl StdIterableItem {
+    pub fn parameters(self) -> impl Iterator<Item = usize> {
+        let (first, second) = match self {
+            Self::Element { parameter } => (parameter, None),
+            Self::Entry { key, value } => (key, Some(value)),
+        };
+        std::iter::once(first).chain(second)
     }
 }
 

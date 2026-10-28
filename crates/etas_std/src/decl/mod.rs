@@ -20,7 +20,8 @@ pub use std_type::{
 };
 pub use tool_decl::ToolDecl;
 pub use type_decl::{
-    CodeTypeRole, StdGenericParam, StdSpecRef, StdTypeConstruction, TypeDecl, TypeDeclKind,
+    CodeTypeRole, StdGenericParam, StdIterableItem, StdSpecRef, StdTypeConstruction, TypeDecl,
+    TypeDeclKind,
 };
 pub use value_decl::ValueDecl;
 

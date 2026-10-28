@@ -28,7 +28,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             representation: None,
             canonical_type: None,
             derivable: false,
-            iterable_element_param: None,
+            iterable_item: None,
             code_role: None,
             construction: crate::StdTypeConstruction::Public,
             projected_fields: Vec::new(),
