@@ -9,11 +9,19 @@ use crate::modules::registration::{IntrinsicFlowRegistration, register_intrinsic
 pub fn register(builder: &mut StdRegistryBuilder) {
     let module = builder.module(&["std", "host", "command"], "Host command support types.");
     for name in ["Command", "CommandResult", "CommandHandle"] {
+        let declaration = TypeDecl::generic(name, &[], TypeDeclKind::Support);
+        let declaration = if name == "CommandResult" {
+            declaration
+                .runtime_role(crate::RuntimeTypeRole::CommandResult)
+                .intrinsic_only()
+        } else {
+            declaration
+        };
         builder.symbol(
             module,
             name,
             StdSymbolKind::Type,
-            StdDecl::Type(TypeDecl::generic(name, &[], TypeDeclKind::Support)),
+            StdDecl::Type(declaration),
             "Host command support type.",
         );
     }
