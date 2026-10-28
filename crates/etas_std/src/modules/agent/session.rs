@@ -13,7 +13,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         "Session and conversation support declarations.",
     );
     for (name, representation) in [
-        ("SessionId", None),
+        ("SessionId", Some(StdType::parse("string"))),
         (
             "SessionConfig",
             Some(record(&[
@@ -35,15 +35,16 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             "SessionSummary",
             Some(record(&[("text", "string"), ("message_count", "usize")])),
         ),
-        ("ContextPolicy", None),
-        ("RetentionPolicy", None),
     ] {
         let mut decl = TypeDecl::generic(name, &[], TypeDeclKind::Support);
         if let Some(representation) = representation {
             decl = decl.with_representation(representation);
         }
-        if name == "Conversation" {
-            decl = decl.runtime_role(crate::RuntimeTypeRole::Conversation);
+        match name {
+            "Conversation" => decl = decl.runtime_role(crate::RuntimeTypeRole::Conversation),
+            "SessionConfig" => decl = decl.runtime_role(crate::RuntimeTypeRole::SessionConfig),
+            "SessionId" => decl = decl.runtime_role(crate::RuntimeTypeRole::SessionId),
+            _ => {}
         }
         let symbol = builder.symbol(
             module,
@@ -53,6 +54,40 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             "Session support type.",
         );
         builder.prelude(name, symbol);
+    }
+    for (name, role, variants) in [
+        (
+            "ContextPolicy",
+            crate::RuntimeTypeRole::ContextPolicy,
+            &[
+                ("All", &[][..]),
+                ("LastTurns", &["usize"][..]),
+                ("SummaryPlusRecent", &["usize"][..]),
+            ][..],
+        ),
+        (
+            "RetentionPolicy",
+            crate::RuntimeTypeRole::RetentionPolicy,
+            &[("Forever", &[][..]), ("Days", &["usize"][..])][..],
+        ),
+    ] {
+        let owner = builder.symbol(
+            module,
+            name,
+            StdSymbolKind::Type,
+            StdDecl::Type(TypeDecl::generic(name, &[], TypeDeclKind::Enum).runtime_role(role)),
+            "Checked session policy value.",
+        );
+        builder.prelude(name, owner);
+        for (variant, params) in variants {
+            builder
+                .enum_constructor(
+                    owner,
+                    FlowDecl::pure(variant, params, &format!("std.agent.session.{name}")),
+                    "Session policy constructor.",
+                )
+                .expect("session policy owner is registered");
+        }
     }
     history::register(builder, module);
     publication::register(builder, module);

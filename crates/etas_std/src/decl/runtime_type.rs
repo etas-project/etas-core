@@ -28,6 +28,11 @@ pub enum RuntimeTypeRole {
     OrderedSet,
     WorkspacePath,
     MemoryWriteIntent,
+    SessionId,
+    SessionConfig,
+    ContextPolicy,
+    RetentionPolicy,
+    Limit,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
@@ -54,13 +59,26 @@ impl RuntimeTypeRole {
     }
 
     pub(crate) fn accepts_declaration(self, declaration: &super::TypeDecl) -> bool {
-        declaration.kind == super::TypeDeclKind::Support
+        let kind = match self {
+            Self::ContextPolicy | Self::RetentionPolicy | Self::Limit => super::TypeDeclKind::Enum,
+            _ => super::TypeDeclKind::Support,
+        };
+        let representation = match self {
+            Self::SessionId => {
+                declaration.representation == Some(StdType::Primitive(StdPrimitiveType::String))
+            }
+            Self::SessionConfig | Self::Conversation => {
+                matches!(declaration.representation, Some(StdType::Record(_)))
+            }
+            _ => declaration.representation.is_none(),
+        };
+        declaration.kind == kind
             && declaration.params.len() == self.type_parameter_count()
             && declaration.canonical_type.is_none()
             && declaration.code_role.is_none()
             && !declaration.derivable
             && declaration.projected_fields == self.projected_fields()
-            && (declaration.representation.is_none() || self == Self::Conversation)
+            && representation
             && (self != Self::CommandResult
                 || declaration.construction == super::StdTypeConstruction::IntrinsicOnly)
     }
