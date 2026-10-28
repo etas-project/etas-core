@@ -119,6 +119,7 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                 if let Some(descriptor) = &symbol.intrinsic {
                     super::action_forwarder::validate(registry, flow, descriptor)?;
                     super::default_action::validate(registry, flow, descriptor)?;
+                    super::collection::validate(flow, descriptor)?;
                 }
                 validate_generic_params(registry, &symbol.qualified_path, &flow.type_params)?;
                 let generics = generic_names(&flow.type_params);

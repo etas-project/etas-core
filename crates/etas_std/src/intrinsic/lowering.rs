@@ -3,6 +3,7 @@ pub enum LoweringHint {
     None,
     PureBuiltin,
     RuntimeCall,
+    Collection(super::StdCollectionIntrinsic),
     HostBoundary,
     ApprovalBoundary,
     ErrorRaise,

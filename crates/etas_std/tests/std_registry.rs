@@ -8,6 +8,97 @@ use etas_std::{
 };
 
 #[test]
+fn every_collection_operation_has_an_executable_stable_descriptor() {
+    use etas_std::{
+        LoweringHint, StdCollectionIntrinsic, StdCollectionKind as K, StdCollectionOperation as O,
+    };
+    let registry = standard_registry();
+    let mut operations = std::collections::BTreeSet::new();
+    let mut flows = 0;
+    for symbol in registry.symbols().filter(|symbol| {
+        symbol.qualified_path[..symbol.qualified_path.len() - 1] == ["std", "collections"]
+    }) {
+        let StdDecl::Flow(_) = &symbol.decl else {
+            continue;
+        };
+        flows += 1;
+        let descriptor = symbol
+            .intrinsic
+            .as_ref()
+            .expect("exported collection function needs an executable descriptor");
+        match descriptor.lowering {
+            LoweringHint::Collection(operation) => {
+                assert!(operation.is_supported());
+                assert_eq!(descriptor.id, operation.id());
+                assert!(operations.insert(descriptor.id.0));
+                assert_eq!(descriptor.dispatch, IntrinsicDispatch::Runtime);
+            }
+            _ => assert_eq!(descriptor.dispatch, IntrinsicDispatch::PureKernel),
+        }
+    }
+    assert_eq!(flows, 45);
+    assert_eq!(operations.len(), 42);
+    for (kind, operation, expected) in [
+        (K::Array, O::Get, 3000),
+        (K::List, O::Get, 3032),
+        (K::Range, O::Open, 3146),
+        (K::OrderedSet, O::WithCompare, 3329),
+    ] {
+        assert_eq!(StdCollectionIntrinsic { kind, operation }.id().0, expected);
+    }
+}
+
+#[test]
+fn collection_descriptors_reject_signature_and_identity_drift() {
+    use etas_std::{
+        LoweringHint, StdCollectionIntrinsic, StdCollectionKind as K, StdCollectionOperation as O,
+    };
+    let registry = standard_registry();
+    let descriptor = registry
+        .lookup_qualified(&["std", "collections", "array_push"])
+        .unwrap()
+        .intrinsic
+        .as_ref()
+        .unwrap();
+    for corruption in 0..6 {
+        let mut builder = StdRegistryBuilder::new(StdRegistryVersion::phase1());
+        let module = builder.module(&["std", "probe"], "probe");
+        let mut descriptor = descriptor.clone();
+        descriptor.qualified_path = vec!["std".into(), "probe".into(), "push".into()];
+        let mut flow = FlowDecl::pure("push", &["Array[i32]", "i32"], "Array[i32]")
+            .with_value_method("Array[i32]", "push");
+        match corruption {
+            0 => (),
+            1 => descriptor.id.0 += 1,
+            2 => descriptor.dispatch = IntrinsicDispatch::Host,
+            3 => flow.output = StdType::parse("bool"),
+            4 => flow.source_method.as_mut().unwrap().receiver = StdType::parse("List[i32]"),
+            5 => {
+                descriptor.lowering = LoweringHint::Collection(StdCollectionIntrinsic {
+                    kind: K::Array,
+                    operation: O::Closed,
+                })
+            }
+            _ => unreachable!(),
+        }
+        builder.symbol_with_intrinsic(
+            module,
+            "push",
+            StdSymbolKind::Flow,
+            StdDecl::Flow(flow),
+            "probe",
+            Some(descriptor),
+        );
+        let result = builder.try_finish();
+        if corruption == 0 {
+            result.unwrap();
+        } else {
+            assert!(result.unwrap_err().reason.contains("collection descriptor"));
+        }
+    }
+}
+
+#[test]
 fn registry_declares_generic_checked_index_methods() {
     let registry = standard_registry();
     for name in ["array_at", "list_at", "slice_at"] {

@@ -2,6 +2,7 @@ mod action_forwarder;
 pub mod builder;
 mod canonical_type;
 mod checked_index;
+mod collection;
 mod default_action;
 mod enum_constructor;
 pub mod lookup;
