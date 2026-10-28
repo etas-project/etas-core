@@ -58,7 +58,7 @@ pub use model::{
     ModelContent, ModelCostUsage, ModelMessage, ModelName, ModelOptions, ModelProviderCapabilities,
     ModelProviderId, ModelRequest, ModelResponse, ModelRole, ModelToolCall, ModelToolChoice,
     ModelUsage, OmlxRequestOptions, OpenAiProtocolAdapter, OpenAiProviderRequest,
-    OpenAiProviderResponse,
+    OpenAiProviderResponse, OpenAiTypedOutputEncoding,
 };
 pub use network::{
     LocalTcpClient, TcpClient, TcpConnectOperation, TcpConnectRequest, TcpConnectResponse,

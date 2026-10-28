@@ -13,6 +13,9 @@ use super::tool_schema::{host_schema_to_json_schema, openai_legacy_functions, op
 
 const OPENAI_OUTPUT_TOOL: &str = "etas_emit_output";
 
+mod output;
+pub use output::OpenAiTypedOutputEncoding;
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct OpenAiProviderRequest {
     pub base_url: String,
@@ -30,6 +33,7 @@ pub struct OpenAiProtocolAdapter {
     pub transport: HttpTransport,
     pub dialect: OpenAiProviderDialect,
     pub omlx_options: Option<OmlxRequestOptions>,
+    pub typed_output_encoding: Option<OpenAiTypedOutputEncoding>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -61,6 +65,7 @@ impl OpenAiProtocolAdapter {
             base_url,
             dialect: OpenAiProviderDialect::OpenAiTools,
             omlx_options: None,
+            typed_output_encoding: None,
         })
     }
 
@@ -99,6 +104,24 @@ impl OpenAiProtocolAdapter {
         Ok(self)
     }
 
+    pub fn with_typed_output_encoding(
+        mut self,
+        encoding: OpenAiTypedOutputEncoding,
+    ) -> Result<Self, HostError> {
+        output::resolve(self.dialect, Some(encoding))?;
+        self.typed_output_encoding = Some(encoding);
+        Ok(self)
+    }
+
+    pub fn effective_typed_output_encoding(&self) -> Result<OpenAiTypedOutputEncoding, HostError> {
+        output::resolve(self.dialect, self.typed_output_encoding)
+    }
+
+    pub fn provider_capabilities(&self) -> Result<ModelProviderCapabilities, HostError> {
+        self.effective_typed_output_encoding()
+            .map(output::capabilities)
+    }
+
     pub fn capabilities() -> ModelProviderCapabilities {
         Self::capabilities_for_dialect(OpenAiProviderDialect::OpenAiTools)
     }
@@ -112,16 +135,7 @@ impl OpenAiProtocolAdapter {
     }
 
     pub fn capabilities_for_dialect(dialect: OpenAiProviderDialect) -> ModelProviderCapabilities {
-        ModelProviderCapabilities {
-            supports_forced_tool_output: true,
-            supports_json_schema_response_format: !matches!(
-                dialect,
-                OpenAiProviderDialect::LegacyFunctions
-            ),
-            supports_plain_json_text_instruction: true,
-            supports_tool_call_loop: true,
-            supports_required_tool_choice: true,
-        }
+        output::capabilities(output::default_encoding(dialect))
     }
 
     pub fn with_auth(mut self, auth: AuthConfig) -> Self {
@@ -161,6 +175,7 @@ impl OpenAiProtocolAdapter {
             &request,
             self.dialect,
             self.omlx_options.as_ref(),
+            self.typed_output_encoding,
         )?;
         let response = match operation {
             Some(operation) => {
@@ -212,7 +227,9 @@ fn encode_openai_chat_request_with_dialect(
     request: &ModelRequest,
     dialect: OpenAiProviderDialect,
     omlx_options: Option<&OmlxRequestOptions>,
+    typed_output_encoding: Option<OpenAiTypedOutputEncoding>,
 ) -> Result<String, HostError> {
+    let encoding = output::resolve(dialect, typed_output_encoding)?;
     let require_model_tool =
         !request.tools.is_empty() && !matches!(request.tool_choice, ModelToolChoice::Auto);
     let mut messages = request
@@ -261,75 +278,30 @@ fn encode_openai_chat_request_with_dialect(
             metadata_to_json_object(&request.options.metadata)?,
         );
     }
-    if let Some(schema) = &request.response_schema
-        && request.tools.is_empty()
-        && !require_model_tool
+    if request
+        .tools
+        .iter()
+        .any(|tool| tool.tool.name == OPENAI_OUTPUT_TOOL)
     {
-        insert_forced_output_tool(&mut body, schema, dialect)?;
-    } else if !request.tools.is_empty() {
+        return Err(HostError::new(
+            HostErrorCode::InvalidRequest,
+            "application tool name is reserved for typed model output",
+        ));
+    }
+    if !request.tools.is_empty() {
         insert_model_tools(&mut body, request, dialect)?;
     }
     if let Some(schema) = &request.response_schema
         && !require_model_tool
-        && dialect_supports_response_format(dialect)
     {
-        body.insert(
-            "response_format".to_owned(),
-            json!({
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "etas_output",
-                    "strict": true,
-                    "schema": host_schema_to_json_schema(schema)?,
-                },
-            }),
-        );
+        match encoding {
+            OpenAiTypedOutputEncoding::JsonSchema => output::insert_format(&mut body, schema)?,
+            OpenAiTypedOutputEncoding::OutputTool => {
+                output::insert_tool(&mut body, schema, dialect, request.tools.is_empty())?
+            }
+        }
     }
     Ok(Value::Object(body).to_string())
-}
-
-fn insert_forced_output_tool(
-    body: &mut serde_json::Map<String, Value>,
-    schema: &crate::HostSchema,
-    dialect: OpenAiProviderDialect,
-) -> Result<(), HostError> {
-    match dialect {
-        OpenAiProviderDialect::OpenAiTools | OpenAiProviderDialect::OmlxCompatible => {
-            body.insert(
-                "tools".to_owned(),
-                Value::Array(vec![json!({
-                    "type": "function",
-                    "function": {
-                        "name": OPENAI_OUTPUT_TOOL,
-                        "description": "Emit the final Etas agent output.",
-                        "parameters": host_schema_to_json_schema(schema)?,
-                    },
-                })]),
-            );
-            body.insert(
-                "tool_choice".to_owned(),
-                json!({
-                    "type": "function",
-                    "function": { "name": OPENAI_OUTPUT_TOOL },
-                }),
-            );
-        }
-        OpenAiProviderDialect::LegacyFunctions => {
-            body.insert(
-                "functions".to_owned(),
-                Value::Array(vec![json!({
-                    "name": OPENAI_OUTPUT_TOOL,
-                    "description": "Emit the final Etas agent output.",
-                    "parameters": host_schema_to_json_schema(schema)?,
-                })]),
-            );
-            body.insert(
-                "function_call".to_owned(),
-                json!({ "name": OPENAI_OUTPUT_TOOL }),
-            );
-        }
-    }
-    Ok(())
 }
 
 fn insert_model_tools(
@@ -355,10 +327,6 @@ fn insert_model_tools(
         }
     }
     Ok(())
-}
-
-fn dialect_supports_response_format(dialect: OpenAiProviderDialect) -> bool {
-    !matches!(dialect, OpenAiProviderDialect::LegacyFunctions)
 }
 
 fn openai_tool_choice(choice: &ModelToolChoice) -> Result<Option<Value>, HostError> {
@@ -694,9 +662,8 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn openai_request_for_typed_output_uses_forced_output_tool() {
-        let request = ModelRequest {
+    fn typed_request() -> ModelRequest {
+        ModelRequest {
             id: HostRequestId(1),
             provider: None,
             model: ModelName("test-model".to_owned()),
@@ -723,12 +690,42 @@ mod tests {
             },
             trace: TraceContext::root(TraceId(1)),
             budget: ExecutionBudget::default(),
-        };
+        }
+    }
 
+    #[test]
+    fn typed_output_does_not_combine_output_tool_and_json_schema_encodings() {
+        for dialect in [
+            OpenAiProviderDialect::OpenAiTools,
+            OpenAiProviderDialect::OmlxCompatible,
+        ] {
+            let body =
+                encode_openai_chat_request_with_dialect(&typed_request(), dialect, None, None)
+                    .unwrap();
+            let body: Value = serde_json::from_str(&body).unwrap();
+            assert!(
+                !(body.get("tools").is_some() && body.get("response_format").is_some()),
+                "{dialect:?}: {body}"
+            );
+            assert!(body.get("tools").is_none());
+            assert!(body.get("tool_choice").is_none());
+            assert_eq!(body["response_format"]["type"], "json_schema");
+            assert_eq!(body["response_format"]["json_schema"]["strict"], true);
+            assert_eq!(
+                body["response_format"]["json_schema"]["schema"]["properties"]["summary"]["type"],
+                "string"
+            );
+        }
+    }
+
+    #[test]
+    fn openai_request_for_typed_output_uses_forced_output_tool() {
+        let request = typed_request();
         let body = encode_openai_chat_request_with_dialect(
             &request,
             OpenAiProviderDialect::OpenAiTools,
             None,
+            Some(OpenAiTypedOutputEncoding::OutputTool),
         )
         .expect("request should encode");
         let body: Value = serde_json::from_str(&body).expect("encoded request should be JSON");
@@ -744,12 +741,152 @@ mod tests {
             body["tools"][0]["function"]["parameters"]["properties"]["summary"]["type"],
             "string"
         );
-        assert_eq!(body["response_format"]["type"], "json_schema");
-        assert_eq!(
-            body["response_format"]["json_schema"]["schema"]["properties"]["summary"]["type"],
-            "string"
-        );
+        assert!(body.get("response_format").is_none());
         assert!(body.get("chat_template_kwargs").is_none());
+    }
+
+    #[test]
+    fn typed_output_encoding_is_explicit_and_matches_effective_capabilities() {
+        for dialect in [
+            OpenAiProviderDialect::OpenAiTools,
+            OpenAiProviderDialect::OmlxCompatible,
+            OpenAiProviderDialect::LegacyFunctions,
+        ] {
+            for encoding in [
+                OpenAiTypedOutputEncoding::JsonSchema,
+                OpenAiTypedOutputEncoding::OutputTool,
+            ] {
+                let adapter = OpenAiProtocolAdapter::new("https://api.example.com/v1")
+                    .unwrap()
+                    .with_dialect(dialect)
+                    .with_typed_output_encoding(encoding);
+                if dialect == OpenAiProviderDialect::LegacyFunctions
+                    && encoding == OpenAiTypedOutputEncoding::JsonSchema
+                {
+                    assert_eq!(adapter.unwrap_err().code, HostErrorCode::InvalidRequest);
+                    assert!(
+                        encode_openai_chat_request_with_dialect(
+                            &typed_request(),
+                            dialect,
+                            None,
+                            Some(encoding)
+                        )
+                        .is_err()
+                    );
+                    continue;
+                }
+                let adapter = adapter.unwrap();
+                assert_eq!(adapter.effective_typed_output_encoding().unwrap(), encoding);
+                let caps = adapter.provider_capabilities().unwrap();
+                assert_eq!(
+                    caps.supports_json_schema_response_format,
+                    encoding == OpenAiTypedOutputEncoding::JsonSchema
+                );
+                assert_eq!(
+                    caps.supports_forced_tool_output,
+                    encoding == OpenAiTypedOutputEncoding::OutputTool
+                );
+                let body = encode_openai_chat_request_with_dialect(
+                    &typed_request(),
+                    dialect,
+                    None,
+                    Some(encoding),
+                )
+                .unwrap();
+                let body: Value = serde_json::from_str(&body).unwrap();
+                assert_eq!(
+                    body.get("response_format").is_some(),
+                    encoding == OpenAiTypedOutputEncoding::JsonSchema
+                );
+                if encoding == OpenAiTypedOutputEncoding::OutputTool {
+                    let (key, choice, name) = if dialect == OpenAiProviderDialect::LegacyFunctions {
+                        ("functions", "function_call", &body["functions"][0]["name"])
+                    } else {
+                        (
+                            "tools",
+                            "tool_choice",
+                            &body["tools"][0]["function"]["name"],
+                        )
+                    };
+                    assert_eq!(body[key].as_array().unwrap().len(), 1);
+                    assert!(body.get(choice).is_some());
+                    assert_eq!(name, OPENAI_OUTPUT_TOOL);
+                } else {
+                    assert!(body.get("tools").is_none());
+                    assert!(body.get("functions").is_none());
+                    assert_eq!(body["response_format"]["json_schema"]["strict"], true);
+                }
+            }
+        }
+        for value in ["", "both", "plain-json", "JSON_SCHEMA"] {
+            assert_eq!(
+                value.parse::<OpenAiTypedOutputEncoding>().unwrap_err().code,
+                HostErrorCode::InvalidRequest
+            );
+        }
+        for mode in [
+            OpenAiTypedOutputEncoding::JsonSchema,
+            OpenAiTypedOutputEncoding::OutputTool,
+        ] {
+            assert_eq!(
+                mode.as_str().parse::<OpenAiTypedOutputEncoding>().unwrap(),
+                mode
+            );
+        }
+    }
+
+    #[test]
+    fn typed_output_tool_coexists_with_application_tools_without_a_second_encoding() {
+        let mut request = typed_request();
+        request.tools.push(crate::ToolSchema {
+            tool: crate::ToolRef::anonymous_test("lookup"),
+            input: HostSchema::String,
+            output: Some(HostSchema::String),
+        });
+        for dialect in [
+            OpenAiProviderDialect::OpenAiTools,
+            OpenAiProviderDialect::OmlxCompatible,
+        ] {
+            let body = encode_openai_chat_request_with_dialect(
+                &request,
+                dialect,
+                None,
+                Some(OpenAiTypedOutputEncoding::OutputTool),
+            )
+            .unwrap();
+            let body: Value = serde_json::from_str(&body).unwrap();
+            assert_eq!(body["tools"].as_array().unwrap().len(), 2);
+            assert_eq!(body["tools"][0]["function"]["name"], "lookup");
+            assert_eq!(body["tools"][1]["function"]["name"], OPENAI_OUTPUT_TOOL);
+            assert_eq!(body["tool_choice"], "required");
+            assert!(body.get("response_format").is_none());
+        }
+        assert!(
+            encode_openai_chat_request_with_dialect(
+                &request,
+                OpenAiProviderDialect::LegacyFunctions,
+                None,
+                Some(OpenAiTypedOutputEncoding::OutputTool)
+            )
+            .is_err()
+        );
+        request.tools[0].tool.name = OPENAI_OUTPUT_TOOL.into();
+        for encoding in [
+            OpenAiTypedOutputEncoding::JsonSchema,
+            OpenAiTypedOutputEncoding::OutputTool,
+        ] {
+            assert_eq!(
+                encode_openai_chat_request_with_dialect(
+                    &request,
+                    OpenAiProviderDialect::OpenAiTools,
+                    None,
+                    Some(encoding)
+                )
+                .unwrap_err()
+                .code,
+                HostErrorCode::InvalidRequest
+            );
+        }
     }
 
     #[test]
@@ -785,6 +922,7 @@ mod tests {
             Some(&OmlxRequestOptions {
                 enable_thinking: Some(false),
             }),
+            None,
         )
         .expect("oMLX request should encode");
         let body: Value = serde_json::from_str(&body).expect("encoded request should be JSON");
@@ -794,6 +932,7 @@ mod tests {
             &request,
             OpenAiProviderDialect::OmlxCompatible,
             Some(&OmlxRequestOptions::default()),
+            None,
         )
         .expect("oMLX request without an override should encode");
         let body: Value = serde_json::from_str(&body).expect("encoded request should be JSON");
@@ -855,6 +994,7 @@ mod tests {
             &request,
             OpenAiProviderDialect::OpenAiTools,
             None,
+            None,
         )
         .expect("request should encode");
         let body: Value = serde_json::from_str(&body).expect("encoded request should be JSON");
@@ -904,6 +1044,7 @@ mod tests {
         let body = encode_openai_chat_request_with_dialect(
             &request,
             OpenAiProviderDialect::LegacyFunctions,
+            None,
             None,
         )
         .expect("legacy request should encode");
