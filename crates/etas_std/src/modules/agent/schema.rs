@@ -18,6 +18,9 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         if name == "Schema" {
             decl = decl.with_canonical_type(StdType::Schema(Box::new(StdType::Var("T".into()))));
         }
+        if name == "ModelResponse" {
+            decl = decl.runtime_role(crate::RuntimeTypeRole::ModelResponse);
+        }
         let symbol = builder.symbol(
             module,
             name,

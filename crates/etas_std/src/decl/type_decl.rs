@@ -89,7 +89,9 @@ impl TypeDecl {
 
     pub fn runtime_role(mut self, role: super::RuntimeTypeRole) -> Self {
         self.runtime_role = Some(role);
-        self.projected_fields = role.projected_fields();
+        if !role.fields().is_empty() {
+            self.projected_fields = role.projected_fields();
+        }
         self
     }
 

@@ -30,6 +30,19 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             "PriorityQueue" => declaration.iterable_entries(1, 0),
             _ => declaration,
         };
+        let role = match name {
+            "Deque" => Some(crate::RuntimeTypeRole::Deque),
+            "Queue" => Some(crate::RuntimeTypeRole::Queue),
+            "Stack" => Some(crate::RuntimeTypeRole::Stack),
+            "PriorityQueue" => Some(crate::RuntimeTypeRole::PriorityQueue),
+            "OrderedMap" => Some(crate::RuntimeTypeRole::OrderedMap),
+            "OrderedSet" => Some(crate::RuntimeTypeRole::OrderedSet),
+            _ => None,
+        };
+        let declaration = match role {
+            Some(role) => declaration.runtime_role(role),
+            None => declaration,
+        };
         let symbol = builder.symbol(
             module,
             name,

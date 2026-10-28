@@ -1,7 +1,7 @@
 use crate::{
-    IntrinsicDescriptor, IntrinsicDispatch, IntrinsicPurity, LoweringHint, RequirementDecl,
-    StdDecl, StdIntrinsicId, StdLimitKind, StdRegistryBuilder, StdSymbolKind, TypeDecl,
-    TypeDeclKind, intrinsic,
+    FlowDecl, IntrinsicDescriptor, IntrinsicDispatch, IntrinsicPurity, LoweringHint,
+    RequirementDecl, StdDecl, StdIntrinsicId, StdLimitKind, StdRegistryBuilder, StdSymbolKind,
+    TypeDecl, TypeDeclKind, intrinsic,
 };
 
 pub fn register(builder: &mut StdRegistryBuilder) {
@@ -13,7 +13,10 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         module,
         "Limit",
         StdSymbolKind::Type,
-        StdDecl::Type(TypeDecl::generic("Limit", &[], TypeDeclKind::Support)),
+        StdDecl::Type(
+            TypeDecl::generic("Limit", &[], TypeDeclKind::Enum)
+                .runtime_role(crate::RuntimeTypeRole::Limit),
+        ),
         "Compiler-known support type for runtime limit constructors.",
     );
     builder.prelude("Limit", limit);
@@ -56,6 +59,13 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             "Limit retry attempts.",
         ),
     ] {
+        builder
+            .enum_constructor(
+                limit,
+                FlowDecl::pure(name, params, "std.runtime.limits.Limit"),
+                summary,
+            )
+            .expect("Limit owner is registered");
         let symbol = builder.symbol_with_intrinsic(
             module,
             name,

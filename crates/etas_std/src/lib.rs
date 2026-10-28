@@ -10,8 +10,8 @@ pub use decl::{
     RequirementKind, RequirementSemantics, RuntimeField, RuntimeFieldRole, RuntimeTypeRole,
     StdDecl, StdEffectRef, StdGenericParam, StdImplFact, StdIterableItem, StdLimitKind,
     StdPrimitiveType, StdRecordField, StdRuntimeRequirement, StdSpecRef, StdStaticArg,
-    StdSupportConstraint, StdTrustWrapper, StdType, StdTypeConstruction, ToolDecl, TypeDecl,
-    TypeDeclKind, ValueDecl,
+    StdSupportConstraint, StdTrustWrapper, StdType, StdTypeConstruction, StdValueRole, ToolDecl,
+    TypeDecl, TypeDeclKind, ValueDecl,
 };
 pub use intrinsic::{
     IntrinsicCompletionSemantics, IntrinsicDescriptor, IntrinsicDispatch, IntrinsicLatentEffect,

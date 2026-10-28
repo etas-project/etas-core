@@ -27,6 +27,9 @@ pub fn register(builder: &mut StdRegistryBuilder) {
                 ("provenance", "Option[std.agent.message.Provenance]"),
             ]));
         }
+        if name == "Provenance" {
+            decl = decl.runtime_role(crate::RuntimeTypeRole::Provenance);
+        }
         let symbol = builder.symbol(
             module,
             name,

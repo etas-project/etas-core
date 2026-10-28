@@ -9,7 +9,10 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         module,
         "JsonValue",
         StdSymbolKind::Type,
-        StdDecl::Type(TypeDecl::generic("JsonValue", &[], TypeDeclKind::Support)),
+        StdDecl::Type(
+            TypeDecl::generic("JsonValue", &[], TypeDeclKind::Support)
+                .runtime_role(crate::RuntimeTypeRole::JsonValue),
+        ),
         "Structured JSON value support type.",
     );
     let error = builder.symbol(

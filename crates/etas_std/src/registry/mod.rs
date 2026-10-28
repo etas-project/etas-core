@@ -9,6 +9,7 @@ pub mod lookup;
 pub mod module;
 pub mod prelude;
 mod validation;
+mod value_role;
 
 pub use builder::StdRegistryBuilder;
 pub use module::{

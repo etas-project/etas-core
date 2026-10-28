@@ -17,7 +17,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         module,
         "Logical",
         StdSymbolKind::Value,
-        StdDecl::Value(ValueDecl::new("Logical", "TraceLabel")),
+        StdDecl::Value(ValueDecl::runtime(crate::StdValueRole::LogicalTraceLabel)),
         "Logical trace stage label.",
     );
     builder.prelude("Logical", logical);

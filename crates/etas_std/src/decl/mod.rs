@@ -25,7 +25,7 @@ pub use type_decl::{
     CodeTypeRole, StdGenericParam, StdIterableItem, StdSpecRef, StdTypeConstruction, TypeDecl,
     TypeDeclKind,
 };
-pub use value_decl::ValueDecl;
+pub use value_decl::{StdValueRole, ValueDecl};
 
 #[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum StdDecl {

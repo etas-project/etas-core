@@ -33,9 +33,11 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
     let logical_effects = LogicalEffectIndex::build(registry)?;
     let mut code_roles = BTreeSet::new();
     let mut runtime_roles = BTreeSet::new();
+    let mut value_roles = BTreeSet::new();
     let mut action_roles = BTreeSet::new();
     for symbol in registry.symbols() {
         super::enum_constructor::validate(registry, symbol)?;
+        super::value_role::validate(registry, symbol, &mut value_roles)?;
         if let Some(argument) = registry.memory_place_result_argument(symbol.id)
             && !matches!(&symbol.decl, StdDecl::Flow(flow) if matches!(flow.params.get(argument), Some(StdType::Store { .. })))
         {
@@ -51,18 +53,11 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                 if let Some(role) = declaration.runtime_role
                     && (!runtime_roles.insert(role)
                         || symbol.kind != StdSymbolKind::Type
-                        || declaration.kind != TypeDeclKind::Support
-                        || declaration.construction != crate::StdTypeConstruction::IntrinsicOnly
-                        || declaration.representation.is_some()
-                        || declaration.canonical_type.is_some()
-                        || declaration.code_role.is_some()
-                        || declaration.derivable
-                        || !declaration.params.is_empty()
-                        || declaration.projected_fields != role.projected_fields())
+                        || !role.accepts_declaration(declaration))
                 {
                     return Err(StdRegistryValidationError {
                         symbol: symbol.qualified_path.join("."),
-                        reason: "native runtime type role requires a unique opaque support type and its exact read-only field contract".into(),
+                        reason: "native runtime type role requires a unique support identity, declared generic arity and checked ABI contract".into(),
                     });
                 }
                 if let Some(role) = declaration.code_role

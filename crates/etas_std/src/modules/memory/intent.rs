@@ -23,6 +23,9 @@ pub(super) fn register(builder: &mut StdRegistryBuilder, module: crate::StdModul
     ] {
         let mut decl = TypeDecl::generic(name, params, kind);
         decl.representation = representation;
+        if name == "MemoryWriteIntent" {
+            decl = decl.runtime_role(crate::RuntimeTypeRole::MemoryWriteIntent);
+        }
         let symbol = builder.symbol(
             module,
             name,
