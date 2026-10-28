@@ -10,6 +10,7 @@ pub use anthropic::{
 pub use client::ModelClient;
 pub use openai::{
     OmlxRequestOptions, OpenAiProtocolAdapter, OpenAiProviderRequest, OpenAiProviderResponse,
+    OpenAiTypedOutputEncoding,
 };
 pub use protocol::{
     ModelContent, ModelCostUsage, ModelMessage, ModelName, ModelOptions, ModelProviderCapabilities,
