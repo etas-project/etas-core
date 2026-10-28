@@ -56,6 +56,7 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                         || declaration.representation.is_some()
                         || declaration.canonical_type.is_some()
                         || declaration.code_role.is_some()
+                        || declaration.derivable
                         || !declaration.params.is_empty()
                         || declaration.projected_fields != role.projected_fields())
                 {

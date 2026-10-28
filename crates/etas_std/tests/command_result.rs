@@ -53,7 +53,7 @@ fn native_runtime_roles_reject_ambiguous_identity_or_changed_abi() {
             .runtime_role(RuntimeTypeRole::CommandResult)
             .intrinsic_only()
     };
-    for defect in 0..5 {
+    for defect in 0..6 {
         let mut declaration = valid();
         match defect {
             0 => declaration.construction = StdTypeConstruction::Public,
@@ -61,6 +61,7 @@ fn native_runtime_roles_reject_ambiguous_identity_or_changed_abi() {
             2 => declaration.params.push(etas_std::StdGenericParam::new("T")),
             3 => declaration.projected_fields[1].ty = StdType::parse("string"),
             4 => declaration.kind = TypeDeclKind::Struct,
+            5 => declaration.derivable = true,
             _ => unreachable!(),
         }
         let mut builder = StdRegistryBuilder::new(StdRegistryVersion::phase1());
