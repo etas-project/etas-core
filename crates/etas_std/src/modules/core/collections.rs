@@ -526,4 +526,34 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         StdDecl::Flow(compared),
         "Construct a stable priority queue with a pure priority comparison flow.",
     );
+    for (name, receiver, parameters, key) in [
+        (
+            "ordered_map_with_compare",
+            "OrderedMap[K, V]",
+            vec![StdGenericParam::new("K"), StdGenericParam::new("V")],
+            "K",
+        ),
+        (
+            "ordered_set_with_compare",
+            "OrderedSet[T]",
+            vec![StdGenericParam::new("T")],
+            "T",
+        ),
+    ] {
+        let mut compared =
+            FlowDecl::with_type_params_actions(name, &parameters, &[], receiver, &[], &[])
+                .with_type_member_method(receiver, "new");
+        compared.params.push(StdType::Function {
+            input: vec![StdType::parse(key), StdType::parse(key)],
+            output: Box::new(StdType::parse("i32")),
+            effects: Vec::new(),
+        });
+        builder.symbol(
+            module,
+            name,
+            StdSymbolKind::Flow,
+            StdDecl::Flow(compared),
+            "Construct an ordered collection with a pure key comparison flow.",
+        );
+    }
 }
