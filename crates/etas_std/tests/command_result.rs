@@ -30,12 +30,13 @@ fn native_runtime_roles_cover_the_declared_value_abis_without_name_inference() {
         (RuntimeTypeRole::OrderedMap, 2),
         (RuntimeTypeRole::OrderedSet, 1),
         (RuntimeTypeRole::WorkspacePath, 1),
+        (RuntimeTypeRole::MemoryWriteIntent, 2),
     ] {
         let declaration = roles.get(&role).expect("registered native ABI role");
         assert_eq!(role.type_parameter_count(), arity);
         assert_eq!(declaration.params.len(), arity);
     }
-    assert_eq!(roles.len(), 13);
+    assert_eq!(roles.len(), 14);
     assert!(
         roles[&RuntimeTypeRole::Conversation]
             .representation
@@ -45,7 +46,7 @@ fn native_runtime_roles_cover_the_declared_value_abis_without_name_inference() {
 
 #[test]
 fn native_runtime_roles_reject_wrong_generic_kind_and_duplicates() {
-    for defect in 0..4 {
+    for defect in 0..5 {
         let mut builder = StdRegistryBuilder::new(StdRegistryVersion::phase1());
         let module = builder.module(&["std", "probe"], "native ABI probe");
         let mut decl = TypeDecl::generic("Native", &["T"], TypeDeclKind::Support)
@@ -55,6 +56,12 @@ fn native_runtime_roles_reject_wrong_generic_kind_and_duplicates() {
             1 => decl.kind = TypeDeclKind::Struct,
             2 => decl.representation = Some(StdType::parse("T")),
             3 => decl = decl.derivable(),
+            4 => {
+                decl = decl.with_projected_fields(vec![etas_std::StdRecordField::new(
+                    "unexpected",
+                    StdType::parse("string"),
+                )])
+            }
             _ => unreachable!(),
         }
         builder.symbol(

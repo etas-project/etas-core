@@ -27,6 +27,7 @@ pub enum RuntimeTypeRole {
     OrderedMap,
     OrderedSet,
     WorkspacePath,
+    MemoryWriteIntent,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
@@ -47,7 +48,7 @@ impl RuntimeTypeRole {
     pub fn type_parameter_count(self) -> usize {
         match self {
             Self::Deque | Self::Queue | Self::Stack | Self::OrderedSet | Self::WorkspacePath => 1,
-            Self::PriorityQueue | Self::OrderedMap => 2,
+            Self::PriorityQueue | Self::OrderedMap | Self::MemoryWriteIntent => 2,
             _ => 0,
         }
     }
@@ -58,10 +59,10 @@ impl RuntimeTypeRole {
             && declaration.canonical_type.is_none()
             && declaration.code_role.is_none()
             && !declaration.derivable
+            && declaration.projected_fields == self.projected_fields()
             && (declaration.representation.is_none() || self == Self::Conversation)
             && (self != Self::CommandResult
-                || (declaration.construction == super::StdTypeConstruction::IntrinsicOnly
-                    && declaration.projected_fields == self.projected_fields()))
+                || declaration.construction == super::StdTypeConstruction::IntrinsicOnly)
     }
 
     pub fn fields(self) -> &'static [RuntimeField] {
