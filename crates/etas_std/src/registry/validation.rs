@@ -33,9 +33,11 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
     let logical_effects = LogicalEffectIndex::build(registry)?;
     let mut code_roles = BTreeSet::new();
     let mut runtime_roles = BTreeSet::new();
+    let mut value_roles = BTreeSet::new();
     let mut action_roles = BTreeSet::new();
     for symbol in registry.symbols() {
         super::enum_constructor::validate(registry, symbol)?;
+        super::value_role::validate(registry, symbol, &mut value_roles)?;
         if let Some(argument) = registry.memory_place_result_argument(symbol.id)
             && !matches!(&symbol.decl, StdDecl::Flow(flow) if matches!(flow.params.get(argument), Some(StdType::Store { .. })))
         {

@@ -19,9 +19,8 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         module,
         "DefaultCommandSandbox",
         StdSymbolKind::Value,
-        StdDecl::Value(ValueDecl::new(
-            "DefaultCommandSandbox",
-            "std.host.sandbox.SandboxProfile",
+        StdDecl::Value(ValueDecl::runtime(
+            crate::StdValueRole::DefaultCommandSandbox,
         )),
         "Default command sandbox descriptor.",
     );
