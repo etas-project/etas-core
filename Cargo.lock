@@ -309,6 +309,7 @@ name = "etas_std"
 version = "0.1.0"
 dependencies = [
  "etas_core",
+ "serde",
 ]
 
 [[package]]

@@ -14,6 +14,8 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             declaration
                 .runtime_role(crate::RuntimeTypeRole::CommandResult)
                 .intrinsic_only()
+        } else if name == "Command" {
+            declaration.runtime_role(crate::RuntimeTypeRole::Command)
         } else {
             declaration
         };

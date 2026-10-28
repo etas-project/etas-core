@@ -1,9 +1,32 @@
 use super::{StdPrimitiveType, StdRecordField, StdType};
 
 /// Canonical native value identities; unrelated source types cannot acquire these roles.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, etas_core::RetainedSize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    serde::Serialize,
+    serde::Deserialize,
+    etas_core::RetainedSize,
+)]
 pub enum RuntimeTypeRole {
+    Command,
     CommandResult,
+    JsonValue,
+    Conversation,
+    Provenance,
+    ModelResponse,
+    Deque,
+    Queue,
+    Stack,
+    PriorityQueue,
+    OrderedMap,
+    OrderedSet,
+    WorkspacePath,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
@@ -21,6 +44,26 @@ pub struct RuntimeField {
 }
 
 impl RuntimeTypeRole {
+    pub fn type_parameter_count(self) -> usize {
+        match self {
+            Self::Deque | Self::Queue | Self::Stack | Self::OrderedSet | Self::WorkspacePath => 1,
+            Self::PriorityQueue | Self::OrderedMap => 2,
+            _ => 0,
+        }
+    }
+
+    pub(crate) fn accepts_declaration(self, declaration: &super::TypeDecl) -> bool {
+        declaration.kind == super::TypeDeclKind::Support
+            && declaration.params.len() == self.type_parameter_count()
+            && declaration.canonical_type.is_none()
+            && declaration.code_role.is_none()
+            && !declaration.derivable
+            && (declaration.representation.is_none() || self == Self::Conversation)
+            && (self != Self::CommandResult
+                || (declaration.construction == super::StdTypeConstruction::IntrinsicOnly
+                    && declaration.projected_fields == self.projected_fields()))
+    }
+
     pub fn fields(self) -> &'static [RuntimeField] {
         match self {
             Self::CommandResult => &[
@@ -40,6 +83,7 @@ impl RuntimeTypeRole {
                     role: RuntimeFieldRole::CommandStderr,
                 },
             ],
+            _ => &[],
         }
     }
 

@@ -42,6 +42,9 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         if let Some(representation) = representation {
             decl = decl.with_representation(representation);
         }
+        if name == "Conversation" {
+            decl = decl.runtime_role(crate::RuntimeTypeRole::Conversation);
+        }
         let symbol = builder.symbol(
             module,
             name,

@@ -30,7 +30,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             derivable: false,
             iterable_item: None,
             code_role: None,
-            runtime_role: None,
+            runtime_role: Some(crate::RuntimeTypeRole::WorkspacePath),
             construction: crate::StdTypeConstruction::Public,
             projected_fields: Vec::new(),
         }),

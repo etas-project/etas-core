@@ -5,6 +5,76 @@ use etas_std::{
 };
 
 #[test]
+fn native_runtime_roles_cover_the_declared_value_abis_without_name_inference() {
+    let registry = standard_registry();
+    let roles = registry
+        .symbols()
+        .filter_map(|symbol| {
+            let StdDecl::Type(declaration) = &symbol.decl else {
+                return None;
+            };
+            declaration.runtime_role.map(|role| (role, declaration))
+        })
+        .collect::<std::collections::BTreeMap<_, _>>();
+    for (role, arity) in [
+        (RuntimeTypeRole::Command, 0),
+        (RuntimeTypeRole::CommandResult, 0),
+        (RuntimeTypeRole::JsonValue, 0),
+        (RuntimeTypeRole::Conversation, 0),
+        (RuntimeTypeRole::Provenance, 0),
+        (RuntimeTypeRole::ModelResponse, 0),
+        (RuntimeTypeRole::Deque, 1),
+        (RuntimeTypeRole::Queue, 1),
+        (RuntimeTypeRole::Stack, 1),
+        (RuntimeTypeRole::PriorityQueue, 2),
+        (RuntimeTypeRole::OrderedMap, 2),
+        (RuntimeTypeRole::OrderedSet, 1),
+        (RuntimeTypeRole::WorkspacePath, 1),
+    ] {
+        let declaration = roles.get(&role).expect("registered native ABI role");
+        assert_eq!(role.type_parameter_count(), arity);
+        assert_eq!(declaration.params.len(), arity);
+    }
+    assert_eq!(roles.len(), 13);
+    assert!(
+        roles[&RuntimeTypeRole::Conversation]
+            .representation
+            .is_some()
+    );
+}
+
+#[test]
+fn native_runtime_roles_reject_wrong_generic_kind_and_duplicates() {
+    for defect in 0..4 {
+        let mut builder = StdRegistryBuilder::new(StdRegistryVersion::phase1());
+        let module = builder.module(&["std", "probe"], "native ABI probe");
+        let mut decl = TypeDecl::generic("Native", &["T"], TypeDeclKind::Support)
+            .runtime_role(RuntimeTypeRole::Deque);
+        match defect {
+            0 => decl.params.clear(),
+            1 => decl.kind = TypeDeclKind::Struct,
+            2 => decl.representation = Some(StdType::parse("T")),
+            3 => decl = decl.derivable(),
+            _ => unreachable!(),
+        }
+        builder.symbol(
+            module,
+            "Native",
+            StdSymbolKind::Type,
+            StdDecl::Type(decl),
+            "invalid",
+        );
+        assert!(
+            builder
+                .try_finish()
+                .unwrap_err()
+                .reason
+                .contains("native runtime type role")
+        );
+    }
+}
+
+#[test]
 fn command_result_exposes_typed_read_only_bytes_without_a_record_constructor() {
     let registry = standard_registry();
     let result = registry
