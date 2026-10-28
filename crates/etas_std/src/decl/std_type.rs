@@ -18,6 +18,11 @@ pub enum StdType {
         err: Box<StdType>,
     },
     Tuple(Vec<StdType>),
+    Function {
+        input: Vec<StdType>,
+        output: Box<StdType>,
+        effects: Vec<super::StdEffectRef>,
+    },
     Schema(Box<StdType>),
     Trust {
         wrapper: StdTrustWrapper,

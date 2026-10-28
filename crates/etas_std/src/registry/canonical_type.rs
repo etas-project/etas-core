@@ -32,6 +32,20 @@ pub(super) fn validate(owner: &str, root: &StdType) -> Result<(), StdRegistryVal
             }
             StdType::Result { ok, err } => pending.extend([ok.as_ref(), err.as_ref()]),
             StdType::Tuple(elements) => pending.extend(elements),
+            StdType::Function {
+                input,
+                output,
+                effects,
+            } => {
+                pending.extend(input);
+                pending.push(output);
+                for effect in effects {
+                    pending.extend(effect.args.iter().filter_map(|arg| match arg {
+                        crate::StdStaticArg::Type(ty) => Some(ty),
+                        _ => None,
+                    }));
+                }
+            }
             StdType::Record(fields) => pending.extend(fields.iter().map(|field| &field.ty)),
             StdType::Primitive(_)
             | StdType::Var(_)

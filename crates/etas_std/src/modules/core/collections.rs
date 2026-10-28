@@ -505,4 +505,25 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         };
         builder.symbol(module, name, StdSymbolKind::Flow, StdDecl::Flow(decl), docs);
     }
+    let mut compared = FlowDecl::with_type_params_actions(
+        "priority_queue_with_compare",
+        &[StdGenericParam::new("T"), StdGenericParam::new("P")],
+        &[],
+        "PriorityQueue[T, P]",
+        &[],
+        &[],
+    )
+    .with_type_member_method("PriorityQueue[T, P]", "new");
+    compared.params.push(StdType::Function {
+        input: vec![StdType::parse("P"), StdType::parse("P")],
+        output: Box::new(StdType::parse("i32")),
+        effects: Vec::new(),
+    });
+    builder.symbol(
+        module,
+        "priority_queue_with_compare",
+        StdSymbolKind::Flow,
+        StdDecl::Flow(compared),
+        "Construct a stable priority queue with a pure priority comparison flow.",
+    );
 }
