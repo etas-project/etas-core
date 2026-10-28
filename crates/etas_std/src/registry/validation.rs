@@ -60,13 +60,15 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                         reason: "code descriptor role requires a unique opaque nominal type with matching arity".into() });
                 }
                 validate_generic_params(registry, &symbol.qualified_path, &declaration.params)?;
-                if let Some(parameter) = declaration.iterable_element_param
+                if let Some(item) = declaration.iterable_item
                     && (declaration.kind != TypeDeclKind::Support
-                        || parameter >= declaration.params.len())
+                        || item
+                            .parameters()
+                            .any(|parameter| parameter >= declaration.params.len()))
                 {
                     return Err(StdRegistryValidationError {
                         symbol: symbol.qualified_path.join("."),
-                        reason: "iterable element must reference a declared support type parameter"
+                        reason: "iterable item must reference declared support type parameters"
                             .into(),
                     });
                 }

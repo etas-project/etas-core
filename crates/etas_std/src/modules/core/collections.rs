@@ -24,10 +24,11 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         ("OrderedSet", &["T"][..]),
     ] {
         let declaration = TypeDecl::generic(name, params, TypeDeclKind::Support);
-        let declaration = if matches!(name, "Deque" | "Queue" | "Stack") {
-            declaration.iterable_elements(0)
-        } else {
-            declaration
+        let declaration = match name {
+            "Deque" | "Queue" | "Stack" | "OrderedSet" => declaration.iterable_elements(0),
+            "OrderedMap" => declaration.iterable_entries(0, 1),
+            "PriorityQueue" => declaration.iterable_entries(1, 0),
+            _ => declaration,
         };
         let symbol = builder.symbol(
             module,
