@@ -11,6 +11,7 @@ pub struct TypeDecl {
     pub derivable: bool,
     pub iterable_item: Option<StdIterableItem>,
     pub code_role: Option<CodeTypeRole>,
+    pub runtime_role: Option<super::RuntimeTypeRole>,
     pub construction: StdTypeConstruction,
     /// Read-only projections, not a constructor representation or Host decode schema.
     pub projected_fields: Vec<super::std_type::StdRecordField>,
@@ -27,6 +28,7 @@ impl TypeDecl {
             derivable: false,
             iterable_item: None,
             code_role: None,
+            runtime_role: None,
             construction: StdTypeConstruction::Public,
             projected_fields: Vec::new(),
         }
@@ -45,6 +47,7 @@ impl TypeDecl {
             derivable: false,
             iterable_item: None,
             code_role: None,
+            runtime_role: None,
             construction: StdTypeConstruction::Public,
             projected_fields: Vec::new(),
         }
@@ -81,6 +84,12 @@ impl TypeDecl {
     }
     pub fn intrinsic_only(mut self) -> Self {
         self.construction = StdTypeConstruction::IntrinsicOnly;
+        self
+    }
+
+    pub fn runtime_role(mut self, role: super::RuntimeTypeRole) -> Self {
+        self.runtime_role = Some(role);
+        self.projected_fields = role.projected_fields();
         self
     }
 
