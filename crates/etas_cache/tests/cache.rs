@@ -32,7 +32,9 @@ fn dependency_graph_invalidates_reverse_dependents_transitively() {
     graph.add_dependency(parsed.clone(), source.clone());
     graph.add_dependency(hir.clone(), parsed.clone());
 
-    let invalidated = graph.invalidate_from(&[source.clone()]).into_keys();
+    let invalidated = graph
+        .invalidate_from(std::slice::from_ref(&source))
+        .into_keys();
 
     assert_eq!(invalidated, vec![source, parsed, hir]);
 }

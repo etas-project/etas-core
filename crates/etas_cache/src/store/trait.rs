@@ -12,5 +12,14 @@ pub trait ArtifactStore {
 
 pub trait TypedArtifactStore: ArtifactStore {
     fn get<T: Clone + 'static>(&self, key: &ArtifactKey) -> CacheResult<Option<CachedArtifact<T>>>;
-    fn put<T: Clone + 'static>(&mut self, artifact: CachedArtifact<T>) -> CacheResult<()>;
+    fn put<T: Clone + etas_core::memory::RetainedSize + 'static>(
+        &mut self,
+        artifact: CachedArtifact<T>,
+    ) -> CacheResult<ArtifactPutStatus>;
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ArtifactPutStatus {
+    Stored,
+    SkippedMemoryBudget,
 }

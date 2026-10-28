@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use super::{UnitKey, UnitKindKey};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, etas_core::RetainedSize)]
 pub struct ArtifactKey {
     pub namespace: &'static str,
     pub name: &'static str,
@@ -14,14 +14,14 @@ impl ArtifactKey {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, etas_core::RetainedSize)]
 pub enum ArtifactScope {
     Global,
     Unit(UnitKey),
     UnitKind(UnitKindKey),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, etas_core::RetainedSize)]
 pub struct ArtifactRef {
     pub key: ArtifactKey,
     pub scope: ArtifactScope,
@@ -50,7 +50,7 @@ impl ArtifactRef {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct ArtifactSet {
     artifacts: BTreeSet<ArtifactRef>,
 }

@@ -1,6 +1,6 @@
 use super::{ArtifactKey, ArtifactSet};
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum PreservedArtifacts {
     #[default]
     All,

@@ -3,6 +3,7 @@ members = [
     "crates/etas_builtin",
     "crates/etas_cache",
     "crates/etas_core",
+    "crates/etas_memory_derive",
     "crates/etas_host",
     "crates/etas_package_metadata",
     "crates/etas_std",
@@ -20,6 +21,7 @@ repository = "https://github.com/etas-project/etas-core"
 etas_builtin = { path = "crates/etas_builtin" }
 etas_cache = { path = "crates/etas_cache" }
 etas_core = { path = "crates/etas_core" }
+etas_memory_derive = { path = "crates/etas_memory_derive" }
 etas_host = { path = "crates/etas_host" }
 etas_package_metadata = { path = "crates/etas_package_metadata" }
 etas_std = { path = "crates/etas_std" }

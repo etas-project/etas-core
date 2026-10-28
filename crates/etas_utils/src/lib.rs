@@ -27,8 +27,9 @@ pub use pipeline::{
     Analysis, AnalysisCache, ArtifactKey, ArtifactRef, ArtifactScope, ArtifactSet, ForEachAdapter,
     Pass, PassContext, PassControl, PassDescriptor, PassFailure, PassInstrumentation, PassKind,
     PassManager, PassResult, PassRunRecord, PassScope, PassTiming, Pipeline, PipelineConfig,
-    PipelineRunResult, PipelineStats, PipelineStep, PreservedArtifacts, UnitFilterKey, UnitKey,
-    UnitKindKey, UnitOrder, UnitProvider, UnitSelector,
+    PipelineExecutionControl, PipelineInterruption, PipelineInterruptionKind, PipelineRunResult,
+    PipelineStats, PipelineStep, PreservedArtifacts, UnitFilterKey, UnitKey, UnitKindKey,
+    UnitOrder, UnitProvider, UnitSelector,
 };
 pub use profile::{
     ProfileCounter, ProfileHandle, ProfileRecorder, ProfileReport, ProfileSpan, ProfileSpanGuard,

@@ -20,8 +20,9 @@ pub use policy::{CachePolicy, CachePriority, DiskCacheBudgetPolicy, EvictionPoli
 pub use revision::ProjectRevision;
 pub use serialize::{ArtifactEnvelopeHeader, CompressionKind, PayloadCodec};
 pub use store::{
-    ArtifactStore, DiskArtifactBytes, DiskArtifactStore, DiskArtifactStoreOptions,
-    DiskArtifactStorePolicy, DiskPutReport, DiskPutStatus, DiskReadOptions, DiskWriteSkipReason,
-    MemoryArtifactStore, StoredArtifactBytes, TypedArtifactStore,
+    ArtifactKindMemoryUsage, ArtifactPutStatus, ArtifactStore, DEFAULT_MEMORY_CACHE_BYTES,
+    DiskArtifactBytes, DiskArtifactStore, DiskArtifactStoreOptions, DiskArtifactStorePolicy,
+    DiskPutReport, DiskPutStatus, DiskReadOptions, DiskWriteSkipReason, MemoryArtifactStore,
+    MemoryCacheUsage, StoredArtifactBytes, TypedArtifactStore,
 };
 pub use telemetry::{ArtifactTelemetry, ArtifactTelemetryKey, CacheTelemetry};

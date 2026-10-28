@@ -233,6 +233,7 @@ name = "etas_cache"
 version = "0.1.0"
 dependencies = [
  "blake3",
+ "etas_core",
  "rusqlite",
  "zstd",
 ]
@@ -241,7 +242,9 @@ dependencies = [
 name = "etas_core"
 version = "0.1.0"
 dependencies = [
+ "etas_memory_derive",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -267,6 +270,14 @@ dependencies = [
  "tokio-rustls",
  "tokio-util",
  "webpki-roots",
+]
+
+[[package]]
+name = "etas_memory_derive"
+version = "0.1.0"
+dependencies = [
+ "quote",
+ "syn",
 ]
 
 [[package]]

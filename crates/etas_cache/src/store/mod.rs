@@ -6,5 +6,7 @@ pub use disk::{
     DiskArtifactBytes, DiskArtifactStore, DiskArtifactStoreOptions, DiskArtifactStorePolicy,
     DiskPutReport, DiskPutStatus, DiskReadOptions, DiskWriteSkipReason, StoredArtifactBytes,
 };
-pub use memory::MemoryArtifactStore;
-pub use r#trait::{ArtifactStore, TypedArtifactStore};
+pub use memory::{
+    ArtifactKindMemoryUsage, DEFAULT_MEMORY_CACHE_BYTES, MemoryArtifactStore, MemoryCacheUsage,
+};
+pub use r#trait::{ArtifactPutStatus, ArtifactStore, TypedArtifactStore};

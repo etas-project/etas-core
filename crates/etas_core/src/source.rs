@@ -3,11 +3,20 @@ use std::{path::PathBuf, sync::Arc};
 use crate::LineIndex;
 
 #[derive(
-    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+    etas_core::RetainedSize,
 )]
 pub struct SourceId(pub u32);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, etas_core::RetainedSize)]
 pub struct SourceFile {
     pub id: SourceId,
     pub path: Option<PathBuf>,

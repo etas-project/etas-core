@@ -10,6 +10,7 @@
     Hash,
     serde::Serialize,
     serde::Deserialize,
+    etas_core::RetainedSize,
 )]
 pub struct TextSize(pub u32);
 
@@ -26,7 +27,16 @@ impl TextSize {
 }
 
 #[derive(
-    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+    etas_core::RetainedSize,
 )]
 pub struct TextRange {
     pub start: TextSize,
@@ -57,7 +67,17 @@ impl TextRange {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+    etas_core::RetainedSize,
+)]
 pub struct Span {
     pub source: crate::SourceId,
     pub range: TextRange,

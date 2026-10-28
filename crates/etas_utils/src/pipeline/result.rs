@@ -1,6 +1,6 @@
 use super::{ArtifactKey, ArtifactRef, ArtifactSet, PassScope, PreservedArtifacts, UnitKey};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct PassResult {
     pub control: PassControl,
     pub changed: bool,
@@ -44,19 +44,29 @@ impl PassResult {
             produced: ArtifactSet::new(),
         }
     }
+
+    pub fn interrupted(interruption: super::PipelineInterruption) -> Self {
+        Self {
+            control: PassControl::Failed(PassFailure::interrupted(interruption)),
+            changed: false,
+            preserved: PreservedArtifacts::All,
+            produced: ArtifactSet::new(),
+        }
+    }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum PassControl {
     Continue,
     Stop,
     Failed(PassFailure),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct PassFailure {
     pub message: String,
     pub missing_artifact: Option<ArtifactKey>,
+    pub interruption: Option<super::PipelineInterruption>,
 }
 
 impl PassFailure {
@@ -64,6 +74,7 @@ impl PassFailure {
         Self {
             message: message.into(),
             missing_artifact: None,
+            interruption: None,
         }
     }
 
@@ -74,6 +85,7 @@ impl PassFailure {
                 key.namespace, key.name
             ),
             missing_artifact: Some(key),
+            interruption: None,
         }
     }
 
@@ -84,6 +96,7 @@ impl PassFailure {
                 artifact.key.namespace, artifact.key.name, artifact.scope
             ),
             missing_artifact: Some(artifact.key),
+            interruption: None,
         }
     }
 
@@ -97,11 +110,20 @@ impl PassFailure {
                 "pass {pass} has scope {scope:?} but current unit is {current_unit:?}"
             ),
             missing_artifact: None,
+            interruption: None,
+        }
+    }
+
+    pub fn interrupted(interruption: super::PipelineInterruption) -> Self {
+        Self {
+            message: interruption.reason.clone(),
+            missing_artifact: None,
+            interruption: Some(interruption),
         }
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct PipelineRunResult {
     pub control: PassControl,
     pub stats: super::PipelineStats,

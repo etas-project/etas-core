@@ -9,6 +9,13 @@ macro_rules! id_type {
         #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
         pub struct $name(pub u32);
 
+        impl $crate::memory::RetainedSize for $name {
+            fn visit_retained<'a>(&'a self, _: &mut $crate::memory::MemoryVisitor<'a>) {}
+            fn may_retain_heap() -> bool {
+                false
+            }
+        }
+
         impl $name {
             pub fn index(self) -> usize {
                 self.0 as usize
