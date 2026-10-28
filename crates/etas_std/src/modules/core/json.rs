@@ -12,24 +12,23 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         StdDecl::Type(TypeDecl::generic("JsonValue", &[], TypeDeclKind::Support)),
         "Structured JSON value support type.",
     );
-    builder.symbol(
+    let error = builder.symbol(
         module,
         "JsonError",
         StdSymbolKind::Type,
-        StdDecl::Type(TypeDecl::generic("JsonError", &[], TypeDeclKind::Support)),
+        StdDecl::Type(TypeDecl::generic("JsonError", &[], TypeDeclKind::Enum)),
         "Structured JSON parse/stringify error support type.",
     );
-    builder.symbol_with_intrinsic(
-        module,
-        "InvalidJson",
-        StdSymbolKind::Constructor,
-        StdDecl::Flow(FlowDecl::pure("InvalidJson", &["string"], "JsonError")),
-        "JSON parse/stringify error carrying a human-readable diagnostic message.",
-        Some(runtime_pure_descriptor(
-            intrinsic::pure::JSON_INVALID_JSON,
-            &["std", "json", "InvalidJson"],
-        )),
-    );
+    let invalid = builder
+        .enum_constructor(
+            error,
+            FlowDecl::pure("InvalidJson", &["string"], "std.json.JsonError"),
+            "JSON parse/stringify error carrying a human-readable diagnostic message.",
+        )
+        .expect("JsonError owner is registered");
+    builder
+        .re_export(module, "InvalidJson", invalid)
+        .expect("JSON error export is unique");
     builder.symbol_with_intrinsic(
         module,
         "parse",

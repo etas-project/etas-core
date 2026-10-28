@@ -239,6 +239,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "etas_code"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "etas_core",
+ "etas_utils",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "etas_core"
 version = "0.1.0"
 dependencies = [
@@ -255,6 +266,7 @@ dependencies = [
  "cap-fs-ext",
  "cap-std",
  "close_fds",
+ "etas_code",
  "etas_core",
  "etas_std",
  "getrandom 0.3.4",
@@ -285,7 +297,10 @@ name = "etas_package_metadata"
 version = "0.1.0"
 dependencies = [
  "blake3",
+ "etas_code",
+ "etas_core",
  "prost",
+ "serde",
  "zstd",
 ]
 

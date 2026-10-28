@@ -129,7 +129,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         module,
         "parse_i32",
         &["string"],
-        "Result[i32, ParseError]",
+        "Result[i32, std.text.ParseError]",
         intrinsic::pure::TEXT_PARSE_I32,
         "Parse a string into an i32.",
     );

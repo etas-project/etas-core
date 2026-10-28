@@ -1,5 +1,6 @@
 pub mod browser;
 pub mod command;
+pub mod compiler;
 pub mod console;
 pub mod context;
 pub mod execution;

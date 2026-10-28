@@ -1,6 +1,6 @@
 use super::{StdEffectRef, StdGenericParam, StdType};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct FlowDecl {
     pub name: String,
     pub type_params: Vec<StdGenericParam>,
@@ -11,7 +11,7 @@ pub struct FlowDecl {
     pub source_method: Option<FlowSourceMethod>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct FlowSourceMethod {
     pub receiver: StdType,
     pub name: String,
@@ -19,14 +19,15 @@ pub struct FlowSourceMethod {
     pub operation: FlowSourceMethodOperation,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum FlowSourceMethodOperation {
     #[default]
     Call,
     CheckedIndex,
+    CheckedIntrinsic,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum FlowSourceMethodKind {
     TypeMember,
     ValueMethod,
@@ -109,6 +110,16 @@ impl FlowDecl {
             name: name.to_owned(),
             kind: FlowSourceMethodKind::ValueMethod,
             operation: FlowSourceMethodOperation::CheckedIndex,
+        });
+        self
+    }
+
+    pub fn with_intrinsic_value_method(mut self, receiver: StdType, name: &str) -> Self {
+        self.source_method = Some(FlowSourceMethod {
+            receiver,
+            name: name.to_owned(),
+            kind: FlowSourceMethodKind::ValueMethod,
+            operation: FlowSourceMethodOperation::CheckedIntrinsic,
         });
         self
     }

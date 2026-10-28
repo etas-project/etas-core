@@ -1,13 +1,19 @@
 use super::std_type::StdType;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct TypeDecl {
     pub name: String,
     pub params: Vec<StdGenericParam>,
     pub kind: TypeDeclKind,
     pub representation: Option<StdType>,
+    /// Canonical compiler type for a support declaration, not nominal storage.
+    pub canonical_type: Option<StdType>,
     pub derivable: bool,
     pub iterable_element_param: Option<usize>,
+    pub code_role: Option<CodeTypeRole>,
+    pub construction: StdTypeConstruction,
+    /// Read-only projections, not a constructor representation or Host decode schema.
+    pub projected_fields: Vec<super::std_type::StdRecordField>,
 }
 
 impl TypeDecl {
@@ -17,8 +23,12 @@ impl TypeDecl {
             params: Vec::new(),
             kind: TypeDeclKind::Primitive,
             representation: None,
+            canonical_type: None,
             derivable: false,
             iterable_element_param: None,
+            code_role: None,
+            construction: StdTypeConstruction::Public,
+            projected_fields: Vec::new(),
         }
     }
 
@@ -31,13 +41,22 @@ impl TypeDecl {
                 .collect(),
             kind,
             representation: None,
+            canonical_type: None,
             derivable: false,
             iterable_element_param: None,
+            code_role: None,
+            construction: StdTypeConstruction::Public,
+            projected_fields: Vec::new(),
         }
     }
 
     pub fn with_representation(mut self, representation: StdType) -> Self {
         self.representation = Some(representation);
+        self
+    }
+
+    pub fn with_canonical_type(mut self, ty: StdType) -> Self {
+        self.canonical_type = Some(ty);
         self
     }
 
@@ -50,9 +69,56 @@ impl TypeDecl {
         self.iterable_element_param = Some(parameter);
         self
     }
+
+    pub fn code_role(mut self, role: CodeTypeRole) -> Self {
+        self.code_role = Some(role);
+        self
+    }
+    pub fn intrinsic_only(mut self) -> Self {
+        self.construction = StdTypeConstruction::IntrinsicOnly;
+        self
+    }
+
+    pub fn with_projected_fields(mut self, fields: Vec<super::std_type::StdRecordField>) -> Self {
+        self.projected_fields = fields;
+        self
+    }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+pub enum StdTypeConstruction {
+    Public,
+    IntrinsicOnly,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, etas_core::RetainedSize)]
+pub enum CodeTypeRole {
+    AgentDefinition,
+    CallableDefinition,
+    SyntaxBlock,
+    AgentId,
+    TypeInfo,
+    GenericOwnerInfo,
+    ToolRef,
+    StaticValueInfo,
+    TraceConstraintInfo,
+    DefinitionId,
+    CallableId,
+    EffectRowInfo,
+    ActionSummary,
+    TraceSummary,
+    Determinism,
+    DescriptorDetail,
+    TraceWitness,
+}
+
+impl CodeTypeRole {
+    pub fn type_parameter_count(self) -> usize {
+        usize::from(self == Self::AgentDefinition)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct StdGenericParam {
     pub name: String,
     pub bounds: Vec<StdSpecRef>,
@@ -74,7 +140,7 @@ impl StdGenericParam {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct StdSpecRef {
     pub path: Vec<String>,
     pub args: Vec<StdType>,
@@ -96,7 +162,7 @@ impl StdSpecRef {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum TypeDeclKind {
     Primitive,
     Struct,

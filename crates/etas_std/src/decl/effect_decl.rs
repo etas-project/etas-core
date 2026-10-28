@@ -1,6 +1,6 @@
 use super::{StdGenericParam, StdType};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct EffectDecl {
     pub name: String,
     pub params: Vec<String>,
@@ -64,7 +64,7 @@ impl EffectDecl {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct EffectActionDecl {
     pub owner: String,
     pub name: String,
@@ -76,9 +76,18 @@ pub struct EffectActionDecl {
     pub stable_id: Option<u32>,
     pub runtime_requirement: Option<StdRuntimeRequirement>,
     pub high_impact_ack: bool,
+    pub compiler_role: Option<CompilerActionRole>,
+    /// None means no standard handler. An explicit empty row means a handler
+    /// exists and produces no escaping effects.
+    pub default_handler_effects: Option<Vec<super::StdEffectRef>>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, etas_core::RetainedSize)]
+pub enum CompilerActionRole {
+    AgentInference,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum EffectActionArgKind {
     Type,
     MemoryPlace,
@@ -86,7 +95,7 @@ pub enum EffectActionArgKind {
     StringPattern,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum StdRuntimeRequirement {
     Agentic,
     ToolCall,
@@ -104,27 +113,49 @@ pub enum StdRuntimeRequirement {
     FileIO,
     Command,
     SecretAccess,
+    Compiler,
     RuntimeHandler,
 }
 
 impl EffectActionDecl {
     pub fn new(owner: &str, name: &str, params: &[&str], output: &str) -> Self {
+        Self::typed(
+            owner,
+            name,
+            params.iter().map(|param| StdType::parse(param)).collect(),
+            StdType::parse(output),
+        )
+    }
+
+    pub fn typed(owner: &str, name: &str, params: Vec<StdType>, output: StdType) -> Self {
         Self {
             owner: owner.to_owned(),
             name: name.to_owned(),
             type_params: Vec::new(),
-            params: params.iter().map(|param| StdType::parse(param)).collect(),
+            params,
             effect_args: Vec::new(),
             selector_param_names: Vec::new(),
-            output: StdType::parse(output),
+            output,
             stable_id: None,
             runtime_requirement: None,
             high_impact_ack: false,
+            compiler_role: None,
+            default_handler_effects: None,
         }
     }
 
     pub fn local(owner: &str, name: &str, params: &[&str], output: &str) -> Self {
         Self::new(owner, name, params, output)
+    }
+
+    pub fn with_compiler_role(mut self, role: CompilerActionRole) -> Self {
+        self.compiler_role = Some(role);
+        self
+    }
+
+    pub fn with_default_handler_effects(mut self, effects: Vec<super::StdEffectRef>) -> Self {
+        self.default_handler_effects = Some(effects);
+        self
     }
 
     pub fn with_effect_args(mut self, effect_args: &[EffectActionArgKind]) -> Self {

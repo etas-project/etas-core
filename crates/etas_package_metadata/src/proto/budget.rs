@@ -2,8 +2,12 @@ use crate::{MetadataArtifactError, model::*};
 
 use super::schema as proto;
 
-pub(crate) const MAX_METADATA_GRAPH_DEPTH: usize = 64;
-pub(crate) const MAX_METADATA_GRAPH_NODES: usize = 100_000;
+mod callable_values;
+mod request_templates;
+pub(crate) use callable_values::validate as validate_callable_values;
+
+pub const MAX_METADATA_GRAPH_DEPTH: usize = 64;
+pub const MAX_METADATA_GRAPH_NODES: usize = 100_000;
 
 #[derive(Default)]
 pub(crate) struct MetadataGraphBudget {
@@ -11,6 +15,37 @@ pub(crate) struct MetadataGraphBudget {
 }
 
 impl MetadataGraphBudget {
+    pub(crate) fn check(&self, count: usize, graph: &str) -> Result<(), MetadataArtifactError> {
+        if self
+            .nodes
+            .checked_add(count)
+            .is_none_or(|nodes| nodes > MAX_METADATA_GRAPH_NODES)
+        {
+            return Err(invalid(format!(
+                "package metadata graph exceeds the maximum node count while validating {graph}"
+            )));
+        }
+        Ok(())
+    }
+    pub(crate) fn used(&self) -> usize {
+        self.nodes
+    }
+    pub(crate) fn charge(
+        &mut self,
+        count: usize,
+        graph: &str,
+    ) -> Result<(), MetadataArtifactError> {
+        self.nodes = self
+            .nodes
+            .checked_add(count)
+            .ok_or_else(|| invalid(format!("package metadata {graph} node count overflow")))?;
+        if self.nodes > MAX_METADATA_GRAPH_NODES {
+            return Err(invalid(format!(
+                "package metadata graph exceeds the maximum node count while validating {graph}"
+            )));
+        }
+        Ok(())
+    }
     pub(crate) fn enter(&mut self, depth: usize, graph: &str) -> Result<(), MetadataArtifactError> {
         if depth > MAX_METADATA_GRAPH_DEPTH {
             return Err(invalid(format!(
@@ -76,6 +111,35 @@ impl ModelGraphValidator {
     }
 
     fn public_metadata(&mut self, metadata: &PublicMetadata) -> Result<(), MetadataArtifactError> {
+        if let Some(graph) = &metadata.definition_descriptors {
+            super::descriptors::validate_model(graph, &mut self.budget)?;
+            super::descriptors::validate_public_bodies(metadata)?;
+        }
+        if let Some(origins) = &metadata.definition_origins {
+            self.budget.enter(0, "definition origins")?;
+            for module in &origins.modules {
+                self.budget.enter(0, "definition module")?;
+                for _ in module.path.iter().chain(&module.canonical_path) {
+                    self.budget.enter(0, "definition module path")?;
+                }
+            }
+            for binding in &origins.declarations {
+                self.budget.enter(0, "definition binding")?;
+                self.budget.enter(0, "definition identity")?;
+                for _ in binding
+                    .module
+                    .iter()
+                    .chain(&binding.declaration)
+                    .chain(binding.definition.module())
+                    .chain(binding.definition.declaration())
+                {
+                    self.budget.enter(0, "definition binding path")?;
+                }
+            }
+            origins
+                .validate()
+                .map_err(|error| invalid(error.to_string()))?;
+        }
         for signature in metadata
             .types
             .iter()
@@ -85,6 +149,9 @@ impl ModelGraphValidator {
             .chain(&metadata.trace_specs)
             .chain(&metadata.protocols)
         {
+            for generic in &signature.generic_params {
+                self.generic_param(generic)?;
+            }
             if let Some(ty) = &signature.ty {
                 self.ty(ty, 0)?;
             }
@@ -150,6 +217,20 @@ impl ModelGraphValidator {
             }
         }
         for summary in &metadata.effect_summaries {
+            if let Some(requests) = &summary.handler_requests {
+                self.request_template(requests)?;
+            }
+            if let Some(graph) = &summary.returned_callables {
+                self.callable_values(graph)?;
+            }
+            if let Some(effects) = &summary.default_handler_effects {
+                self.effect_row(&effects.direct_effects, 0)?;
+                self.effect_row(&effects.default_actions, 0)?;
+                for handler in &effects.handlers {
+                    self.effect_ref(&handler.action, 0)?;
+                    self.effect_row(&handler.produced, 0)?;
+                }
+            }
             self.effect_row(&summary.public_effects, 0)?;
             self.effect_row(&summary.requested_actions, 0)?;
             self.effect_row(&summary.handled_requested_actions, 0)?;
@@ -214,6 +295,15 @@ impl ModelGraphValidator {
 
     fn ty(&mut self, ty: &Type, depth: usize) -> Result<(), MetadataArtifactError> {
         self.budget.enter(depth, "type graph")?;
+        crate::type_validation::validate_type_shape(
+            ty.kind,
+            &ty.name,
+            &ty.path,
+            &ty.children,
+            &ty.fields,
+            &ty.effects,
+            &ty.produced_effects,
+        )?;
         for child in &ty.children {
             self.ty(child, depth + 1)?;
         }
@@ -322,6 +412,30 @@ impl ProtoGraphValidator {
         &mut self,
         metadata: &proto::ProtoPublicMetadataSection,
     ) -> Result<(), MetadataArtifactError> {
+        if let Some(graph) = &metadata.definition_descriptors {
+            super::descriptors::validate_wire(graph, &mut self.budget)?;
+        }
+        if let Some(origins) = &metadata.definition_origins {
+            self.budget.enter(0, "definition origins")?;
+            for module in &origins.modules {
+                self.budget.enter(0, "definition module")?;
+                for _ in module.path.iter().chain(&module.canonical_path) {
+                    self.budget.enter(0, "definition module path")?;
+                }
+            }
+            for binding in &origins.declarations {
+                self.budget.enter(0, "definition binding")?;
+                for _ in binding.module.iter().chain(&binding.declaration) {
+                    self.budget.enter(0, "definition binding path")?;
+                }
+                if let Some(key) = &binding.definition {
+                    self.budget.enter(0, "definition identity")?;
+                    for _ in key.module.iter().chain(&key.declaration) {
+                        self.budget.enter(0, "definition binding path")?;
+                    }
+                }
+            }
+        }
         for signature in metadata
             .types
             .iter()
@@ -331,6 +445,9 @@ impl ProtoGraphValidator {
             .chain(&metadata.trace_specs)
             .chain(&metadata.protocols)
         {
+            for generic in &signature.generic_params {
+                self.generic_param(generic)?;
+            }
             if let Some(ty) = signature.ty.as_ref() {
                 self.ty(ty, 0)?;
             }
@@ -399,6 +516,28 @@ impl ProtoGraphValidator {
             }
         }
         for summary in &metadata.effect_summaries {
+            if let Some(requests) = &summary.handler_requests {
+                self.request_template(requests)?;
+            }
+            if let Some(graph) = &summary.returned_callables {
+                self.callable_values(graph)?;
+            }
+            if let Some(effects) = &summary.default_handler_effects {
+                for row in [&effects.direct_effects, &effects.default_actions]
+                    .into_iter()
+                    .flatten()
+                {
+                    self.effect_row(row, 0)?;
+                }
+                for handler in &effects.handlers {
+                    if let Some(action) = &handler.action {
+                        self.effect_ref(action, 0)?;
+                    }
+                    if let Some(row) = &handler.produced {
+                        self.effect_row(row, 0)?;
+                    }
+                }
+            }
             for row in [
                 summary.public_effects.as_ref(),
                 summary.requested_actions.as_ref(),

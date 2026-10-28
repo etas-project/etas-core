@@ -1,6 +1,6 @@
 use super::StdType;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct ValueDecl {
     pub name: String,
     pub ty: StdType,

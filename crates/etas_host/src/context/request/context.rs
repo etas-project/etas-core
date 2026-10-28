@@ -1,5 +1,6 @@
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HostRequestKind {
+    Compiler,
     Model,
     Tool,
     Approval,

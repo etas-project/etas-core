@@ -1317,10 +1317,12 @@ mod tests {
                 },
                 authority,
                 trace: TraceContext::root(TraceId(42)),
-                budget: budget.with_limits(Budget {
-                    time: Some(TimeBudget { max_millis: 25 }),
-                    ..Budget::default()
-                }),
+                budget: budget
+                    .with_limits(Budget {
+                        time: Some(TimeBudget { max_millis: 25 }),
+                        ..Budget::default()
+                    })
+                    .expect("scoped TLS budget"),
             })
             .await
             .expect("host execution should return a typed response");

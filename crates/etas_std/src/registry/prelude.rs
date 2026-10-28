@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use super::StdSymbolId;
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct StdPrelude {
     symbols: BTreeMap<String, StdSymbolRef>,
 }
@@ -22,7 +22,7 @@ impl StdPrelude {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct StdSymbolRef {
     pub name: String,
     pub id: StdSymbolId,

@@ -51,6 +51,53 @@ fn registry_rejects_unchecked_index_method_marker() {
 }
 
 #[test]
+fn compiler_definition_edit_is_a_generic_pure_registry_method() {
+    let registry = standard_registry();
+    let symbol = registry
+        .lookup_qualified(&["std", "compiler", "with_body"])
+        .unwrap();
+    let StdDecl::Flow(flow) = &symbol.decl else {
+        panic!("flow")
+    };
+    assert_eq!(flow.type_params, [StdGenericParam::new("A")]);
+    let method = flow.source_method.as_ref().unwrap();
+    assert_eq!(
+        method.operation,
+        etas_std::FlowSourceMethodOperation::CheckedIntrinsic
+    );
+    assert_eq!(flow.params[0], method.receiver);
+    assert_eq!(flow.params[0], flow.output);
+    assert!(flow.public_effects.is_empty() && flow.requested_actions.is_empty());
+    assert_eq!(
+        symbol.intrinsic.as_ref().unwrap().id,
+        StdIntrinsicId(intrinsic::runtime::CODE_WITH_BODY)
+    );
+}
+
+#[test]
+fn checked_intrinsic_method_marker_requires_an_executable_descriptor() {
+    let mut builder = StdRegistryBuilder::new(StdRegistryVersion::phase1());
+    let module = builder.module(&["std", "probe"], "probe");
+    builder.symbol(
+        module,
+        "bad",
+        StdSymbolKind::Flow,
+        StdDecl::Flow(
+            FlowDecl::pure("bad", &["string"], "string")
+                .with_intrinsic_value_method(StdType::parse("string"), "bad"),
+        ),
+        "invalid marker",
+    );
+    assert!(
+        builder
+            .try_finish()
+            .unwrap_err()
+            .reason
+            .contains("pure executable descriptor")
+    );
+}
+
+#[test]
 fn registry_exposes_core_qualified_symbols_and_prelude() {
     let registry = standard_registry();
 
@@ -907,11 +954,24 @@ fn registry_declares_edk_facing_substrate_modules() {
         let symbol = registry
             .lookup_qualified(path)
             .unwrap_or_else(|| panic!("{} should be registered", path.join(".")));
-        assert_eq!(symbol.kind, StdSymbolKind::Value);
-        let StdDecl::Value(value) = &symbol.decl else {
-            panic!("{} should be a value", path.join("."));
+        assert_eq!(symbol.kind, StdSymbolKind::Constructor);
+        let StdDecl::Flow(value) = &symbol.decl else {
+            panic!("{} should be an enum constructor", path.join("."));
         };
-        assert_eq!(value.ty, StdType::Named("StreamError".to_owned()));
+        assert!(value.params.is_empty());
+        assert_eq!(
+            value.output,
+            StdType::Named("std.stream.StreamError".to_owned())
+        );
+        assert_eq!(
+            symbol.enum_owner,
+            Some(
+                registry
+                    .lookup_qualified(&["std", "stream", "StreamError"])
+                    .unwrap()
+                    .id
+            )
+        );
     }
 
     let host = registry
@@ -925,7 +985,10 @@ fn registry_declares_edk_facing_substrate_modules() {
         flow.params,
         vec![StdType::Primitive(StdPrimitiveType::String)]
     );
-    assert_eq!(flow.output, StdType::Named("StreamError".to_owned()));
+    assert_eq!(
+        flow.output,
+        StdType::Named("std.stream.StreamError".to_owned())
+    );
 
     for (path, action_owner, action_name, selector_arity, error_type) in [
         (
@@ -1017,49 +1080,49 @@ fn registry_declares_edk_facing_substrate_modules() {
             "Secret",
             "read",
             1,
-            "SecretError",
+            "std.secret.SecretError",
         ),
         (
             &["std", "browser", "protocol", "attach"][..],
             "Browser",
             "attach",
             1,
-            "BrowserError",
+            "std.browser.protocol.BrowserError",
         ),
         (
             &["std", "browser", "protocol", "create"][..],
             "Browser",
             "attach",
             1,
-            "BrowserError",
+            "std.browser.protocol.BrowserError",
         ),
         (
             &["std", "browser", "protocol", "send"][..],
             "Browser",
             "send",
             1,
-            "BrowserError",
+            "std.browser.protocol.BrowserError",
         ),
         (
             &["std", "browser", "protocol", "recv"][..],
             "Browser",
             "recv",
             1,
-            "BrowserError",
+            "std.browser.protocol.BrowserError",
         ),
         (
             &["std", "browser", "protocol", "screenshot"][..],
             "Browser",
             "screenshot",
             1,
-            "BrowserError",
+            "std.browser.protocol.BrowserError",
         ),
         (
             &["std", "browser", "protocol", "close"][..],
             "Browser",
             "close",
             1,
-            "BrowserError",
+            "std.browser.protocol.BrowserError",
         ),
     ] {
         let symbol = registry
@@ -1121,10 +1184,32 @@ fn registry_declares_edk_facing_substrate_modules() {
     let StdDecl::Flow(hmac_flow) = &hmac.decl else {
         panic!("std.crypto.hmac_sha256 should be a flow");
     };
-    assert_eq!(hmac_flow.public_effects, vec![error_effect("CryptoError")]);
+    assert_eq!(
+        hmac_flow.type_params,
+        vec![etas_std::StdGenericParam::new("K")]
+    );
+    assert_eq!(
+        hmac_flow.params,
+        vec![
+            StdType::parse("std.secret.SecretValue[K]"),
+            StdType::parse("bytes")
+        ]
+    );
+    assert!(
+        registry
+            .lookup_qualified(&["std", "crypto", "SecretValue"])
+            .is_none()
+    );
+    assert_eq!(
+        hmac_flow.public_effects,
+        vec![error_effect("std.crypto.CryptoError")]
+    );
     assert_eq!(
         hmac_flow.requested_actions,
-        vec![StdEffectRef::wildcard(&["Secret", "use"], 1)]
+        vec![StdEffectRef::typed(
+            &["Secret", "use"],
+            StdType::Var("K".into())
+        )]
     );
     let hmac_intrinsic = hmac.intrinsic.as_ref().expect("hmac intrinsic metadata");
     assert_eq!(hmac_intrinsic.purity, IntrinsicPurity::Host);

@@ -1,6 +1,6 @@
 use super::{StdEffectRef, StdType};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct ToolDecl {
     pub name: String,
     pub params: Vec<StdType>,

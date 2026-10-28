@@ -2,6 +2,7 @@
 members = [
     "crates/etas_builtin",
     "crates/etas_cache",
+    "crates/etas_code",
     "crates/etas_core",
     "crates/etas_memory_derive",
     "crates/etas_host",
@@ -20,6 +21,7 @@ repository = "https://github.com/etas-project/etas-core"
 [workspace.dependencies]
 etas_builtin = { path = "crates/etas_builtin" }
 etas_cache = { path = "crates/etas_cache" }
+etas_code = { path = "crates/etas_code" }
 etas_core = { path = "crates/etas_core" }
 etas_memory_derive = { path = "crates/etas_memory_derive" }
 etas_host = { path = "crates/etas_host" }

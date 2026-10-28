@@ -60,7 +60,10 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         module,
         "len",
         StdSymbolKind::Flow,
-        StdDecl::Flow(FlowDecl::pure("len", &["LengthInput"], "usize")),
+        StdDecl::Flow(
+            FlowDecl::pure("len", &["LengthInput"], "usize")
+                .with_intrinsic_value_method(StdType::parse("LengthInput"), "len"),
+        ),
         "Return the length of an Array, List, Slice, Map, or string value.",
         Some(IntrinsicDescriptor {
             id: StdIntrinsicId(intrinsic::pure::LIST_LEN),
@@ -77,7 +80,10 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         module,
         "is_empty",
         StdSymbolKind::Flow,
-        StdDecl::Flow(FlowDecl::pure("is_empty", &["EmptinessInput"], "bool")),
+        StdDecl::Flow(
+            FlowDecl::pure("is_empty", &["EmptinessInput"], "bool")
+                .with_intrinsic_value_method(StdType::parse("EmptinessInput"), "is_empty"),
+        ),
         "Return whether an Array, List, Slice, Map, or string value is empty.",
         Some(IntrinsicDescriptor {
             id: StdIntrinsicId(intrinsic::pure::LIST_IS_EMPTY),

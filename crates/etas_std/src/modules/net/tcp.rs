@@ -56,7 +56,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             summary: "Open a host-mediated TCP connection.",
             purity: IntrinsicPurity::Host,
             dispatch: IntrinsicDispatch::Host,
-            lowering: LoweringHint::RuntimeCall,
+            lowering: LoweringHint::default_action(130, &[0, 1]),
         },
     );
 }

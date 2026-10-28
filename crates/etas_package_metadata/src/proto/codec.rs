@@ -1,4 +1,17 @@
+use crate::type_validation::{type_kind_to_wire, validate_type_shape};
 use prost::Message;
+mod callable_values;
+mod request_templates;
+use request_templates::{request_template_from_proto, request_template_to_proto};
+
+pub(crate) fn callable_value_graph_fingerprint(
+    graph: &crate::CallableValueGraph,
+) -> etas_code::CodeFingerprint {
+    etas_code::CodeFingerprint::of_bytes(
+        "etas.metadata.callable-values.v11",
+        &callable_values::to_proto(graph).encode_to_vec(),
+    )
+}
 
 use std::path::Path;
 
@@ -167,7 +180,9 @@ pub fn package_metadata_from_package_graph_payload(
         )
     })?;
     validate_proto_package_metadata_graph(&graph)?;
-    package_metadata_from_proto(graph)
+    let metadata = package_metadata_from_proto(graph)?;
+    validate_package_metadata_graph(&metadata)?;
+    Ok(metadata)
 }
 
 pub fn package_metadata_from_artifact(
@@ -562,11 +577,13 @@ fn resolved_source_to_proto(source: &ResolvedDependencySource) -> ProtoResolvedS
             path,
             checksum,
             store,
+            definition_origin,
         } => ProtoResolvedSource {
             kind: "vendor".to_owned(),
             path: path.clone(),
             checksum: checksum.clone(),
             store: store.clone().unwrap_or_default(),
+            definition_origin: definition_origin.map(|key| key.fingerprint().as_bytes().to_vec()),
             ..Default::default()
         },
     }
@@ -575,6 +592,26 @@ fn resolved_source_to_proto(source: &ResolvedDependencySource) -> ProtoResolvedS
 fn resolved_source_from_proto(
     source: ProtoResolvedSource,
 ) -> Result<ResolvedDependencySource, MetadataArtifactError> {
+    let definition_origin = source
+        .definition_origin
+        .map(|bytes| {
+            let bytes: [u8; 32] = bytes.try_into().map_err(|_| {
+                MetadataArtifactError::invalid(
+                    crate::PACKAGE_METADATA_FILE,
+                    "vendor definition origin must be a 32-byte package key",
+                )
+            })?;
+            Ok(etas_code::PackageKey::from_canonical_fingerprint(
+                etas_code::CodeFingerprint::from_bytes(bytes),
+            ))
+        })
+        .transpose()?;
+    if definition_origin.is_some() && source.kind != "vendor" {
+        return Err(MetadataArtifactError::invalid(
+            crate::PACKAGE_METADATA_FILE,
+            "definition origin is only valid on a vendored source",
+        ));
+    }
     let store = (!source.store.is_empty()).then_some(source.store);
     match source.kind.as_str() {
         "builtin" => Ok(ResolvedDependencySource::Builtin {
@@ -616,6 +653,7 @@ fn resolved_source_from_proto(
             path: required(source.path, "vendor source path")?,
             checksum: required(source.checksum, "vendor source checksum")?,
             store,
+            definition_origin,
         }),
         other => Err(MetadataArtifactError::invalid(
             crate::PACKAGE_METADATA_FILE,
@@ -692,6 +730,14 @@ fn external_export_from_proto(
 
 fn public_metadata_to_proto(metadata: &PublicMetadata) -> ProtoPublicMetadataSection {
     ProtoPublicMetadataSection {
+        definition_descriptors: metadata
+            .definition_descriptors
+            .as_ref()
+            .map(super::descriptors::to_proto),
+        definition_origins: metadata
+            .definition_origins
+            .as_ref()
+            .map(super::origins::to_proto),
         modules: metadata
             .modules
             .iter()
@@ -801,7 +847,15 @@ fn public_metadata_to_proto(metadata: &PublicMetadata) -> ProtoPublicMetadataSec
 fn public_metadata_from_proto(
     metadata: ProtoPublicMetadataSection,
 ) -> Result<PublicMetadata, MetadataArtifactError> {
-    Ok(PublicMetadata {
+    let metadata = PublicMetadata {
+        definition_descriptors: metadata
+            .definition_descriptors
+            .map(super::descriptors::from_proto)
+            .transpose()?,
+        definition_origins: metadata
+            .definition_origins
+            .map(super::origins::from_proto)
+            .transpose()?,
         modules: metadata
             .modules
             .into_iter()
@@ -913,7 +967,9 @@ fn public_metadata_from_proto(
             .map(annotation_metadata_from_proto)
             .collect::<Result<Vec<_>, _>>()?,
         fingerprint: (!metadata.fingerprint.is_empty()).then_some(metadata.fingerprint),
-    })
+    };
+    super::descriptors::validate_public_bodies(&metadata)?;
+    Ok(metadata)
 }
 
 fn annotation_metadata_to_proto(annotation: &AnnotationMetadata) -> ProtoAnnotationMetadata {
@@ -1064,6 +1120,11 @@ fn annotation_value_kind_from_wire(
 fn named_signature_to_proto(signature: &NamedSignature) -> ProtoNamedSignature {
     ProtoNamedSignature {
         path: signature.path.clone(),
+        generic_params: signature
+            .generic_params
+            .iter()
+            .map(generic_param_to_proto)
+            .collect(),
         visibility: visibility_to_wire(signature.visibility).to_owned(),
         ty: signature.ty.as_ref().map(type_to_proto),
     }
@@ -1074,6 +1135,11 @@ fn named_signature_from_proto(
 ) -> Result<NamedSignature, MetadataArtifactError> {
     Ok(NamedSignature {
         path: required_path(signature.path, "named signature path")?,
+        generic_params: signature
+            .generic_params
+            .into_iter()
+            .map(generic_param_from_proto)
+            .collect::<Result<_, _>>()?,
         visibility: visibility_from_wire(&signature.visibility)?,
         ty: signature.ty.map(type_from_proto).transpose()?,
     })
@@ -1696,6 +1762,18 @@ fn effect_metadata_from_proto(
 
 fn effect_summary_to_proto(summary: &EffectSummary) -> ProtoEffectSummary {
     ProtoEffectSummary {
+        handler_requests: summary
+            .handler_requests
+            .as_ref()
+            .map(request_template_to_proto),
+        returned_callables: summary
+            .returned_callables
+            .as_ref()
+            .map(callable_values::to_proto),
+        default_handler_effects: summary
+            .default_handler_effects
+            .as_ref()
+            .map(default_handler_effects_to_proto),
         item: summary.item.clone(),
         public_effects: Some(effect_row_to_proto(&summary.public_effects)),
         requested_actions: Some(effect_row_to_proto(&summary.requested_actions)),
@@ -1713,22 +1791,34 @@ fn effect_summary_from_proto(
     summary: ProtoEffectSummary,
 ) -> Result<EffectSummary, MetadataArtifactError> {
     Ok(EffectSummary {
+        handler_requests: summary
+            .handler_requests
+            .map(request_template_from_proto)
+            .transpose()?,
+        returned_callables: summary
+            .returned_callables
+            .map(callable_values::from_proto)
+            .transpose()?,
+        default_handler_effects: summary
+            .default_handler_effects
+            .map(default_handler_effects_from_proto)
+            .transpose()?,
         item: required_path(summary.item, "effect summary item")?,
-        public_effects: summary
-            .public_effects
-            .map(effect_row_from_proto)
-            .transpose()?
-            .unwrap_or_default(),
-        requested_actions: summary
-            .requested_actions
-            .map(effect_row_from_proto)
-            .transpose()?
-            .unwrap_or_default(),
-        handled_requested_actions: summary
-            .handled_requested_actions
-            .map(effect_row_from_proto)
-            .transpose()?
-            .unwrap_or_default(),
+        public_effects: effect_row_from_proto(
+            summary
+                .public_effects
+                .ok_or_else(|| invalid("effect summary is missing public effects"))?,
+        )?,
+        requested_actions: effect_row_from_proto(
+            summary
+                .requested_actions
+                .ok_or_else(|| invalid("effect summary is missing requested actions"))?,
+        )?,
+        handled_requested_actions: effect_row_from_proto(
+            summary
+                .handled_requested_actions
+                .ok_or_else(|| invalid("effect summary is missing handled actions"))?,
+        )?,
         action_trace: summary
             .action_trace
             .map(action_trace_from_proto)
@@ -1739,6 +1829,52 @@ fn effect_summary_from_proto(
             .into_iter()
             .map(latent_flow_summary_from_proto)
             .collect::<Result<Vec<_>, _>>()?,
+    })
+}
+
+fn default_handler_effects_to_proto(effects: &DefaultHandlerEffects) -> ProtoDefaultHandlerEffects {
+    ProtoDefaultHandlerEffects {
+        direct_effects: Some(effect_row_to_proto(&effects.direct_effects)),
+        default_actions: Some(effect_row_to_proto(&effects.default_actions)),
+        handlers: effects
+            .handlers
+            .iter()
+            .map(|handler| ProtoDefaultHandlerContribution {
+                action: Some(effect_ref_to_proto(&handler.action)),
+                produced: Some(effect_row_to_proto(&handler.produced)),
+            })
+            .collect(),
+    }
+}
+
+fn default_handler_effects_from_proto(
+    effects: ProtoDefaultHandlerEffects,
+) -> Result<DefaultHandlerEffects, MetadataArtifactError> {
+    Ok(DefaultHandlerEffects {
+        direct_effects: effect_row_from_proto(
+            effects
+                .direct_effects
+                .ok_or_else(|| invalid("default handler summary is missing direct effects"))?,
+        )?,
+        default_actions: effect_row_from_proto(
+            effects
+                .default_actions
+                .ok_or_else(|| invalid("default handler summary is missing default actions"))?,
+        )?,
+        handlers: effects
+            .handlers
+            .into_iter()
+            .map(|handler| {
+                Ok(DefaultHandlerContribution {
+                    action: effect_ref_from_proto(handler.action.ok_or_else(|| {
+                        invalid("default handler contribution is missing action")
+                    })?)?,
+                    produced: effect_row_from_proto(handler.produced.ok_or_else(|| {
+                        invalid("default handler contribution is missing produced row")
+                    })?)?,
+                })
+            })
+            .collect::<Result<_, MetadataArtifactError>>()?,
     })
 }
 
@@ -1923,21 +2059,16 @@ fn latent_flow_summary_to_proto(summary: &LatentFlowSummary) -> ProtoLatentFlowS
 fn latent_flow_summary_from_proto(
     summary: ProtoLatentFlowSummary,
 ) -> Result<LatentFlowSummary, MetadataArtifactError> {
-    let declared_bound = summary
-        .declared_bound
-        .map(effect_row_from_proto)
-        .transpose()?
-        .unwrap_or_default();
-    let inferred_effects = summary
-        .inferred_effects
-        .map(effect_row_from_proto)
-        .transpose()?
-        .unwrap_or_default();
-    if declared_bound.effects.is_empty() && inferred_effects.effects.is_empty() {
-        return Err(invalid(
-            "latent flow summary must contain a declared bound or inferred effects",
-        ));
-    }
+    let declared_bound = effect_row_from_proto(
+        summary
+            .declared_bound
+            .ok_or_else(|| invalid("latent flow summary is missing declared bound"))?,
+    )?;
+    let inferred_effects = effect_row_from_proto(
+        summary
+            .inferred_effects
+            .ok_or_else(|| invalid("latent flow summary is missing inferred effects"))?,
+    )?;
     Ok(LatentFlowSummary {
         declared_bound,
         inferred_effects,
@@ -2158,41 +2289,6 @@ fn spec_kind_from_wire(value: &str) -> Result<SpecKind, MetadataArtifactError> {
     }
 }
 
-fn type_kind_to_wire(kind: TypeKind) -> &'static str {
-    match kind {
-        TypeKind::Primitive => "primitive",
-        TypeKind::Var => "var",
-        TypeKind::Named => "named",
-        TypeKind::Applied => "applied",
-        TypeKind::Alias => "alias",
-        TypeKind::Nominal => "nominal",
-        TypeKind::Array => "array",
-        TypeKind::List => "list",
-        TypeKind::Map => "map",
-        TypeKind::Set => "set",
-        TypeKind::Range => "range",
-        TypeKind::Slice => "slice",
-        TypeKind::Option => "option",
-        TypeKind::Result => "result",
-        TypeKind::Record => "record",
-        TypeKind::Tuple => "tuple",
-        TypeKind::Function => "function",
-        TypeKind::Handler => "handler",
-        TypeKind::Trusted => "trusted",
-        TypeKind::Untrusted => "untrusted",
-        TypeKind::Secret => "secret",
-        TypeKind::Public => "public",
-        TypeKind::Sanitized => "sanitized",
-        TypeKind::Prompt => "prompt",
-        TypeKind::PromptPart => "prompt_part",
-        TypeKind::Message => "message",
-        TypeKind::MemorySelection => "memory_selection",
-        TypeKind::Store => "store",
-        TypeKind::MemoryRegion => "memory_region",
-        TypeKind::ResourceHandle => "resource_handle",
-    }
-}
-
 fn type_kind_from_wire(value: &str) -> Result<TypeKind, MetadataArtifactError> {
     match value {
         "primitive" => Ok(TypeKind::Primitive),
@@ -2201,6 +2297,7 @@ fn type_kind_from_wire(value: &str) -> Result<TypeKind, MetadataArtifactError> {
         "applied" => Ok(TypeKind::Applied),
         "alias" => Ok(TypeKind::Alias),
         "nominal" => Ok(TypeKind::Nominal),
+        "enum" => Ok(TypeKind::Enum),
         "array" => Ok(TypeKind::Array),
         "list" => Ok(TypeKind::List),
         "map" => Ok(TypeKind::Map),
@@ -2226,97 +2323,6 @@ fn type_kind_from_wire(value: &str) -> Result<TypeKind, MetadataArtifactError> {
         "memory_region" => Ok(TypeKind::MemoryRegion),
         "resource_handle" => Ok(TypeKind::ResourceHandle),
         other => Err(invalid(format!("type kind `{other}` is not supported"))),
-    }
-}
-
-fn validate_type_shape(
-    kind: TypeKind,
-    name: &str,
-    path: &[String],
-    children: &[Type],
-    fields: &[TypeField],
-    effects: &Option<EffectRow>,
-    produced_effects: &Option<EffectRow>,
-) -> Result<(), MetadataArtifactError> {
-    match kind {
-        TypeKind::Primitive | TypeKind::Var | TypeKind::ResourceHandle if name.is_empty() => {
-            Err(invalid(format!(
-                "type kind `{}` requires name",
-                type_kind_to_wire(kind)
-            )))
-        }
-        TypeKind::Named | TypeKind::Applied | TypeKind::Alias | TypeKind::Nominal
-            if path.is_empty() =>
-        {
-            Err(invalid(format!(
-                "type kind `{}` requires path",
-                type_kind_to_wire(kind)
-            )))
-        }
-        TypeKind::Applied if children.is_empty() => {
-            Err(invalid("applied type requires at least one argument child"))
-        }
-        TypeKind::Alias if children.len() != 1 => {
-            Err(invalid("alias type requires exactly one target child"))
-        }
-        TypeKind::Nominal if children.len() > 1 => Err(invalid(
-            "nominal type can carry at most one representation child",
-        )),
-        TypeKind::Array
-        | TypeKind::List
-        | TypeKind::Set
-        | TypeKind::Range
-        | TypeKind::Slice
-        | TypeKind::Option
-        | TypeKind::Trusted
-        | TypeKind::Untrusted
-        | TypeKind::Secret
-        | TypeKind::Public
-        | TypeKind::Sanitized
-        | TypeKind::Message
-        | TypeKind::MemorySelection
-        | TypeKind::MemoryRegion
-            if children.len() != 1 =>
-        {
-            Err(invalid(format!(
-                "type kind `{}` requires exactly one child",
-                type_kind_to_wire(kind)
-            )))
-        }
-        TypeKind::Map | TypeKind::Result | TypeKind::Store if children.len() != 2 => {
-            Err(invalid(format!(
-                "type kind `{}` requires exactly two children",
-                type_kind_to_wire(kind)
-            )))
-        }
-        TypeKind::Function if children.is_empty() => {
-            Err(invalid("function type requires an output child"))
-        }
-        TypeKind::Handler if effects.is_none() => {
-            Err(invalid("handler type requires handled effects"))
-        }
-        TypeKind::Handler if children.len() > 1 => {
-            Err(invalid("handler type can carry at most one result child"))
-        }
-        TypeKind::Record if children.is_empty() && fields.is_empty() => {
-            Err(invalid("record type requires at least one field"))
-        }
-        TypeKind::Record if !children.is_empty() => Err(invalid("record type cannot use children")),
-        kind if kind != TypeKind::Record && !fields.is_empty() => Err(invalid(format!(
-            "type kind `{}` cannot use record fields",
-            type_kind_to_wire(kind)
-        ))),
-        kind if !matches!(kind, TypeKind::Function | TypeKind::Handler) && effects.is_some() => {
-            Err(invalid(format!(
-                "type kind `{}` cannot use effects",
-                type_kind_to_wire(kind)
-            )))
-        }
-        kind if kind != TypeKind::Handler && produced_effects.is_some() => Err(invalid(format!(
-            "type kind `{}` cannot use handler produced effects",
-            type_kind_to_wire(kind)
-        ))),
-        _ => Ok(()),
     }
 }
 
@@ -2371,6 +2377,69 @@ fn invalid(message: impl Into<String>) -> MetadataArtifactError {
 mod tests {
     use super::super::budget::MAX_METADATA_GRAPH_NODES;
     use super::*;
+
+    #[test]
+    fn solved_empty_or_open_latent_rows_round_trip_but_missing_rows_are_rejected() {
+        for row in [
+            EffectRow::default(),
+            EffectRow {
+                effects: vec![],
+                tail: Some("E".into()),
+            },
+        ] {
+            let summary = LatentFlowSummary {
+                declared_bound: row.clone(),
+                inferred_effects: row,
+            };
+            assert_eq!(
+                latent_flow_summary_from_proto(latent_flow_summary_to_proto(&summary)).unwrap(),
+                summary
+            );
+        }
+        for field in 0..2 {
+            let mut proto = latent_flow_summary_to_proto(&LatentFlowSummary::default());
+            if field == 0 {
+                proto.declared_bound = None;
+            } else {
+                proto.inferred_effects = None;
+            }
+            assert!(
+                latent_flow_summary_from_proto(proto)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("missing")
+            );
+        }
+    }
+
+    #[test]
+    fn decode_rejects_invalid_vendor_origin_width_and_origin_on_other_source_kinds() {
+        for length in [0, 31, 33] {
+            let mut graph = valid_graph();
+            let source = graph.dependencies[0].source.as_mut().unwrap();
+            source.kind = "vendor".into();
+            source.path = ".etas/vendor/dependency".into();
+            source.definition_origin = Some(vec![1; length]);
+            assert!(
+                package_metadata_from_proto(graph)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("32-byte package key")
+            );
+        }
+        let mut graph = valid_graph();
+        graph.dependencies[0]
+            .source
+            .as_mut()
+            .unwrap()
+            .definition_origin = Some(vec![1; 32]);
+        assert!(
+            package_metadata_from_proto(graph)
+                .unwrap_err()
+                .to_string()
+                .contains("only valid on a vendored source")
+        );
+    }
 
     #[test]
     fn decode_rejects_github_release_without_asset_checksum() {
@@ -2470,7 +2539,10 @@ mod tests {
         let mut metadata = PackageMetadata::default();
         metadata.public_metadata.types = (0..MAX_METADATA_GRAPH_NODES)
             .map(|_| NamedSignature {
-                ty: Some(Type::default()),
+                ty: Some(Type {
+                    name: "unit".into(),
+                    ..Default::default()
+                }),
                 ..Default::default()
             })
             .collect();
@@ -2519,6 +2591,145 @@ mod tests {
             package_metadata_from_package_graph_payload(&graph.encode_to_vec()).unwrap_err();
 
         assert!(error.to_string().contains("maximum depth"), "{error}");
+    }
+
+    #[test]
+    fn binary_decoder_rejects_missing_effect_summary_evidence() {
+        let valid = ProtoEffectSummary {
+            item: vec!["demo".into(), "check".into()],
+            public_effects: Some(ProtoEffectRow::default()),
+            requested_actions: Some(ProtoEffectRow::default()),
+            handled_requested_actions: Some(ProtoEffectRow::default()),
+            action_trace: Some(ProtoActionTrace::default()),
+            default_handler_effects: Some(ProtoDefaultHandlerEffects {
+                direct_effects: Some(ProtoEffectRow::default()),
+                default_actions: Some(ProtoEffectRow::default()),
+                handlers: vec![ProtoDefaultHandlerContribution {
+                    action: Some(ProtoEffectRef {
+                        path: vec!["Code".into(), "check".into()],
+                        args: Vec::new(),
+                    }),
+                    produced: Some(ProtoEffectRow::default()),
+                }],
+            }),
+            ..Default::default()
+        };
+        for missing in 0..7 {
+            let mut summary = valid.clone();
+            match missing {
+                0 => summary.public_effects = None,
+                1 => summary.requested_actions = None,
+                2 => summary.handled_requested_actions = None,
+                3 => {
+                    summary
+                        .default_handler_effects
+                        .as_mut()
+                        .unwrap()
+                        .direct_effects = None
+                }
+                4 => {
+                    summary
+                        .default_handler_effects
+                        .as_mut()
+                        .unwrap()
+                        .default_actions = None
+                }
+                5 => summary.default_handler_effects.as_mut().unwrap().handlers[0].action = None,
+                6 => summary.default_handler_effects.as_mut().unwrap().handlers[0].produced = None,
+                _ => unreachable!(),
+            }
+            let mut graph = valid_graph();
+            graph.public_metadata = Some(ProtoPublicMetadataSection {
+                effect_summaries: vec![summary],
+                ..Default::default()
+            });
+            let error =
+                package_metadata_from_package_graph_payload(&graph.encode_to_vec()).unwrap_err();
+            assert!(
+                error.to_string().contains("missing"),
+                "case {missing}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn binary_returned_callable_evidence_is_optional_bounded_and_unambiguous() {
+        use crate::{
+            CallableValueGraph, CallableValueParameter, CallableValueScope, CallableValueSource,
+        };
+        let source = CallableValueSource::Parameter(CallableValueParameter {
+            scope: CallableValueScope::Root,
+            position: 0,
+        });
+        let valid = CallableValueGraph {
+            sources: vec![source],
+            values: vec![],
+        };
+        for returned_callables in [None, Some(valid.clone())] {
+            let summary = EffectSummary {
+                item: vec!["demo".into(), "select".into()],
+                returned_callables,
+                ..Default::default()
+            };
+            let decoded = effect_summary_from_proto(effect_summary_to_proto(&summary)).unwrap();
+            assert_eq!(decoded, summary);
+        }
+        for sources in [
+            vec![],
+            vec![source, source],
+            vec![CallableValueSource::Value(5)],
+        ] {
+            let mut graph = valid_graph();
+            graph.public_metadata = Some(ProtoPublicMetadataSection {
+                effect_summaries: vec![ProtoEffectSummary {
+                    returned_callables: Some(callable_values::to_proto(&CallableValueGraph {
+                        sources: sources.clone(),
+                        values: vec![],
+                    })),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            });
+            let error =
+                package_metadata_from_package_graph_payload(&graph.encode_to_vec()).unwrap_err();
+            assert!(error.to_string().contains("returned callable"), "{error}");
+            let metadata = PackageMetadata {
+                public_metadata: PublicMetadata {
+                    effect_summaries: vec![EffectSummary {
+                        returned_callables: Some(CallableValueGraph {
+                            sources,
+                            values: vec![],
+                        }),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            let error = crate::package_metadata_to_sections(&metadata).unwrap_err();
+            assert!(error.to_string().contains("returned callable"), "{error}");
+        }
+        let mut graph = valid_graph();
+        graph.public_metadata = Some(ProtoPublicMetadataSection {
+            effect_summaries: vec![ProtoEffectSummary {
+                returned_callables: Some(callable_values::to_proto(&CallableValueGraph {
+                    sources: (0..=super::super::budget::MAX_METADATA_GRAPH_NODES)
+                        .map(|position| {
+                            CallableValueSource::Parameter(CallableValueParameter {
+                                scope: CallableValueScope::Root,
+                                position: position as u32,
+                            })
+                        })
+                        .collect(),
+                    values: vec![],
+                })),
+                ..Default::default()
+            }],
+            ..Default::default()
+        });
+        let error =
+            package_metadata_from_package_graph_payload(&graph.encode_to_vec()).unwrap_err();
+        assert!(error.to_string().contains("maximum node count"), "{error}");
     }
 
     fn valid_graph() -> ProtoPackageGraphSection {

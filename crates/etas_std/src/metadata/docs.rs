@@ -1,4 +1,4 @@
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct DocsMetadata {
     pub summary: String,
 }

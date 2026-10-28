@@ -1,6 +1,7 @@
 pub mod agent;
 pub mod browser;
 pub mod codec;
+pub mod compiler;
 pub mod core;
 pub mod crypto;
 pub mod effects;
@@ -23,6 +24,7 @@ use crate::{StdRegistry, StdRegistryBuilder, StdRegistryVersion};
 pub fn standard_registry() -> StdRegistry {
     let mut builder = StdRegistryBuilder::new(StdRegistryVersion::phase1());
     core::register(&mut builder);
+    compiler::register(&mut builder);
     effects::register(&mut builder);
     io::register(&mut builder);
     memory::register(&mut builder);

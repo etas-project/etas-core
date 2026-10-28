@@ -1,4 +1,6 @@
 use prost::Message;
+mod callable_values;
+pub(super) use callable_values::*;
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoPackageGraphSection {
@@ -66,6 +68,8 @@ pub struct ProtoResolvedSource {
     pub store: String,
     #[prost(string, tag = "8")]
     pub asset_checksum: String,
+    #[prost(bytes = "vec", optional, tag = "9")]
+    pub definition_origin: Option<Vec<u8>>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -108,6 +112,10 @@ pub struct ProtoExternalExport {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoPublicMetadataSection {
+    #[prost(message, optional, tag = "25")]
+    pub definition_descriptors: Option<super::descriptors::ProtoDescriptorGraph>,
+    #[prost(message, optional, tag = "24")]
+    pub definition_origins: Option<ProtoDefinitionOrigins>,
     #[prost(message, repeated, tag = "1")]
     pub modules: Vec<ProtoExternalModule>,
     #[prost(message, repeated, tag = "2")]
@@ -154,6 +162,48 @@ pub struct ProtoPublicMetadataSection {
     pub callable_spec_satisfactions: Vec<ProtoCallableSpecSatisfaction>,
     #[prost(message, repeated, tag = "23")]
     pub trace_spec_conformances: Vec<ProtoTraceSpecConformance>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoDefinitionOrigins {
+    #[prost(uint32, tag = "1")]
+    pub version: u32,
+    #[prost(bytes = "vec", tag = "2")]
+    pub package: Vec<u8>,
+    #[prost(message, repeated, tag = "3")]
+    pub modules: Vec<ProtoDefinitionModuleOrigin>,
+    #[prost(message, repeated, tag = "4")]
+    pub declarations: Vec<ProtoDefinitionBindingOrigin>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoDefinitionModuleOrigin {
+    #[prost(string, repeated, tag = "1")]
+    pub path: Vec<String>,
+    #[prost(string, repeated, tag = "2")]
+    pub canonical_path: Vec<String>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoDefinitionBindingOrigin {
+    #[prost(string, repeated, tag = "1")]
+    pub module: Vec<String>,
+    #[prost(string, repeated, tag = "2")]
+    pub declaration: Vec<String>,
+    #[prost(message, optional, tag = "3")]
+    pub definition: Option<ProtoDefinitionKey>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoDefinitionKey {
+    #[prost(bytes = "vec", tag = "1")]
+    pub package: Vec<u8>,
+    #[prost(string, repeated, tag = "2")]
+    pub module: Vec<String>,
+    #[prost(string, repeated, tag = "3")]
+    pub declaration: Vec<String>,
+    #[prost(uint32, tag = "4")]
+    pub kind: u32,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -318,6 +368,8 @@ pub struct ProtoNamedSignature {
     pub visibility: String,
     #[prost(message, optional, tag = "3")]
     pub ty: Option<ProtoType>,
+    #[prost(message, repeated, tag = "4")]
+    pub generic_params: Vec<ProtoActionGenericParam>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -460,6 +512,12 @@ pub struct ProtoEffectMetadataSection {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoEffectSummary {
+    #[prost(message, optional, tag = "9")]
+    pub handler_requests: Option<ProtoRequestInstantiationTemplate>,
+    #[prost(message, optional, tag = "8")]
+    pub returned_callables: Option<ProtoCallableValueGraph>,
+    #[prost(message, optional, tag = "7")]
+    pub default_handler_effects: Option<ProtoDefaultHandlerEffects>,
     #[prost(string, repeated, tag = "1")]
     pub item: Vec<String>,
     #[prost(message, optional, tag = "2")]
@@ -472,6 +530,54 @@ pub struct ProtoEffectSummary {
     pub handled_requested_actions: Option<ProtoEffectRow>,
     #[prost(message, optional, tag = "6")]
     pub action_trace: Option<ProtoActionTrace>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoRequestInstantiationTemplate {
+    #[prost(message, repeated, tag = "1")]
+    pub actions: Vec<ProtoActionRequestTemplate>,
+    #[prost(message, repeated, tag = "2")]
+    pub parameters: Vec<ProtoParameterRequestTemplate>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoActionRequestTemplate {
+    #[prost(message, optional, tag = "1")]
+    pub action: Option<ProtoEffectRef>,
+    #[prost(message, optional, tag = "2")]
+    pub type_bindings: Option<ProtoActionTypeBindings>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoActionTypeBindings {
+    #[prost(message, repeated, tag = "1")]
+    pub bindings: Vec<ProtoTypeField>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoParameterRequestTemplate {
+    #[prost(string, tag = "1")]
+    pub parameter: String,
+    #[prost(message, repeated, tag = "2")]
+    pub excluded: Vec<ProtoEffectRef>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoDefaultHandlerEffects {
+    #[prost(message, optional, tag = "1")]
+    pub direct_effects: Option<ProtoEffectRow>,
+    #[prost(message, optional, tag = "2")]
+    pub default_actions: Option<ProtoEffectRow>,
+    #[prost(message, repeated, tag = "3")]
+    pub handlers: Vec<ProtoDefaultHandlerContribution>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoDefaultHandlerContribution {
+    #[prost(message, optional, tag = "1")]
+    pub action: Option<ProtoEffectRef>,
+    #[prost(message, optional, tag = "2")]
+    pub produced: Option<ProtoEffectRow>,
 }
 
 #[derive(Clone, PartialEq, Message)]

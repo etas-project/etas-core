@@ -1,7 +1,7 @@
 use crate::{
     FlowDecl, IntrinsicDescriptor, IntrinsicDispatch, IntrinsicPurity, LoweringHint, StdDecl,
-    StdEffectRef, StdIntrinsicId, StdRegistryBuilder, StdSymbolKind, StdType, TypeDecl,
-    TypeDeclKind, intrinsic,
+    StdEffectRef, StdGenericParam, StdIntrinsicId, StdRegistryBuilder, StdSymbolKind, StdType,
+    TypeDecl, TypeDeclKind, intrinsic,
 };
 
 use crate::modules::registration::{IntrinsicFlowRegistration, register_intrinsic_flow};
@@ -21,29 +21,30 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         ),
         "Nominal cryptographic digest backed by bytes.",
     );
-    for name in ["SecretValue", "CryptoError"] {
-        builder.symbol(
-            module,
-            name,
-            StdSymbolKind::Type,
-            StdDecl::Type(TypeDecl::generic(name, &[], TypeDeclKind::Support)),
-            "Deterministic crypto support type.",
-        );
-    }
+    builder.symbol(
+        module,
+        "CryptoError",
+        StdSymbolKind::Type,
+        StdDecl::Type(TypeDecl::generic("CryptoError", &[], TypeDeclKind::Support)),
+        "Secret-backed crypto error type.",
+    );
     register_intrinsic_flow(
         builder,
         module,
         &["std", "crypto"],
         IntrinsicFlowRegistration {
             name: "hmac_sha256",
-            type_params: &[],
-            params: &["std.crypto.SecretValue", "bytes"],
+            type_params: &[StdGenericParam::new("K")],
+            params: &["std.secret.SecretValue[K]", "bytes"],
             output: "Digest",
             public_effects: &[StdEffectRef::typed(
                 &["Error"],
-                StdType::parse("CryptoError"),
+                StdType::parse("std.crypto.CryptoError"),
             )],
-            requested_actions: &[StdEffectRef::wildcard(&["Secret", "use"], 1)],
+            requested_actions: &[StdEffectRef::typed(
+                &["Secret", "use"],
+                StdType::Var("K".into()),
+            )],
             intrinsic_id: intrinsic::runtime::SECRET_HMAC_SHA256,
             summary: "Compute HMAC-SHA256 using a host-mediated opaque secret.",
             purity: IntrinsicPurity::Host,

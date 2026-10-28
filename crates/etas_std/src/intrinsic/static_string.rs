@@ -1,7 +1,7 @@
 use super::StdIntrinsicId;
 use crate::intrinsic;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum IntrinsicStaticStringSemantics {
     StringTransform {
         argument: usize,
@@ -9,7 +9,7 @@ pub enum IntrinsicStaticStringSemantics {
     },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum StaticStringTransform {
     Trim,
     Lowercase,
