@@ -680,6 +680,23 @@ fn validate_type_expr(
             }
             Ok(())
         }
+        StdType::Function {
+            input,
+            output,
+            effects,
+        } => {
+            for ty in input.iter().chain(std::iter::once(output.as_ref())) {
+                validate_type_expr(registry, owner, ty, generics)?;
+            }
+            validate_effect_row(
+                registry,
+                &LogicalEffectIndex::build(registry)?,
+                &owner.split('.').map(str::to_owned).collect::<Vec<_>>(),
+                effects,
+                EffectReferenceKind::Effect,
+                generics,
+            )
+        }
         StdType::Record(fields) => {
             for field in fields {
                 validate_type_expr(registry, owner, &field.ty, generics)?;
