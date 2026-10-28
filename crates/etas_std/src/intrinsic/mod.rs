@@ -1,4 +1,6 @@
+mod collection;
 mod completion;
+pub use collection::{StdCollectionIntrinsic, StdCollectionKind, StdCollectionOperation};
 pub mod id;
 pub use completion::{IntrinsicCompletionSemantics, intrinsic_completion_semantics};
 pub mod lowering;

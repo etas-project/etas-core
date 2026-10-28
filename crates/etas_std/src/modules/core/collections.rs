@@ -273,13 +273,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         } else {
             decl.with_value_method(receiver, source_method)
         };
-        builder.symbol(
-            module,
-            &symbol_name,
-            StdSymbolKind::Flow,
-            StdDecl::Flow(decl),
-            docs,
-        );
+        register_operation(builder, module, &symbol_name, decl, docs);
     }
     for (name, docs) in [
         ("closed", "Construct a closed range."),
@@ -297,7 +291,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             &[],
         )
         .with_type_member_method("Range[T]", name);
-        builder.symbol(module, name, StdSymbolKind::Flow, StdDecl::Flow(decl), docs);
+        register_operation(builder, module, name, decl, docs);
     }
     for (name, params, output, receiver, method, type_member, docs) in [
         (
@@ -503,7 +497,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         } else {
             decl.with_value_method(receiver, method)
         };
-        builder.symbol(module, name, StdSymbolKind::Flow, StdDecl::Flow(decl), docs);
+        register_operation(builder, module, name, decl, docs);
     }
     let mut compared = FlowDecl::with_type_params_actions(
         "priority_queue_with_compare",
@@ -519,11 +513,11 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         output: Box::new(StdType::parse("i32")),
         effects: Vec::new(),
     });
-    builder.symbol(
+    register_operation(
+        builder,
         module,
         "priority_queue_with_compare",
-        StdSymbolKind::Flow,
-        StdDecl::Flow(compared),
+        compared,
         "Construct a stable priority queue with a pure priority comparison flow.",
     );
     for (name, receiver, parameters, key) in [
@@ -548,12 +542,84 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             output: Box::new(StdType::parse("i32")),
             effects: Vec::new(),
         });
-        builder.symbol(
+        register_operation(
+            builder,
             module,
             name,
-            StdSymbolKind::Flow,
-            StdDecl::Flow(compared),
+            compared,
             "Construct an ordered collection with a pure key comparison flow.",
         );
     }
+}
+
+fn register_operation(
+    builder: &mut StdRegistryBuilder,
+    module: crate::StdModuleId,
+    name: &str,
+    declaration: FlowDecl,
+    docs: &str,
+) {
+    use crate::{StdCollectionIntrinsic, StdCollectionKind as K, StdCollectionOperation as O};
+    let method = declaration
+        .source_method
+        .as_ref()
+        .expect("collection source method");
+    let kind = match &method.receiver {
+        StdType::Array(_) => K::Array,
+        StdType::List(_) => K::List,
+        StdType::Slice(_) => K::Slice,
+        StdType::Map { .. } => K::Map,
+        StdType::Range(_) => K::Range,
+        StdType::NamedApplied { name, .. } => match name.as_str() {
+            "Deque" => K::Deque,
+            "Queue" => K::Queue,
+            "Stack" => K::Stack,
+            "PriorityQueue" => K::PriorityQueue,
+            "OrderedMap" => K::OrderedMap,
+            "OrderedSet" => K::OrderedSet,
+            _ => panic!("unknown declared collection {name}"),
+        },
+        _ => panic!("invalid declared collection receiver"),
+    };
+    let operation = match method.name.as_str() {
+        "get" => O::Get,
+        "at" => O::At,
+        "head" => O::Head,
+        "tail" => O::Tail,
+        "push" => O::Push,
+        "pop" => O::Pop,
+        "extend" => O::Extend,
+        "to_array" => O::ToArray,
+        "new" if declaration.params.is_empty() => O::New,
+        "new" => O::WithCompare,
+        "push_front" => O::PushFront,
+        "push_back" => O::PushBack,
+        "pop_front" => O::PopFront,
+        "pop_back" => O::PopBack,
+        "insert" => O::Insert,
+        "contains" => O::Contains,
+        "contains_key" => O::ContainsKey,
+        "closed" => O::Closed,
+        "open" => O::Open,
+        _ => panic!("unknown declared collection operation"),
+    };
+    let operation = StdCollectionIntrinsic { kind, operation };
+    assert!(operation.is_supported(), "invalid collection operation");
+    builder.symbol_with_intrinsic(
+        module,
+        name,
+        StdSymbolKind::Flow,
+        StdDecl::Flow(declaration),
+        docs,
+        Some(IntrinsicDescriptor {
+            id: operation.id(),
+            qualified_path: vec!["std".into(), "collections".into(), name.into()],
+            purity: IntrinsicPurity::Pure,
+            dispatch: IntrinsicDispatch::Runtime,
+            lowering: LoweringHint::Collection(operation),
+            latent_effect: crate::IntrinsicLatentEffect::None,
+            memory_access: crate::IntrinsicMemoryAccess::None,
+            runtime_requirement: crate::IntrinsicRuntimeRequirement::None,
+        }),
+    );
 }

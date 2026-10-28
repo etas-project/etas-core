@@ -16,7 +16,8 @@ pub use intrinsic::{
     IntrinsicCompletionSemantics, IntrinsicDescriptor, IntrinsicDispatch, IntrinsicLatentEffect,
     IntrinsicMemoryAccess, IntrinsicPurity, IntrinsicRuntimeRequirement,
     IntrinsicStaticStringSemantics, LoweringHint, StaticStringTransform, StdActionReducer,
-    StdIntrinsicId, intrinsic_completion_semantics, intrinsic_static_string_semantics,
+    StdCollectionIntrinsic, StdCollectionKind, StdCollectionOperation, StdIntrinsicId,
+    intrinsic_completion_semantics, intrinsic_static_string_semantics,
 };
 pub use metadata::{CompletionMetadata, DocsMetadata, StdManifest};
 pub use modules::standard_registry;
