@@ -1,6 +1,6 @@
 use super::{StdSpecRef, StdType};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct StdImplFact {
     pub self_type: StdType,
     pub spec: StdSpecRef,

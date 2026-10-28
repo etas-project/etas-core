@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use super::ArtifactKey;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, etas_core::RetainedSize)]
 pub struct UnitKindKey {
     pub namespace: &'static str,
     pub name: &'static str,
@@ -14,7 +14,7 @@ impl UnitKindKey {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, etas_core::RetainedSize)]
 pub struct UnitKey {
     pub kind: UnitKindKey,
     pub id: u64,
@@ -26,7 +26,7 @@ impl UnitKey {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, etas_core::RetainedSize)]
 pub struct UnitFilterKey {
     pub namespace: &'static str,
     pub name: &'static str,
@@ -38,7 +38,7 @@ impl UnitFilterKey {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum UnitSelector {
     Kind(UnitKindKey),
     Affected(UnitKindKey),
@@ -49,7 +49,7 @@ pub enum UnitSelector {
     },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum UnitOrder {
     Stable,
     SourceOrder,
@@ -59,13 +59,13 @@ pub enum UnitOrder {
     Custom(&'static str),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum PassScope {
     Global,
     Unit(UnitKindKey),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct PassContext<C> {
     pub current_unit: Option<UnitKey>,
     marker: PhantomData<C>,

@@ -32,7 +32,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             "std.secret.SecretValue[K]",
             &[StdEffectRef::typed(
                 &["Error"],
-                StdType::parse("SecretError"),
+                StdType::parse("std.secret.SecretError"),
             )],
             &[StdEffectRef::typed(
                 &["Secret", "read"],
@@ -45,7 +45,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             qualified_path: vec!["std".into(), "secret".into(), "read".into()],
             purity: IntrinsicPurity::Host,
             dispatch: IntrinsicDispatch::Host,
-            lowering: LoweringHint::RuntimeCall,
+            lowering: LoweringHint::default_action(85, &[0]),
             latent_effect: crate::IntrinsicLatentEffect::None,
             memory_access: crate::IntrinsicMemoryAccess::None,
             runtime_requirement: crate::IntrinsicRuntimeRequirement::None,

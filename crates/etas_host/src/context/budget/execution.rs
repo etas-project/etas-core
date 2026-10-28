@@ -100,11 +100,11 @@ impl ExecutionBudget {
         &self.limits
     }
 
-    pub fn with_limits(&self, limits: Budget) -> Self {
-        Self {
-            limits,
+    pub fn with_limits(&self, limits: Budget) -> Result<Self, HostError> {
+        Ok(Self {
+            limits: stricter_budget_limits(&self.limits, &limits)?,
             state: self.state.clone(),
-        }
+        })
     }
 
     pub fn replace_limits(&mut self, limits: Budget) {
@@ -425,10 +425,10 @@ fn stricter_budget_limits(checkpoint: &Budget, invocation: &Budget) -> Result<Bu
         (Some(checkpoint), Some(invocation)) if checkpoint.currency != invocation.currency => {
             return Err(HostError::new(
                 HostErrorCode::InvalidRequest,
-                "resume budget currency does not match checkpoint budget currency",
+                "budget cost currencies do not match",
             )
-            .with_detail("checkpoint", checkpoint.currency.clone())
-            .with_detail("invocation", invocation.currency.clone()));
+            .with_detail("base", checkpoint.currency.clone())
+            .with_detail("restriction", invocation.currency.clone()));
         }
         (Some(checkpoint), Some(invocation)) => Some(CostBudget {
             max_micros: checkpoint.max_micros.min(invocation.max_micros),
@@ -804,16 +804,78 @@ mod tests {
             time: Some(TimeBudget { max_millis: 10_000 }),
             ..Budget::default()
         });
-        let scoped = budget.with_limits(Budget {
-            time: Some(TimeBudget { max_millis: 50_000 }),
-            ..Budget::default()
-        });
+        let scoped = budget
+            .with_limits(Budget {
+                time: Some(TimeBudget { max_millis: 50_000 }),
+                ..Budget::default()
+            })
+            .expect("scoped budget");
 
         assert_eq!(
             budget.deadline().expect("run deadline"),
             scoped.deadline().expect("scoped deadline"),
             "a scoped request must not restart or extend the run-owned deadline"
         );
+    }
+
+    #[test]
+    fn scoped_views_cannot_increase_or_remove_run_owned_token_and_cost_limits() {
+        let budget = ExecutionBudget::start(Budget {
+            tokens: Some(TokenBudget { max_tokens: 7 }),
+            cost: Some(CostBudget {
+                max_micros: 50,
+                currency: "USD".into(),
+            }),
+            ..Default::default()
+        });
+        for limits in [
+            Budget::default(),
+            Budget {
+                tokens: Some(TokenBudget { max_tokens: 100 }),
+                cost: Some(CostBudget {
+                    max_micros: 1000,
+                    currency: "USD".into(),
+                }),
+                ..Default::default()
+            },
+        ] {
+            let scoped = budget.with_limits(limits).unwrap();
+            assert_eq!(scoped.limits(), budget.limits());
+            assert!(scoped.reserve_tokens(8).is_err());
+            assert!(scoped.reserve_cost(51, "USD").is_err());
+        }
+        let scoped = budget
+            .with_limits(Budget {
+                tokens: Some(TokenBudget { max_tokens: 3 }),
+                ..Default::default()
+            })
+            .unwrap();
+        let reservation = scoped.reserve_tokens(3).unwrap();
+        scoped.settle_tokens(reservation, 2).unwrap();
+        assert_eq!(budget.snapshot().unwrap().consumed_tokens, 2);
+        assert_eq!(budget.limits().tokens, Some(TokenBudget { max_tokens: 7 }));
+    }
+
+    #[test]
+    fn scoped_budget_currency_mismatch_is_an_error_not_a_replacement() {
+        let budget = ExecutionBudget::start(Budget {
+            cost: Some(CostBudget {
+                max_micros: 50,
+                currency: "USD".into(),
+            }),
+            ..Default::default()
+        });
+        let error = budget
+            .with_limits(Budget {
+                cost: Some(CostBudget {
+                    max_micros: 1,
+                    currency: "EUR".into(),
+                }),
+                ..Default::default()
+            })
+            .unwrap_err();
+        assert_eq!(error.code, HostErrorCode::InvalidRequest);
+        assert_eq!(budget.limits().cost.as_ref().unwrap().currency, "USD");
     }
 
     #[test]

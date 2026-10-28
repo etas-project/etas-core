@@ -1,8 +1,12 @@
+mod callable_values;
 pub mod container;
 pub mod error;
 pub mod model;
 mod proto;
+mod request_templates;
+mod type_validation;
 
+pub use callable_values::*;
 pub use container::{
     ARTIFACT_SCHEMA_VERSION, COMPRESSION_ZSTD, DecodedMetadataArtifact, EncodedMetadataSection,
     MAGIC, MAX_METADATA_ARTIFACT_SIZE, MAX_METADATA_COMPRESSED_SECTION_SIZE,
@@ -15,10 +19,38 @@ pub use container::{
 };
 pub use error::MetadataArtifactError;
 pub use model::*;
+
+/// Checks graph-local references and resource bounds outside the binary codec.
+/// The frontend must also validate root references against its resolved interface.
+pub fn validate_callable_value_graph(
+    graph: &CallableValueGraph,
+) -> Result<usize, MetadataArtifactError> {
+    proto::validate_callable_values(graph)
+}
+
+pub fn callable_value_graph_fingerprint(
+    graph: &CallableValueGraph,
+) -> Result<etas_code::CodeFingerprint, MetadataArtifactError> {
+    validate_callable_value_graph(graph)?;
+    Ok(proto::callable_value_graph_fingerprint(graph))
+}
 pub use proto::{
-    package_metadata_from_artifact, package_metadata_from_package_graph_payload,
-    package_metadata_to_sections,
+    MAX_METADATA_GRAPH_DEPTH, MAX_METADATA_GRAPH_NODES, package_metadata_from_artifact,
+    package_metadata_from_package_graph_payload, package_metadata_to_sections,
 };
+
+pub fn definition_descriptors_fingerprint(
+    set: &etas_code::descriptor::DefinitionDescriptorSet,
+) -> etas_code::CodeFingerprint {
+    proto::descriptors_fingerprint(set)
+}
+
+/// Validates descriptive data and returns its artifact graph budget usage.
+pub fn validate_definition_descriptors(
+    set: &etas_code::descriptor::DefinitionDescriptorSet,
+) -> Result<usize, MetadataArtifactError> {
+    proto::validate_descriptors(set)
+}
 
 #[cfg(test)]
 mod tests {
@@ -39,9 +71,226 @@ mod tests {
     }
 
     #[test]
+    fn metadata_artifact_round_trips_vendor_definition_origins_without_using_store_paths() {
+        let mut metadata = sample_metadata();
+        for origin in [
+            None,
+            Some(etas_code::PackageKey::from_canonical_fingerprint(
+                etas_code::CodeFingerprint::of_bytes("etas.test.vendor-origin", b"original-owner"),
+            )),
+        ] {
+            metadata.dependencies[0].source = ResolvedDependencySource::Vendor {
+                path: ".etas/vendor/alias".into(),
+                checksum: "payload-checksum".into(),
+                store: Some(".etas/store/payload".into()),
+                definition_origin: origin,
+            };
+            let bytes = encode_sample(&metadata);
+            let (_, decoded) =
+                package_metadata_from_artifact(Path::new("package.etasmeta"), &bytes).unwrap();
+            assert_eq!(decoded, metadata);
+        }
+    }
+
+    #[test]
+    fn metadata_artifact_round_trips_conditional_default_effects_and_open_tails() {
+        let mut metadata = sample_metadata();
+        metadata.public_metadata.flows[0]
+            .generic_params
+            .push(GenericParam {
+                name: "E".into(),
+                kind: GenericParamKind::Effect,
+                bounds: Vec::new(),
+            });
+        let summary = &mut metadata.public_metadata.effect_summaries[0];
+        let action = EffectRef {
+            path: vec![
+                "std".into(),
+                "effects".into(),
+                "actions".into(),
+                "Code".into(),
+                "check".into(),
+            ],
+            args: Vec::new(),
+        };
+        summary.public_effects.tail = Some("E".into());
+        summary.requested_actions = EffectRow {
+            effects: vec![action.clone()],
+            tail: Some("E".into()),
+        };
+        summary.handled_requested_actions = summary.requested_actions.clone();
+        let produced = EffectRow {
+            effects: summary.public_effects.effects.clone(),
+            tail: None,
+        };
+        summary.default_handler_effects = Some(DefaultHandlerEffects {
+            direct_effects: EffectRow {
+                effects: Vec::new(),
+                tail: Some("E".into()),
+            },
+            default_actions: EffectRow {
+                effects: vec![action.clone()],
+                tail: Some("E".into()),
+            },
+            handlers: vec![DefaultHandlerContribution { action, produced }],
+        });
+        let bytes = encode_sample(&metadata);
+        let (_, decoded) =
+            package_metadata_from_artifact(Path::new("package.etasmeta"), &bytes).unwrap();
+        assert_eq!(decoded, metadata);
+    }
+
+    #[test]
+    fn metadata_artifact_round_trips_named_type_parameter_scope_and_unused_parameters() {
+        let mut metadata = sample_metadata();
+        metadata.public_metadata.types.push(NamedSignature {
+            path: vec!["demo".into(), "Wrapper".into()],
+            generic_params: vec![
+                GenericParam {
+                    name: "T".into(),
+                    kind: GenericParamKind::Type,
+                    bounds: vec![SpecBound {
+                        spec: vec!["demo".into(), "Allowed".into()],
+                        args: vec![],
+                    }],
+                },
+                GenericParam {
+                    name: "Unused".into(),
+                    ..Default::default()
+                },
+            ],
+            visibility: Visibility::Public,
+            ty: Some(Type {
+                kind: TypeKind::Nominal,
+                path: vec!["demo".into(), "Wrapper".into()],
+                children: vec![Type {
+                    kind: TypeKind::Var,
+                    name: "T".into(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }),
+        });
+        let header = sample_header();
+        let bytes =
+            encode_metadata_artifact(&header, package_metadata_to_sections(&metadata).unwrap())
+                .unwrap();
+        let (_, decoded) =
+            package_metadata_from_artifact(Path::new("package.etasmeta"), &bytes).unwrap();
+        assert_eq!(decoded, metadata);
+    }
+
+    #[test]
+    fn enum_payload_layouts_round_trip_and_invalid_payload_forms_are_rejected() {
+        let mut metadata = sample_metadata();
+        let variant = |name: &str, ty| TypeField {
+            name: name.into(),
+            ty,
+        };
+        metadata.public_metadata.enums.push(NamedSignature {
+            path: vec!["demo".into(), "Response".into()],
+            visibility: Visibility::Public,
+            ty: Some(Type {
+                kind: TypeKind::Enum,
+                path: vec!["demo".into(), "Response".into()],
+                fields: vec![
+                    variant(
+                        "Empty",
+                        Type {
+                            kind: TypeKind::Tuple,
+                            ..Default::default()
+                        },
+                    ),
+                    variant(
+                        "Success",
+                        Type {
+                            kind: TypeKind::Tuple,
+                            children: vec![Type {
+                                kind: TypeKind::Primitive,
+                                name: "string".into(),
+                                ..Default::default()
+                            }],
+                            ..Default::default()
+                        },
+                    ),
+                    variant(
+                        "Failure",
+                        Type {
+                            kind: TypeKind::Record,
+                            fields: vec![variant(
+                                "code",
+                                Type {
+                                    kind: TypeKind::Primitive,
+                                    name: "i32".into(),
+                                    ..Default::default()
+                                },
+                            )],
+                            ..Default::default()
+                        },
+                    ),
+                    variant(
+                        "NamedEmpty",
+                        Type {
+                            kind: TypeKind::Record,
+                            ..Default::default()
+                        },
+                    ),
+                ],
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+        let bytes = encode_sample(&metadata);
+        let (_, decoded) =
+            package_metadata_from_artifact(Path::new("package.etasmeta"), &bytes).unwrap();
+        assert_eq!(decoded, metadata);
+        for invalid in [
+            Type {
+                kind: TypeKind::Primitive,
+                name: "i32".into(),
+                ..Default::default()
+            },
+            Type {
+                kind: TypeKind::Record,
+                fields: vec![
+                    variant(
+                        "x",
+                        Type {
+                            kind: TypeKind::Tuple,
+                            ..Default::default()
+                        },
+                    ),
+                    variant(
+                        "x",
+                        Type {
+                            kind: TypeKind::Tuple,
+                            ..Default::default()
+                        },
+                    ),
+                ],
+                ..Default::default()
+            },
+        ] {
+            let mut broken = metadata.clone();
+            broken
+                .public_metadata
+                .enums
+                .last_mut()
+                .unwrap()
+                .ty
+                .as_mut()
+                .unwrap()
+                .fields[0]
+                .ty = invalid;
+            assert!(package_metadata_to_sections(&broken).is_err());
+        }
+    }
+
+    #[test]
     fn metadata_artifact_round_trips_public_handler_value() {
         let mut metadata = sample_metadata();
         metadata.public_metadata.values.push(NamedSignature {
+            generic_params: Vec::new(),
             path: vec!["demo".to_owned(), "DefaultHandler".to_owned()],
             visibility: Visibility::Public,
             ty: Some(Type {
@@ -431,6 +680,7 @@ mod tests {
             public_metadata: PublicMetadata {
                 types: vec![
                     NamedSignature {
+                        generic_params: Vec::new(),
                         path: vec!["demo".to_owned(), "HttpRequest".to_owned()],
                         visibility: Visibility::Public,
                         ty: Some(Type {
@@ -447,6 +697,7 @@ mod tests {
                         }),
                     },
                     NamedSignature {
+                        generic_params: Vec::new(),
                         path: vec!["demo".to_owned(), "Path".to_owned()],
                         visibility: Visibility::Public,
                         ty: Some(Type {
@@ -461,6 +712,7 @@ mod tests {
                         }),
                     },
                     NamedSignature {
+                        generic_params: Vec::new(),
                         path: vec!["demo".to_owned(), "UserId".to_owned()],
                         visibility: Visibility::Public,
                         ty: Some(Type {
@@ -533,6 +785,9 @@ mod tests {
                     ..Default::default()
                 }],
                 effect_summaries: vec![EffectSummary {
+                    handler_requests: None,
+                    returned_callables: None,
+                    default_handler_effects: None,
                     item: vec!["demo".to_owned(), "main".to_owned()],
                     public_effects: EffectRow {
                         effects: vec![EffectRef {

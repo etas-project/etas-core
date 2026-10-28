@@ -11,6 +11,7 @@ blake3.workspace = true
 cap-std.workspace = true
 cap-fs-ext.workspace = true
 etas_core.workspace = true
+etas_code.workspace = true
 etas_std.workspace = true
 getrandom.workspace = true
 libc.workspace = true

@@ -1,6 +1,8 @@
 use crate::{Span, TextRange};
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
 pub struct Diagnostic {
     pub code: DiagnosticCode,
     pub phase: DiagnosticPhase,
@@ -127,26 +129,34 @@ impl Diagnostic {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
 pub struct DiagnosticSpan {
     pub span: Span,
     pub label: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
 pub struct DiagnosticLabel {
     pub span: Span,
     pub style: LabelStyle,
     pub message: String,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
 pub enum LabelStyle {
     Primary,
     Secondary,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
 pub enum DiagnosticPhase {
     Lex,
     Parse,
@@ -157,7 +167,9 @@ pub enum DiagnosticPhase {
     Analysis,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
 pub enum DiagnosticCode {
     Syntax(SyntaxDiagnosticCode),
     Name(NameDiagnosticCode),
@@ -166,7 +178,9 @@ pub enum DiagnosticCode {
     Analysis(AnalysisDiagnosticCode),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
 pub enum SyntaxDiagnosticCode {
     UnexpectedToken,
     UnexpectedEof,
@@ -181,7 +195,9 @@ pub enum SyntaxDiagnosticCode {
     InvalidPattern,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
 pub enum NameDiagnosticCode {
     UnresolvedName,
     AmbiguousName,
@@ -193,7 +209,9 @@ pub enum NameDiagnosticCode {
     UnresolvedEffectAction,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
 pub enum TypeDiagnosticCode {
     NonExhaustiveMatch,
     RedundantMatchArm,
@@ -219,9 +237,13 @@ pub enum TypeDiagnosticCode {
     HandlerCompletionRequired,
     ReturnInsideHandlerArm,
     IncompleteTypeFacts,
+    InvalidReflectionConfiguration,
+    CompilerResourceLimit,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
 pub enum EffectDiagnosticCode {
     UnknownEffectTag,
     UnresolvedPerformedAction,
@@ -250,7 +272,9 @@ pub enum EffectDiagnosticCode {
     IncompleteEffectFacts,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
 pub enum AnalysisDiagnosticCode {
     MissingEntry,
     InvalidEntry,
@@ -265,7 +289,9 @@ pub enum AnalysisDiagnosticCode {
     ExecutionNotImplemented,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
 pub enum Severity {
     Error,
     Warning,
@@ -273,20 +299,26 @@ pub enum Severity {
     Hint,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
 pub struct Suggestion {
     pub title: String,
     pub edits: Vec<TextEdit>,
     pub applicability: Applicability,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
 pub struct TextEdit {
     pub range: TextRange,
     pub replacement: String,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
 pub enum Applicability {
     MachineApplicable,
     MaybeIncorrect,

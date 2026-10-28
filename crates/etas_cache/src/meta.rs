@@ -1,6 +1,6 @@
 use crate::{ArtifactFingerprint, ArtifactKey, ContentHash, ProjectRevision};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct ArtifactMeta {
     pub revision: ProjectRevision,
     pub fingerprint: ArtifactFingerprint,
@@ -13,7 +13,7 @@ pub struct ArtifactMeta {
     pub cache_schema_version: u32,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct CachedArtifact<T> {
     pub key: ArtifactKey,
     pub meta: ArtifactMeta,

@@ -1,4 +1,4 @@
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum StdType {
     Primitive(StdPrimitiveType),
     Var(String),
@@ -41,13 +41,13 @@ pub enum StdType {
     Record(Vec<StdRecordField>),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct StdRecordField {
     pub name: String,
     pub ty: StdType,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum StdTrustWrapper {
     Trusted,
     Untrusted,
@@ -65,14 +65,14 @@ impl StdRecordField {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum StdSupportConstraint {
     Index,
     LengthInput,
     EmptinessInput,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum StdPrimitiveType {
     Bool,
     I8,

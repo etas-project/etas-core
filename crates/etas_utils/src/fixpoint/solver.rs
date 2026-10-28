@@ -16,29 +16,43 @@ impl FixpointEngine {
         self.limit
     }
 
-    pub fn solve<State, Step>(&self, mut state: State, mut step: Step) -> FixpointResult<State>
+    pub fn solve<State, Step>(&self, state: State, mut step: Step) -> FixpointResult<State>
     where
         Step: FnMut(&mut State) -> bool,
+    {
+        self.try_solve(state, |state| {
+            Ok::<bool, std::convert::Infallible>(step(state))
+        })
+        .unwrap_or_else(|never| match never {})
+    }
+
+    pub fn try_solve<State, Step, E>(
+        &self,
+        mut state: State,
+        mut step: Step,
+    ) -> Result<FixpointResult<State>, E>
+    where
+        Step: FnMut(&mut State) -> Result<bool, E>,
     {
         let mut stats = FixpointStats::default();
 
         while stats.iterations < self.limit.max_iterations() {
             stats.iterations += 1;
-            if !step(&mut state) {
-                return FixpointResult {
+            if !step(&mut state)? {
+                return Ok(FixpointResult {
                     value: state,
                     status: ConvergenceStatus::Converged,
                     stats,
-                };
+                });
             }
             stats.changes += 1;
         }
 
-        FixpointResult {
+        Ok(FixpointResult {
             value: state,
             status: ConvergenceStatus::IterationLimitReached,
             stats,
-        }
+        })
     }
 
     pub fn apply_transfers<State, T>(
@@ -59,14 +73,35 @@ impl FixpointEngine {
 
     pub fn solve_worklist<Node, State, Step, Schedule>(
         &self,
-        mut state: State,
+        state: State,
         initial: impl IntoIterator<Item = Node>,
         mut step: Step,
-        mut schedule: Schedule,
+        schedule: Schedule,
     ) -> FixpointResult<State>
     where
         Node: Clone + Eq + Hash,
         Step: FnMut(&Node, &mut State) -> bool,
+        Schedule: FnMut(&Node, &State) -> Vec<Node>,
+    {
+        self.try_solve_worklist(
+            state,
+            initial,
+            |node, state| Ok::<bool, std::convert::Infallible>(step(node, state)),
+            schedule,
+        )
+        .unwrap_or_else(|never| match never {})
+    }
+
+    pub fn try_solve_worklist<Node, State, Step, Schedule, E>(
+        &self,
+        mut state: State,
+        initial: impl IntoIterator<Item = Node>,
+        mut step: Step,
+        mut schedule: Schedule,
+    ) -> Result<FixpointResult<State>, E>
+    where
+        Node: Clone + Eq + Hash,
+        Step: FnMut(&Node, &mut State) -> Result<bool, E>,
         Schedule: FnMut(&Node, &State) -> Vec<Node>,
     {
         let mut stats = FixpointStats::default();
@@ -74,24 +109,24 @@ impl FixpointEngine {
 
         while let Some(node) = worklist.pop() {
             if stats.iterations >= self.limit.max_iterations() {
-                return FixpointResult {
+                return Ok(FixpointResult {
                     value: state,
                     status: ConvergenceStatus::IterationLimitReached,
                     stats,
-                };
+                });
             }
 
             stats.iterations += 1;
-            if step(&node, &mut state) {
+            if step(&node, &mut state)? {
                 stats.changes += 1;
                 worklist.extend(schedule(&node, &state));
             }
         }
 
-        FixpointResult {
+        Ok(FixpointResult {
             value: state,
             status: ConvergenceStatus::Converged,
             stats,
-        }
+        })
     }
 }

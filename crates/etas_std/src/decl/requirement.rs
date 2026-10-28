@@ -1,6 +1,6 @@
 use super::StdType;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct RequirementDecl {
     pub name: String,
     pub params: Vec<StdType>,
@@ -28,7 +28,7 @@ impl RequirementDecl {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum RequirementKind {
     Policy,
     Schema,
@@ -37,14 +37,14 @@ pub enum RequirementKind {
     Predicate,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum RequirementSemantics {
     #[default]
     None,
     Limit(StdLimitKind),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum StdLimitKind {
     Iterations,
     Tokens,

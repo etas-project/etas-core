@@ -1,0 +1,16 @@
+[package]
+name = "etas_code"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+etas_core.workspace = true
+etas_utils.workspace = true
+blake3.workspace = true
+serde = { workspace = true, features = ["rc"] }
+
+[dev-dependencies]
+serde_json.workspace = true

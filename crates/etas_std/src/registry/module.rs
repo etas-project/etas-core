@@ -3,7 +3,7 @@ use crate::{CompletionMetadata, DocsMetadata, IntrinsicDescriptor, StdDecl};
 etas_core::id_type!(StdModuleId);
 etas_core::id_type!(StdSymbolId);
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct StdRegistryVersion {
     pub contract: String,
 }
@@ -16,14 +16,14 @@ impl StdRegistryVersion {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct StdModule {
     pub id: StdModuleId,
     pub path: Vec<String>,
     pub docs: DocsMetadata,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct StdSymbol {
     pub id: StdSymbolId,
     pub module: StdModuleId,
@@ -37,7 +37,7 @@ pub struct StdSymbol {
     pub completion: CompletionMetadata,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum StdSymbolKind {
     Type,
     Constructor,

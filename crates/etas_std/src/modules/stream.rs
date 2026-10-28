@@ -1,72 +1,17 @@
 use crate::{
-    FlowDecl, IntrinsicDescriptor, IntrinsicDispatch, IntrinsicPurity, LoweringHint, StdDecl,
-    StdEffectRef, StdGenericParam, StdIntrinsicId, StdRecordField, StdRegistryBuilder, StdSpecRef,
-    StdSymbolKind, StdType, TypeDecl, TypeDeclKind, ValueDecl, intrinsic,
+    IntrinsicDispatch, IntrinsicPurity, LoweringHint, StdEffectRef, StdGenericParam,
+    StdRegistryBuilder, StdSpecRef, StdType, intrinsic,
 };
 
 use crate::modules::registration::{IntrinsicFlowRegistration, register_intrinsic_flow};
+mod types;
 
 pub fn register(builder: &mut StdRegistryBuilder) {
     let module = builder.module(
         &["std", "stream"],
         "Bounded byte stream substrate declarations.",
     );
-    for (name, representation) in [
-        ("ByteStream", None),
-        ("StreamRead", None),
-        ("StreamError", None),
-        ("ByteLimit", Some(record(&[("bytes", "i32")]))),
-        ("Timeout", Some(record(&[("ms", "i32")]))),
-    ] {
-        let kind = if name == "ByteStream" {
-            TypeDeclKind::Spec
-        } else {
-            TypeDeclKind::Support
-        };
-        let mut decl = TypeDecl::generic(name, &[], kind);
-        if let Some(representation) = representation {
-            decl = decl.with_representation(representation);
-        }
-        builder.symbol(
-            module,
-            name,
-            StdSymbolKind::Type,
-            StdDecl::Type(decl),
-            "Stream substrate support type.",
-        );
-    }
-    for name in [
-        "TimedOut",
-        "Cancelled",
-        "Closed",
-        "Interrupted",
-        "LimitExceeded",
-    ] {
-        builder.symbol(
-            module,
-            name,
-            StdSymbolKind::Value,
-            StdDecl::Value(ValueDecl::new(name, "StreamError")),
-            "Standard stream error variant.",
-        );
-    }
-    builder.symbol_with_intrinsic(
-        module,
-        "Host",
-        StdSymbolKind::Constructor,
-        StdDecl::Flow(FlowDecl::pure("Host", &["string"], "StreamError")),
-        "Standard stream host-failure error variant.",
-        Some(IntrinsicDescriptor {
-            id: StdIntrinsicId(intrinsic::pure::STREAM_ERROR_HOST),
-            qualified_path: vec!["std".into(), "stream".into(), "Host".into()],
-            purity: IntrinsicPurity::Pure,
-            dispatch: IntrinsicDispatch::Runtime,
-            lowering: LoweringHint::RuntimeCall,
-            latent_effect: crate::IntrinsicLatentEffect::None,
-            memory_access: crate::IntrinsicMemoryAccess::None,
-            runtime_requirement: crate::IntrinsicRuntimeRequirement::None,
-        }),
-    );
+    types::register(builder, module);
     register_intrinsic_flow(
         builder,
         module,
@@ -85,7 +30,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             summary: "Read at most the requested byte count from a host-mediated stream.",
             purity: IntrinsicPurity::Host,
             dispatch: IntrinsicDispatch::Host,
-            lowering: LoweringHint::RuntimeCall,
+            lowering: LoweringHint::default_action(131, &[0]),
         },
     );
     register_intrinsic_flow(
@@ -106,7 +51,14 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             summary: "Read from a host-mediated stream until EOF or the requested byte limit.",
             purity: IntrinsicPurity::Host,
             dispatch: IntrinsicDispatch::Host,
-            lowering: LoweringHint::RuntimeCall,
+            lowering: LoweringHint::ActionReducer {
+                stable_id: 131,
+                payload: vec![0],
+                reducer: crate::StdActionReducer::ReadUntilLimit {
+                    limit_parameter: 1,
+                    timeout_parameter: 2,
+                },
+            },
         },
     );
     register_intrinsic_flow(
@@ -127,7 +79,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             summary: "Write all bytes to a host-mediated stream.",
             purity: IntrinsicPurity::Host,
             dispatch: IntrinsicDispatch::Host,
-            lowering: LoweringHint::RuntimeCall,
+            lowering: LoweringHint::default_action(132, &[0]),
         },
     );
     register_intrinsic_flow(
@@ -148,7 +100,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             summary: "Flush a host-mediated stream.",
             purity: IntrinsicPurity::Host,
             dispatch: IntrinsicDispatch::Host,
-            lowering: LoweringHint::RuntimeCall,
+            lowering: LoweringHint::default_action(133, &[0]),
         },
     );
     register_intrinsic_flow(
@@ -169,7 +121,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             summary: "Close a host-mediated stream.",
             purity: IntrinsicPurity::Host,
             dispatch: IntrinsicDispatch::Host,
-            lowering: LoweringHint::RuntimeCall,
+            lowering: LoweringHint::default_action(134, &[0]),
         },
     );
 }
@@ -180,13 +132,4 @@ fn byte_stream_param() -> StdGenericParam {
 
 fn stream_error_effect() -> StdEffectRef {
     StdEffectRef::typed(&["Error"], StdType::parse("std.stream.StreamError"))
-}
-
-fn record(fields: &[(&str, &str)]) -> StdType {
-    StdType::Record(
-        fields
-            .iter()
-            .map(|(name, ty)| StdRecordField::new(name, StdType::parse(ty)))
-            .collect(),
-    )
 }

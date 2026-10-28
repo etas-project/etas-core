@@ -1,5 +1,8 @@
+mod action_forwarder;
 pub mod builder;
+mod canonical_type;
 mod checked_index;
+mod default_action;
 mod enum_constructor;
 pub mod lookup;
 pub mod module;
@@ -17,7 +20,7 @@ use std::collections::BTreeMap;
 
 use crate::{IntrinsicDescriptor, StdImplFact, StdIntrinsicId};
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, etas_core::RetainedSize)]
 pub struct StdRegistry {
     version: StdRegistryVersion,
     modules: Vec<StdModule>,

@@ -121,6 +121,25 @@ fn worklist_fixpoint_reschedules_successors_on_change() {
 }
 
 #[test]
+fn fallible_worklist_does_not_publish_partial_state_after_transfer_failure() {
+    let mut visited = Vec::new();
+    let result = FixpointEngine::default().try_solve_worklist(
+        BTreeSet::new(),
+        ["a", "b", "c", "d"],
+        |node, state| {
+            visited.push(*node);
+            if *node == "c" {
+                return Err("cancelled during transfer");
+            }
+            Ok(state.insert(*node))
+        },
+        |_, _| Vec::new(),
+    );
+    assert_eq!(result.unwrap_err(), "cancelled during transfer");
+    assert_eq!(visited, ["a", "b", "c"]);
+}
+
+#[test]
 fn traversal_algorithms_walk_reachable_nodes() {
     let g = graph(&[("a", &["b", "c"]), ("b", &["d"]), ("c", &[]), ("d", &[])]);
 

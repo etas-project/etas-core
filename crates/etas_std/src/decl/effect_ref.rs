@@ -1,12 +1,12 @@
 use super::StdType;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct StdEffectRef {
     pub path: Vec<String>,
     pub args: Vec<StdStaticArg>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum StdStaticArg {
     Type(StdType),
     Path(Vec<String>),

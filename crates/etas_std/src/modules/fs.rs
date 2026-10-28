@@ -26,8 +26,12 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             params: vec![region_param()],
             kind: TypeDeclKind::Support,
             representation: None,
+            canonical_type: None,
             derivable: false,
             iterable_element_param: None,
+            code_role: None,
+            construction: crate::StdTypeConstruction::Public,
+            projected_fields: Vec::new(),
         }),
         "Opaque project-scoped path indexed by its filesystem authority region.",
     );
@@ -79,7 +83,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             summary: "Read bytes from a project-scoped workspace path.",
             purity: IntrinsicPurity::Host,
             dispatch: IntrinsicDispatch::Host,
-            lowering: LoweringHint::RuntimeCall,
+            lowering: LoweringHint::default_action(136, &[0]),
         },
     );
     register_intrinsic_flow(
@@ -103,7 +107,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             summary: "Write bytes to a project-scoped workspace path.",
             purity: IntrinsicPurity::Host,
             dispatch: IntrinsicDispatch::Host,
-            lowering: LoweringHint::RuntimeCall,
+            lowering: LoweringHint::default_action(137, &[0]),
         },
     );
     register_intrinsic_flow(
@@ -127,7 +131,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             summary: "List a project-scoped workspace directory.",
             purity: IntrinsicPurity::Host,
             dispatch: IntrinsicDispatch::Host,
-            lowering: LoweringHint::RuntimeCall,
+            lowering: LoweringHint::default_action(138, &[0]),
         },
     );
     register_intrinsic_flow(
@@ -151,7 +155,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             summary: "Read project-scoped filesystem metadata.",
             purity: IntrinsicPurity::Host,
             dispatch: IntrinsicDispatch::Host,
-            lowering: LoweringHint::RuntimeCall,
+            lowering: LoweringHint::default_action(139, &[0]),
         },
     );
     register_intrinsic_flow(
@@ -175,7 +179,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             summary: "Atomically replace bytes at a project-scoped workspace path.",
             purity: IntrinsicPurity::Host,
             dispatch: IntrinsicDispatch::Host,
-            lowering: LoweringHint::RuntimeCall,
+            lowering: LoweringHint::default_action(140, &[0]),
         },
     );
 }

@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, etas_core::RetainedSize)]
 pub struct InternedString(pub u32);
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, etas_core::RetainedSize)]
 pub struct StringInterner {
     strings: Vec<String>,
     ids: HashMap<String, InternedString>,

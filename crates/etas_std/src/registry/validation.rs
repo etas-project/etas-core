@@ -31,6 +31,8 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
     validate_unique_symbols(registry)?;
     validate_stable_ids(registry)?;
     let logical_effects = LogicalEffectIndex::build(registry)?;
+    let mut code_roles = BTreeSet::new();
+    let mut action_roles = BTreeSet::new();
     for symbol in registry.symbols() {
         super::enum_constructor::validate(registry, symbol)?;
         if let Some(argument) = registry.memory_place_result_argument(symbol.id)
@@ -45,6 +47,18 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
         }
         match &symbol.decl {
             StdDecl::Type(declaration) => {
+                if let Some(role) = declaration.code_role
+                    && (!code_roles.insert(role)
+                        || symbol.kind != StdSymbolKind::Type
+                        || declaration.kind != TypeDeclKind::Struct
+                        || declaration.construction != crate::StdTypeConstruction::IntrinsicOnly
+                        || declaration.representation.is_some()
+                        || declaration.canonical_type.is_some()
+                        || declaration.params.len() != role.type_parameter_count())
+                {
+                    return Err(StdRegistryValidationError { symbol: symbol.qualified_path.join("."),
+                        reason: "code descriptor role requires a unique opaque nominal type with matching arity".into() });
+                }
                 validate_generic_params(registry, &symbol.qualified_path, &declaration.params)?;
                 if let Some(parameter) = declaration.iterable_element_param
                     && (declaration.kind != TypeDeclKind::Support
@@ -57,6 +71,35 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                     });
                 }
                 let generics = generic_names(&declaration.params);
+                if let Some(ty) = &declaration.canonical_type {
+                    if declaration.kind != TypeDeclKind::Support
+                        || declaration.representation.is_some()
+                    {
+                        return Err(StdRegistryValidationError {
+                            symbol: symbol.qualified_path.join("."),
+                            reason:
+                                "canonical compiler type requires a non-nominal support declaration"
+                                    .into(),
+                        });
+                    }
+                    super::canonical_type::validate(&symbol.qualified_path.join("."), ty)?;
+                    validate_type_expr(registry, &symbol.qualified_path.join("."), ty, &generics)?;
+                }
+                let mut projected_names = BTreeSet::new();
+                for field in &declaration.projected_fields {
+                    if field.name.is_empty() || !projected_names.insert(&field.name) {
+                        return Err(StdRegistryValidationError {
+                            symbol: symbol.qualified_path.join("."),
+                            reason: "projected fields require unique nonempty names".into(),
+                        });
+                    }
+                    validate_type_expr(
+                        registry,
+                        &symbol.qualified_path.join("."),
+                        &field.ty,
+                        &generics,
+                    )?;
+                }
                 if let Some(representation) = &declaration.representation {
                     validate_type_expr(
                         registry,
@@ -71,6 +114,10 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                 validate_effect_extensions(&logical_effects, &symbol.qualified_path, effect)?;
             }
             StdDecl::Flow(flow) => {
+                if let Some(descriptor) = &symbol.intrinsic {
+                    super::action_forwarder::validate(registry, flow, descriptor)?;
+                    super::default_action::validate(registry, flow, descriptor)?;
+                }
                 validate_generic_params(registry, &symbol.qualified_path, &flow.type_params)?;
                 let generics = generic_names(&flow.type_params);
                 let owner = symbol.qualified_path.join(".");
@@ -78,6 +125,22 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                     validate_type_expr(registry, &owner, ty, &generics)?;
                 }
                 if let Some(method) = &flow.source_method {
+                    if method.operation == crate::FlowSourceMethodOperation::CheckedIntrinsic
+                        && (symbol.intrinsic.is_none()
+                            || method.kind != crate::FlowSourceMethodKind::ValueMethod
+                            || flow.params.first() != Some(&method.receiver)
+                            || symbol.intrinsic.as_ref().is_some_and(|descriptor| {
+                                descriptor.purity != crate::IntrinsicPurity::Pure
+                                    || descriptor.dispatch == crate::IntrinsicDispatch::LoweringOnly
+                            })
+                            || !flow.public_effects.is_empty()
+                            || !flow.requested_actions.is_empty())
+                    {
+                        return Err(StdRegistryValidationError {
+                            symbol: symbol.qualified_path.join("."),
+                            reason: "checked intrinsic method requires a pure executable descriptor, an effect-free contract and a matching first receiver parameter".into(),
+                        });
+                    }
                     validate_type_expr(registry, &owner, &method.receiver, &generics)?;
                     super::checked_index::validate(&owner, flow, method)?;
                 }
@@ -115,7 +178,40 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                 validate_tool_requirements(registry, &symbol.qualified_path, &tool.requirements)?;
             }
             StdDecl::EffectAction(action) => {
+                if let Some(role) = action.compiler_role {
+                    let valid_shape = action.type_params.len() == 1
+                        && action.params.len() == 2
+                        && action.params[0] == StdType::Prompt
+                        && action.params[1] == StdType::Schema(Box::new(action.output.clone()))
+                        && matches!(&action.output, StdType::Var(name) if *name == action.type_params[0].name)
+                        && matches!(
+                            action.effect_args.as_slice(),
+                            [
+                                EffectActionArgKind::StaticResourcePath { ty: "Agent" },
+                                EffectActionArgKind::Type
+                            ]
+                        )
+                        && action.runtime_requirement
+                            == Some(crate::StdRuntimeRequirement::Agentic)
+                        && action.stable_id.is_some();
+                    if !action_roles.insert(role) || !valid_shape {
+                        return Err(StdRegistryValidationError {
+                            symbol: symbol.qualified_path.join("."),
+                            reason: "agent inference role requires a unique action with Prompt/Schema<O> ABI and callable/output selectors".into(),
+                        });
+                    }
+                }
                 validate_action_declaration(registry, &symbol.qualified_path, action)?;
+                if let Some(effects) = &action.default_handler_effects {
+                    validate_effect_row(
+                        registry,
+                        &logical_effects,
+                        &symbol.qualified_path,
+                        effects,
+                        EffectReferenceKind::Effect,
+                        &generic_names(&action.type_params),
+                    )?;
+                }
                 validate_action_owner(&logical_effects, &symbol.qualified_path, action)?;
             }
             StdDecl::Value(value) => validate_type_expr(
@@ -717,21 +813,23 @@ fn validate_effect_ref(
             }
         }
         EffectReferenceKind::Action => {
-            let [action_owner, action_name] = effect.path.as_slice() else {
+            let declaration = match effect.path.as_slice() {
+                [action_owner, action_name] => logical_effects.action(action_owner, action_name),
+                path => registry
+                    .lookup_qualified(path)
+                    .and_then(|symbol| match &symbol.decl {
+                        StdDecl::EffectAction(action) => Some(action),
+                        _ => None,
+                    }),
+            };
+            let Some(declaration) = declaration else {
                 return invalid(
                     owner_name,
-                    format!(
-                        "requested action `{}` must use owner and action segments",
-                        effect.path.join(".")
-                    ),
+                    format!("unknown action `{}`", effect.path.join(".")),
                 );
             };
-            let Some(declaration) = logical_effects.action(action_owner, action_name) else {
-                return invalid(
-                    owner_name,
-                    format!("unknown action `{action_owner}.{action_name}`"),
-                );
-            };
+            let action_owner = &declaration.owner;
+            let action_name = &declaration.name;
             if effect.args.len() != declaration.effect_args.len() {
                 return invalid(
                     owner_name,

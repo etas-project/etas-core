@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    EffectActionArgKind, EffectActionDecl, EffectDecl, StdDecl, StdGenericParam, StdModuleId,
-    StdRegistryBuilder, StdRuntimeRequirement, StdSpecRef, StdSymbolKind,
+    EffectActionArgKind, EffectActionDecl, EffectDecl, StdDecl, StdEffectRef, StdGenericParam,
+    StdModuleId, StdRegistryBuilder, StdRuntimeRequirement, StdSpecRef, StdSymbolKind, StdType,
 };
 
 pub fn register(builder: &mut StdRegistryBuilder) {
@@ -12,23 +12,23 @@ pub fn register(builder: &mut StdRegistryBuilder) {
     );
 
     for effect in STANDARD_EFFECTS {
+        let mut declaration = if effect.name == "Error" {
+            EffectDecl::generic_core("Error", &["E"])
+        } else if effect.core {
+            EffectDecl::core(effect.name)
+        } else {
+            EffectDecl::standard(effect.name, effect.extends)
+        }
+        .with_stable_id(effect.stable_id)
+        .with_runtime_requirement(effect.runtime_requirement.clone());
+        if !effect.core && effect.high_impact_ack {
+            declaration = declaration.with_high_impact_ack();
+        }
         let symbol = builder.symbol(
             module,
             effect.name,
             StdSymbolKind::Effect,
-            if effect.name == "Error" {
-                StdDecl::Effect(EffectDecl::generic_core("Error", &["E"]))
-            } else if effect.core {
-                StdDecl::Effect(EffectDecl::core(effect.name))
-            } else {
-                let mut decl = EffectDecl::standard(effect.name, effect.extends)
-                    .with_stable_id(effect.stable_id)
-                    .with_runtime_requirement(effect.runtime_requirement.clone());
-                if effect.high_impact_ack {
-                    decl = decl.with_high_impact_ack();
-                }
-                StdDecl::Effect(decl)
-            },
+            StdDecl::Effect(declaration),
             effect.description,
         );
         if effect.prelude {
@@ -63,13 +63,14 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             action.description,
         );
     }
+    super::compiler::register_actions(builder);
 }
 
 fn declare_standard_action_generics(
     action: &StandardActionSpec,
     decl: EffectActionDecl,
 ) -> EffectActionDecl {
-    match action.owner {
+    let decl = match action.owner {
         "Stream" => decl
             .with_type_params(&[StdGenericParam::bounded(
                 "S",
@@ -85,11 +86,28 @@ fn declare_standard_action_generics(
         "Secret" => decl
             .with_type_params(&[StdGenericParam::new("K")])
             .with_selector_param_names(&["K"]),
-        "Agentic" => decl
+        "Agentic" if action.name == "infer" => decl
             .with_type_params(&[StdGenericParam::new("O")])
-            .with_selector_param_names(&["C", "O"]),
+            .with_selector_param_names(&["C", "O"])
+            .with_compiler_role(crate::CompilerActionRole::AgentInference),
         "Memory" => decl.with_type_params(&[StdGenericParam::new("R")]),
         _ => decl,
+    };
+    let error = match action.owner {
+        "Fs" => Some("std.fs.IOError"),
+        "Stream" => Some("std.stream.StreamError"),
+        "Net" => Some("std.net.tcp.NetworkError"),
+        "Tls" => Some("std.tls.TlsError"),
+        "Secret" if action.name == "read" => Some("std.secret.SecretError"),
+        "Browser" => Some("std.browser.protocol.BrowserError"),
+        _ => None,
+    };
+    match error {
+        Some(error) => decl.with_default_handler_effects(vec![StdEffectRef::typed(
+            &["Error"],
+            StdType::parse(error),
+        )]),
+        None => decl,
     }
 }
 
@@ -117,6 +135,16 @@ struct StandardActionSpec {
 }
 
 const STANDARD_EFFECTS: &[StandardEffectSpec] = &[
+    StandardEffectSpec {
+        name: "Code",
+        extends: &[],
+        core: false,
+        prelude: true,
+        stable_id: 27,
+        runtime_requirement: StdRuntimeRequirement::Compiler,
+        high_impact_ack: false,
+        description: "Checking and compilation of immutable retained definitions.",
+    },
     StandardEffectSpec {
         name: "Agentic",
         extends: &[],
@@ -456,7 +484,7 @@ const STANDARD_ACTIONS: &[StandardActionSpec] = &[
         owner: "Stream",
         name: "read",
         params: &["S"],
-        output: "StreamRead",
+        output: "std.stream.StreamRead",
         stable_id: 131,
         runtime_requirement: StdRuntimeRequirement::Stream,
         effect_args: &[EffectActionArgKind::Type],

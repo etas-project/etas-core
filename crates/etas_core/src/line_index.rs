@@ -1,12 +1,12 @@
 use crate::{TextRange, TextSize};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct LineIndex {
     line_starts: Vec<TextSize>,
     text_len: TextSize,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct LineCol {
     pub line: u32,
     pub col: u32,

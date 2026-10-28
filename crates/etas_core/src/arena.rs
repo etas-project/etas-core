@@ -2,7 +2,7 @@ use std::ops::Index;
 
 use crate::Idx;
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, crate::RetainedSize)]
 pub struct Arena<Id, T> {
     values: Vec<T>,
     _id: std::marker::PhantomData<fn() -> Id>,
@@ -36,6 +36,13 @@ where
     pub fn iter(&self) -> impl Iterator<Item = (Id, &T)> {
         self.values
             .iter()
+            .enumerate()
+            .map(|(index, value)| (Id::from_u32(index.min(u32::MAX as usize) as u32), value))
+    }
+
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (Id, &mut T)> {
+        self.values
+            .iter_mut()
             .enumerate()
             .map(|(index, value)| (Id::from_u32(index.min(u32::MAX as usize) as u32), value))
     }

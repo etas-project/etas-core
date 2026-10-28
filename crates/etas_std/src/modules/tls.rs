@@ -49,7 +49,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             qualified_path: vec!["std".into(), "tls".into(), "connect".into()],
             purity: IntrinsicPurity::Host,
             dispatch: IntrinsicDispatch::Host,
-            lowering: LoweringHint::RuntimeCall,
+            lowering: LoweringHint::default_action(135, &[1]),
             latent_effect: crate::IntrinsicLatentEffect::None,
             memory_access: crate::IntrinsicMemoryAccess::None,
             runtime_requirement: crate::IntrinsicRuntimeRequirement::None,

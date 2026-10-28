@@ -34,7 +34,7 @@ pub const CRYPTO_CONSTANT_TIME_EQ: u32 = 32;
 pub const HTTP_DECODE_RESPONSE: u32 = 33;
 pub const RESULT_UNWRAP: u32 = 34;
 pub const OPTION_NONE: u32 = 35;
-pub const JSON_INVALID_JSON: u32 = 36;
+// ID 36 is retired; JSON error constructors use the checked enum ABI.
 pub const JSON_PARSE: u32 = 37;
 pub const JSON_STRINGIFY: u32 = 38;
 pub const SESSION_LAST_TURNS: u32 = 39;

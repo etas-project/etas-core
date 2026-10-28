@@ -1,4 +1,4 @@
-use crate::{StdDecl, StdRegistryBuilder, StdSymbolKind, TypeDecl, TypeDeclKind};
+use crate::{StdDecl, StdRegistryBuilder, StdSymbolKind, StdType, TypeDecl, TypeDeclKind};
 
 pub fn register(builder: &mut StdRegistryBuilder) {
     let module = builder.module(
@@ -14,6 +14,9 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         let mut decl = TypeDecl::generic(name, params, TypeDeclKind::Support);
         if matches!(name, "Schema" | "ResponseDecode") {
             decl = decl.derivable();
+        }
+        if name == "Schema" {
+            decl = decl.with_canonical_type(StdType::Schema(Box::new(StdType::Var("T".into()))));
         }
         let symbol = builder.symbol(
             module,

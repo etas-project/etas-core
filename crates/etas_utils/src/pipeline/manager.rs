@@ -15,6 +15,7 @@ pub struct PassManager<C> {
     records: Vec<PassRunRecord>,
     stats: PipelineStats,
     current_unit: Option<UnitKey>,
+    execution_control: Option<std::sync::Arc<dyn super::PipelineExecutionControl>>,
 }
 
 impl<C> Default for PassManager<C> {
@@ -33,6 +34,7 @@ impl<C> PassManager<C> {
             records: Vec::new(),
             stats: PipelineStats::default(),
             current_unit: None,
+            execution_control: None,
         }
     }
 
@@ -45,6 +47,29 @@ impl<C> PassManager<C> {
 
     pub fn config(&self) -> &PipelineConfig {
         &self.config
+    }
+
+    pub fn set_execution_control(
+        &mut self,
+        control: std::sync::Arc<dyn super::PipelineExecutionControl>,
+    ) {
+        self.execution_control = Some(control);
+    }
+
+    pub fn execution_control(&self) -> Option<&dyn super::PipelineExecutionControl> {
+        self.execution_control.as_deref()
+    }
+
+    pub fn execution_control_handle(
+        &self,
+    ) -> Option<std::sync::Arc<dyn super::PipelineExecutionControl>> {
+        self.execution_control.clone()
+    }
+
+    fn execution_interruption(&self) -> Option<super::PipelineInterruption> {
+        self.execution_control
+            .as_ref()
+            .and_then(|control| control.checkpoint().err())
     }
 
     pub fn config_mut(&mut self) -> &mut PipelineConfig {
@@ -122,6 +147,23 @@ impl<C> PassManager<C> {
             PassControl::Continue => PipelineRunResult::completed(stats, records),
             other => PipelineRunResult::stopped(other, stats, records),
         }
+    }
+
+    /// Execute a composed pipeline without resetting its parent's records,
+    /// statistics, or artifact ledger. The caller explicitly selects its scope.
+    pub fn run_nested_pipeline(
+        &mut self,
+        pipeline: &mut Pipeline<C>,
+        context: &mut C,
+        unit: Option<UnitKey>,
+    ) -> PassControl
+    where
+        C: UnitProvider,
+    {
+        let current_unit = std::mem::replace(&mut self.current_unit, unit);
+        let control = self.run_steps(&mut pipeline.steps, context);
+        self.current_unit = current_unit;
+        control
     }
 
     pub fn schedule_text(&self, pipeline: &Pipeline<C>) -> String {
@@ -219,6 +261,18 @@ impl<C> PassManager<C> {
         context: &mut C,
     ) -> PassControl {
         let pass_context = PassContext::new(self.current_unit);
+        if let Some(interruption) = self.execution_interruption() {
+            let mut result = PassResult::unchanged();
+            result.control = PassControl::Failed(PassFailure::interrupted(interruption));
+            return self.finish_pass(
+                &descriptor,
+                &pass_context,
+                result,
+                ArtifactSet::new(),
+                None,
+                context,
+            );
+        }
         if !self.config.should_run(descriptor.name) {
             self.stats.skipped += 1;
             self.records.push(PassRunRecord {
@@ -288,6 +342,19 @@ impl<C> PassManager<C> {
 
         let started = self.config.collect_timing.then(Instant::now);
         let mut result = pass.run(context, &pass_context, self);
+        if let Some(interruption) = self.execution_interruption() {
+            result = PassResult::unchanged();
+            result.control = PassControl::Failed(PassFailure::interrupted(interruption));
+            let duration = started.map(|started| started.elapsed());
+            return self.finish_pass(
+                &descriptor,
+                &pass_context,
+                result,
+                ArtifactSet::new(),
+                duration,
+                context,
+            );
+        }
         result.produced = self.resolve_artifact_set(&result.produced);
         let produced = self.resolve_artifact_set(&descriptor.produces);
         result.produced.extend(&produced);

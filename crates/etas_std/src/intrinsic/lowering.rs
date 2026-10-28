@@ -1,4 +1,4 @@
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum LoweringHint {
     None,
     PureBuiltin,
@@ -6,4 +6,33 @@ pub enum LoweringHint {
     HostBoundary,
     ApprovalBoundary,
     ErrorRaise,
+    ForwardAction {
+        stable_id: u32,
+    },
+    DefaultAction {
+        stable_id: u32,
+        payload: Vec<usize>,
+    },
+    ActionReducer {
+        stable_id: u32,
+        payload: Vec<usize>,
+        reducer: StdActionReducer,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+pub enum StdActionReducer {
+    ReadUntilLimit {
+        limit_parameter: usize,
+        timeout_parameter: usize,
+    },
+}
+
+impl LoweringHint {
+    pub fn default_action(stable_id: u32, payload: &[usize]) -> Self {
+        Self::DefaultAction {
+            stable_id,
+            payload: payload.to_vec(),
+        }
+    }
 }

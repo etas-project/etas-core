@@ -8,7 +8,9 @@ pub mod tool_decl;
 pub mod type_decl;
 pub mod value_decl;
 
-pub use effect_decl::{EffectActionArgKind, EffectActionDecl, EffectDecl, StdRuntimeRequirement};
+pub use effect_decl::{
+    CompilerActionRole, EffectActionArgKind, EffectActionDecl, EffectDecl, StdRuntimeRequirement,
+};
 pub use effect_ref::{StdEffectRef, StdStaticArg};
 pub use flow_decl::{FlowDecl, FlowSourceMethod, FlowSourceMethodKind, FlowSourceMethodOperation};
 pub use impl_decl::StdImplFact;
@@ -17,10 +19,12 @@ pub use std_type::{
     StdPrimitiveType, StdRecordField, StdSupportConstraint, StdTrustWrapper, StdType,
 };
 pub use tool_decl::ToolDecl;
-pub use type_decl::{StdGenericParam, StdSpecRef, TypeDecl, TypeDeclKind};
+pub use type_decl::{
+    CodeTypeRole, StdGenericParam, StdSpecRef, StdTypeConstruction, TypeDecl, TypeDeclKind,
+};
 pub use value_decl::ValueDecl;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum StdDecl {
     Type(TypeDecl),
     Effect(EffectDecl),

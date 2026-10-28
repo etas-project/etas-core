@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use super::{ArtifactSet, PassControl, UnitKey};
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct PipelineStats {
     pub executed: u32,
     pub skipped: u32,
@@ -11,14 +11,14 @@ pub struct PipelineStats {
     pub stopped: u32,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct PassTiming {
     pub pass: &'static str,
     pub unit: Option<UnitKey>,
     pub duration: Duration,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct PassRunRecord {
     pub pass: &'static str,
     pub unit: Option<UnitKey>,

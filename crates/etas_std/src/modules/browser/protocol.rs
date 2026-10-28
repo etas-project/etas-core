@@ -40,7 +40,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             summary: "Attach to an existing browser protocol session.",
             purity: IntrinsicPurity::Host,
             dispatch: IntrinsicDispatch::Host,
-            lowering: LoweringHint::RuntimeCall,
+            lowering: LoweringHint::default_action(141, &[0]),
         },
     );
     register_intrinsic_flow(
@@ -58,7 +58,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             summary: "Create a new browser protocol session.",
             purity: IntrinsicPurity::Host,
             dispatch: IntrinsicDispatch::Host,
-            lowering: LoweringHint::RuntimeCall,
+            lowering: LoweringHint::default_action(141, &[0]),
         },
     );
     register_intrinsic_flow(
@@ -76,7 +76,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             summary: "Send a browser protocol message.",
             purity: IntrinsicPurity::Host,
             dispatch: IntrinsicDispatch::Host,
-            lowering: LoweringHint::RuntimeCall,
+            lowering: LoweringHint::default_action(142, &[0]),
         },
     );
     register_intrinsic_flow(
@@ -94,7 +94,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             summary: "Receive a browser protocol message.",
             purity: IntrinsicPurity::Host,
             dispatch: IntrinsicDispatch::Host,
-            lowering: LoweringHint::RuntimeCall,
+            lowering: LoweringHint::default_action(143, &[0]),
         },
     );
     register_intrinsic_flow(
@@ -112,7 +112,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             summary: "Close a browser protocol session.",
             purity: IntrinsicPurity::Host,
             dispatch: IntrinsicDispatch::Host,
-            lowering: LoweringHint::RuntimeCall,
+            lowering: LoweringHint::default_action(144, &[0]),
         },
     );
     register_intrinsic_flow(
@@ -130,11 +130,14 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             summary: "Capture a screenshot payload for a browser protocol session.",
             purity: IntrinsicPurity::Host,
             dispatch: IntrinsicDispatch::Host,
-            lowering: LoweringHint::RuntimeCall,
+            lowering: LoweringHint::default_action(145, &[0]),
         },
     );
 }
 
 fn browser_error_effect() -> StdEffectRef {
-    StdEffectRef::typed(&["Error"], StdType::parse("BrowserError"))
+    StdEffectRef::typed(
+        &["Error"],
+        StdType::parse("std.browser.protocol.BrowserError"),
+    )
 }

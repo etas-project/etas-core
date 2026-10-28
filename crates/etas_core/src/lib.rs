@@ -3,6 +3,7 @@ pub mod diagnostic;
 pub mod id;
 pub mod interner;
 pub mod line_index;
+pub mod memory;
 pub mod result;
 pub mod source;
 pub mod span;
@@ -22,3 +23,6 @@ pub use line_index::{LineCol, LineIndex};
 pub use result::{DiagnosticSink, EtasError, EtasResult};
 pub use source::{SourceFile, SourceId};
 pub use span::{Span, TextRange, TextSize};
+
+extern crate self as etas_core;
+pub use etas_memory_derive::RetainedSize;

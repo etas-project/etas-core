@@ -7,6 +7,9 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+etas_code.workspace = true
+etas_core.workspace = true
 blake3.workspace = true
 prost = "0.13"
+serde = { workspace = true, features = ["derive"] }
 zstd.workspace = true

@@ -66,6 +66,7 @@ pub enum ResolvedDependencySource {
         path: String,
         checksum: String,
         store: Option<String>,
+        definition_origin: Option<etas_code::PackageKey>,
     },
 }
 
@@ -92,6 +93,8 @@ pub struct ExternalExport {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PublicMetadata {
+    pub definition_descriptors: Option<etas_code::descriptor::DefinitionDescriptorSet>,
+    pub definition_origins: Option<etas_code::identity::PackageDefinitionOrigins>,
     pub modules: Vec<ExternalModule>,
     pub types: Vec<NamedSignature>,
     pub values: Vec<NamedSignature>,
@@ -119,7 +122,9 @@ pub struct PublicMetadata {
 
 impl PublicMetadata {
     pub fn is_empty(&self) -> bool {
-        self.modules.is_empty()
+        self.definition_descriptors.is_none()
+            && self.definition_origins.is_none()
+            && self.modules.is_empty()
             && self.types.is_empty()
             && self.values.is_empty()
             && self.enums.is_empty()
@@ -195,6 +200,7 @@ pub enum AnnotationValueKind {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct NamedSignature {
     pub path: Vec<String>,
+    pub generic_params: Vec<GenericParam>,
     pub visibility: Visibility,
     pub ty: Option<Type>,
 }
@@ -225,14 +231,33 @@ pub struct ActionSignature {
     pub visibility: Visibility,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    etas_core::RetainedSize,
+)]
 pub struct GenericParam {
     pub name: String,
     pub kind: GenericParamKind,
     pub bounds: Vec<SpecBound>,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    etas_core::RetainedSize,
+)]
 pub enum GenericParamKind {
     #[default]
     Type,
@@ -252,7 +277,16 @@ pub enum ActionArgKind {
     StringPattern,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    etas_core::RetainedSize,
+)]
 pub struct Type {
     pub kind: TypeKind,
     pub name: String,
@@ -263,25 +297,61 @@ pub struct Type {
     pub produced_effects: Option<EffectRow>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    etas_core::RetainedSize,
+)]
 pub struct TypeField {
     pub name: String,
     pub ty: Type,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    etas_core::RetainedSize,
+)]
 pub struct EffectRow {
     pub effects: Vec<EffectRef>,
     pub tail: Option<String>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    etas_core::RetainedSize,
+)]
 pub struct EffectRef {
     pub path: Vec<String>,
     pub args: Vec<EffectArg>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    etas_core::RetainedSize,
+)]
 pub struct EffectArg {
     pub kind: EffectArgKind,
     pub ty: Option<Type>,
@@ -303,15 +373,94 @@ impl EffectMetadata {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct EffectSummary {
+    pub handler_requests: Option<RequestInstantiationTemplate>,
+    pub default_handler_effects: Option<DefaultHandlerEffects>,
     pub item: Vec<String>,
     pub public_effects: EffectRow,
     pub requested_actions: EffectRow,
     pub handled_requested_actions: EffectRow,
     pub latent_flows: Vec<LatentFlowSummary>,
+    /// Complete sources on every successful callable-bearing return.
+    /// Absence means the return sources are unavailable, not known-pure.
+    pub returned_callables: Option<crate::CallableValueGraph>,
     pub action_trace: ActionTrace,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    etas_core::RetainedSize,
+)]
+pub struct RequestInstantiationTemplate {
+    pub actions: Vec<ActionRequestTemplate>,
+    pub parameters: Vec<ParameterRequestTemplate>,
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub struct ActionRequestTemplate {
+    pub action: EffectRef,
+    /// None means that the request is known, but its payload-generic ABI is not.
+    pub type_bindings: Option<Vec<ActionTypeBinding>>,
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub struct ActionTypeBinding {
+    pub parameter: String,
+    pub ty: Type,
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub struct ParameterRequestTemplate {
+    /// Resolved through the containing callable's parameter binding table.
+    pub parameter: String,
+    pub excluded: Vec<EffectRef>,
+}
+
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    etas_core::RetainedSize,
+)]
+pub struct DefaultHandlerEffects {
+    pub direct_effects: EffectRow,
+    pub default_actions: EffectRow,
+    pub handlers: Vec<DefaultHandlerContribution>,
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub struct DefaultHandlerContribution {
+    pub action: EffectRef,
+    pub produced: EffectRow,
+}
+
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    etas_core::RetainedSize,
+)]
 pub enum ActionTrace {
     #[default]
     Empty,
@@ -329,13 +478,25 @@ pub enum ActionTrace {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
 pub struct ActionTraceEvent {
     pub action: EffectRef,
     pub source: ActionTraceEventSource,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    etas_core::RetainedSize,
+)]
 pub enum ActionTraceEventSource {
     Perform,
     StdIntrinsic,
@@ -396,7 +557,16 @@ pub struct SpecMethod {
     pub signature: Option<CallableSignature>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    etas_core::RetainedSize,
+)]
 pub struct SpecBound {
     pub spec: Vec<String>,
     pub args: Vec<Type>,
@@ -511,7 +681,17 @@ pub enum Visibility {
     Private,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    etas_core::RetainedSize,
+)]
 pub enum TypeKind {
     #[default]
     Primitive,
@@ -520,6 +700,7 @@ pub enum TypeKind {
     Applied,
     Alias,
     Nominal,
+    Enum,
     Array,
     List,
     Map,
@@ -546,7 +727,17 @@ pub enum TypeKind {
     ResourceHandle,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    etas_core::RetainedSize,
+)]
 pub enum EffectArgKind {
     Type,
     Path,

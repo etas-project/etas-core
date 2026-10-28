@@ -399,16 +399,15 @@ fn disk_store_reuses_existing_final_object_without_rewriting_it() -> Result<(), 
         .expect("payload hash");
     let path = object_path(&root, &hash);
     let original = fs::read(&path)?;
-    let mut permissions = fs::metadata(&path)?.permissions();
+    let original_permissions = fs::metadata(&path)?.permissions();
+    let mut permissions = original_permissions.clone();
     permissions.set_readonly(true);
     fs::set_permissions(&path, permissions)?;
 
     put_payload(&mut store, key, Vec::new(), 20, b"immutable-final")?;
 
     assert_eq!(fs::read(&path)?, original);
-    let mut permissions = fs::metadata(&path)?.permissions();
-    permissions.set_readonly(false);
-    fs::set_permissions(&path, permissions)?;
+    fs::set_permissions(&path, original_permissions)?;
     Ok(())
 }
 

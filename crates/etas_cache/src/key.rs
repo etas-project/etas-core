@@ -1,15 +1,15 @@
 use std::fmt;
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, etas_core::RetainedSize)]
 pub struct CacheNamespace(String);
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, etas_core::RetainedSize)]
 pub struct ArtifactKindKey(String);
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, etas_core::RetainedSize)]
 pub struct ArtifactUnitKey(String);
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, etas_core::RetainedSize)]
 pub struct ArtifactKey {
     pub namespace: CacheNamespace,
     pub kind: ArtifactKindKey,
