@@ -1,6 +1,9 @@
 use etas_std::{StdIntrinsicId, intrinsic::pure};
 
+use super::input::TextInput;
 use crate::{BuiltinError, BuiltinValue};
+
+mod projected;
 
 #[derive(Clone, Copy, Debug)]
 pub enum TextQuery {
@@ -31,13 +34,36 @@ impl TextQuery {
     }
 
     pub fn evaluate(self, args: &[&str]) -> Result<BuiltinValue, BuiltinError> {
+        self.evaluate_projected(args)
+    }
+
+    pub fn evaluate_projected<T: TextInput + ?Sized>(
+        self,
+        args: &[&T],
+    ) -> Result<BuiltinValue, BuiltinError> {
         if args.len() != self.arity() {
             return Err(BuiltinError::ArityMismatch {
                 expected: self.arity(),
                 actual: args.len(),
             });
         }
-        Ok(match self {
+        let mut flat = [""; 2];
+        let contiguous = flat.iter_mut().zip(args).all(|(slot, text)| {
+            if let Some(text) = text.contiguous() {
+                *slot = text;
+                true
+            } else {
+                false
+            }
+        });
+        if contiguous {
+            return Ok(self.evaluate_flat(&flat));
+        }
+        projected::evaluate(self, args)
+    }
+
+    fn evaluate_flat(self, args: &[&str]) -> BuiltinValue {
+        match self {
             Self::Len => BuiltinValue::Usize(args[0].chars().count()),
             Self::Contains => BuiltinValue::Bool(args[0].contains(args[1])),
             Self::StartsWith => BuiltinValue::Bool(args[0].starts_with(args[1])),
@@ -48,9 +74,11 @@ impl TextQuery {
                     BuiltinValue::ResultErr(Box::new(BuiltinValue::String(error.to_string())))
                 }
             },
-        })
+        }
     }
 }
 
+#[cfg(test)]
+mod projected_tests;
 #[cfg(test)]
 mod tests;
