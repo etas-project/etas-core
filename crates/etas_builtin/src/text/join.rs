@@ -15,8 +15,8 @@ where
     join_text_projected(parts, separator)
 }
 
-/// A two-pass join over checked, immutable text projections. Only the final
-/// output and (for a segmented separator) borrowed chunk headers are allocated.
+/// A two-pass join without flattened input payloads. Chunk traversal can need
+/// metadata; the final output owns its bytes and separator headers are reused.
 pub fn join_text_projected<'a, T, E, I>(parts: I, separator: &T) -> Result<String, JoinError<E>>
 where
     T: super::input::TextInput + ?Sized + 'a,
