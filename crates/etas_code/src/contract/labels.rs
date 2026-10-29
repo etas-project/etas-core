@@ -81,7 +81,86 @@ pub enum TraceLabel {
     },
 }
 
+fn path_work(path: &[String]) -> usize {
+    path.iter()
+        .fold(path.len(), |n, segment| n.saturating_add(segment.len()))
+}
+
+pub(super) fn key_work(key: &DefinitionKey) -> usize {
+    1usize
+        .saturating_add(path_work(key.module()))
+        .saturating_add(path_work(key.declaration()))
+}
+
+pub(super) fn callable_work(id: &CallableId) -> usize {
+    match id.identity_ref() {
+        crate::identity::CallableIdentityRef::Declaration(key) => key_work(key),
+        crate::identity::CallableIdentityRef::Method(method) => {
+            let implementation = method.implementation();
+            1usize
+                .saturating_add(method.name().len())
+                .saturating_add(path_work(implementation.module()))
+                .saturating_add(key_work(implementation.subject()))
+                .saturating_add(implementation.selected_spec().map_or(0, key_work))
+        }
+    }
+}
+
 impl TraceLabel {
+    pub(super) fn comparison_work(&self) -> usize {
+        fn effect_work(effect: &CanonicalEffect) -> usize {
+            let target = match &effect.target {
+                EffectTargetInfo::Effect(key) => key_work(key),
+                EffectTargetInfo::Action { effect, name } => {
+                    key_work(effect).saturating_add(name.len())
+                }
+            };
+            effect.arguments.iter().fold(target, |work, arg| {
+                work.saturating_add(match arg {
+                    CanonicalSelector::Resource(key) => key_work(key),
+                    CanonicalSelector::Callable(id) => callable_work(id),
+                    CanonicalSelector::String(value) | CanonicalSelector::Integer(value) => {
+                        value.len().saturating_add(1)
+                    }
+                    CanonicalSelector::Type(_) | CanonicalSelector::Wildcard => 1,
+                })
+            })
+        }
+        fn handlers_work(handlers: &Option<Vec<HandlerScopeLabel>>) -> usize {
+            handlers.as_ref().map_or(1, |handlers| {
+                handlers.iter().fold(1usize, |work, handler| {
+                    let HandlerScopeLabel::Resume(arms) = handler;
+                    arms.iter().fold(work.saturating_add(1), |work, arm| {
+                        work.saturating_add(effect_work(&arm.action))
+                            .saturating_add(1)
+                    })
+                })
+            })
+        }
+        match self {
+            Self::Action(effect) => effect_work(effect),
+            Self::ParameterCall {
+                callable,
+                arguments,
+                handlers,
+                ..
+            }
+            | Self::ParameterNonReturn {
+                callable,
+                arguments,
+                handlers,
+                ..
+            } => callable_work(callable)
+                .saturating_add(arguments.as_ref().map_or(1, Vec::len))
+                .saturating_add(handlers_work(handlers)),
+            Self::Returned {
+                observation: ReturnObservationInfo::Variant { owner, name },
+                ..
+            } => key_work(owner).saturating_add(name.len()),
+            Self::Returned { .. } | Self::Raised { .. } | Self::NonReturn => 1,
+        }
+    }
+
     pub(super) fn covers(&self, candidate: &Self) -> bool {
         match (self, candidate) {
             (Self::NonReturn, Self::NonReturn) => true,

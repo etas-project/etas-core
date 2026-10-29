@@ -44,6 +44,91 @@ fn proves(graph: &DescriptorGraph, candidate: u32, frozen: u32) -> bool {
 }
 
 #[test]
+fn proof_budget_charges_each_handler_arm_and_selector() {
+    let callable = etas_code::CallableId::declaration(
+        DefinitionKey::new(
+            PackageKey::from_canonical_fingerprint(CodeFingerprint::from_bytes([8; 32])),
+            vec!["app".into()],
+            vec!["apply".into()],
+            DefinitionKind::Flow,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let arm = ParameterHandlerArmInfo {
+        action: action("write", Some(StaticEffectArgInfo::Type(TypeInfoRef(2)))),
+        result_type: TypeInfoRef(2),
+        value: ReturnObservationInfo::Unit,
+    };
+    let call = ParameterCallInfo {
+        callable,
+        signature: TypeInfoRef(0),
+        position: 0,
+        arguments: Some(vec![]),
+        handlers: Some(vec![ParameterHandlerScopeInfo::Resume {
+            arms: vec![arm; 200],
+        }]),
+    };
+    let graph = DescriptorGraph::new(
+        DescriptorGraphInput {
+            types: vec![
+                TypeInfo::Function(SignatureInfo {
+                    generics: vec![],
+                    parameters: vec![ParameterInfo {
+                        name: Some("f".into()),
+                        ty: TypeInfoRef(1),
+                    }],
+                    output: TypeInfoRef(2),
+                    declared_output: None,
+                    effects: None,
+                }),
+                TypeInfo::Function(SignatureInfo {
+                    generics: vec![],
+                    parameters: vec![],
+                    output: TypeInfoRef(2),
+                    declared_output: None,
+                    effects: Some(EffectRowInfoRef(0)),
+                }),
+                TypeInfo::Primitive(PrimitiveInfo::Unit),
+            ],
+            rows: vec![EffectRowInfo {
+                effects: vec![],
+                tail: None,
+            }],
+            traces: vec![
+                TraceInfo::ParameterCall(call.clone()),
+                TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(call)),
+            ],
+            ..Default::default()
+        },
+        DescriptorLimits::default(),
+    )
+    .unwrap();
+    for root in [TraceInfoRef(0), TraceInfoRef(1)] {
+        assert!(matches!(
+            check_trace_inclusion(
+                &graph,
+                root,
+                &graph,
+                root,
+                TraceProofLimits {
+                    max_steps: 200,
+                    ..Default::default()
+                }
+            ),
+            Err(TraceProofError::Limit {
+                resource: "proof steps",
+                ..
+            })
+        ));
+        assert!(matches!(
+            check_trace_inclusion(&graph, root, &graph, root, TraceProofLimits::default()),
+            Ok(TraceInclusion::Included)
+        ));
+    }
+}
+
+#[test]
 fn inclusion_preserves_intermediate_order_not_just_final_action_sets() {
     let graph = graph(vec![
         TraceInfo::Event(action("approve", None)),
@@ -182,12 +267,44 @@ fn repeated_large_labels_are_shared_in_abstract_counterexamples() {
         TraceInfo::Seq(parts),
         TraceInfo::Repeat(TraceInfoRef(0)),
     ]);
+    assert!(matches!(
+        check_trace_inclusion(
+            &graph,
+            TraceInfoRef(2),
+            &graph,
+            TraceInfoRef(3),
+            TraceProofLimits::default()
+        ),
+        Err(TraceProofError::Limit {
+            resource: "proof steps",
+            ..
+        })
+    ));
+    assert!(matches!(
+        check_trace_inclusion(
+            &graph,
+            TraceInfoRef(2),
+            &graph,
+            TraceInfoRef(3),
+            TraceProofLimits {
+                max_steps: 3 * 1024 * 1024,
+                ..Default::default()
+            },
+        ),
+        Err(TraceProofError::Limit {
+            resource: "proof steps",
+            ..
+        })
+    ));
     let TraceInclusion::NotProven(witness) = check_trace_inclusion(
         &graph,
         TraceInfoRef(2),
         &graph,
         TraceInfoRef(3),
-        TraceProofLimits::default(),
+        TraceProofLimits {
+            max_steps: 256 * 1024 * 1024,
+            ..Default::default()
+        },
     )
     .unwrap() else {
         panic!("bad final action")

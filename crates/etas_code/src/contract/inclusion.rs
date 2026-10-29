@@ -68,12 +68,13 @@ pub fn check_trace_inclusion(
                 for old in &search[cursor].frozen {
                     for old_edge in &frozen.edges[*old] {
                         budget.charge(1)?;
-                        if old_edge
-                            .label
-                            .as_ref()
-                            .is_some_and(|bound| bound.covers(label))
-                        {
-                            next.insert(old_edge.to);
+                        if let Some(bound) = &old_edge.label {
+                            budget.charge(
+                                bound.comparison_work.saturating_add(label.comparison_work),
+                            )?;
+                            if bound.value.covers(&label.value) {
+                                next.insert(old_edge.to);
+                            }
                         }
                     }
                 }
@@ -82,7 +83,7 @@ pub fn check_trace_inclusion(
                     return Ok(TraceInclusion::NotProven(witness(
                         &search,
                         cursor,
-                        Some((edge.source, label.clone())),
+                        Some((edge.source, label.value.clone())),
                     )));
                 }
                 enqueue(
@@ -92,7 +93,7 @@ pub fn check_trace_inclusion(
                     SearchNode {
                         candidate: edge.to,
                         frozen: next,
-                        parent: Some((cursor, edge.source, label.clone())),
+                        parent: Some((cursor, edge.source, label.value.clone())),
                     },
                     &budget,
                 )?;
