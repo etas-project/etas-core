@@ -25,9 +25,18 @@ impl CountQuery {
     }
 
     pub fn evaluate_text(self, text: &str) -> BuiltinValue {
+        self.evaluate_text_projected(text)
+    }
+
+    pub fn evaluate_text_projected<T: crate::text::input::TextInput + ?Sized>(
+        self,
+        text: &T,
+    ) -> BuiltinValue {
         match self {
-            Self::Len => BuiltinValue::Usize(text.chars().count()),
-            Self::IsEmpty => BuiltinValue::Bool(text.is_empty()),
+            Self::Len => {
+                BuiltinValue::Usize(text.chunks().map(|chunk| chunk.chars().count()).sum())
+            }
+            Self::IsEmpty => BuiltinValue::Bool(text.byte_len() == 0),
         }
     }
 
