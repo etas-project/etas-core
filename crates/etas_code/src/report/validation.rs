@@ -77,6 +77,13 @@ impl CheckReport {
         }
         for check in &self.runtime_checks {
             validate_location(check.location.as_ref())?;
+            if check
+                .spec
+                .as_ref()
+                .is_some_and(|spec| spec.kind() != crate::DefinitionKind::Spec)
+            {
+                return Err(ReportValidationError::InvalidSpec);
+            }
         }
         Ok(())
     }
@@ -175,4 +182,83 @@ fn validate_location(location: Option<&DiagnosticLocation>) -> Result<(), Report
         return Err(ReportValidationError::InvalidLocation);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        CallableId, CodeFingerprint, DefinitionKey, DefinitionKind, PackageKey, RevisionInfo,
+        RevisionInputs,
+        descriptor::{DescriptorGraphInput, EffectRowInfo, EffectSummaryInfo, TraceInfo},
+        report::{DependencyInfo, RuntimeCheckInfo},
+    };
+
+    #[test]
+    fn guarded_report_rejects_non_spec_identity_in_runtime_check() {
+        let fingerprint = |value: &[u8]| CodeFingerprint::of_bytes("etas.test.report", value);
+        let package = PackageKey::from_canonical_fingerprint(fingerprint(b"package"));
+        let definition = |name: &str, kind| {
+            DefinitionKey::new(package, vec!["app".into()], vec![name.into()], kind).unwrap()
+        };
+        let target = definition("flow", DefinitionKind::Flow);
+        let environment = fingerprint(b"environment");
+        let revision = RevisionInfo::new(RevisionInputs {
+            definition: CallableId::declaration(target.clone()).unwrap(),
+            content: fingerprint(b"body"),
+            environment,
+            contract: fingerprint(b"contract"),
+            compilation: fingerprint(b"compiler"),
+            parent: None,
+        });
+        let limits = DescriptorLimits::default();
+        let descriptors = DescriptorGraph::new(
+            DescriptorGraphInput {
+                rows: vec![EffectRowInfo {
+                    effects: vec![],
+                    tail: None,
+                }],
+                traces: vec![TraceInfo::Empty],
+                ..Default::default()
+            },
+            limits,
+        )
+        .unwrap();
+        let mut report = CheckReport {
+            status: CheckStatus::Guarded,
+            diagnostics: vec![],
+            revision,
+            dependencies: DependencyInfo {
+                environment,
+                lexical_owner: target.clone(),
+                standard_package: package,
+                modules: vec![],
+                bindings: vec![],
+                artifacts: vec![],
+            },
+            snapshot_fingerprint: fingerprint(b"snapshot"),
+            descriptors,
+            effects: EffectSummaryInfo {
+                declared_bound: None,
+                escaping: Some(EffectRowInfoRef(0)),
+                requested: Some(EffectRowInfoRef(0)),
+                default_handled: Some(EffectRowInfoRef(0)),
+            },
+            determinism: None,
+            trace: Some(TraceInfoRef(0)),
+            runtime_checks: vec![RuntimeCheckInfo {
+                kind: "action_scope".into(),
+                location: None,
+                spec: Some(target),
+            }],
+        };
+        assert_eq!(
+            report.validate(limits),
+            Err(ReportValidationError::InvalidSpec)
+        );
+        report.runtime_checks[0].spec = Some(definition("Safe", DefinitionKind::Spec));
+        assert_eq!(report.validate(limits), Ok(()));
+        report.runtime_checks[0].spec = None;
+        assert_eq!(report.validate(limits), Ok(()));
+    }
 }
