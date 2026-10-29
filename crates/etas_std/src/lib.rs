@@ -23,7 +23,7 @@ pub use intrinsic::{
 pub use metadata::{CompletionMetadata, DocsMetadata, StdManifest};
 pub use modules::standard_registry;
 pub use registry::{
-    StdModule, StdModuleId, StdPrelude, StdRegistry, StdRegistryBuilder,
+    StdModule, StdModuleId, StdNamespace, StdPrelude, StdRegistry, StdRegistryBuilder,
     StdRegistryValidationError, StdRegistryVersion, StdSymbol, StdSymbolId, StdSymbolKind,
     StdSymbolRef,
 };

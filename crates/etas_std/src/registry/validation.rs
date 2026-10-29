@@ -29,6 +29,7 @@ impl std::error::Error for StdRegistryValidationError {}
 
 pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistryValidationError> {
     validate_unique_symbols(registry)?;
+    validate_prelude(registry)?;
     validate_stable_ids(registry)?;
     let logical_effects = LogicalEffectIndex::build(registry)?;
     let mut code_roles = BTreeSet::new();
@@ -489,6 +490,25 @@ fn validate_requirement(
 
 fn generic_names(params: &[StdGenericParam]) -> BTreeSet<&str> {
     params.iter().map(|param| param.name.as_str()).collect()
+}
+
+fn validate_prelude(registry: &StdRegistry) -> Result<(), StdRegistryValidationError> {
+    let mut bindings = BTreeSet::new();
+    for binding in registry.prelude().symbols() {
+        let symbol = registry
+            .symbol(binding.id)
+            .ok_or_else(|| StdRegistryValidationError {
+                symbol: binding.name.clone(),
+                reason: "prelude binding refers to an unregistered symbol".into(),
+            })?;
+        if !bindings.insert((&binding.name, symbol.kind.namespace())) {
+            return Err(StdRegistryValidationError {
+                symbol: binding.name.clone(),
+                reason: "prelude has multiple bindings in the same namespace".into(),
+            });
+        }
+    }
+    Ok(())
 }
 
 fn validate_unique_symbols(registry: &StdRegistry) -> Result<(), StdRegistryValidationError> {
