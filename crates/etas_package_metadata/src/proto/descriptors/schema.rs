@@ -513,32 +513,34 @@ pub struct ParameterHandlerScopes {
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct ParameterHandlerScope {
-    #[prost(oneof = "parameter_handler_scope::Kind", tags = "2")]
+    #[prost(oneof = "parameter_handler_scope::Kind", tags = "3")]
     pub kind: Option<parameter_handler_scope::Kind>,
 }
 
 pub mod parameter_handler_scope {
     #[derive(Clone, PartialEq, prost::Oneof)]
     pub enum Kind {
-        #[prost(message, tag = "2")]
-        Resume(super::ParameterResumeScope),
+        #[prost(message, tag = "3")]
+        Handle(super::ParameterHandlerBody),
     }
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
-pub struct ParameterResumeScope {
+pub struct ParameterHandlerBody {
     #[prost(message, repeated, tag = "1")]
-    pub arms: Vec<ParameterResumeArm>,
+    pub arms: Vec<ParameterHandlerArm>,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
-pub struct ParameterResumeArm {
+pub struct ParameterHandlerArm {
     #[prost(message, optional, tag = "1")]
     pub action: Option<Effect>,
     #[prost(uint32, tag = "2")]
     pub result_type: u32,
     #[prost(message, optional, tag = "3")]
     pub value: Option<Observation>,
+    #[prost(uint32, optional, tag = "4")]
+    pub control: Option<u32>,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]

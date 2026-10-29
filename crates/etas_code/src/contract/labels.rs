@@ -1,7 +1,7 @@
 use crate::descriptor::{
     CallableOutcomeInfo, DescriptorError, DescriptorGraph, EffectInfo, EffectTargetInfo,
-    ParameterArgumentInfo, ParameterCallInfo, ParameterHandlerScopeInfo, ReturnObservationInfo,
-    StaticEffectArgInfo,
+    ParameterArgumentInfo, ParameterCallInfo, ParameterHandlerCompletionInfo,
+    ParameterHandlerScopeInfo, ReturnObservationInfo, StaticEffectArgInfo,
 };
 use crate::{CallableId, CodeFingerprint, DefinitionKey};
 
@@ -23,14 +23,21 @@ pub struct CanonicalEffect {
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, etas_core::RetainedSize)]
 pub enum HandlerScopeLabel {
-    Resume(Vec<ResumeArmLabel>),
+    Handle(Vec<HandlerArmLabel>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, etas_core::RetainedSize)]
-pub struct ResumeArmLabel {
+pub struct HandlerArmLabel {
     pub action: CanonicalEffect,
+    pub control: HandlerControlLabel,
     pub result_type: CodeFingerprint,
     pub value: ReturnObservationInfo,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, etas_core::RetainedSize)]
+pub enum HandlerControlLabel {
+    Resume,
+    Finish,
 }
 
 impl CanonicalEffect {
@@ -129,7 +136,7 @@ impl TraceLabel {
         fn handlers_work(handlers: &Option<Vec<HandlerScopeLabel>>) -> usize {
             handlers.as_ref().map_or(1, |handlers| {
                 handlers.iter().fold(1usize, |work, handler| {
-                    let HandlerScopeLabel::Resume(arms) = handler;
+                    let HandlerScopeLabel::Handle(arms) = handler;
                     arms.iter().fold(work.saturating_add(1), |work, arm| {
                         work.saturating_add(effect_work(&arm.action))
                             .saturating_add(1)
@@ -246,13 +253,22 @@ pub(super) fn handler_scope_labels(
             handlers
                 .iter()
                 .map(|handler| match handler {
-                    ParameterHandlerScopeInfo::Resume { arms } => Ok(HandlerScopeLabel::Resume(
+                    ParameterHandlerScopeInfo::Handle { arms } => Ok(HandlerScopeLabel::Handle(
                         arms.iter()
                             .map(|arm| {
-                                Ok(ResumeArmLabel {
+                                Ok(HandlerArmLabel {
                                     action: canonical_effect(graph, &arm.action)?,
-                                    result_type: graph.type_fingerprint(arm.result_type)?,
-                                    value: arm.value.clone(),
+                                    control: match arm.completion {
+                                        ParameterHandlerCompletionInfo::Resume { .. } => {
+                                            HandlerControlLabel::Resume
+                                        }
+                                        ParameterHandlerCompletionInfo::Finish { .. } => {
+                                            HandlerControlLabel::Finish
+                                        }
+                                    },
+                                    result_type: graph
+                                        .type_fingerprint(arm.completion.result_type())?,
+                                    value: arm.completion.value().clone(),
                                 })
                             })
                             .collect::<Result<Vec<_>, DescriptorError>>()?,

@@ -57,15 +57,17 @@ fn proof_budget_charges_each_handler_arm_and_selector() {
     .unwrap();
     let arm = ParameterHandlerArmInfo {
         action: action("write", Some(StaticEffectArgInfo::Type(TypeInfoRef(2)))),
-        result_type: TypeInfoRef(2),
-        value: ReturnObservationInfo::Unit,
+        completion: ParameterHandlerCompletionInfo::Resume {
+            result_type: TypeInfoRef(2),
+            value: ReturnObservationInfo::Unit,
+        },
     };
     let call = ParameterCallInfo {
         callable,
         signature: TypeInfoRef(0),
         position: 0,
         arguments: Some(vec![]),
-        handlers: Some(vec![ParameterHandlerScopeInfo::Resume {
+        handlers: Some(vec![ParameterHandlerScopeInfo::Handle {
             arms: vec![arm; 200],
         }]),
     };
@@ -498,19 +500,23 @@ fn parameter_handler_scopes_are_part_of_the_behavioral_label() {
         arguments: Some(vec![]),
         handlers,
     };
-    let unit = |row| ParameterHandlerScopeInfo::Resume {
+    let unit = |row| ParameterHandlerScopeInfo::Handle {
         arms: vec![ParameterHandlerArmInfo {
             action: action(if row == 0 { "a" } else { "b" }, None),
-            result_type: TypeInfoRef(if row == 42 { 42 } else { 2 }),
-            value: ReturnObservationInfo::Unit,
+            completion: ParameterHandlerCompletionInfo::Resume {
+                result_type: TypeInfoRef(if row == 42 { 42 } else { 2 }),
+                value: ReturnObservationInfo::Unit,
+            },
         }],
     };
     let first = call(Some(vec![unit(0), unit(1)]));
-    let boolean = |value| ParameterHandlerScopeInfo::Resume {
+    let boolean = |value| ParameterHandlerScopeInfo::Handle {
         arms: vec![ParameterHandlerArmInfo {
             action: action("a", None),
-            result_type: TypeInfoRef(3),
-            value: ReturnObservationInfo::Bool(value),
+            completion: ParameterHandlerCompletionInfo::Resume {
+                result_type: TypeInfoRef(3),
+                value: ReturnObservationInfo::Bool(value),
+            },
         }],
     };
     let graph = DescriptorGraph::new(
@@ -559,6 +565,16 @@ fn parameter_handler_scopes_are_part_of_the_behavioral_label() {
                 TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(call(None))),
                 TraceInfo::ParameterCall(call(Some(vec![boolean(true)]))),
                 TraceInfo::ParameterCall(call(Some(vec![boolean(false)]))),
+                TraceInfo::ParameterCall(call(Some(vec![unit(0)]))),
+                TraceInfo::ParameterCall(call(Some(vec![ParameterHandlerScopeInfo::Handle {
+                    arms: vec![ParameterHandlerArmInfo {
+                        action: action("a", None),
+                        completion: ParameterHandlerCompletionInfo::Finish {
+                            result_type: TypeInfoRef(2),
+                            value: ReturnObservationInfo::Unit,
+                        },
+                    }],
+                }]))),
             ],
             ..Default::default()
         },
@@ -573,6 +589,13 @@ fn parameter_handler_scopes_are_part_of_the_behavioral_label() {
     assert!(!proves(&graph, 5, 5));
     assert!(proves(&graph, 6, 6));
     assert!(!proves(&graph, 6, 7));
+    assert!(proves(&graph, 9, 9));
+    assert!(!proves(&graph, 8, 9));
+    assert!(!proves(&graph, 9, 8));
+    assert_ne!(
+        graph.trace_fingerprint(TraceInfoRef(8)).unwrap(),
+        graph.trace_fingerprint(TraceInfoRef(9)).unwrap()
+    );
     assert_ne!(
         graph.trace_fingerprint(TraceInfoRef(6)).unwrap(),
         graph.trace_fingerprint(TraceInfoRef(7)).unwrap()
@@ -594,7 +617,7 @@ fn parameter_handler_scopes_are_part_of_the_behavioral_label() {
     let TraceInfo::ParameterCall(call) = &mut not_action.traces[0] else {
         unreachable!()
     };
-    let ParameterHandlerScopeInfo::Resume { arms } = &mut call.handlers.as_mut().unwrap()[0];
+    let ParameterHandlerScopeInfo::Handle { arms } = &mut call.handlers.as_mut().unwrap()[0];
     let EffectTargetInfo::Action { effect, .. } = &arms[0].action.target else {
         unreachable!()
     };
@@ -607,8 +630,11 @@ fn parameter_handler_scopes_are_part_of_the_behavioral_label() {
     let TraceInfo::ParameterCall(call) = &mut wrong_value_type.traces[6] else {
         unreachable!()
     };
-    let ParameterHandlerScopeInfo::Resume { arms } = &mut call.handlers.as_mut().unwrap()[0];
-    arms[0].result_type = TypeInfoRef(2);
+    let ParameterHandlerScopeInfo::Handle { arms } = &mut call.handlers.as_mut().unwrap()[0];
+    let ParameterHandlerCompletionInfo::Resume { result_type, .. } = &mut arms[0].completion else {
+        unreachable!()
+    };
+    *result_type = TypeInfoRef(2);
     assert!(matches!(
         DescriptorGraph::new(wrong_value_type, DescriptorLimits::default()),
         Err(DescriptorError::Invalid { .. })

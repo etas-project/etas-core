@@ -63,7 +63,7 @@ fn parameter_handler_scope_codec_rejects_unknown_scope_kind() {
         signature: TypeInfoRef(0),
         position: 0,
         arguments: Some(vec![]),
-        handlers: Some(vec![ParameterHandlerScopeInfo::Resume {
+        handlers: Some(vec![ParameterHandlerScopeInfo::Handle {
             arms: vec![ParameterHandlerArmInfo {
                 action: EffectInfo {
                     target: EffectTargetInfo::Action {
@@ -72,8 +72,10 @@ fn parameter_handler_scope_codec_rejects_unknown_scope_kind() {
                     },
                     arguments: vec![],
                 },
-                result_type: TypeInfoRef(0),
-                value: ReturnObservationInfo::Bool(true),
+                completion: ParameterHandlerCompletionInfo::Resume {
+                    result_type: TypeInfoRef(0),
+                    value: ReturnObservationInfo::Bool(true),
+                },
             }],
         }]),
     });
@@ -83,6 +85,19 @@ fn parameter_handler_scope_codec_rejects_unknown_scope_kind() {
     };
     call.handlers.as_mut().unwrap().scopes[0].kind = None;
     assert!(traces::decode(encoded).is_err());
+    for control in [None, Some(9)] {
+        let mut encoded = traces::encode(&original);
+        let Some(schema::trace::Kind::ParameterCall(call)) = &mut encoded.kind else {
+            unreachable!()
+        };
+        let Some(schema::parameter_handler_scope::Kind::Handle(scope)) =
+            &mut call.handlers.as_mut().unwrap().scopes[0].kind
+        else {
+            unreachable!()
+        };
+        scope.arms[0].control = control;
+        assert!(traces::decode(encoded).is_err());
+    }
 }
 
 #[test]
@@ -90,7 +105,7 @@ fn parameter_nonreturn_survives_full_package_artifact_roundtrip() {
     use crate::*;
     let flow = key("visit", DefinitionKind::Flow);
     let call = ParameterCallInfo {
-        handlers: Some(vec![ParameterHandlerScopeInfo::Resume {
+        handlers: Some(vec![ParameterHandlerScopeInfo::Handle {
             arms: vec![
                 ParameterHandlerArmInfo {
                     action: EffectInfo {
@@ -100,8 +115,10 @@ fn parameter_nonreturn_survives_full_package_artifact_roundtrip() {
                         },
                         arguments: vec![],
                     },
-                    result_type: TypeInfoRef(2),
-                    value: ReturnObservationInfo::Unit,
+                    completion: ParameterHandlerCompletionInfo::Resume {
+                        result_type: TypeInfoRef(2),
+                        value: ReturnObservationInfo::Unit,
+                    },
                 },
                 ParameterHandlerArmInfo {
                     action: EffectInfo {
@@ -111,8 +128,10 @@ fn parameter_nonreturn_survives_full_package_artifact_roundtrip() {
                         },
                         arguments: vec![],
                     },
-                    result_type: TypeInfoRef(3),
-                    value: ReturnObservationInfo::Bool(true),
+                    completion: ParameterHandlerCompletionInfo::Finish {
+                        result_type: TypeInfoRef(3),
+                        value: ReturnObservationInfo::Bool(true),
+                    },
                 },
             ],
         }]),

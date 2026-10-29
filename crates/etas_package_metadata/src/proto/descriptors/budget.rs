@@ -206,7 +206,7 @@ fn model_call_references(call: &ParameterCallInfo) -> usize {
         .saturating_add(call.arguments.as_ref().map_or(0, Vec::len))
         .saturating_add(call.handlers.as_ref().map_or(0, |handlers| {
             handlers.iter().fold(handlers.len(), |count, handler| {
-                let ParameterHandlerScopeInfo::Resume { arms } = handler;
+                let ParameterHandlerScopeInfo::Handle { arms } = handler;
                 arms.iter().fold(count, |count, arm| {
                     count
                         .saturating_add(2)
@@ -228,7 +228,7 @@ fn wire_call_references(call: &p::ParameterCall) -> usize {
                 .scopes
                 .iter()
                 .fold(handlers.scopes.len(), |count, scope| match &scope.kind {
-                    Some(p::parameter_handler_scope::Kind::Resume(scope)) => {
+                    Some(p::parameter_handler_scope::Kind::Handle(scope)) => {
                         scope.arms.iter().fold(count, |count, arm| {
                             count.saturating_add(2).saturating_add(
                                 arm.action

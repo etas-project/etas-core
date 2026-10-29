@@ -225,10 +225,18 @@ impl Remapper<'_> {
         self.type_ref(&mut call.signature)?;
         for handler in call.handlers.iter_mut().flatten() {
             match handler {
-                super::super::ParameterHandlerScopeInfo::Resume { arms } => {
+                super::super::ParameterHandlerScopeInfo::Handle { arms } => {
                     for arm in arms {
                         self.effect(&mut arm.action)?;
-                        self.type_ref(&mut arm.result_type)?;
+                        let (super::super::ParameterHandlerCompletionInfo::Resume {
+                            result_type,
+                            ..
+                        }
+                        | super::super::ParameterHandlerCompletionInfo::Finish {
+                            result_type,
+                            ..
+                        }) = &mut arm.completion;
+                        self.type_ref(result_type)?;
                     }
                 }
             }

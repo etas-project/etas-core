@@ -302,7 +302,7 @@ fn charge_call(
     charge_graph(graph, budget)?;
     budget.charge(call.arguments.as_ref().map_or(0, Vec::len))?;
     for handler in call.handlers.iter().flatten() {
-        let ParameterHandlerScopeInfo::Resume { arms } = handler;
+        let ParameterHandlerScopeInfo::Handle { arms } = handler;
         budget.charge(arms.len().saturating_add(1))?;
         for arm in arms {
             charge_graph(graph, budget)?;

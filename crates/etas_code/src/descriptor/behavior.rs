@@ -112,8 +112,8 @@ pub struct ParameterCallInfo {
     Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
 )]
 pub enum ParameterHandlerScopeInfo {
-    /// Ordered, unconditional action arms with precisely known resume values.
-    Resume { arms: Vec<ParameterHandlerArmInfo> },
+    /// Ordered, unconditional action arms with precisely known control outcomes.
+    Handle { arms: Vec<ParameterHandlerArmInfo> },
 }
 
 #[derive(
@@ -121,8 +121,35 @@ pub enum ParameterHandlerScopeInfo {
 )]
 pub struct ParameterHandlerArmInfo {
     pub action: EffectInfo,
-    pub result_type: TypeInfoRef,
-    pub value: ReturnObservationInfo,
+    pub completion: ParameterHandlerCompletionInfo,
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub enum ParameterHandlerCompletionInfo {
+    Resume {
+        result_type: TypeInfoRef,
+        value: ReturnObservationInfo,
+    },
+    Finish {
+        result_type: TypeInfoRef,
+        value: ReturnObservationInfo,
+    },
+}
+
+impl ParameterHandlerCompletionInfo {
+    pub fn result_type(&self) -> TypeInfoRef {
+        match self {
+            Self::Resume { result_type, .. } | Self::Finish { result_type, .. } => *result_type,
+        }
+    }
+
+    pub fn value(&self) -> &ReturnObservationInfo {
+        match self {
+            Self::Resume { value, .. } | Self::Finish { value, .. } => value,
+        }
+    }
 }
 
 #[derive(

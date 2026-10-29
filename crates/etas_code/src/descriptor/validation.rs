@@ -304,7 +304,7 @@ pub(super) fn validate(
         }
         for call in calls {
             for handler in call.handlers.iter().flatten() {
-                let super::ParameterHandlerScopeInfo::Resume { arms } = handler;
+                let super::ParameterHandlerScopeInfo::Handle { arms } = handler;
                 validator.edge_count = validator.edge_count.saturating_add(arms.len());
                 if validator.edge_count > limits.max_edges {
                     return Err(DescriptorError::Limit {
@@ -324,7 +324,7 @@ pub(super) fn validate(
                     }
                     if !matches!(arm.action.target, EffectTargetInfo::Action { .. })
                         || !matches!(
-                            arm.value,
+                            arm.completion.value(),
                             ReturnObservationInfo::Unit | ReturnObservationInfo::Bool(_)
                         )
                     {
@@ -334,7 +334,11 @@ pub(super) fn validate(
                         });
                     }
                     validator.effect(node, &arm.action)?;
-                    validator.return_observation(node, arm.result_type, &arm.value)?;
+                    validator.return_observation(
+                        node,
+                        arm.completion.result_type(),
+                        arm.completion.value(),
+                    )?;
                 }
             }
             let signature = input.types.get(call.signature.0 as usize).ok_or(

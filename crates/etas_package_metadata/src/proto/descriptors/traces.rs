@@ -41,14 +41,22 @@ fn encode_call(call: &ParameterCallInfo) -> p::ParameterCall {
                     .iter()
                     .map(|handler| p::ParameterHandlerScope {
                         kind: Some(match handler {
-                            ParameterHandlerScopeInfo::Resume { arms } => {
-                                p::parameter_handler_scope::Kind::Resume(p::ParameterResumeScope {
+                            ParameterHandlerScopeInfo::Handle { arms } => {
+                                p::parameter_handler_scope::Kind::Handle(p::ParameterHandlerBody {
                                     arms: arms
                                         .iter()
-                                        .map(|arm| p::ParameterResumeArm {
+                                        .map(|arm| p::ParameterHandlerArm {
                                             action: Some(encode_effect(&arm.action)),
-                                            result_type: arm.result_type.0,
-                                            value: Some(encode_observation(&arm.value)),
+                                            result_type: arm.completion.result_type().0,
+                                            value: Some(encode_observation(arm.completion.value())),
+                                            control: Some(match arm.completion {
+                                                ParameterHandlerCompletionInfo::Resume {
+                                                    ..
+                                                } => 0,
+                                                ParameterHandlerCompletionInfo::Finish {
+                                                    ..
+                                                } => 1,
+                                            }),
                                         })
                                         .collect(),
                                 })
@@ -101,22 +109,40 @@ fn decode_call(call: p::ParameterCall) -> Result<ParameterCallInfo, Error> {
                     .into_iter()
                     .map(|handler| {
                         Ok(match required(handler.kind, "parameter handler scope")? {
-                            p::parameter_handler_scope::Kind::Resume(scope) => {
-                                ParameterHandlerScopeInfo::Resume {
+                            p::parameter_handler_scope::Kind::Handle(scope) => {
+                                ParameterHandlerScopeInfo::Handle {
                                     arms: scope
                                         .arms
                                         .into_iter()
                                         .map(|arm| {
+                                            let value = decode_observation(required(
+                                                arm.value,
+                                                "handler arm value",
+                                            )?)?;
+                                            let result_type = TypeInfoRef(arm.result_type);
+                                            let completion =
+                                                match required(arm.control, "handler arm control")?
+                                                {
+                                                    0 => ParameterHandlerCompletionInfo::Resume {
+                                                        result_type,
+                                                        value,
+                                                    },
+                                                    1 => ParameterHandlerCompletionInfo::Finish {
+                                                        result_type,
+                                                        value,
+                                                    },
+                                                    _ => {
+                                                        return Err(invalid(
+                                                            "invalid handler arm control",
+                                                        ));
+                                                    }
+                                                };
                                             Ok(ParameterHandlerArmInfo {
                                                 action: decode_effect(required(
                                                     arm.action,
                                                     "handler arm action",
                                                 )?)?,
-                                                result_type: TypeInfoRef(arm.result_type),
-                                                value: decode_observation(required(
-                                                    arm.value,
-                                                    "handler arm value",
-                                                )?)?,
+                                                completion,
                                             })
                                         })
                                         .collect::<Result<Vec<_>, Error>>()?,
