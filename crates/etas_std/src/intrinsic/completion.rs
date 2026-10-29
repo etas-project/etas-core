@@ -37,7 +37,13 @@ pub fn intrinsic_completion_semantics(id: StdIntrinsicId) -> Option<IntrinsicCom
         | pure::TEXT_LOWERCASE
         | pure::TEXT_UPPERCASE
         | pure::LIST_LEN
-        | pure::LIST_IS_EMPTY => Some(IntrinsicCompletionSemantics::Returns),
+        | pure::LIST_IS_EMPTY
+        | pure::LIMIT_ITERATIONS
+        | pure::LIMIT_TOKENS
+        | pure::LIMIT_CONTEXT_TOKENS
+        | pure::LIMIT_COST
+        | pure::LIMIT_WALL_TIME
+        | pure::LIMIT_ATTEMPTS => Some(IntrinsicCompletionSemantics::Returns),
         _ => None,
     }
 }
@@ -73,6 +79,12 @@ mod tests {
             pure::TEXT_TRIM,
             pure::TEXT_LOWERCASE,
             pure::TEXT_UPPERCASE,
+            pure::LIMIT_ITERATIONS,
+            pure::LIMIT_TOKENS,
+            pure::LIMIT_CONTEXT_TOKENS,
+            pure::LIMIT_COST,
+            pure::LIMIT_WALL_TIME,
+            pure::LIMIT_ATTEMPTS,
         ] {
             assert_eq!(
                 intrinsic_completion_semantics(StdIntrinsicId(id)),
