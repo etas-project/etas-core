@@ -159,6 +159,9 @@ fn root_projection_preserves_trace_events_outcomes_and_callback_placeholders() {
     )
     .unwrap();
     let parameter = ParameterCallInfo {
+        handlers: Some(vec![ParameterHandlerScopeInfo::ResumeUnit {
+            actions: EffectRowInfoRef(0),
+        }]),
         callable,
         signature: TypeInfoRef(1),
         position: 0,
@@ -250,6 +253,7 @@ fn parameter_trace_calls_require_a_real_signature_parameter() {
     )
     .unwrap();
     let call = ParameterCallInfo {
+        handlers: Some(vec![]),
         callable,
         signature: TypeInfoRef(0),
         position: 1,
@@ -297,6 +301,7 @@ fn parameter_trace_calls_require_callable_types_including_widened_traces() {
     )
     .unwrap();
     let call = ParameterCallInfo {
+        handlers: Some(vec![]),
         callable,
         signature: TypeInfoRef(0),
         position: 0,

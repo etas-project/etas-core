@@ -501,6 +501,28 @@ pub struct ParameterCall {
     pub position: u32,
     #[prost(message, optional, tag = "4")]
     pub arguments: Option<ParameterArguments>,
+    #[prost(message, optional, tag = "5")]
+    pub handlers: Option<ParameterHandlerScopes>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct ParameterHandlerScopes {
+    #[prost(message, repeated, tag = "1")]
+    pub scopes: Vec<ParameterHandlerScope>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct ParameterHandlerScope {
+    #[prost(oneof = "parameter_handler_scope::Kind", tags = "1")]
+    pub kind: Option<parameter_handler_scope::Kind>,
+}
+
+pub mod parameter_handler_scope {
+    #[derive(Clone, PartialEq, prost::Oneof)]
+    pub enum Kind {
+        #[prost(uint32, tag = "1")]
+        ResumeUnit(u32),
+    }
 }
 
 #[derive(Clone, PartialEq, prost::Message)]

@@ -103,6 +103,18 @@ pub struct ParameterCallInfo {
     pub position: u32,
     /// None means argument values were not proved, not a zero-argument call.
     pub arguments: Option<Vec<ParameterArgumentInfo>>,
+    /// Checked surrounding handlers, ordered from innermost to outermost.
+    /// None means the handler transformer is unavailable, not handler-free.
+    pub handlers: Option<Vec<ParameterHandlerScopeInfo>>,
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub enum ParameterHandlerScopeInfo {
+    /// All listed actions are matched unconditionally and resume with unit,
+    /// without producing other observable effects or control exits.
+    ResumeUnit { actions: EffectRowInfoRef },
 }
 
 #[derive(

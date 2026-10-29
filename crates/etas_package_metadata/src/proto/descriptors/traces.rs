@@ -33,6 +33,21 @@ fn encode_call(call: &ParameterCallInfo) -> p::ParameterCall {
                     })
                     .collect(),
             }),
+        handlers: call
+            .handlers
+            .as_ref()
+            .map(|handlers| p::ParameterHandlerScopes {
+                scopes: handlers
+                    .iter()
+                    .map(|handler| p::ParameterHandlerScope {
+                        kind: Some(match handler {
+                            ParameterHandlerScopeInfo::ResumeUnit { actions } => {
+                                p::parameter_handler_scope::Kind::ResumeUnit(actions.0)
+                            }
+                        }),
+                    })
+                    .collect(),
+            }),
     }
 }
 fn decode_call(call: p::ParameterCall) -> Result<ParameterCallInfo, Error> {
@@ -62,6 +77,24 @@ fn decode_call(call: p::ParameterCall) -> Result<ParameterCallInfo, Error> {
                                 ParameterArgumentInfo::Integer {
                                     negative: value.negative,
                                     magnitude: u128::from_le_bytes(bytes),
+                                }
+                            }
+                        })
+                    })
+                    .collect()
+            })
+            .transpose()?,
+        handlers: call
+            .handlers
+            .map(|handlers| {
+                handlers
+                    .scopes
+                    .into_iter()
+                    .map(|handler| {
+                        Ok(match required(handler.kind, "parameter handler scope")? {
+                            p::parameter_handler_scope::Kind::ResumeUnit(actions) => {
+                                ParameterHandlerScopeInfo::ResumeUnit {
+                                    actions: EffectRowInfoRef(actions),
                                 }
                             }
                         })

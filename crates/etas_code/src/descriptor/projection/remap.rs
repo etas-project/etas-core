@@ -195,9 +195,9 @@ impl Remapper<'_> {
             TraceInfo::Outcome(CallableOutcomeInfo::Returned { ty, .. })
             | TraceInfo::Outcome(CallableOutcomeInfo::Raised { error: ty }) => self.type_ref(ty)?,
             TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(call)) => {
-                self.type_ref(&mut call.signature)?
+                self.parameter_call(call)?
             }
-            TraceInfo::ParameterCall(call) => self.type_ref(&mut call.signature)?,
+            TraceInfo::ParameterCall(call) => self.parameter_call(call)?,
             TraceInfo::Seq(parts) | TraceInfo::Choice(parts) => {
                 for part in parts {
                     self.trace_ref(part)?;
@@ -211,7 +211,22 @@ impl Remapper<'_> {
             } => {
                 self.row_ref(actions)?;
                 for call in parameter_calls {
-                    self.type_ref(&mut call.signature)?;
+                    self.parameter_call(call)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn parameter_call(
+        &self,
+        call: &mut super::super::ParameterCallInfo,
+    ) -> Result<(), DescriptorError> {
+        self.type_ref(&mut call.signature)?;
+        for handler in call.handlers.iter_mut().flatten() {
+            match handler {
+                super::super::ParameterHandlerScopeInfo::ResumeUnit { actions } => {
+                    self.row_ref(actions)?
                 }
             }
         }

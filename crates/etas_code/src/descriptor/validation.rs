@@ -303,6 +303,33 @@ pub(super) fn validate(
             });
         }
         for call in calls {
+            for handler in call.handlers.iter().flatten() {
+                let super::ParameterHandlerScopeInfo::ResumeUnit { actions } = handler;
+                validator.edge_count = validator.edge_count.saturating_add(1);
+                if validator.edge_count > limits.max_edges {
+                    return Err(DescriptorError::Limit {
+                        resource: "edges",
+                        limit: limits.max_edges,
+                    });
+                }
+                let row = input.rows.get(actions.0 as usize).ok_or(
+                    DescriptorError::MissingReference {
+                        from: node,
+                        target: DescriptorNode::Row(*actions),
+                    },
+                )?;
+                if row.tail.is_some()
+                    || row
+                        .effects
+                        .iter()
+                        .any(|effect| !matches!(effect.target, EffectTargetInfo::Action { .. }))
+                {
+                    return Err(DescriptorError::Invalid {
+                        node,
+                        reason: "parameter handler scope must contain only concrete actions",
+                    });
+                }
+            }
             let signature = input.types.get(call.signature.0 as usize).ok_or(
                 DescriptorError::MissingReference {
                     from: node,

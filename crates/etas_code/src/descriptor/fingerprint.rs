@@ -284,6 +284,18 @@ fn encode_parameter_call(encoder: &mut CanonicalEncoder, call: &ParameterCallInf
             }
         }
     }
+    match &call.handlers {
+        None => encoder.tag(0),
+        Some(handlers) => {
+            encoder.tag(1);
+            encoder.number(handlers.len() as u64);
+            for handler in handlers {
+                match handler {
+                    super::ParameterHandlerScopeInfo::ResumeUnit { .. } => encoder.tag(0),
+                }
+            }
+        }
+    }
 }
 
 fn encode_effect(encoder: &mut CanonicalEncoder, effect: &EffectInfo) {

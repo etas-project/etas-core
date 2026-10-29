@@ -13,6 +13,7 @@ mod snapshot_tests;
 #[test]
 fn parameter_nonreturn_survives_binary_trace_codec() {
     let call = ParameterCallInfo {
+        handlers: Some(vec![]),
         callable: CallableId::declaration(key("visit", DefinitionKind::Flow)).unwrap(),
         signature: TypeInfoRef(4),
         position: 2,
@@ -33,6 +34,7 @@ fn parameter_nonreturn_survives_binary_trace_codec() {
 #[test]
 fn parameter_integer_codec_rejects_non_128_bit_magnitude() {
     let original = TraceInfo::ParameterCall(ParameterCallInfo {
+        handlers: Some(vec![]),
         callable: CallableId::declaration(key("visit", DefinitionKind::Flow)).unwrap(),
         signature: TypeInfoRef(0),
         position: 0,
@@ -55,10 +57,32 @@ fn parameter_integer_codec_rejects_non_128_bit_magnitude() {
 }
 
 #[test]
+fn parameter_handler_scope_codec_rejects_unknown_scope_kind() {
+    let original = TraceInfo::ParameterCall(ParameterCallInfo {
+        callable: CallableId::declaration(key("visit", DefinitionKind::Flow)).unwrap(),
+        signature: TypeInfoRef(0),
+        position: 0,
+        arguments: Some(vec![]),
+        handlers: Some(vec![ParameterHandlerScopeInfo::ResumeUnit {
+            actions: EffectRowInfoRef(0),
+        }]),
+    });
+    let mut encoded = traces::encode(&original);
+    let Some(schema::trace::Kind::ParameterCall(call)) = &mut encoded.kind else {
+        unreachable!()
+    };
+    call.handlers.as_mut().unwrap().scopes[0].kind = None;
+    assert!(traces::decode(encoded).is_err());
+}
+
+#[test]
 fn parameter_nonreturn_survives_full_package_artifact_roundtrip() {
     use crate::*;
     let flow = key("visit", DefinitionKind::Flow);
     let call = ParameterCallInfo {
+        handlers: Some(vec![ParameterHandlerScopeInfo::ResumeUnit {
+            actions: EffectRowInfoRef(1),
+        }]),
         callable: CallableId::declaration(flow).unwrap(),
         signature: TypeInfoRef(0),
         position: 0,
@@ -110,10 +134,22 @@ fn parameter_nonreturn_survives_full_package_artifact_roundtrip() {
                 TypeInfo::Primitive(PrimitiveInfo::Bool),
                 TypeInfo::Primitive(PrimitiveInfo::I128),
             ],
-            rows: vec![EffectRowInfo {
-                effects: vec![],
-                tail: None,
-            }],
+            rows: vec![
+                EffectRowInfo {
+                    effects: vec![],
+                    tail: None,
+                },
+                EffectRowInfo {
+                    effects: vec![EffectInfo {
+                        target: EffectTargetInfo::Action {
+                            effect: key("Console", DefinitionKind::Effect),
+                            name: "write".into(),
+                        },
+                        arguments: vec![],
+                    }],
+                    tail: None,
+                },
+            ],
             traces: vec![TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(
                 call,
             ))],
@@ -181,6 +217,7 @@ fn fixture() -> DefinitionDescriptorSet {
     )
     .unwrap();
     let call = ParameterCallInfo {
+        handlers: Some(vec![]),
         callable: CallableId::method(method.clone()),
         signature: TypeInfoRef(10),
         position: 0,
@@ -344,6 +381,7 @@ fn fixture() -> DefinitionDescriptorSet {
                     parameter_calls: vec![
                         call,
                         ParameterCallInfo {
+                            handlers: Some(vec![]),
                             callable: CallableId::declaration(flow.clone()).unwrap(),
                             signature: TypeInfoRef(10),
                             position: 0,

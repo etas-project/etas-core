@@ -20,7 +20,8 @@ pub use annotation::{
 pub use behavior::{
     CallableAnalysisInfo, CallableOutcomeInfo, DeterminismInfo, EffectInfo, EffectRowInfo,
     EffectRowInfoRef, EffectSummaryInfo, EffectTargetInfo, ParameterArgumentInfo,
-    ParameterCallInfo, ReturnObservationInfo, StaticEffectArgInfo, TraceInfo, TraceInfoRef,
+    ParameterCallInfo, ParameterHandlerScopeInfo, ReturnObservationInfo, StaticEffectArgInfo,
+    TraceInfo, TraceInfoRef,
 };
 pub use callable::{
     GenericOwner, GenericParameterInfo, GenericParameterKind, GenericParameterRef, ParameterInfo,

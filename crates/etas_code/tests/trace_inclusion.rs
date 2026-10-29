@@ -216,6 +216,7 @@ fn widened_parameter_calls_are_not_erased_from_the_trace_language() {
     )
     .unwrap();
     let call = ParameterCallInfo {
+        handlers: Some(vec![]),
         callable,
         signature: TypeInfoRef(0),
         position: 0,
@@ -278,6 +279,7 @@ fn parameter_call_arguments_are_part_of_behavior_and_unknown_is_not_empty() {
     )
     .unwrap();
     let call = |arguments| ParameterCallInfo {
+        handlers: Some(vec![]),
         callable: callable.clone(),
         signature: TypeInfoRef(0),
         position: 0,
@@ -361,6 +363,108 @@ fn parameter_call_arguments_are_part_of_behavior_and_unknown_is_not_empty() {
 }
 
 #[test]
+fn parameter_handler_scopes_are_part_of_the_behavioral_label() {
+    let callable = etas_code::CallableId::declaration(
+        DefinitionKey::new(
+            PackageKey::from_canonical_fingerprint(CodeFingerprint::from_bytes([8; 32])),
+            vec!["app".into()],
+            vec!["apply".into()],
+            DefinitionKind::Flow,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let call = |handlers| ParameterCallInfo {
+        callable: callable.clone(),
+        signature: TypeInfoRef(0),
+        position: 0,
+        arguments: Some(vec![]),
+        handlers,
+    };
+    let unit = |row| ParameterHandlerScopeInfo::ResumeUnit {
+        actions: EffectRowInfoRef(row),
+    };
+    let first = call(Some(vec![unit(0), unit(1)]));
+    let graph = DescriptorGraph::new(
+        DescriptorGraphInput {
+            types: vec![
+                TypeInfo::Function(SignatureInfo {
+                    generics: vec![],
+                    parameters: vec![ParameterInfo {
+                        name: Some("f".into()),
+                        ty: TypeInfoRef(1),
+                    }],
+                    output: TypeInfoRef(2),
+                    declared_output: None,
+                    effects: None,
+                }),
+                TypeInfo::Function(SignatureInfo {
+                    generics: vec![],
+                    parameters: vec![],
+                    output: TypeInfoRef(2),
+                    declared_output: None,
+                    effects: Some(EffectRowInfoRef(2)),
+                }),
+                TypeInfo::Primitive(PrimitiveInfo::Unit),
+            ],
+            rows: vec![
+                EffectRowInfo {
+                    effects: vec![action("a", None)],
+                    tail: None,
+                },
+                EffectRowInfo {
+                    effects: vec![action("b", None)],
+                    tail: None,
+                },
+                EffectRowInfo {
+                    effects: vec![],
+                    tail: None,
+                },
+            ],
+            traces: vec![
+                TraceInfo::ParameterCall(first.clone()),
+                TraceInfo::ParameterCall(call(Some(vec![unit(1), unit(0)]))),
+                TraceInfo::ParameterCall(call(Some(vec![]))),
+                TraceInfo::ParameterCall(call(None)),
+                TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(first)),
+                TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(call(None))),
+            ],
+            ..Default::default()
+        },
+        DescriptorLimits::default(),
+    )
+    .unwrap();
+    assert!(proves(&graph, 0, 0));
+    assert!(!proves(&graph, 0, 1));
+    assert!(!proves(&graph, 0, 2));
+    assert!(!proves(&graph, 3, 3));
+    assert!(proves(&graph, 4, 4));
+    assert!(!proves(&graph, 5, 5));
+    assert_ne!(
+        graph.trace_fingerprint(TraceInfoRef(0)).unwrap(),
+        graph.trace_fingerprint(TraceInfoRef(1)).unwrap()
+    );
+    let mut missing = graph.data().clone();
+    let TraceInfo::ParameterCall(call) = &mut missing.traces[0] else {
+        unreachable!()
+    };
+    call.handlers = Some(vec![unit(42)]);
+    assert!(matches!(
+        DescriptorGraph::new(missing, DescriptorLimits::default()),
+        Err(DescriptorError::MissingReference { .. })
+    ));
+    let mut not_action = graph.data().clone();
+    let EffectTargetInfo::Action { effect, .. } = &not_action.rows[0].effects[0].target else {
+        unreachable!()
+    };
+    not_action.rows[0].effects[0].target = EffectTargetInfo::Effect(effect.clone());
+    assert!(matches!(
+        DescriptorGraph::new(not_action, DescriptorLimits::default()),
+        Err(DescriptorError::Invalid { .. })
+    ));
+}
+
+#[test]
 fn parameter_integer_values_are_type_checked_and_compared_exactly() {
     let callable = etas_code::CallableId::declaration(
         DefinitionKey::new(
@@ -373,6 +477,7 @@ fn parameter_integer_values_are_type_checked_and_compared_exactly() {
     )
     .unwrap();
     let call = |negative, magnitude| ParameterCallInfo {
+        handlers: Some(vec![]),
         callable: callable.clone(),
         signature: TypeInfoRef(0),
         position: 0,
@@ -446,6 +551,7 @@ fn parameter_nonreturn_is_distinct_from_normal_completion_and_other_callbacks() 
     )
     .unwrap();
     let call = |position| ParameterCallInfo {
+        handlers: Some(vec![]),
         callable: callable.clone(),
         signature: TypeInfoRef(0),
         position,

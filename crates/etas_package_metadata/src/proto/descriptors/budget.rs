@@ -94,11 +94,14 @@ pub(in crate::proto) fn validate_model(
                 TraceInfo::Seq(children) | TraceInfo::Choice(children) => children.len(),
                 TraceInfo::Widened {
                     parameter_calls, ..
-                } => 1usize.saturating_add(parameter_calls.len()),
-                TraceInfo::Outcome(_)
-                | TraceInfo::ParameterCall(_)
-                | TraceInfo::Repeat(_)
-                | TraceInfo::UnknownOrder(_) => 1,
+                } => parameter_calls.iter().fold(1usize, |count, call| {
+                    count.saturating_add(model_call_references(call))
+                }),
+                TraceInfo::ParameterCall(call)
+                | TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(call)) => {
+                    model_call_references(call)
+                }
+                TraceInfo::Outcome(_) | TraceInfo::Repeat(_) | TraceInfo::UnknownOrder(_) => 1,
             },
             "descriptor trace references",
         )?;
@@ -180,11 +183,40 @@ pub(in crate::proto) fn validate_wire(
                 None | Some(K::Empty(_)) => 0,
                 Some(K::Event(value)) => 1usize.saturating_add(value.arguments.len()),
                 Some(K::Seq(value) | K::Choice(value)) => value.values.len(),
-                Some(K::Widened(value)) => 1usize.saturating_add(value.parameter_calls.len()),
-                Some(K::Outcome(_) | K::ParameterCall(_) | K::Repeat(_) | K::UnknownOrder(_)) => 1,
+                Some(K::Widened(value)) => {
+                    value.parameter_calls.iter().fold(1usize, |count, call| {
+                        count.saturating_add(wire_call_references(call))
+                    })
+                }
+                Some(K::ParameterCall(call)) => wire_call_references(call),
+                Some(K::Outcome(outcome)) => match &outcome.kind {
+                    Some(p::outcome::Kind::ParameterNonReturn(call)) => wire_call_references(call),
+                    _ => 1,
+                },
+                Some(K::Repeat(_) | K::UnknownOrder(_)) => 1,
             },
             "descriptor trace references",
         )?;
     }
     Ok(())
+}
+
+fn model_call_references(call: &ParameterCallInfo) -> usize {
+    1usize
+        .saturating_add(call.arguments.as_ref().map_or(0, Vec::len))
+        .saturating_add(call.handlers.as_ref().map_or(0, Vec::len))
+}
+
+fn wire_call_references(call: &p::ParameterCall) -> usize {
+    1usize
+        .saturating_add(
+            call.arguments
+                .as_ref()
+                .map_or(0, |arguments| arguments.values.len()),
+        )
+        .saturating_add(
+            call.handlers
+                .as_ref()
+                .map_or(0, |handlers| handlers.scopes.len()),
+        )
 }

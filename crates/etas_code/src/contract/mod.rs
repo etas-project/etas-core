@@ -5,7 +5,9 @@ mod nfa;
 use crate::descriptor::DescriptorError;
 
 pub use inclusion::{TraceInclusion, TraceInclusionWitness, check_trace_inclusion};
-pub use labels::{CanonicalEffect, CanonicalSelector, TraceLabel, canonical_effect};
+pub use labels::{
+    CanonicalEffect, CanonicalSelector, HandlerScopeLabel, TraceLabel, canonical_effect,
+};
 
 #[derive(Clone, Copy, Debug)]
 pub struct TraceProofLimits {

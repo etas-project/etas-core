@@ -1,6 +1,7 @@
 use crate::descriptor::{
     CallableOutcomeInfo, DescriptorError, DescriptorGraph, EffectInfo, EffectTargetInfo,
-    ParameterArgumentInfo, ReturnObservationInfo, StaticEffectArgInfo,
+    ParameterArgumentInfo, ParameterCallInfo, ParameterHandlerScopeInfo, ReturnObservationInfo,
+    StaticEffectArgInfo,
 };
 use crate::{CallableId, CodeFingerprint, DefinitionKey};
 
@@ -18,6 +19,11 @@ pub enum CanonicalSelector {
 pub struct CanonicalEffect {
     pub target: EffectTargetInfo,
     pub arguments: Vec<CanonicalSelector>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, etas_core::RetainedSize)]
+pub enum HandlerScopeLabel {
+    ResumeUnit(CodeFingerprint),
 }
 
 impl CanonicalEffect {
@@ -49,6 +55,7 @@ pub enum TraceLabel {
         position: u32,
         signature: CodeFingerprint,
         arguments: Option<Vec<ParameterArgumentInfo>>,
+        handlers: Option<Vec<HandlerScopeLabel>>,
     },
     Returned {
         ty: CodeFingerprint,
@@ -63,6 +70,7 @@ pub enum TraceLabel {
         position: u32,
         signature: CodeFingerprint,
         arguments: Option<Vec<ParameterArgumentInfo>>,
+        handlers: Option<Vec<HandlerScopeLabel>>,
     },
 }
 
@@ -71,6 +79,12 @@ impl TraceLabel {
         match (self, candidate) {
             (Self::NonReturn, Self::NonReturn) => true,
             (Self::Action(bound), Self::Action(actual)) => bound.covers(actual),
+            (Self::ParameterCall { handlers: None, .. }, Self::ParameterCall { .. })
+            | (Self::ParameterCall { .. }, Self::ParameterCall { handlers: None, .. })
+            | (Self::ParameterNonReturn { handlers: None, .. }, Self::ParameterNonReturn { .. })
+            | (Self::ParameterNonReturn { .. }, Self::ParameterNonReturn { handlers: None, .. }) => {
+                false
+            }
             (
                 Self::ParameterCall {
                     arguments: None, ..
@@ -131,8 +145,28 @@ pub(super) fn outcome_label(
             position: call.position,
             signature: graph.type_fingerprint(call.signature)?,
             arguments: call.arguments.clone(),
+            handlers: handler_scope_labels(graph, call)?,
         },
     })
+}
+
+pub(super) fn handler_scope_labels(
+    graph: &DescriptorGraph,
+    call: &ParameterCallInfo,
+) -> Result<Option<Vec<HandlerScopeLabel>>, DescriptorError> {
+    call.handlers
+        .as_ref()
+        .map(|handlers| {
+            handlers
+                .iter()
+                .map(|handler| match handler {
+                    ParameterHandlerScopeInfo::ResumeUnit { actions } => Ok(
+                        HandlerScopeLabel::ResumeUnit(graph.row_fingerprint(*actions)?),
+                    ),
+                })
+                .collect()
+        })
+        .transpose()
 }
 
 pub fn canonical_effect(

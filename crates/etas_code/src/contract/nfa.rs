@@ -59,6 +59,13 @@ impl Nfa {
                         label.clone()
                     } else {
                         charge_graph(graph, budget)?;
+                        if let crate::descriptor::CallableOutcomeInfo::ParameterNonReturn(call) =
+                            outcome
+                        {
+                            for _ in call.handlers.iter().flatten() {
+                                charge_graph(graph, budget)?;
+                            }
+                        }
                         let label = Arc::new(super::labels::outcome_label(graph, outcome)?);
                         result.labels.insert(key, label.clone());
                         label
@@ -223,11 +230,15 @@ impl Nfa {
             return Ok(label.clone());
         }
         charge_graph(graph, budget)?;
+        for _ in call.handlers.iter().flatten() {
+            charge_graph(graph, budget)?;
+        }
         let label = Arc::new(TraceLabel::ParameterCall {
             callable: call.callable.clone(),
             position: call.position,
             signature: graph.type_fingerprint(call.signature)?,
             arguments: call.arguments.clone(),
+            handlers: super::labels::handler_scope_labels(graph, call)?,
         });
         self.labels.insert(source, label.clone());
         Ok(label)
