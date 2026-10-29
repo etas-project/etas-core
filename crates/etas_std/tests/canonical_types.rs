@@ -3,6 +3,26 @@ use etas_std::{
 };
 
 #[test]
+fn text_parse_error_has_checked_nominal_storage_without_a_source_constructor() {
+    let registry = etas_std::standard_registry();
+    let symbol = registry
+        .lookup_qualified(&["std", "text", "ParseError"])
+        .unwrap();
+    let StdDecl::Type(declaration) = &symbol.decl else {
+        panic!("ParseError declaration")
+    };
+    assert_eq!(
+        declaration.representation,
+        Some(StdType::Primitive(etas_std::StdPrimitiveType::String))
+    );
+    assert!(declaration.canonical_type.is_none());
+    assert_eq!(
+        declaration.construction,
+        etas_std::StdTypeConstruction::IntrinsicOnly
+    );
+}
+
+#[test]
 fn schema_source_declaration_and_action_payload_share_one_canonical_type() {
     let registry = etas_std::standard_registry();
     let symbol = registry

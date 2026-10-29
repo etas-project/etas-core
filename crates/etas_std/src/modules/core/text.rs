@@ -9,11 +9,11 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         module,
         "ParseError",
         StdSymbolKind::Type,
-        StdDecl::Type(crate::TypeDecl::generic(
-            "ParseError",
-            &[],
-            crate::TypeDeclKind::Support,
-        )),
+        StdDecl::Type(
+            crate::TypeDecl::generic("ParseError", &[], crate::TypeDeclKind::Support)
+                .with_representation(crate::StdType::Primitive(crate::StdPrimitiveType::String))
+                .intrinsic_only(),
+        ),
         "Standard text parsing error support type.",
     );
     text_intrinsic(
