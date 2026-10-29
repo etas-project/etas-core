@@ -215,6 +215,68 @@ fn relocated_roots_preserve_shared_types_and_trace_order() {
 }
 
 #[test]
+fn relocation_charges_only_distinct_reachable_nodes() {
+    let source = DescriptorGraph::new(
+        DescriptorGraphInput {
+            types: vec![
+                TypeInfo::Primitive(PrimitiveInfo::Bool),
+                TypeInfo::Primitive(PrimitiveInfo::Unit),
+            ],
+            ..Default::default()
+        },
+        Default::default(),
+    )
+    .unwrap();
+    let offsets = DescriptorGraphOffsets {
+        types: u32::MAX - 1,
+        ..Default::default()
+    };
+    let (segment, roots) = source
+        .relocate_roots(
+            &[
+                DescriptorNode::Type(TypeInfoRef(0)),
+                DescriptorNode::Type(TypeInfoRef(0)),
+            ],
+            offsets,
+        )
+        .unwrap();
+    assert_eq!(segment.types.len(), 1);
+    assert_eq!(roots, [DescriptorNode::Type(TypeInfoRef(u32::MAX - 1)); 2]);
+    let (_, roots) = source
+        .relocate_roots(
+            &[
+                DescriptorNode::Type(TypeInfoRef(0)),
+                DescriptorNode::Type(TypeInfoRef(1)),
+            ],
+            offsets,
+        )
+        .unwrap();
+    assert_eq!(
+        roots,
+        [
+            DescriptorNode::Type(TypeInfoRef(u32::MAX - 1)),
+            DescriptorNode::Type(TypeInfoRef(u32::MAX))
+        ]
+    );
+    assert!(matches!(
+        source.relocate_roots(
+            &[
+                DescriptorNode::Type(TypeInfoRef(0)),
+                DescriptorNode::Type(TypeInfoRef(1))
+            ],
+            DescriptorGraphOffsets {
+                types: u32::MAX,
+                ..Default::default()
+            }
+        ),
+        Err(DescriptorError::Limit {
+            resource: "descriptor arena indices",
+            ..
+        })
+    ));
+}
+
+#[test]
 fn root_projection_preserves_trace_events_outcomes_and_callback_placeholders() {
     let mut event = action();
     event

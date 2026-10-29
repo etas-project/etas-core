@@ -42,23 +42,6 @@ impl DescriptorGraph {
         roots: &[DescriptorNode],
         offsets: DescriptorGraphOffsets,
     ) -> Result<(DescriptorGraphInput, Vec<DescriptorNode>), DescriptorError> {
-        for (offset, count) in [
-            (offsets.types, self.data().types.len()),
-            (offsets.rows, self.data().rows.len()),
-            (offsets.binders, self.data().binders.len()),
-            (offsets.traces, self.data().traces.len()),
-        ] {
-            if u32::try_from(count)
-                .ok()
-                .and_then(|count| offset.checked_add(count))
-                .is_none()
-            {
-                return Err(DescriptorError::Limit {
-                    resource: "descriptor arena indices",
-                    limit: u32::MAX as usize,
-                });
-            }
-        }
         for root in roots {
             if node_index(self.data(), *root).is_none() {
                 return Err(DescriptorError::MissingReference {
@@ -74,7 +57,7 @@ impl DescriptorGraph {
         let mut nodes = Vec::new();
         let mut pending = roots.iter().rev().copied().collect::<Vec<_>>();
         while let Some(node) = pending.pop() {
-            if !mapping.insert(node) {
+            if !mapping.insert(node)? {
                 continue;
             }
             nodes.push(node);
@@ -148,31 +131,43 @@ impl Mapping {
         }
     }
 
-    fn insert(&mut self, node: DescriptorNode) -> bool {
-        fn insert<K: Ord + Copy>(map: &mut BTreeMap<K, K>, key: K, value: K) -> bool {
+    fn insert(&mut self, node: DescriptorNode) -> Result<bool, DescriptorError> {
+        fn insert<K: Ord + Copy>(
+            map: &mut BTreeMap<K, K>,
+            key: K,
+            offset: u32,
+            make: impl FnOnce(u32) -> K,
+        ) -> Result<bool, DescriptorError> {
+            let count = map.len();
             if let std::collections::btree_map::Entry::Vacant(entry) = map.entry(key) {
-                entry.insert(value);
-                true
+                let index = u32::try_from(count)
+                    .ok()
+                    .and_then(|count| offset.checked_add(count))
+                    .ok_or(DescriptorError::Limit {
+                        resource: "descriptor arena indices",
+                        limit: u32::MAX as usize,
+                    })?;
+                entry.insert(make(index));
+                Ok(true)
             } else {
-                false
+                Ok(false)
             }
         }
         match node {
             DescriptorNode::Type(key) => {
-                let index = TypeInfoRef(self.offsets.types + self.types.len() as u32);
-                insert(&mut self.types, key, index)
+                insert(&mut self.types, key, self.offsets.types, TypeInfoRef)
             }
             DescriptorNode::Row(key) => {
-                let index = EffectRowInfoRef(self.offsets.rows + self.rows.len() as u32);
-                insert(&mut self.rows, key, index)
+                insert(&mut self.rows, key, self.offsets.rows, EffectRowInfoRef)
             }
-            DescriptorNode::Binder(key) => {
-                let index = GenericParameterRef(self.offsets.binders + self.binders.len() as u32);
-                insert(&mut self.binders, key, index)
-            }
+            DescriptorNode::Binder(key) => insert(
+                &mut self.binders,
+                key,
+                self.offsets.binders,
+                GenericParameterRef,
+            ),
             DescriptorNode::Trace(key) => {
-                let index = TraceInfoRef(self.offsets.traces + self.traces.len() as u32);
-                insert(&mut self.traces, key, index)
+                insert(&mut self.traces, key, self.offsets.traces, TraceInfoRef)
             }
         }
     }
