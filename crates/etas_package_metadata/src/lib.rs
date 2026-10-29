@@ -4,6 +4,8 @@ pub mod error;
 pub mod model;
 mod proto;
 mod request_templates;
+mod spec_invocations;
+mod spec_receivers;
 mod type_validation;
 
 pub use callable_values::*;
@@ -19,6 +21,7 @@ pub use container::{
 };
 pub use error::MetadataArtifactError;
 pub use model::*;
+pub use spec_invocations::*;
 
 /// Checks graph-local references and resource bounds outside the binary codec.
 /// The frontend must also validate root references against its resolved interface.
@@ -54,6 +57,7 @@ pub fn validate_definition_descriptors(
 
 #[cfg(test)]
 mod tests {
+    mod spec_invocations;
     use std::path::Path;
 
     use super::*;
@@ -510,7 +514,7 @@ mod tests {
                 path: vec!["Console".to_owned(), "stdout_write".to_owned()],
                 args: Vec::new(),
             }],
-            parameter_calls: vec!["f".to_owned()],
+            parameter_calls: vec![CallableRequestTarget::Parameter("f".to_owned())],
         };
 
         let bytes = encode_sample(&metadata);
@@ -549,7 +553,7 @@ mod tests {
     fn metadata_artifact_rejects_excessively_deep_action_trace() {
         let mut metadata = sample_metadata();
         let mut trace = ActionTrace::ParameterCall {
-            parameter: "f".to_owned(),
+            parameter: CallableRequestTarget::Parameter("f".to_owned()),
         };
         for _ in 0..70 {
             trace = ActionTrace::Repeat(Box::new(trace));
@@ -844,7 +848,7 @@ mod tests {
                             source: ActionTraceEventSource::Perform,
                         }),
                         ActionTrace::ParameterCall {
-                            parameter: "f".to_owned(),
+                            parameter: CallableRequestTarget::Parameter("f".to_owned()),
                         },
                     ]),
                 }],

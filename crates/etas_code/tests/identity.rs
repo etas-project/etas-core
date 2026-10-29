@@ -89,6 +89,46 @@ fn implementation_header_is_structured_order_independent_and_body_independent() 
 }
 
 #[test]
+fn implementation_subject_arguments_are_ordered_and_preserve_existing_empty_identity() {
+    let header = ImplementationHeader::new(Vec::new()).unwrap();
+    assert_eq!(
+        header.fingerprint(),
+        header
+            .clone()
+            .with_subject_arguments(Vec::new())
+            .fingerprint()
+    );
+    let int = fingerprint("type:i32");
+    let string = fingerprint("type:string");
+    assert_ne!(
+        header.fingerprint(),
+        header
+            .clone()
+            .with_subject_arguments(vec![int])
+            .fingerprint()
+    );
+    assert_ne!(
+        header
+            .clone()
+            .with_subject_arguments(vec![int])
+            .fingerprint(),
+        header
+            .clone()
+            .with_subject_arguments(vec![string])
+            .fingerprint()
+    );
+    assert_ne!(
+        header
+            .clone()
+            .with_subject_arguments(vec![int, string])
+            .fingerprint(),
+        header
+            .with_subject_arguments(vec![string, int])
+            .fingerprint()
+    );
+}
+
+#[test]
 fn canonical_encoding_preserves_segment_boundaries_and_unicode() {
     let a = definition("origin", &["a.b", "c"], "工作", DefinitionKind::Flow);
     let b = definition("origin", &["a", "b.c"], "工作", DefinitionKind::Flow);

@@ -26,7 +26,7 @@ pub(super) fn request_template_to_proto(
             .parameters
             .iter()
             .map(|parameter| ProtoParameterRequestTemplate {
-                parameter: parameter.parameter.clone(),
+                parameter: Some(super::spec_invocations::to_proto(&parameter.parameter)),
                 excluded: parameter.excluded.iter().map(effect_ref_to_proto).collect(),
             })
             .collect(),
@@ -72,7 +72,13 @@ pub(super) fn request_template_from_proto(
             .into_iter()
             .map(|parameter| {
                 Ok(ParameterRequestTemplate {
-                    parameter: parameter.parameter,
+                    parameter: super::spec_invocations::from_proto(
+                        parameter.parameter.ok_or_else(|| {
+                            invalid("request template has no checked callable target")
+                        })?,
+                        0,
+                        &mut MetadataGraphBudget::default(),
+                    )?,
                     excluded: parameter
                         .excluded
                         .into_iter()

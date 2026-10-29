@@ -4,7 +4,9 @@ use super::schema as proto;
 
 mod callable_values;
 mod request_templates;
+mod spec_invocations;
 pub(crate) use callable_values::validate as validate_callable_values;
+pub(crate) use spec_invocations::validate as validate_callable_request_target;
 
 pub const MAX_METADATA_GRAPH_DEPTH: usize = 64;
 pub const MAX_METADATA_GRAPH_NODES: usize = 100_000;
@@ -184,6 +186,7 @@ impl ModelGraphValidator {
                 self.callable(callable)?;
             }
             for method in &signature.methods {
+                crate::spec_receivers::validate(method).map_err(invalid)?;
                 if let Some(callable) = &method.signature {
                     self.callable(callable)?;
                 }
@@ -196,6 +199,15 @@ impl ModelGraphValidator {
             self.ty(&implementation.self_type, 0)?;
             for arg in &implementation.args {
                 self.ty(arg, 0)?;
+            }
+            for method in &implementation.methods {
+                super::descriptors::validate_model_method_identity(
+                    &method.identity,
+                    &mut self.budget,
+                )?;
+                self.callable_values(&method.callable)?;
+                method.root()?;
+                method.callable.validate_references(Some((0, &[])))?;
             }
         }
         for satisfaction in &metadata.type_spec_satisfactions {
@@ -280,15 +292,33 @@ impl ModelGraphValidator {
     }
 
     fn generic_param(&mut self, param: &GenericParam) -> Result<(), MetadataArtifactError> {
+        self.generic_param_at_depth(param, 0)
+    }
+
+    fn generic_param_at_depth(
+        &mut self,
+        param: &GenericParam,
+        depth: usize,
+    ) -> Result<(), MetadataArtifactError> {
+        self.budget.enter(depth, "generic parameter")?;
         for bound in &param.bounds {
-            self.spec_bound(bound)?;
+            self.spec_bound_at_depth(bound, depth + 1)?;
         }
         Ok(())
     }
 
     fn spec_bound(&mut self, bound: &SpecBound) -> Result<(), MetadataArtifactError> {
+        self.spec_bound_at_depth(bound, 0)
+    }
+
+    fn spec_bound_at_depth(
+        &mut self,
+        bound: &SpecBound,
+        depth: usize,
+    ) -> Result<(), MetadataArtifactError> {
+        self.budget.enter(depth, "spec bound")?;
         for arg in &bound.args {
-            self.ty(arg, 0)?;
+            self.ty(arg, depth + 1)?;
         }
         Ok(())
     }
@@ -366,7 +396,19 @@ impl ModelGraphValidator {
                     self.effect_ref(action, depth + 1)?;
                 }
             }
-            ActionTrace::Empty | ActionTrace::ParameterCall { .. } => {}
+            ActionTrace::ParameterCall { parameter } => {
+                self.callable_request_target(parameter, depth + 1)?
+            }
+            ActionTrace::Empty => {}
+        }
+        if let ActionTrace::Widened {
+            parameter_calls, ..
+        } = trace
+        {
+            for parameter in parameter_calls {
+                self.callable_request_target(parameter, depth + 1)?;
+            }
+            super::codec::spec_invocations::ensure_distinct(parameter_calls)?;
         }
         Ok(())
     }
@@ -496,6 +538,14 @@ impl ProtoGraphValidator {
             for arg in &implementation.args {
                 self.ty(arg, 0)?;
             }
+            for method in &implementation.methods {
+                if let Some(identity) = &method.identity {
+                    super::descriptors::validate_method_identity(identity, &mut self.budget)?;
+                }
+                if let Some(graph) = &method.callable {
+                    self.callable_values(graph)?;
+                }
+            }
         }
         for satisfaction in &metadata.type_spec_satisfactions {
             if let Some(ty) = satisfaction.self_type.as_ref() {
@@ -608,15 +658,33 @@ impl ProtoGraphValidator {
         &mut self,
         generic: &proto::ProtoActionGenericParam,
     ) -> Result<(), MetadataArtifactError> {
+        self.generic_param_at_depth(generic, 0)
+    }
+
+    fn generic_param_at_depth(
+        &mut self,
+        generic: &proto::ProtoActionGenericParam,
+        depth: usize,
+    ) -> Result<(), MetadataArtifactError> {
+        self.budget.enter(depth, "generic parameter")?;
         for bound in &generic.bounds {
-            self.spec_bound(bound)?;
+            self.spec_bound_at_depth(bound, depth + 1)?;
         }
         Ok(())
     }
 
     fn spec_bound(&mut self, bound: &proto::ProtoSpecBound) -> Result<(), MetadataArtifactError> {
+        self.spec_bound_at_depth(bound, 0)
+    }
+
+    fn spec_bound_at_depth(
+        &mut self,
+        bound: &proto::ProtoSpecBound,
+        depth: usize,
+    ) -> Result<(), MetadataArtifactError> {
+        self.budget.enter(depth, "spec bound")?;
         for arg in &bound.args {
-            self.ty(arg, 0)?;
+            self.ty(arg, depth + 1)?;
         }
         Ok(())
     }
@@ -692,6 +760,12 @@ impl ProtoGraphValidator {
         }
         for action in &trace.actions {
             self.effect_ref(action, depth + 1)?;
+        }
+        if let Some(parameter) = &trace.parameter {
+            self.callable_request_target(parameter, depth + 1)?;
+        }
+        for parameter in &trace.parameter_calls {
+            self.callable_request_target(parameter, depth + 1)?;
         }
         Ok(())
     }

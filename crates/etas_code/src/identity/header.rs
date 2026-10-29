@@ -14,6 +14,7 @@ pub struct ImplementationSpecIdentity {
 #[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct ImplementationHeader {
     specs: Vec<ImplementationSpecIdentity>,
+    subject_arguments: Vec<CodeFingerprint>,
 }
 
 impl ImplementationHeader {
@@ -25,11 +26,30 @@ impl ImplementationHeader {
         }
         specs.sort();
         specs.dedup();
-        Ok(Self { specs })
+        Ok(Self {
+            specs,
+            subject_arguments: Vec::new(),
+        })
+    }
+
+    pub fn with_subject_arguments(mut self, arguments: Vec<CodeFingerprint>) -> Self {
+        self.subject_arguments = arguments;
+        self
     }
 
     pub fn fingerprint(&self) -> CodeFingerprint {
-        let mut encoder = CanonicalEncoder::new("etas.code.implementation-header.v1");
+        let domain = if self.subject_arguments.is_empty() {
+            "etas.code.implementation-header.v1"
+        } else {
+            "etas.code.implementation-header.v2"
+        };
+        let mut encoder = CanonicalEncoder::new(domain);
+        if !self.subject_arguments.is_empty() {
+            encoder.number(self.subject_arguments.len() as u64);
+            for argument in &self.subject_arguments {
+                encoder.fingerprint(*argument);
+            }
+        }
         encoder.number(self.specs.len() as u64);
         for spec in &self.specs {
             encoder.fingerprint(spec.definition.fingerprint());

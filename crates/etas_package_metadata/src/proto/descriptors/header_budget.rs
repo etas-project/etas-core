@@ -28,16 +28,17 @@ pub(super) fn callable(
 ) -> Result<(), Error> {
     match &callable.kind {
         Some(p::callable::Kind::Declaration(value)) => key(Some(value), budget),
-        Some(p::callable::Kind::Method(method)) => {
-            budget.charge(
-                1usize.saturating_add(method.module.len()),
-                "header method identity",
-            )?;
-            key(method.subject.as_ref(), budget)?;
-            key(method.selected_spec.as_ref(), budget)
-        }
+        Some(p::callable::Kind::Method(value)) => method(value, budget),
         None => Ok(()),
     }
+}
+pub(super) fn method(method: &p::Method, budget: &mut MetadataGraphBudget) -> Result<(), Error> {
+    budget.charge(
+        1usize.saturating_add(method.module.len()),
+        "header method identity",
+    )?;
+    key(method.subject.as_ref(), budget)?;
+    key(method.selected_spec.as_ref(), budget)
 }
 fn spec(spec: &p::Spec, budget: &mut MetadataGraphBudget) -> Result<(), Error> {
     key(spec.definition.as_ref(), budget)?;

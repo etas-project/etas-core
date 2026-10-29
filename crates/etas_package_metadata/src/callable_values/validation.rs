@@ -47,6 +47,7 @@ impl CallableValueGraph {
                 }
             }
             for parameter in &requests.parameters {
+                work.push(Part::Target(&parameter.parameter));
                 work.extend(parameter.excluded.iter().map(Part::Effect));
             }
         }
@@ -74,6 +75,18 @@ impl CallableValueGraph {
         work.push(Part::Trace(&node.action_trace));
         while let Some(part) = work.pop() {
             match part {
+                Part::Target(crate::CallableRequestTarget::Parameter(_)) => {}
+                Part::Target(crate::CallableRequestTarget::SpecMethod(method)) => {
+                    valid_path(&method.spec)?;
+                    work.push(Part::Type(&method.receiver));
+                    work.extend(method.spec_args.iter().map(Part::Type));
+                    for argument in &method.generic_arguments {
+                        work.push(match argument {
+                            crate::SpecMethodGenericArgument::Type(ty) => Part::Type(ty),
+                            crate::SpecMethodGenericArgument::EffectRow(row) => Part::Row(row),
+                        });
+                    }
+                }
                 Part::Type(ty) => {
                     match ty.kind {
                         TypeKind::Var => {
@@ -134,10 +147,18 @@ impl CallableValueGraph {
                         work.extend(parts.iter().map(Part::Trace))
                     }
                     ActionTrace::Repeat(part) => work.push(Part::Trace(part)),
-                    ActionTrace::UnknownOrder(actions) | ActionTrace::Widened { actions, .. } => {
+                    ActionTrace::UnknownOrder(actions) => {
                         work.extend(actions.iter().map(Part::Effect))
                     }
-                    ActionTrace::Empty | ActionTrace::ParameterCall { .. } => {}
+                    ActionTrace::Widened {
+                        actions,
+                        parameter_calls,
+                    } => {
+                        work.extend(actions.iter().map(Part::Effect));
+                        work.extend(parameter_calls.iter().map(Part::Target));
+                    }
+                    ActionTrace::ParameterCall { parameter } => work.push(Part::Target(parameter)),
+                    ActionTrace::Empty => {}
                 },
             }
         }
@@ -146,6 +167,7 @@ impl CallableValueGraph {
 }
 
 enum Part<'a> {
+    Target(&'a crate::CallableRequestTarget),
     Type(&'a Type),
     Row(&'a EffectRow),
     Effect(&'a crate::EffectRef),

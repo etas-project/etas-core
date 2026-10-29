@@ -20,6 +20,43 @@ use crate::{MAX_METADATA_UNCOMPRESSED_SECTION_SIZE, MetadataArtifactError, PACKA
 
 pub(super) use budget::{validate_model, validate_wire};
 pub(super) use schema::Graph as ProtoDescriptorGraph;
+pub(super) use schema::Method as ProtoMethodIdentity;
+
+pub(super) fn encode_method_identity(method: &etas_code::MethodId) -> ProtoMethodIdentity {
+    identities::encode_method(method)
+}
+
+pub(super) fn decode_method_identity(
+    method: ProtoMethodIdentity,
+) -> Result<etas_code::MethodId, MetadataArtifactError> {
+    identities::decode_method(method)
+}
+
+pub(super) fn validate_method_identity(
+    method: &ProtoMethodIdentity,
+    budget: &mut super::budget::MetadataGraphBudget,
+) -> Result<(), MetadataArtifactError> {
+    header_budget::method(method, budget)
+}
+
+pub(super) fn validate_model_method_identity(
+    method: &etas_code::MethodId,
+    budget: &mut super::budget::MetadataGraphBudget,
+) -> Result<(), MetadataArtifactError> {
+    let owner = method.implementation();
+    let units = |key: &etas_code::DefinitionKey| {
+        1usize
+            .saturating_add(key.module().len())
+            .saturating_add(key.declaration().len())
+    };
+    budget.charge(
+        1usize
+            .saturating_add(owner.module().len())
+            .saturating_add(units(owner.subject()))
+            .saturating_add(owner.selected_spec().map_or(0, units)),
+        "spec implementation method identity",
+    )
+}
 
 pub(super) fn validate_public_bodies(
     metadata: &crate::PublicMetadata,
