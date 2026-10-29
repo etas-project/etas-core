@@ -63,8 +63,18 @@ fn parameter_handler_scope_codec_rejects_unknown_scope_kind() {
         signature: TypeInfoRef(0),
         position: 0,
         arguments: Some(vec![]),
-        handlers: Some(vec![ParameterHandlerScopeInfo::ResumeUnit {
-            actions: EffectRowInfoRef(0),
+        handlers: Some(vec![ParameterHandlerScopeInfo::Resume {
+            arms: vec![ParameterHandlerArmInfo {
+                action: EffectInfo {
+                    target: EffectTargetInfo::Action {
+                        effect: key("Console", DefinitionKind::Effect),
+                        name: "write".into(),
+                    },
+                    arguments: vec![],
+                },
+                result_type: TypeInfoRef(0),
+                value: ReturnObservationInfo::Bool(true),
+            }],
         }]),
     });
     let mut encoded = traces::encode(&original);
@@ -80,8 +90,31 @@ fn parameter_nonreturn_survives_full_package_artifact_roundtrip() {
     use crate::*;
     let flow = key("visit", DefinitionKind::Flow);
     let call = ParameterCallInfo {
-        handlers: Some(vec![ParameterHandlerScopeInfo::ResumeUnit {
-            actions: EffectRowInfoRef(1),
+        handlers: Some(vec![ParameterHandlerScopeInfo::Resume {
+            arms: vec![
+                ParameterHandlerArmInfo {
+                    action: EffectInfo {
+                        target: EffectTargetInfo::Action {
+                            effect: key("Console", DefinitionKind::Effect),
+                            name: "write".into(),
+                        },
+                        arguments: vec![],
+                    },
+                    result_type: TypeInfoRef(2),
+                    value: ReturnObservationInfo::Unit,
+                },
+                ParameterHandlerArmInfo {
+                    action: EffectInfo {
+                        target: EffectTargetInfo::Action {
+                            effect: key("Choice", DefinitionKind::Effect),
+                            name: "decide".into(),
+                        },
+                        arguments: vec![],
+                    },
+                    result_type: TypeInfoRef(3),
+                    value: ReturnObservationInfo::Bool(true),
+                },
+            ],
         }]),
         callable: CallableId::declaration(flow).unwrap(),
         signature: TypeInfoRef(0),

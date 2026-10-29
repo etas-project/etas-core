@@ -112,9 +112,17 @@ pub struct ParameterCallInfo {
     Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
 )]
 pub enum ParameterHandlerScopeInfo {
-    /// All listed actions are matched unconditionally and resume with unit,
-    /// without producing other observable effects or control exits.
-    ResumeUnit { actions: EffectRowInfoRef },
+    /// Ordered, unconditional action arms with precisely known resume values.
+    Resume { arms: Vec<ParameterHandlerArmInfo> },
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub struct ParameterHandlerArmInfo {
+    pub action: EffectInfo,
+    pub result_type: TypeInfoRef,
+    pub value: ReturnObservationInfo,
 }
 
 #[derive(

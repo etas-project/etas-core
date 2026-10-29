@@ -204,7 +204,16 @@ pub(in crate::proto) fn validate_wire(
 fn model_call_references(call: &ParameterCallInfo) -> usize {
     1usize
         .saturating_add(call.arguments.as_ref().map_or(0, Vec::len))
-        .saturating_add(call.handlers.as_ref().map_or(0, Vec::len))
+        .saturating_add(call.handlers.as_ref().map_or(0, |handlers| {
+            handlers.iter().fold(handlers.len(), |count, handler| {
+                let ParameterHandlerScopeInfo::Resume { arms } = handler;
+                arms.iter().fold(count, |count, arm| {
+                    count
+                        .saturating_add(2)
+                        .saturating_add(arm.action.arguments.len())
+                })
+            })
+        }))
 }
 
 fn wire_call_references(call: &p::ParameterCall) -> usize {
@@ -214,9 +223,21 @@ fn wire_call_references(call: &p::ParameterCall) -> usize {
                 .as_ref()
                 .map_or(0, |arguments| arguments.values.len()),
         )
-        .saturating_add(
-            call.handlers
-                .as_ref()
-                .map_or(0, |handlers| handlers.scopes.len()),
-        )
+        .saturating_add(call.handlers.as_ref().map_or(0, |handlers| {
+            handlers
+                .scopes
+                .iter()
+                .fold(handlers.scopes.len(), |count, scope| match &scope.kind {
+                    Some(p::parameter_handler_scope::Kind::Resume(scope)) => {
+                        scope.arms.iter().fold(count, |count, arm| {
+                            count.saturating_add(2).saturating_add(
+                                arm.action
+                                    .as_ref()
+                                    .map_or(0, |action| action.arguments.len()),
+                            )
+                        })
+                    }
+                    None => count,
+                })
+        }))
 }

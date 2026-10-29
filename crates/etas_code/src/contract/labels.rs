@@ -23,7 +23,14 @@ pub struct CanonicalEffect {
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, etas_core::RetainedSize)]
 pub enum HandlerScopeLabel {
-    ResumeUnit(CodeFingerprint),
+    Resume(Vec<ResumeArmLabel>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, etas_core::RetainedSize)]
+pub struct ResumeArmLabel {
+    pub action: CanonicalEffect,
+    pub result_type: CodeFingerprint,
+    pub value: ReturnObservationInfo,
 }
 
 impl CanonicalEffect {
@@ -160,9 +167,17 @@ pub(super) fn handler_scope_labels(
             handlers
                 .iter()
                 .map(|handler| match handler {
-                    ParameterHandlerScopeInfo::ResumeUnit { actions } => Ok(
-                        HandlerScopeLabel::ResumeUnit(graph.row_fingerprint(*actions)?),
-                    ),
+                    ParameterHandlerScopeInfo::Resume { arms } => Ok(HandlerScopeLabel::Resume(
+                        arms.iter()
+                            .map(|arm| {
+                                Ok(ResumeArmLabel {
+                                    action: canonical_effect(graph, &arm.action)?,
+                                    result_type: graph.type_fingerprint(arm.result_type)?,
+                                    value: arm.value.clone(),
+                                })
+                            })
+                            .collect::<Result<Vec<_>, DescriptorError>>()?,
+                    )),
                 })
                 .collect()
         })

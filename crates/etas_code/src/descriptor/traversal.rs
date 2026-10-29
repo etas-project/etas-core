@@ -210,8 +210,15 @@ fn parameter_call_references(call: &ParameterCallInfo, visit: &mut impl FnMut(De
     visit(DescriptorNode::Type(call.signature));
     for handler in call.handlers.iter().flatten() {
         match handler {
-            ParameterHandlerScopeInfo::ResumeUnit { actions } => {
-                visit(DescriptorNode::Row(*actions))
+            ParameterHandlerScopeInfo::Resume { arms } => {
+                for arm in arms {
+                    visit(DescriptorNode::Type(arm.result_type));
+                    for arg in &arm.action.arguments {
+                        if let StaticEffectArgInfo::Type(ty) = arg {
+                            visit(DescriptorNode::Type(*ty));
+                        }
+                    }
+                }
             }
         }
     }

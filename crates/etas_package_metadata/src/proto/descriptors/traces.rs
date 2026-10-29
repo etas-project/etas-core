@@ -41,8 +41,17 @@ fn encode_call(call: &ParameterCallInfo) -> p::ParameterCall {
                     .iter()
                     .map(|handler| p::ParameterHandlerScope {
                         kind: Some(match handler {
-                            ParameterHandlerScopeInfo::ResumeUnit { actions } => {
-                                p::parameter_handler_scope::Kind::ResumeUnit(actions.0)
+                            ParameterHandlerScopeInfo::Resume { arms } => {
+                                p::parameter_handler_scope::Kind::Resume(p::ParameterResumeScope {
+                                    arms: arms
+                                        .iter()
+                                        .map(|arm| p::ParameterResumeArm {
+                                            action: Some(encode_effect(&arm.action)),
+                                            result_type: arm.result_type.0,
+                                            value: Some(encode_observation(&arm.value)),
+                                        })
+                                        .collect(),
+                                })
                             }
                         }),
                     })
@@ -92,9 +101,25 @@ fn decode_call(call: p::ParameterCall) -> Result<ParameterCallInfo, Error> {
                     .into_iter()
                     .map(|handler| {
                         Ok(match required(handler.kind, "parameter handler scope")? {
-                            p::parameter_handler_scope::Kind::ResumeUnit(actions) => {
-                                ParameterHandlerScopeInfo::ResumeUnit {
-                                    actions: EffectRowInfoRef(actions),
+                            p::parameter_handler_scope::Kind::Resume(scope) => {
+                                ParameterHandlerScopeInfo::Resume {
+                                    arms: scope
+                                        .arms
+                                        .into_iter()
+                                        .map(|arm| {
+                                            Ok(ParameterHandlerArmInfo {
+                                                action: decode_effect(required(
+                                                    arm.action,
+                                                    "handler arm action",
+                                                )?)?,
+                                                result_type: TypeInfoRef(arm.result_type),
+                                                value: decode_observation(required(
+                                                    arm.value,
+                                                    "handler arm value",
+                                                )?)?,
+                                            })
+                                        })
+                                        .collect::<Result<Vec<_>, Error>>()?,
                                 }
                             }
                         })
@@ -103,6 +128,39 @@ fn decode_call(call: p::ParameterCall) -> Result<ParameterCallInfo, Error> {
             })
             .transpose()?,
     })
+}
+
+fn encode_observation(observation: &ReturnObservationInfo) -> p::Observation {
+    p::Observation {
+        kind: Some(match observation {
+            ReturnObservationInfo::Any => p::observation::Kind::Any(true),
+            ReturnObservationInfo::Unit => p::observation::Kind::Unit(true),
+            ReturnObservationInfo::Bool(value) => p::observation::Kind::Bool(*value),
+            ReturnObservationInfo::Variant { owner, name } => {
+                p::observation::Kind::Variant(p::VariantObservation {
+                    owner: Some(encode_key(owner)),
+                    name: name.clone(),
+                })
+            }
+        }),
+    }
+}
+
+fn decode_observation(observation: p::Observation) -> Result<ReturnObservationInfo, Error> {
+    Ok(
+        match required(observation.kind, "return observation kind")? {
+            p::observation::Kind::Any(true) => ReturnObservationInfo::Any,
+            p::observation::Kind::Unit(true) => ReturnObservationInfo::Unit,
+            p::observation::Kind::Bool(value) => ReturnObservationInfo::Bool(value),
+            p::observation::Kind::Variant(value) => ReturnObservationInfo::Variant {
+                owner: decode_key(required(value.owner, "return variant owner")?)?,
+                name: value.name,
+            },
+            p::observation::Kind::Any(false) | p::observation::Kind::Unit(false) => {
+                return Err(invalid("invalid return observation marker"));
+            }
+        },
+    )
 }
 
 fn encode_outcome(outcome: &CallableOutcomeInfo) -> p::Outcome {

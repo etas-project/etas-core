@@ -159,8 +159,12 @@ fn root_projection_preserves_trace_events_outcomes_and_callback_placeholders() {
     )
     .unwrap();
     let parameter = ParameterCallInfo {
-        handlers: Some(vec![ParameterHandlerScopeInfo::ResumeUnit {
-            actions: EffectRowInfoRef(0),
+        handlers: Some(vec![ParameterHandlerScopeInfo::Resume {
+            arms: vec![ParameterHandlerArmInfo {
+                action: event.clone(),
+                result_type: TypeInfoRef(0),
+                value: ReturnObservationInfo::Unit,
+            }],
         }]),
         callable,
         signature: TypeInfoRef(1),

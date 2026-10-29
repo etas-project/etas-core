@@ -381,10 +381,21 @@ fn parameter_handler_scopes_are_part_of_the_behavioral_label() {
         arguments: Some(vec![]),
         handlers,
     };
-    let unit = |row| ParameterHandlerScopeInfo::ResumeUnit {
-        actions: EffectRowInfoRef(row),
+    let unit = |row| ParameterHandlerScopeInfo::Resume {
+        arms: vec![ParameterHandlerArmInfo {
+            action: action(if row == 0 { "a" } else { "b" }, None),
+            result_type: TypeInfoRef(if row == 42 { 42 } else { 2 }),
+            value: ReturnObservationInfo::Unit,
+        }],
     };
     let first = call(Some(vec![unit(0), unit(1)]));
+    let boolean = |value| ParameterHandlerScopeInfo::Resume {
+        arms: vec![ParameterHandlerArmInfo {
+            action: action("a", None),
+            result_type: TypeInfoRef(3),
+            value: ReturnObservationInfo::Bool(value),
+        }],
+    };
     let graph = DescriptorGraph::new(
         DescriptorGraphInput {
             types: vec![
@@ -406,6 +417,7 @@ fn parameter_handler_scopes_are_part_of_the_behavioral_label() {
                     effects: Some(EffectRowInfoRef(2)),
                 }),
                 TypeInfo::Primitive(PrimitiveInfo::Unit),
+                TypeInfo::Primitive(PrimitiveInfo::Bool),
             ],
             rows: vec![
                 EffectRowInfo {
@@ -428,6 +440,8 @@ fn parameter_handler_scopes_are_part_of_the_behavioral_label() {
                 TraceInfo::ParameterCall(call(None)),
                 TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(first)),
                 TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(call(None))),
+                TraceInfo::ParameterCall(call(Some(vec![boolean(true)]))),
+                TraceInfo::ParameterCall(call(Some(vec![boolean(false)]))),
             ],
             ..Default::default()
         },
@@ -440,6 +454,12 @@ fn parameter_handler_scopes_are_part_of_the_behavioral_label() {
     assert!(!proves(&graph, 3, 3));
     assert!(proves(&graph, 4, 4));
     assert!(!proves(&graph, 5, 5));
+    assert!(proves(&graph, 6, 6));
+    assert!(!proves(&graph, 6, 7));
+    assert_ne!(
+        graph.trace_fingerprint(TraceInfoRef(6)).unwrap(),
+        graph.trace_fingerprint(TraceInfoRef(7)).unwrap()
+    );
     assert_ne!(
         graph.trace_fingerprint(TraceInfoRef(0)).unwrap(),
         graph.trace_fingerprint(TraceInfoRef(1)).unwrap()
@@ -454,12 +474,26 @@ fn parameter_handler_scopes_are_part_of_the_behavioral_label() {
         Err(DescriptorError::MissingReference { .. })
     ));
     let mut not_action = graph.data().clone();
-    let EffectTargetInfo::Action { effect, .. } = &not_action.rows[0].effects[0].target else {
+    let TraceInfo::ParameterCall(call) = &mut not_action.traces[0] else {
         unreachable!()
     };
-    not_action.rows[0].effects[0].target = EffectTargetInfo::Effect(effect.clone());
+    let ParameterHandlerScopeInfo::Resume { arms } = &mut call.handlers.as_mut().unwrap()[0];
+    let EffectTargetInfo::Action { effect, .. } = &arms[0].action.target else {
+        unreachable!()
+    };
+    arms[0].action.target = EffectTargetInfo::Effect(effect.clone());
     assert!(matches!(
         DescriptorGraph::new(not_action, DescriptorLimits::default()),
+        Err(DescriptorError::Invalid { .. })
+    ));
+    let mut wrong_value_type = graph.data().clone();
+    let TraceInfo::ParameterCall(call) = &mut wrong_value_type.traces[6] else {
+        unreachable!()
+    };
+    let ParameterHandlerScopeInfo::Resume { arms } = &mut call.handlers.as_mut().unwrap()[0];
+    arms[0].result_type = TypeInfoRef(2);
+    assert!(matches!(
+        DescriptorGraph::new(wrong_value_type, DescriptorLimits::default()),
         Err(DescriptorError::Invalid { .. })
     ));
 }

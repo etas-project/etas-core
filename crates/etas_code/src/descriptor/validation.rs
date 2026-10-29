@@ -304,30 +304,37 @@ pub(super) fn validate(
         }
         for call in calls {
             for handler in call.handlers.iter().flatten() {
-                let super::ParameterHandlerScopeInfo::ResumeUnit { actions } = handler;
-                validator.edge_count = validator.edge_count.saturating_add(1);
+                let super::ParameterHandlerScopeInfo::Resume { arms } = handler;
+                validator.edge_count = validator.edge_count.saturating_add(arms.len());
                 if validator.edge_count > limits.max_edges {
                     return Err(DescriptorError::Limit {
                         resource: "edges",
                         limit: limits.max_edges,
                     });
                 }
-                let row = input.rows.get(actions.0 as usize).ok_or(
-                    DescriptorError::MissingReference {
-                        from: node,
-                        target: DescriptorNode::Row(*actions),
-                    },
-                )?;
-                if row.tail.is_some()
-                    || row
-                        .effects
-                        .iter()
-                        .any(|effect| !matches!(effect.target, EffectTargetInfo::Action { .. }))
-                {
-                    return Err(DescriptorError::Invalid {
-                        node,
-                        reason: "parameter handler scope must contain only concrete actions",
-                    });
+                for arm in arms {
+                    validator.edge_count = validator
+                        .edge_count
+                        .saturating_add(arm.action.arguments.len());
+                    if validator.edge_count > limits.max_edges {
+                        return Err(DescriptorError::Limit {
+                            resource: "edges",
+                            limit: limits.max_edges,
+                        });
+                    }
+                    if !matches!(arm.action.target, EffectTargetInfo::Action { .. })
+                        || !matches!(
+                            arm.value,
+                            ReturnObservationInfo::Unit | ReturnObservationInfo::Bool(_)
+                        )
+                    {
+                        return Err(DescriptorError::Invalid {
+                            node,
+                            reason: "parameter handler arm requires an action and a precise resume value",
+                        });
+                    }
+                    validator.effect(node, &arm.action)?;
+                    validator.return_observation(node, arm.result_type, &arm.value)?;
                 }
             }
             let signature = input.types.get(call.signature.0 as usize).ok_or(

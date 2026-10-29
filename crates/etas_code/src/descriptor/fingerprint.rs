@@ -291,7 +291,26 @@ fn encode_parameter_call(encoder: &mut CanonicalEncoder, call: &ParameterCallInf
             encoder.number(handlers.len() as u64);
             for handler in handlers {
                 match handler {
-                    super::ParameterHandlerScopeInfo::ResumeUnit { .. } => encoder.tag(0),
+                    super::ParameterHandlerScopeInfo::Resume { arms } => {
+                        encoder.tag(0);
+                        encoder.number(arms.len() as u64);
+                        for arm in arms {
+                            encode_effect(encoder, &arm.action);
+                            match &arm.value {
+                                super::ReturnObservationInfo::Unit => encoder.tag(0),
+                                super::ReturnObservationInfo::Bool(value) => {
+                                    encoder.tag(1);
+                                    encoder.tag(u8::from(*value));
+                                }
+                                super::ReturnObservationInfo::Any => encoder.tag(2),
+                                super::ReturnObservationInfo::Variant { owner, name } => {
+                                    encoder.tag(3);
+                                    encoder.fingerprint(owner.fingerprint());
+                                    encoder.bytes(name.as_bytes());
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
