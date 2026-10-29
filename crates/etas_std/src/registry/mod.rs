@@ -13,7 +13,7 @@ mod value_role;
 
 pub use builder::StdRegistryBuilder;
 pub use module::{
-    StdModule, StdModuleId, StdRegistryVersion, StdSymbol, StdSymbolId, StdSymbolKind,
+    StdModule, StdModuleId, StdNamespace, StdRegistryVersion, StdSymbol, StdSymbolId, StdSymbolKind,
 };
 pub use prelude::{StdPrelude, StdSymbolRef};
 pub use validation::StdRegistryValidationError;
@@ -103,6 +103,19 @@ impl StdRegistry {
         self.prelude
             .lookup(name)
             .and_then(|symbol| self.symbol(symbol.id))
+    }
+
+    pub fn lookup_prelude_in_namespace(
+        &self,
+        name: &str,
+        namespace: StdNamespace,
+    ) -> Option<&StdSymbol> {
+        let mut candidates = self.prelude.candidates(name).filter_map(|binding| {
+            self.symbol(binding.id)
+                .filter(|symbol| symbol.kind.namespace() == namespace)
+        });
+        let symbol = candidates.next()?;
+        candidates.next().is_none().then_some(symbol)
     }
 
     pub fn intrinsic(&self, id: StdIntrinsicId) -> Option<&IntrinsicDescriptor> {

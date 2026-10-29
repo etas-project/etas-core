@@ -651,7 +651,6 @@ fn registry_covers_phase1_standard_surface_vocabulary() {
     for prelude in [
         "Trusted",
         "Untrusted",
-        "Secret",
         "Public",
         "Sanitized",
         "Prompt",
@@ -694,6 +693,13 @@ fn registry_covers_phase1_standard_surface_vocabulary() {
         registry.lookup_prelude("unwrap").is_none(),
         "unwrap must remain a qualified std.option helper, not a prelude symbol"
     );
+    for namespace in [etas_std::StdNamespace::Type, etas_std::StdNamespace::Effect] {
+        assert!(
+            registry
+                .lookup_prelude_in_namespace("Secret", namespace)
+                .is_some()
+        );
+    }
 
     let cast = registry
         .lookup_qualified(&["std", "agent", "message", "cast"])

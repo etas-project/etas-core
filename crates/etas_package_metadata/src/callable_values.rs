@@ -5,6 +5,30 @@ mod paths;
 mod validation;
 pub use behavior::*;
 
+fn validate_request_target(
+    target: &crate::CallableRequestTarget,
+    labels: &std::collections::BTreeSet<&str>,
+    root: Option<(usize, &[crate::GenericParamKind])>,
+    depth: usize,
+) -> Result<(), crate::MetadataArtifactError> {
+    target.validate_shape().map_err(|reason| invalid(&reason))?;
+    match target {
+        crate::CallableRequestTarget::Parameter(label) => {
+            if !labels.contains(label.as_str()) {
+                return Err(invalid("callable request has an unbound parameter"));
+            }
+        }
+        crate::CallableRequestTarget::SpecMethod(invocation) => {
+            for argument in &invocation.callable_arguments {
+                argument
+                    .sources
+                    .validate_references_at_depth(root, depth + 1)?;
+            }
+        }
+    }
+    Ok(())
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CallableValuePathKind {
     Type,
@@ -132,6 +156,19 @@ impl CallableValueGraph {
         &self,
         root: Option<(usize, &[crate::GenericParamKind])>,
     ) -> Result<(), crate::MetadataArtifactError> {
+        self.validate_references_at_depth(root, 0)
+    }
+
+    pub(crate) fn validate_references_at_depth(
+        &self,
+        root: Option<(usize, &[crate::GenericParamKind])>,
+        depth: usize,
+    ) -> Result<(), crate::MetadataArtifactError> {
+        if depth > crate::MAX_METADATA_GRAPH_DEPTH {
+            return Err(invalid(
+                "nested callable evidence exceeds the maximum depth",
+            ));
+        }
         use std::collections::BTreeSet;
         self.validate_sources(&self.sources, root)?;
         for source in &self.sources {
@@ -216,29 +253,20 @@ impl CallableValueGraph {
             let mut trace = vec![&node.action_trace];
             if let Some(requests) = &node.handler_requests {
                 for parameter in &requests.parameters {
-                    if !labels.contains(parameter.parameter.as_str()) {
-                        return Err(invalid(
-                            "callable request template has an unbound parameter",
-                        ));
-                    }
+                    validate_request_target(&parameter.parameter, &labels, root, depth)?;
                 }
             }
             while let Some(part) = trace.pop() {
                 match part {
-                    ActionTrace::ParameterCall { parameter }
-                        if !labels.contains(parameter.as_str()) =>
-                    {
-                        return Err(invalid("callable value trace has an unbound parameter"));
+                    ActionTrace::ParameterCall { parameter } => {
+                        validate_request_target(parameter, &labels, root, depth)?
                     }
                     ActionTrace::Widened {
                         parameter_calls, ..
-                    } if parameter_calls
-                        .iter()
-                        .any(|parameter| !labels.contains(parameter.as_str())) =>
-                    {
-                        return Err(invalid(
-                            "callable value widened trace has an unbound parameter",
-                        ));
+                    } => {
+                        for parameter in parameter_calls {
+                            validate_request_target(parameter, &labels, root, depth)?;
+                        }
                     }
                     ActionTrace::Seq(parts) | ActionTrace::Choice(parts) => trace.extend(parts),
                     ActionTrace::Repeat(part) => trace.push(part),
