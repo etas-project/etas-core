@@ -541,6 +541,8 @@ pub struct ParameterHandlerArm {
     pub value: Option<Observation>,
     #[prost(uint32, optional, tag = "4")]
     pub control: Option<u32>,
+    #[prost(uint32, optional, tag = "5")]
+    pub trace: Option<u32>,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]

@@ -212,6 +212,7 @@ fn parameter_call_references(call: &ParameterCallInfo, visit: &mut impl FnMut(De
         match handler {
             ParameterHandlerScopeInfo::Handle { arms } => {
                 for arm in arms {
+                    visit(DescriptorNode::Trace(arm.trace));
                     visit(DescriptorNode::Type(arm.completion.result_type()));
                     for arg in &arm.action.arguments {
                         if let StaticEffectArgInfo::Type(ty) = arg {

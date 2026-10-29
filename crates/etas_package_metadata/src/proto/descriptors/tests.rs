@@ -72,6 +72,7 @@ fn parameter_handler_scope_codec_rejects_unknown_scope_kind() {
                     },
                     arguments: vec![],
                 },
+                trace: TraceInfoRef(0),
                 completion: ParameterHandlerCompletionInfo::Resume {
                     result_type: TypeInfoRef(0),
                     value: ReturnObservationInfo::Bool(true),
@@ -98,6 +99,17 @@ fn parameter_handler_scope_codec_rejects_unknown_scope_kind() {
         scope.arms[0].control = control;
         assert!(traces::decode(encoded).is_err());
     }
+    let mut encoded = traces::encode(&original);
+    let Some(schema::trace::Kind::ParameterCall(call)) = &mut encoded.kind else {
+        unreachable!()
+    };
+    let Some(schema::parameter_handler_scope::Kind::Handle(scope)) =
+        &mut call.handlers.as_mut().unwrap().scopes[0].kind
+    else {
+        unreachable!()
+    };
+    scope.arms[0].trace = None;
+    assert!(traces::decode(encoded).is_err());
 }
 
 #[test]
@@ -115,6 +127,7 @@ fn parameter_nonreturn_survives_full_package_artifact_roundtrip() {
                         },
                         arguments: vec![],
                     },
+                    trace: TraceInfoRef(1),
                     completion: ParameterHandlerCompletionInfo::Resume {
                         result_type: TypeInfoRef(2),
                         value: ReturnObservationInfo::Unit,
@@ -128,6 +141,7 @@ fn parameter_nonreturn_survives_full_package_artifact_roundtrip() {
                         },
                         arguments: vec![],
                     },
+                    trace: TraceInfoRef(1),
                     completion: ParameterHandlerCompletionInfo::Finish {
                         result_type: TypeInfoRef(3),
                         value: ReturnObservationInfo::Bool(true),
@@ -202,9 +216,10 @@ fn parameter_nonreturn_survives_full_package_artifact_roundtrip() {
                     tail: None,
                 },
             ],
-            traces: vec![TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(
-                call,
-            ))],
+            traces: vec![
+                TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(call)),
+                TraceInfo::Empty,
+            ],
             ..Default::default()
         },
         declarations: vec![],

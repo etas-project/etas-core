@@ -228,6 +228,7 @@ impl Remapper<'_> {
                 super::super::ParameterHandlerScopeInfo::Handle { arms } => {
                     for arm in arms {
                         self.effect(&mut arm.action)?;
+                        self.trace_ref(&mut arm.trace)?;
                         let (super::super::ParameterHandlerCompletionInfo::Resume {
                             result_type,
                             ..

@@ -121,6 +121,8 @@ pub enum ParameterHandlerScopeInfo {
 )]
 pub struct ParameterHandlerArmInfo {
     pub action: EffectInfo,
+    /// Checked actions performed by the arm before its control outcome.
+    pub trace: TraceInfoRef,
     pub completion: ParameterHandlerCompletionInfo,
 }
 

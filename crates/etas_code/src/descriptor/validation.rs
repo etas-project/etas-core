@@ -339,6 +339,7 @@ pub(super) fn validate(
                         arm.completion.result_type(),
                         arm.completion.value(),
                     )?;
+                    validator.handler_trace(node, arm.trace)?;
                 }
             }
             let signature = input.types.get(call.signature.0 as usize).ok_or(
@@ -526,6 +527,54 @@ struct Validator<'a> {
 }
 
 impl Validator<'_> {
+    fn handler_trace(
+        &mut self,
+        node: DescriptorNode,
+        root: TraceInfoRef,
+    ) -> Result<(), DescriptorError> {
+        let mut pending = vec![root];
+        let mut visited = BTreeSet::new();
+        while let Some(reference) = pending.pop() {
+            self.edge_count = self.edge_count.saturating_add(1);
+            if self.edge_count > self.limits.max_edges {
+                return Err(DescriptorError::Limit {
+                    resource: "edges",
+                    limit: self.limits.max_edges,
+                });
+            }
+            if !visited.insert(reference) {
+                continue;
+            }
+            match self.input.traces.get(reference.0 as usize) {
+                Some(TraceInfo::Empty | TraceInfo::Event(_) | TraceInfo::UnknownOrder(_)) => {}
+                Some(TraceInfo::Seq(parts) | TraceInfo::Choice(parts)) => {
+                    if parts.len() > self.limits.max_edges.saturating_sub(self.edge_count) {
+                        return Err(DescriptorError::Limit {
+                            resource: "edges",
+                            limit: self.limits.max_edges,
+                        });
+                    }
+                    pending.extend(parts.iter().copied());
+                }
+                Some(TraceInfo::Repeat(inner)) => pending.push(*inner),
+                Some(
+                    TraceInfo::Outcome(_) | TraceInfo::ParameterCall(_) | TraceInfo::Widened { .. },
+                ) => {
+                    return Err(DescriptorError::Invalid {
+                        node,
+                        reason: "handler arm trace must contain only checked concrete actions",
+                    });
+                }
+                None => {
+                    return Err(DescriptorError::MissingReference {
+                        from: node,
+                        target: DescriptorNode::Trace(reference),
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
     fn scalar_argument_type(
         &mut self,
         node: DescriptorNode,

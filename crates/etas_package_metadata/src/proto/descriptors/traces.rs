@@ -57,6 +57,7 @@ fn encode_call(call: &ParameterCallInfo) -> p::ParameterCall {
                                                     ..
                                                 } => 1,
                                             }),
+                                            trace: Some(arm.trace.0),
                                         })
                                         .collect(),
                                 })
@@ -142,6 +143,10 @@ fn decode_call(call: p::ParameterCall) -> Result<ParameterCallInfo, Error> {
                                                     arm.action,
                                                     "handler arm action",
                                                 )?)?,
+                                                trace: TraceInfoRef(required(
+                                                    arm.trace,
+                                                    "handler arm trace",
+                                                )?),
                                                 completion,
                                             })
                                         })

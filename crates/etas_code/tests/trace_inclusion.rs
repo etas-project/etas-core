@@ -57,6 +57,7 @@ fn proof_budget_charges_each_handler_arm_and_selector() {
     .unwrap();
     let arm = ParameterHandlerArmInfo {
         action: action("write", Some(StaticEffectArgInfo::Type(TypeInfoRef(2)))),
+        trace: TraceInfoRef(2),
         completion: ParameterHandlerCompletionInfo::Resume {
             result_type: TypeInfoRef(2),
             value: ReturnObservationInfo::Unit,
@@ -100,6 +101,7 @@ fn proof_budget_charges_each_handler_arm_and_selector() {
             traces: vec![
                 TraceInfo::ParameterCall(call.clone()),
                 TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(call)),
+                TraceInfo::Empty,
             ],
             ..Default::default()
         },
@@ -503,6 +505,7 @@ fn parameter_handler_scopes_are_part_of_the_behavioral_label() {
     let unit = |row| ParameterHandlerScopeInfo::Handle {
         arms: vec![ParameterHandlerArmInfo {
             action: action(if row == 0 { "a" } else { "b" }, None),
+            trace: TraceInfoRef(10),
             completion: ParameterHandlerCompletionInfo::Resume {
                 result_type: TypeInfoRef(if row == 42 { 42 } else { 2 }),
                 value: ReturnObservationInfo::Unit,
@@ -513,6 +516,7 @@ fn parameter_handler_scopes_are_part_of_the_behavioral_label() {
     let boolean = |value| ParameterHandlerScopeInfo::Handle {
         arms: vec![ParameterHandlerArmInfo {
             action: action("a", None),
+            trace: TraceInfoRef(10),
             completion: ParameterHandlerCompletionInfo::Resume {
                 result_type: TypeInfoRef(3),
                 value: ReturnObservationInfo::Bool(value),
@@ -569,12 +573,14 @@ fn parameter_handler_scopes_are_part_of_the_behavioral_label() {
                 TraceInfo::ParameterCall(call(Some(vec![ParameterHandlerScopeInfo::Handle {
                     arms: vec![ParameterHandlerArmInfo {
                         action: action("a", None),
+                        trace: TraceInfoRef(10),
                         completion: ParameterHandlerCompletionInfo::Finish {
                             result_type: TypeInfoRef(2),
                             value: ReturnObservationInfo::Unit,
                         },
                     }],
                 }]))),
+                TraceInfo::Empty,
             ],
             ..Default::default()
         },
@@ -639,6 +645,48 @@ fn parameter_handler_scopes_are_part_of_the_behavioral_label() {
         DescriptorGraph::new(wrong_value_type, DescriptorLimits::default()),
         Err(DescriptorError::Invalid { .. })
     ));
+    for (trace, missing) in [(0, false), (4, false), (42, true)] {
+        let mut invalid = graph.data().clone();
+        let TraceInfo::ParameterCall(call) = &mut invalid.traces[8] else {
+            unreachable!()
+        };
+        let ParameterHandlerScopeInfo::Handle { arms } = &mut call.handlers.as_mut().unwrap()[0];
+        arms[0].trace = TraceInfoRef(trace);
+        let result = DescriptorGraph::new(invalid, DescriptorLimits::default());
+        if missing {
+            assert!(matches!(
+                result,
+                Err(DescriptorError::MissingReference { .. })
+            ));
+        } else {
+            assert!(matches!(result, Err(DescriptorError::Invalid { .. })));
+        }
+    }
+    let mut effectful = graph.data().clone();
+    effectful.traces.extend([
+        TraceInfo::Event(action("a", None)),
+        TraceInfo::Event(action("b", None)),
+        TraceInfo::Seq(vec![TraceInfoRef(11), TraceInfoRef(12)]),
+        TraceInfo::Seq(vec![TraceInfoRef(12), TraceInfoRef(11)]),
+    ]);
+    let TraceInfo::ParameterCall(call) = &effectful.traces[8] else {
+        unreachable!()
+    };
+    let mut first = call.clone();
+    let ParameterHandlerScopeInfo::Handle { arms } = &mut first.handlers.as_mut().unwrap()[0];
+    arms[0].trace = TraceInfoRef(13);
+    let mut second = first.clone();
+    let ParameterHandlerScopeInfo::Handle { arms } = &mut second.handlers.as_mut().unwrap()[0];
+    arms[0].trace = TraceInfoRef(14);
+    effectful.traces.push(TraceInfo::ParameterCall(first));
+    effectful.traces.push(TraceInfo::ParameterCall(second));
+    let effectful = DescriptorGraph::new(effectful, DescriptorLimits::default()).unwrap();
+    assert!(proves(&effectful, 15, 15));
+    assert!(!proves(&effectful, 15, 16));
+    assert_ne!(
+        effectful.trace_fingerprint(TraceInfoRef(15)).unwrap(),
+        effectful.trace_fingerprint(TraceInfoRef(16)).unwrap()
+    );
 }
 
 #[test]

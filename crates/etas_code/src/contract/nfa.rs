@@ -306,6 +306,7 @@ fn charge_call(
         budget.charge(arms.len().saturating_add(1))?;
         for arm in arms {
             charge_graph(graph, budget)?;
+            charge_graph(graph, budget)?;
             charge_effect(graph, &arm.action, budget)?;
         }
     }

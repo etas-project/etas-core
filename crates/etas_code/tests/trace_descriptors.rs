@@ -162,6 +162,7 @@ fn root_projection_preserves_trace_events_outcomes_and_callback_placeholders() {
         handlers: Some(vec![ParameterHandlerScopeInfo::Handle {
             arms: vec![ParameterHandlerArmInfo {
                 action: event.clone(),
+                trace: TraceInfoRef(0),
                 completion: ParameterHandlerCompletionInfo::Resume {
                     result_type: TypeInfoRef(0),
                     value: ReturnObservationInfo::Unit,

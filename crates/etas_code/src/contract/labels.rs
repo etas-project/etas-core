@@ -29,6 +29,7 @@ pub enum HandlerScopeLabel {
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, etas_core::RetainedSize)]
 pub struct HandlerArmLabel {
     pub action: CanonicalEffect,
+    pub trace: CodeFingerprint,
     pub control: HandlerControlLabel,
     pub result_type: CodeFingerprint,
     pub value: ReturnObservationInfo,
@@ -258,6 +259,7 @@ pub(super) fn handler_scope_labels(
                             .map(|arm| {
                                 Ok(HandlerArmLabel {
                                     action: canonical_effect(graph, &arm.action)?,
+                                    trace: graph.trace_fingerprint(arm.trace)?,
                                     control: match arm.completion {
                                         ParameterHandlerCompletionInfo::Resume { .. } => {
                                             HandlerControlLabel::Resume
