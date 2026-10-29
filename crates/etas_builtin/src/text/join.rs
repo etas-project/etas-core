@@ -12,24 +12,53 @@ pub fn join_projected<'a, E, I>(parts: I, separator: &str) -> Result<String, Joi
 where
     I: Iterator<Item = Result<&'a str, E>> + Clone,
 {
+    join_text_projected(parts, separator)
+}
+
+/// A two-pass join over checked, immutable text projections. Only the final
+/// output and (for a segmented separator) borrowed chunk headers are allocated.
+pub fn join_text_projected<'a, T, E, I>(parts: I, separator: &T) -> Result<String, JoinError<E>>
+where
+    T: super::input::TextInput + ?Sized + 'a,
+    I: Iterator<Item = Result<&'a T, E>> + Clone,
+{
     let mut bytes = 0usize;
     let mut first = true;
+    let mut separated = false;
     for part in parts.clone() {
         let part = part.map_err(JoinError::Projection)?;
-        bytes = joined_size(bytes, part.len(), if first { 0 } else { separator.len() })
-            .ok_or(JoinError::OutputTooLarge)?;
+        separated |= !first;
+        bytes = joined_size(
+            bytes,
+            part.byte_len(),
+            if first { 0 } else { separator.byte_len() },
+        )
+        .ok_or(JoinError::OutputTooLarge)?;
         first = false;
     }
     let mut output = String::new();
     output
         .try_reserve_exact(bytes)
         .map_err(|_| JoinError::OutputTooLarge)?;
+    let separator_chunks = if !separated || separator.contiguous().is_some() {
+        Vec::new()
+    } else {
+        separator.chunks().collect::<Vec<_>>()
+    };
     for (index, part) in parts.enumerate() {
         let part = part.map_err(JoinError::Projection)?;
         if index != 0 {
-            output.push_str(separator);
+            if let Some(separator) = separator.contiguous() {
+                output.push_str(separator);
+            } else {
+                for chunk in &separator_chunks {
+                    output.push_str(chunk);
+                }
+            }
         }
-        output.push_str(part);
+        for chunk in part.chunks() {
+            output.push_str(chunk);
+        }
     }
     Ok(output)
 }
