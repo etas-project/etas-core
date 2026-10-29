@@ -306,12 +306,50 @@ pub(super) fn validate(
                     target: DescriptorNode::Type(call.signature),
                 },
             )?;
-            if !matches!(signature, TypeInfo::Function(signature) if (call.position as usize) < signature.parameters.len())
-            {
+            let TypeInfo::Function(owner) = signature else {
                 return Err(DescriptorError::Invalid {
                     node,
                     reason: "trace parameter call has no callable signature parameter",
                 });
+            };
+            let Some(parameter) = owner.parameters.get(call.position as usize) else {
+                return Err(DescriptorError::Invalid {
+                    node,
+                    reason: "trace parameter call has no callable signature parameter",
+                });
+            };
+            let mut parameter_type = parameter.ty;
+            let mut visited = BTreeSet::new();
+            loop {
+                validator.edge_count = validator.edge_count.saturating_add(1);
+                if validator.edge_count > limits.max_edges {
+                    return Err(DescriptorError::Limit {
+                        resource: "edges",
+                        limit: limits.max_edges,
+                    });
+                }
+                if !visited.insert(parameter_type) {
+                    return Err(DescriptorError::Invalid {
+                        node,
+                        reason: "trace parameter call has a cyclic callable alias",
+                    });
+                }
+                match input.types.get(parameter_type.0 as usize) {
+                    Some(TypeInfo::Function(_)) => break,
+                    Some(TypeInfo::Alias { target, .. }) => parameter_type = *target,
+                    Some(_) => {
+                        return Err(DescriptorError::Invalid {
+                            node,
+                            reason: "trace parameter call requires a checked callback function",
+                        });
+                    }
+                    None => {
+                        return Err(DescriptorError::MissingReference {
+                            from: node,
+                            target: DescriptorNode::Type(parameter_type),
+                        });
+                    }
+                }
             }
             validator.callable(node, &call.callable)?;
         }

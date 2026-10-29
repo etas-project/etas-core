@@ -282,6 +282,90 @@ fn parameter_trace_calls_require_a_real_signature_parameter() {
 }
 
 #[test]
+fn parameter_trace_calls_require_a_callable_type_even_when_widened() {
+    let package = PackageKey::from_canonical_fingerprint(CodeFingerprint::from_bytes([9; 32]));
+    let callable = etas_code::CallableId::declaration(
+        DefinitionKey::new(
+            package,
+            vec!["app".into()],
+            vec!["apply".into()],
+            DefinitionKind::Flow,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let call = ParameterCallInfo {
+        callable,
+        signature: TypeInfoRef(0),
+        position: 0,
+    };
+    let mut input = DescriptorGraphInput {
+        types: vec![
+            TypeInfo::Function(SignatureInfo {
+                generics: vec![],
+                parameters: vec![ParameterInfo {
+                    name: Some("f".into()),
+                    ty: TypeInfoRef(1),
+                }],
+                output: TypeInfoRef(1),
+                declared_output: None,
+                effects: None,
+            }),
+            TypeInfo::Primitive(PrimitiveInfo::Bool),
+            TypeInfo::Function(SignatureInfo {
+                generics: vec![],
+                parameters: vec![],
+                output: TypeInfoRef(1),
+                declared_output: None,
+                effects: None,
+            }),
+            TypeInfo::Alias {
+                definition: DefinitionKey::new(
+                    package,
+                    vec!["app".into()],
+                    vec!["Callback".into()],
+                    DefinitionKind::Type,
+                )
+                .unwrap(),
+                parameters: vec![],
+                target: TypeInfoRef(2),
+            },
+        ],
+        rows: vec![EffectRowInfo {
+            effects: vec![],
+            tail: None,
+        }],
+        traces: vec![TraceInfo::ParameterCall(call.clone())],
+        ..Default::default()
+    };
+    assert!(matches!(
+        DescriptorGraph::new(input.clone(), DescriptorLimits::default()),
+        Err(DescriptorError::Invalid { .. })
+    ));
+    input.traces[0] = TraceInfo::Widened {
+        actions: EffectRowInfoRef(0),
+        parameter_calls: vec![call],
+    };
+    assert!(matches!(
+        DescriptorGraph::new(input.clone(), DescriptorLimits::default()),
+        Err(DescriptorError::Invalid { .. })
+    ));
+    let TypeInfo::Function(owner) = &mut input.types[0] else {
+        unreachable!()
+    };
+    owner.parameters[0].ty = TypeInfoRef(3);
+    assert!(DescriptorGraph::new(input.clone(), DescriptorLimits::default()).is_ok());
+    let TypeInfo::Alias { target, .. } = &mut input.types[3] else {
+        unreachable!()
+    };
+    *target = TypeInfoRef(3);
+    assert!(matches!(
+        DescriptorGraph::new(input, DescriptorLimits::default()),
+        Err(DescriptorError::Invalid { .. })
+    ));
+}
+
+#[test]
 fn outcome_observations_must_match_the_checked_type_and_constructor_owner() {
     let make = |ty, observation| DescriptorGraphInput {
         types: vec![ty],
