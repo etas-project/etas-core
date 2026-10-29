@@ -47,29 +47,6 @@ fn ends_with<T: TextInput + ?Sized>(source: &T, pattern: &T) -> bool {
                 .eq(pattern.chunks().rev().flat_map(|chunk| chunk.bytes().rev())))
 }
 
-enum PatternBytes<'a> {
-    Flat(&'a [u8]),
-    Chunks(Vec<PatternChunk<'a>>),
-}
-
-struct PatternChunk<'a> {
-    end: usize,
-    bytes: &'a [u8],
-}
-
-impl PatternBytes<'_> {
-    fn at(&self, index: usize) -> u8 {
-        match self {
-            Self::Flat(bytes) => bytes[index],
-            Self::Chunks(chunks) => {
-                let slot = chunks.partition_point(|chunk| chunk.end <= index);
-                let chunk = &chunks[slot];
-                chunk.bytes[index - (chunk.end - chunk.bytes.len())]
-            }
-        }
-    }
-}
-
 fn contains<T: TextInput + ?Sized>(source: &T, pattern: &T) -> Result<bool, BuiltinError> {
     let length = pattern.byte_len();
     if length == 0 {
@@ -78,58 +55,10 @@ fn contains<T: TextInput + ?Sized>(source: &T, pattern: &T) -> Result<bool, Buil
     if length > source.byte_len() {
         return Ok(false);
     }
-    // KMP stores only prefix lengths and a per-chunk index, not a byte-sized
-    // pointer table or a flattened payload. Chunked pattern lookup is logarithmic
-    // in its chunk count; flat patterns retain direct byte indexing.
-    let bytes = if let Some(text) = pattern.contiguous() {
-        PatternBytes::Flat(text.as_bytes())
-    } else {
-        let chunks = pattern.chunks();
-        let mut indexed = Vec::new();
-        indexed
-            .try_reserve_exact(chunks.size_hint().0)
-            .map_err(|_| BuiltinError::NumericOverflow)?;
-        let mut end = 0usize;
-        for chunk in chunks.filter(|chunk| !chunk.is_empty()) {
-            end = end
-                .checked_add(chunk.len())
-                .ok_or(BuiltinError::NumericOverflow)?;
-            indexed.push(PatternChunk {
-                end,
-                bytes: chunk.as_bytes(),
-            });
-        }
-        if end != length {
-            return Err(BuiltinError::Abort {
-                message: "invalid text projection length".into(),
-            });
-        }
-        PatternBytes::Chunks(indexed)
-    };
-    let mut prefix = Vec::new();
-    prefix
-        .try_reserve_exact(length)
-        .map_err(|_| BuiltinError::NumericOverflow)?;
-    prefix.resize(length, 0usize);
+    let pattern = super::super::search::PatternIndex::new(pattern)?;
     let mut matched = 0;
-    for index in 1..length {
-        while matched > 0 && bytes.at(matched) != bytes.at(index) {
-            matched = prefix[matched - 1];
-        }
-        if bytes.at(matched) == bytes.at(index) {
-            matched += 1;
-        }
-        prefix[index] = matched;
-    }
-    matched = 0;
     for byte in source.chunks().flat_map(str::bytes) {
-        while matched > 0 && bytes.at(matched) != byte {
-            matched = prefix[matched - 1];
-        }
-        if bytes.at(matched) == byte {
-            matched += 1;
-        }
-        if matched == length {
+        if pattern.advance(&mut matched, byte) {
             return Ok(true);
         }
     }
