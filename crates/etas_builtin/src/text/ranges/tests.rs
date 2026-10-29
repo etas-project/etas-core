@@ -37,6 +37,13 @@ fn segmented_trim_and_lines_match_standard_text_at_every_scalar_boundary() {
         "\r\n\n",
         "a\r\r\n",
     ] {
+        assert_eq!(&text[trim_range(text)], text.trim());
+        assert_eq!(
+            line_ranges(text)
+                .map(|range| &text[range])
+                .collect::<Vec<_>>(),
+            text.lines().collect::<Vec<_>>()
+        );
         for boundary in boundaries(text) {
             let input = Text(vec!["", &text[..boundary], "", &text[boundary..], ""]);
             assert_eq!(
@@ -77,6 +84,13 @@ fn segmented_split_matches_empty_unicode_overlap_and_cross_chunk_separators() {
             "\r\n",
             "missing",
         ] {
+            assert_eq!(
+                split_ranges(text, separator)
+                    .unwrap()
+                    .map(|range| &text[range])
+                    .collect::<Vec<_>>(),
+                text.split(separator).collect::<Vec<_>>()
+            );
             for source_boundary in boundaries(text) {
                 for separator_boundary in boundaries(separator) {
                     let source = Text(vec![&text[..source_boundary], "", &text[source_boundary..]]);

@@ -5,6 +5,11 @@ use crate::BuiltinError;
 
 /// Byte ranges always delimit complete UTF-8 scalar values in the input.
 pub fn trim_range<T: TextInput + ?Sized>(text: &T) -> Range<usize> {
+    if let Some(text) = text.contiguous() {
+        let remaining = text.trim_start();
+        let start = text.len() - remaining.len();
+        return start..start + remaining.trim_end().len();
+    }
     let mut chars = text.chunks().flat_map(str::chars);
     let mut start = 0;
     for ch in chars.by_ref() {
@@ -54,6 +59,7 @@ impl<'a, C: Iterator<Item = &'a str>> Iterator for Bytes<'a, C> {
 
 pub struct LineRanges<'a, C> {
     bytes: Bytes<'a, C>,
+    flat: Option<(&'a str, std::str::Lines<'a>)>,
     start: usize,
     position: usize,
     finished: bool,
@@ -62,6 +68,7 @@ pub struct LineRanges<'a, C> {
 pub fn line_ranges<T: TextInput + ?Sized>(text: &T) -> LineRanges<'_, T::Chunks<'_>> {
     LineRanges {
         bytes: Bytes::new(text.chunks()),
+        flat: text.contiguous().map(|text| (text, text.lines())),
         start: 0,
         position: 0,
         finished: false,
@@ -73,6 +80,19 @@ impl<'a, C: Iterator<Item = &'a str>> Iterator for LineRanges<'a, C> {
     fn next(&mut self) -> Option<Self::Item> {
         if self.finished {
             return None;
+        }
+        if let Some((text, lines)) = &mut self.flat {
+            let line = lines.next()?;
+            let end = self.start + line.len();
+            let remaining = &text[end..];
+            let delimiter = if remaining.starts_with("\r\n") {
+                2
+            } else {
+                usize::from(remaining.starts_with('\n'))
+            };
+            let range = self.start..end;
+            self.start = end + delimiter;
+            return Some(range);
         }
         let mut previous = None;
         for byte in self.bytes.by_ref() {
@@ -101,6 +121,10 @@ pub struct SplitRanges<'a, C> {
 }
 
 enum SplitSource<'a, C> {
+    Flat {
+        parts: std::str::Split<'a, &'a str>,
+        separator_bytes: usize,
+    },
     Empty {
         chars: Chars<'a, C>,
         leading: bool,
@@ -122,6 +146,11 @@ pub fn split_ranges<'a, T: TextInput + ?Sized>(
                 .chunks()
                 .flat_map(str::chars as fn(&'a str) -> std::str::Chars<'a>),
             leading: true,
+        }
+    } else if let (Some(text), Some(pattern)) = (text.contiguous(), pattern.contiguous()) {
+        SplitSource::Flat {
+            parts: text.split(pattern),
+            separator_bytes: pattern.len(),
         }
     } else {
         SplitSource::Pattern {
@@ -145,6 +174,16 @@ impl<'a, C: Iterator<Item = &'a str>> Iterator for SplitRanges<'a, C> {
             return None;
         }
         match &mut self.source {
+            SplitSource::Flat {
+                parts,
+                separator_bytes,
+            } => {
+                let part = parts.next()?;
+                let end = self.start + part.len();
+                let range = self.start..end;
+                self.start = end + *separator_bytes;
+                Some(range)
+            }
             SplitSource::Empty { chars, leading } => {
                 if std::mem::take(leading) {
                     return Some(0..0);
