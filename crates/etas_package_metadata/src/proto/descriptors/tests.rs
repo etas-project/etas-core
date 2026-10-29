@@ -119,7 +119,7 @@ fn fixture() -> DefinitionDescriptorSet {
                     generics: vec![GenericParameterRef(1), GenericParameterRef(2)],
                     parameters: vec![ParameterInfo {
                         name: Some("value".into()),
-                        ty: TypeInfoRef(12),
+                        ty: TypeInfoRef(13),
                     }],
                     output: TypeInfoRef(0),
                     declared_output: Some(TypeInfoRef(0)),
@@ -131,6 +131,13 @@ fn fixture() -> DefinitionDescriptorSet {
                     result: Some(TypeInfoRef(0)),
                 },
                 TypeInfo::Tuple(vec![TypeInfoRef(1), TypeInfoRef(2)]),
+                TypeInfo::Function(SignatureInfo {
+                    generics: vec![],
+                    parameters: vec![],
+                    output: TypeInfoRef(0),
+                    declared_output: None,
+                    effects: None,
+                }),
             ],
             rows: vec![
                 EffectRowInfo {

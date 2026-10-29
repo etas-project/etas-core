@@ -15,11 +15,13 @@ pub(super) fn with_headers() -> DefinitionDescriptorSet {
     .unwrap();
     let run = MethodId::new(implementation.clone(), "run".into()).unwrap();
     let helper = MethodId::new(implementation, "help".into()).unwrap();
+    let component = TypeInfoRef(set.graph.types.len() as u32);
     set.graph.types.push(TypeInfo::Nominal {
         definition: identity.clone(),
         parameters: vec![],
         representation: None,
     });
+    let run_signature = TypeInfoRef(set.graph.types.len() as u32);
     set.graph.types.push(TypeInfo::Function(SignatureInfo {
         generics: vec![GenericParameterRef(3)],
         parameters: vec![],
@@ -27,6 +29,7 @@ pub(super) fn with_headers() -> DefinitionDescriptorSet {
         declared_output: Some(TypeInfoRef(0)),
         effects: Some(EffectRowInfoRef(1)),
     }));
+    let helper_signature = TypeInfoRef(set.graph.types.len() as u32);
     set.graph.types.push(TypeInfo::Function(SignatureInfo {
         generics: vec![],
         parameters: vec![ParameterInfo {
@@ -39,7 +42,7 @@ pub(super) fn with_headers() -> DefinitionDescriptorSet {
     }));
     set.declarations.push(DefinitionTypeBinding {
         definition: identity.clone(),
-        ty: TypeInfoRef(13),
+        ty: component,
     });
     let value = Arc::new(StaticValueInfo::Literal(AnnotationLiteralInfo::String(
         "shared".into(),
@@ -134,19 +137,19 @@ pub(super) fn with_headers() -> DefinitionDescriptorSet {
             },
             CallableHeaderInfo {
                 id: CallableId::method(run.clone()),
-                signature: TypeInfoRef(14),
+                signature: run_signature,
                 analysis: analysis.clone(),
             },
             CallableHeaderInfo {
                 id: CallableId::method(helper.clone()),
-                signature: TypeInfoRef(15),
+                signature: helper_signature,
                 analysis,
             },
         ],
         agents: vec![AgentHeaderInfo {
             method_info: None,
             identity,
-            component: TypeInfoRef(13),
+            component,
             default_entry: Some(CallableId::method(run)),
             methods: vec![CallableId::method(helper)],
             tools: vec![key("Search", DefinitionKind::Tool)],
