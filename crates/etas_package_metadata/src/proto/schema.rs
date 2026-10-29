@@ -512,6 +512,8 @@ pub struct ProtoEffectMetadataSection {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoEffectSummary {
+    #[prost(message, optional, tag = "10")]
+    pub behavior: Option<ProtoCallableValueBehavior>,
     #[prost(message, optional, tag = "9")]
     pub handler_requests: Option<ProtoRequestInstantiationTemplate>,
     #[prost(message, optional, tag = "8")]
@@ -546,6 +548,16 @@ pub struct ProtoActionRequestTemplate {
     pub action: Option<ProtoEffectRef>,
     #[prost(message, optional, tag = "2")]
     pub type_bindings: Option<ProtoActionTypeBindings>,
+    #[prost(message, optional, tag = "3")]
+    pub signature: Option<ProtoActionRequestSignature>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoActionRequestSignature {
+    #[prost(message, repeated, tag = "1")]
+    pub params: Vec<ProtoType>,
+    #[prost(message, optional, tag = "2")]
+    pub output: Option<ProtoType>,
 }
 
 #[derive(Clone, PartialEq, Message)]

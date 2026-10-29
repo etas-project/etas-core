@@ -162,6 +162,7 @@ fn root_projection_preserves_trace_events_outcomes_and_callback_placeholders() {
         callable,
         signature: TypeInfoRef(1),
         position: 0,
+        arguments: Some(vec![]),
     };
     let source = DescriptorGraph::new(
         DescriptorGraphInput {
@@ -252,6 +253,7 @@ fn parameter_trace_calls_require_a_real_signature_parameter() {
         callable,
         signature: TypeInfoRef(0),
         position: 1,
+        arguments: None,
     };
     let mut input = DescriptorGraphInput {
         types: vec![
@@ -282,7 +284,7 @@ fn parameter_trace_calls_require_a_real_signature_parameter() {
 }
 
 #[test]
-fn parameter_trace_calls_require_a_callable_type_even_when_widened() {
+fn parameter_trace_calls_require_callable_types_including_widened_traces() {
     let package = PackageKey::from_canonical_fingerprint(CodeFingerprint::from_bytes([9; 32]));
     let callable = etas_code::CallableId::declaration(
         DefinitionKey::new(
@@ -298,6 +300,7 @@ fn parameter_trace_calls_require_a_callable_type_even_when_widened() {
         callable,
         signature: TypeInfoRef(0),
         position: 0,
+        arguments: Some(vec![]),
     };
     let mut input = DescriptorGraphInput {
         types: vec![
@@ -344,7 +347,7 @@ fn parameter_trace_calls_require_a_callable_type_even_when_widened() {
     ));
     input.traces[0] = TraceInfo::Widened {
         actions: EffectRowInfoRef(0),
-        parameter_calls: vec![call],
+        parameter_calls: vec![call.clone()],
     };
     assert!(matches!(
         DescriptorGraph::new(input.clone(), DescriptorLimits::default()),
@@ -354,6 +357,12 @@ fn parameter_trace_calls_require_a_callable_type_even_when_widened() {
         unreachable!()
     };
     owner.parameters[0].ty = TypeInfoRef(3);
+    assert!(DescriptorGraph::new(input.clone(), DescriptorLimits::default()).is_ok());
+    let TypeInfo::Function(callback) = &mut input.types[2] else {
+        unreachable!()
+    };
+    callback.effects = Some(EffectRowInfoRef(0));
+    input.traces[0] = TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(call));
     assert!(DescriptorGraph::new(input.clone(), DescriptorLimits::default()).is_ok());
     let TypeInfo::Alias { target, .. } = &mut input.types[3] else {
         unreachable!()

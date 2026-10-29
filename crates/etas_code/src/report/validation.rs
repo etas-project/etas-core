@@ -58,7 +58,6 @@ impl CheckReport {
             if self.effects.escaping.is_none()
                 || self.effects.requested.is_none()
                 || self.effects.default_handled.is_none()
-                || self.determinism.is_none()
                 || self.trace.is_none()
             {
                 return Err(ReportValidationError::IncompleteAcceptedAnalysis);

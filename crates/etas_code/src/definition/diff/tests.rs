@@ -114,3 +114,44 @@ fn different_agent_identities_cannot_share_a_change_report() {
         Err(super::super::DefinitionOperationError::IncompatibleDefinitions)
     ));
 }
+
+#[test]
+fn flow_reports_preserve_their_definition_kind_and_reject_foreign_revisions() {
+    let flow = DefinitionKey::new(
+        PackageKey::from_canonical_fingerprint(fp("package")),
+        vec!["app".into()],
+        vec!["normalize".into()],
+        DefinitionKind::Flow,
+    )
+    .unwrap();
+    let revision = revision(&flow);
+    let report =
+        ChangeReport::compare(snapshot(&flow, &revision), snapshot(&flow, &revision)).unwrap();
+    assert_eq!(report.identity.kind(), DefinitionKind::Flow);
+    let other = identity("Worker");
+    assert!(
+        ChangeReport::compare(snapshot(&other, &revision), snapshot(&other, &revision)).is_err()
+    );
+}
+
+#[test]
+fn agent_default_method_revisions_are_bound_to_the_same_selected_entry() {
+    let owner = identity("Worker");
+    let implementation = crate::ImplementationKey::new(
+        owner.package(),
+        owner.module().to_vec(),
+        owner.clone(),
+        None,
+        fp("impl"),
+    )
+    .unwrap();
+    let mut inputs = revision(&owner).inputs().clone();
+    inputs.definition =
+        CallableId::method(crate::MethodId::new(implementation.clone(), "entry".into()).unwrap());
+    let first = RevisionInfo::new(inputs.clone());
+    assert!(ChangeReport::compare(snapshot(&owner, &first), snapshot(&owner, &first)).is_ok());
+    inputs.definition =
+        CallableId::method(crate::MethodId::new(implementation, "auxiliary".into()).unwrap());
+    let other = RevisionInfo::new(inputs);
+    assert!(ChangeReport::compare(snapshot(&owner, &first), snapshot(&owner, &other)).is_err());
+}

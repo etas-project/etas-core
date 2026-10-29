@@ -38,7 +38,7 @@ pub struct ProtoCallableValueParameter {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoCallableValueSource {
-    #[prost(oneof = "source::Kind", tags = "1, 2")]
+    #[prost(oneof = "source::Kind", tags = "1, 2, 3")]
     pub kind: Option<source::Kind>,
 }
 
@@ -49,6 +49,8 @@ pub mod source {
         Parameter(super::ProtoCallableValueParameter),
         #[prost(uint32, tag = "2")]
         Value(u32),
+        #[prost(uint32, tag = "3")]
+        FrozenContract(u32),
     }
 }
 
@@ -118,4 +120,6 @@ pub struct ProtoCallableValueBehavior {
     pub host_requirements: Vec<i32>,
     #[prost(int32, repeated, tag = "3")]
     pub interpreter_features: Vec<i32>,
+    #[prost(int32, optional, tag = "4")]
+    pub independent_determinism: Option<i32>,
 }

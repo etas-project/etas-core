@@ -8,6 +8,31 @@ fn encode_call(call: &ParameterCallInfo) -> p::ParameterCall {
         callable: Some(encode_callable(&call.callable)),
         signature: call.signature.0,
         position: call.position,
+        arguments: call
+            .arguments
+            .as_ref()
+            .map(|arguments| p::ParameterArguments {
+                values: arguments
+                    .iter()
+                    .map(|argument| p::ParameterArgument {
+                        kind: Some(match argument {
+                            ParameterArgumentInfo::Bool(value) => {
+                                p::parameter_argument::Kind::Bool(*value)
+                            }
+                            ParameterArgumentInfo::Input { position } => {
+                                p::parameter_argument::Kind::Input(*position)
+                            }
+                            ParameterArgumentInfo::Integer {
+                                negative,
+                                magnitude,
+                            } => p::parameter_argument::Kind::Integer(p::ParameterInteger {
+                                negative: *negative,
+                                magnitude: magnitude.to_le_bytes().to_vec(),
+                            }),
+                        }),
+                    })
+                    .collect(),
+            }),
     }
 }
 fn decode_call(call: p::ParameterCall) -> Result<ParameterCallInfo, Error> {
@@ -15,6 +40,35 @@ fn decode_call(call: p::ParameterCall) -> Result<ParameterCallInfo, Error> {
         callable: decode_callable(required(call.callable, "parameter call identity")?)?,
         signature: TypeInfoRef(call.signature),
         position: call.position,
+        arguments: call
+            .arguments
+            .map(|arguments| {
+                arguments
+                    .values
+                    .into_iter()
+                    .map(|argument| {
+                        Ok(match required(argument.kind, "parameter argument kind")? {
+                            p::parameter_argument::Kind::Bool(value) => {
+                                ParameterArgumentInfo::Bool(value)
+                            }
+                            p::parameter_argument::Kind::Input(position) => {
+                                ParameterArgumentInfo::Input { position }
+                            }
+                            p::parameter_argument::Kind::Integer(value) => {
+                                let bytes: [u8; 16] = value
+                                    .magnitude
+                                    .try_into()
+                                    .map_err(|_| invalid("invalid parameter integer magnitude"))?;
+                                ParameterArgumentInfo::Integer {
+                                    negative: value.negative,
+                                    magnitude: u128::from_le_bytes(bytes),
+                                }
+                            }
+                        })
+                    })
+                    .collect()
+            })
+            .transpose()?,
     })
 }
 
@@ -40,6 +94,9 @@ fn encode_outcome(outcome: &CallableOutcomeInfo) -> p::Outcome {
             }),
             CallableOutcomeInfo::Raised { error } => K::Raised(error.0),
             CallableOutcomeInfo::NonReturn => K::NonReturn(true),
+            CallableOutcomeInfo::ParameterNonReturn(call) => {
+                K::ParameterNonReturn(encode_call(call))
+            }
         }),
     }
 }
@@ -70,6 +127,7 @@ fn decode_outcome(outcome: p::Outcome) -> Result<CallableOutcomeInfo, Error> {
         },
         K::NonReturn(true) => CallableOutcomeInfo::NonReturn,
         K::NonReturn(false) => return Err(invalid("invalid non-return marker")),
+        K::ParameterNonReturn(call) => CallableOutcomeInfo::ParameterNonReturn(decode_call(call)?),
     })
 }
 

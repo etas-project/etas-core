@@ -198,6 +198,10 @@ impl DescriptorGraph {
                         encoder.tag(8);
                         match outcome {
                             CallableOutcomeInfo::NonReturn => encoder.tag(0),
+                            CallableOutcomeInfo::ParameterNonReturn(call) => {
+                                encoder.tag(3);
+                                encode_parameter_call(encoder, call);
+                            }
                             CallableOutcomeInfo::Raised { .. } => encoder.tag(1),
                             CallableOutcomeInfo::Returned { observation, .. } => {
                                 encoder.tag(2);
@@ -253,6 +257,33 @@ impl DescriptorGraph {
 fn encode_parameter_call(encoder: &mut CanonicalEncoder, call: &ParameterCallInfo) {
     encoder.fingerprint(call.callable.fingerprint());
     encoder.number(u64::from(call.position));
+    match &call.arguments {
+        None => encoder.tag(0),
+        Some(arguments) => {
+            encoder.tag(1);
+            encoder.number(arguments.len() as u64);
+            for argument in arguments {
+                match argument {
+                    super::ParameterArgumentInfo::Bool(value) => {
+                        encoder.tag(0);
+                        encoder.tag(u8::from(*value));
+                    }
+                    super::ParameterArgumentInfo::Input { position } => {
+                        encoder.tag(1);
+                        encoder.number(u64::from(*position));
+                    }
+                    super::ParameterArgumentInfo::Integer {
+                        negative,
+                        magnitude,
+                    } => {
+                        encoder.tag(2);
+                        encoder.tag(u8::from(*negative));
+                        encoder.bytes(&magnitude.to_le_bytes());
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn encode_effect(encoder: &mut CanonicalEncoder, effect: &EffectInfo) {

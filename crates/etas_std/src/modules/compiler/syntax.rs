@@ -51,7 +51,7 @@ pub(super) fn register(builder: &mut StdRegistryBuilder, module: crate::StdModul
         name: "std.compiler.AgentDef".into(),
         args: vec![StdType::Var("A".into())],
     };
-    builder.symbol_with_intrinsic(
+    let diff = builder.symbol_with_intrinsic(
         module,
         "diff",
         StdSymbolKind::Flow,
@@ -76,7 +76,7 @@ pub(super) fn register(builder: &mut StdRegistryBuilder, module: crate::StdModul
             runtime_requirement: crate::IntrinsicRuntimeRequirement::None,
         }),
     );
-    builder.symbol_with_intrinsic(
+    let with_body = builder.symbol_with_intrinsic(
         module,
         "with_body",
         StdSymbolKind::Flow,
@@ -107,4 +107,40 @@ pub(super) fn register(builder: &mut StdRegistryBuilder, module: crate::StdModul
             runtime_requirement: crate::IntrinsicRuntimeRequirement::None,
         }),
     );
+    let definition = StdType::NamedApplied {
+        name: "std.compiler.CallableDef".into(),
+        args: vec![StdType::Var("F".into())],
+    };
+    builder
+        .flow_overload(
+            diff,
+            FlowDecl {
+                name: "diff".into(),
+                type_params: vec![crate::StdGenericParam::new("F")],
+                params: vec![definition.clone(), definition.clone()],
+                output: StdType::Named("std.compiler.ChangeReport".into()),
+                public_effects: vec![],
+                requested_actions: vec![],
+                source_method: None,
+            },
+        )
+        .expect("snapshot diff overload preserves its registered identity");
+    builder
+        .flow_overload(
+            with_body,
+            FlowDecl {
+                name: "with_body".into(),
+                type_params: vec![crate::StdGenericParam::new("F")],
+                params: vec![
+                    definition.clone(),
+                    StdType::Named("std.compiler.SyntaxBlock".into()),
+                ],
+                output: definition.clone(),
+                public_effects: Vec::new(),
+                requested_actions: Vec::new(),
+                source_method: None,
+            }
+            .with_intrinsic_value_method(definition, "with_body"),
+        )
+        .expect("body-edit overload preserves its registered identity");
 }

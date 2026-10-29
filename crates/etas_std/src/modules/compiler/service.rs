@@ -19,7 +19,7 @@ pub(super) fn register(builder: &mut StdRegistryBuilder, module: crate::StdModul
             147,
         ),
     ] {
-        builder.symbol_with_intrinsic(
+        let symbol = builder.symbol_with_intrinsic(
             module,
             name,
             StdSymbolKind::Flow,
@@ -54,6 +54,32 @@ pub(super) fn register(builder: &mut StdRegistryBuilder, module: crate::StdModul
                 runtime_requirement: crate::IntrinsicRuntimeRequirement::None,
             }),
         );
+        builder
+            .flow_overload(
+                symbol,
+                FlowDecl {
+                    name: name.into(),
+                    type_params: vec![StdGenericParam::new("F")],
+                    params: vec![StdType::NamedApplied {
+                        name: "std.compiler.CallableDef".into(),
+                        args: vec![StdType::Var("F".into())],
+                    }],
+                    output: if name == "compile" {
+                        StdType::Var("F".into())
+                    } else {
+                        compiler_type("CheckReport")
+                    },
+                    public_effects: vec![StdEffectRef::typed(
+                        &["Error"],
+                        compiler_type("CompileError"),
+                    )],
+                    requested_actions: vec![StdEffectRef::new(&[
+                        "std", "effects", "actions", "Code", name,
+                    ])],
+                    source_method: None,
+                },
+            )
+            .expect("compiler callable overload preserves its registered identity");
     }
 }
 
@@ -86,12 +112,35 @@ pub(super) fn register_actions(builder: &mut StdRegistryBuilder) {
             &["Error"],
             compiler_type("CompileError"),
         )]);
-        builder.symbol(
+        let symbol = builder.symbol(
             module,
             name,
             StdSymbolKind::EffectAction,
             StdDecl::EffectAction(declaration),
             "Compile/check the definition without executing or promoting it.",
         );
+        let declaration = crate::EffectActionDecl::typed(
+            "Code",
+            name,
+            vec![StdType::NamedApplied {
+                name: "std.compiler.CallableDef".into(),
+                args: vec![StdType::Var("F".into())],
+            }],
+            if name == "compile" {
+                StdType::Var("F".into())
+            } else {
+                compiler_type("CheckReport")
+            },
+        )
+        .with_type_params(&[StdGenericParam::new("F")])
+        .with_stable_id(stable_id)
+        .with_runtime_requirement(crate::StdRuntimeRequirement::Compiler)
+        .with_default_handler_effects(vec![StdEffectRef::typed(
+            &["Error"],
+            compiler_type("CompileError"),
+        )]);
+        builder
+            .action_overload(symbol, declaration)
+            .expect("compiler action overload preserves its registered identity");
     }
 }

@@ -1762,6 +1762,10 @@ fn effect_metadata_from_proto(
 
 fn effect_summary_to_proto(summary: &EffectSummary) -> ProtoEffectSummary {
     ProtoEffectSummary {
+        behavior: summary
+            .behavior
+            .as_ref()
+            .map(callable_values::behavior_to_proto),
         handler_requests: summary
             .handler_requests
             .as_ref()
@@ -1791,6 +1795,10 @@ fn effect_summary_from_proto(
     summary: ProtoEffectSummary,
 ) -> Result<EffectSummary, MetadataArtifactError> {
     Ok(EffectSummary {
+        behavior: summary
+            .behavior
+            .map(callable_values::behavior_from_proto)
+            .transpose()?,
         handler_requests: summary
             .handler_requests
             .map(request_template_from_proto)
@@ -2650,6 +2658,30 @@ mod tests {
                 "case {missing}: {error}"
             );
         }
+    }
+
+    #[test]
+    fn binary_effect_summary_preserves_and_validates_behavior() {
+        use crate::{CallableValueBehavior, CallableValueDeterminism};
+        let summary = EffectSummary {
+            item: vec!["demo".into(), "relay".into()],
+            behavior: Some(CallableValueBehavior {
+                determinism: CallableValueDeterminism::RuntimeMediated,
+                independent_determinism: Some(CallableValueDeterminism::Deterministic),
+                host_requirements: vec![],
+                interpreter_features: vec![],
+            }),
+            ..Default::default()
+        };
+        let bytes = effect_summary_to_proto(&summary).encode_to_vec();
+        let decoded =
+            effect_summary_from_proto(ProtoEffectSummary::decode(bytes.as_slice()).unwrap())
+                .unwrap();
+        assert_eq!(decoded, summary);
+        let mut forged = effect_summary_to_proto(&summary);
+        forged.behavior.as_mut().unwrap().independent_determinism =
+            Some(CallableValueDeterminism::NonDeterministic as i32);
+        assert!(effect_summary_from_proto(forged).is_err());
     }
 
     #[test]

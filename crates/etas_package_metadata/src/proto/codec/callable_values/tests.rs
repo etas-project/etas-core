@@ -17,6 +17,7 @@ fn node() -> CallableValueNode {
         handler_requests: Some(Default::default()),
         behavior: crate::CallableValueBehavior {
             determinism: crate::CallableValueDeterminism::Deterministic,
+            independent_determinism: Some(crate::CallableValueDeterminism::Deterministic),
             host_requirements: vec![],
             interpreter_features: vec![],
         },
@@ -41,6 +42,24 @@ fn graph() -> CallableValueGraph {
         sources: vec![CallableValueSource::Value(0)],
         values: vec![node()],
     }
+}
+
+#[test]
+fn frozen_contract_sources_remain_distinct_from_revision_analysis_across_binary_replay() {
+    let mut graph = graph();
+    graph.sources = vec![CallableValueSource::FrozenContract(0)];
+    graph.values[0].returned_sources = Some(vec![
+        CallableValueSource::Value(0),
+        CallableValueSource::FrozenContract(0),
+    ]);
+    graph.validate_references(None).unwrap();
+    let bytes = to_proto(&graph).encode_to_vec();
+    assert_eq!(
+        from_proto(ProtoCallableValueGraph::decode(bytes.as_slice()).unwrap()).unwrap(),
+        graph
+    );
+    graph.sources = vec![CallableValueSource::FrozenContract(1)];
+    assert!(graph.validate_references(None).is_err());
 }
 
 #[test]
@@ -116,6 +135,15 @@ fn callable_graph_round_trips_captures_scoped_generics_and_recursive_returns() {
         from_proto(ProtoCallableValueGraph::decode(bytes.as_slice()).unwrap()).unwrap(),
         graph
     );
+    let mut missing = graph.clone();
+    missing.values[0].behavior.independent_determinism = None;
+    assert!(missing.validate_references(Some((1, &root))).is_err());
+    assert!(from_proto(to_proto(&missing)).is_err());
+    let mut inconsistent = graph.clone();
+    inconsistent.values[0].behavior.independent_determinism =
+        Some(crate::CallableValueDeterminism::RuntimeMediated);
+    assert!(inconsistent.validate_references(Some((1, &root))).is_err());
+    assert!(from_proto(to_proto(&inconsistent)).is_err());
 }
 
 #[test]

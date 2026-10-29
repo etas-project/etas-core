@@ -89,11 +89,16 @@ pub(super) fn validate(
         }
     }
     if let Some(snapshots) = &headers.snapshots {
-        for snapshot in &snapshots.agents {
+        for snapshot in snapshots
+            .agents
+            .iter()
+            .chain(&snapshots.flows)
+            .chain(&snapshots.methods)
+        {
             if let Some(body) = seen.get(&snapshot.revision.definition)
                 && body.source.content != snapshot.revision.content
             {
-                return Err(invalid("retained agent body disagrees with its revision"));
+                return Err(invalid("retained body disagrees with its revision"));
             }
         }
     }

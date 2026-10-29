@@ -146,7 +146,14 @@ pub enum CodeTypeRole {
 
 impl CodeTypeRole {
     pub fn type_parameter_count(self) -> usize {
-        usize::from(self == Self::AgentDefinition)
+        usize::from(matches!(
+            self,
+            Self::AgentDefinition | Self::CallableDefinition
+        ))
+    }
+
+    pub fn has_read_only_erased_view(self) -> bool {
+        self == Self::CallableDefinition
     }
 }
 

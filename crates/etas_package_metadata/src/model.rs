@@ -373,6 +373,7 @@ impl EffectMetadata {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct EffectSummary {
+    pub behavior: Option<crate::CallableValueBehavior>,
     pub handler_requests: Option<RequestInstantiationTemplate>,
     pub default_handler_effects: Option<DefaultHandlerEffects>,
     pub item: Vec<String>,
@@ -408,6 +409,15 @@ pub struct ActionRequestTemplate {
     pub action: EffectRef,
     /// None means that the request is known, but its payload-generic ABI is not.
     pub type_bindings: Option<Vec<ActionTypeBinding>>,
+    pub signature: Option<ActionRequestSignature>,
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub struct ActionRequestSignature {
+    pub params: Vec<Type>,
+    pub output: Type,
 }
 
 #[derive(

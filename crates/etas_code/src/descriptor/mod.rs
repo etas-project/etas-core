@@ -19,16 +19,16 @@ pub use annotation::{
 };
 pub use behavior::{
     CallableAnalysisInfo, CallableOutcomeInfo, DeterminismInfo, EffectInfo, EffectRowInfo,
-    EffectRowInfoRef, EffectSummaryInfo, EffectTargetInfo, ParameterCallInfo,
-    ReturnObservationInfo, StaticEffectArgInfo, TraceInfo, TraceInfoRef,
+    EffectRowInfoRef, EffectSummaryInfo, EffectTargetInfo, ParameterArgumentInfo,
+    ParameterCallInfo, ReturnObservationInfo, StaticEffectArgInfo, TraceInfo, TraceInfoRef,
 };
 pub use callable::{
     GenericOwner, GenericParameterInfo, GenericParameterKind, GenericParameterRef, ParameterInfo,
     SignatureInfo, SpecInfo,
 };
 pub use definitions::{
-    AgentHeaderInfo, AgentMethodInfo, AgentSnapshotInfo, BodyAccess, CallableBodyInfo,
-    CallableHeaderInfo, DefinitionBodies, DefinitionDescriptorSet, DefinitionHeaders,
+    AgentHeaderInfo, AgentMethodInfo, BodyAccess, CallableBodyInfo, CallableHeaderInfo,
+    DefinitionBodies, DefinitionDescriptorSet, DefinitionHeaders, DefinitionSnapshotInfo,
     DefinitionSnapshots, DefinitionTypeBinding,
 };
 pub use graph::{DescriptorGraph, DescriptorGraphInput, DescriptorLimits};

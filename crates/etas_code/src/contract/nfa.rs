@@ -227,6 +227,7 @@ impl Nfa {
             callable: call.callable.clone(),
             position: call.position,
             signature: graph.type_fingerprint(call.signature)?,
+            arguments: call.arguments.clone(),
         });
         self.labels.insert(source, label.clone());
         Ok(label)

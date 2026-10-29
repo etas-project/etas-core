@@ -785,6 +785,7 @@ mod tests {
                     ..Default::default()
                 }],
                 effect_summaries: vec![EffectSummary {
+                    behavior: None,
                     handler_requests: None,
                     returned_callables: None,
                     default_handler_effects: None,

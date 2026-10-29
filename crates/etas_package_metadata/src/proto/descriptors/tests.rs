@@ -10,6 +10,147 @@ mod body_tests;
 mod header_tests;
 mod snapshot_tests;
 
+#[test]
+fn parameter_nonreturn_survives_binary_trace_codec() {
+    let call = ParameterCallInfo {
+        callable: CallableId::declaration(key("visit", DefinitionKind::Flow)).unwrap(),
+        signature: TypeInfoRef(4),
+        position: 2,
+        arguments: Some(vec![
+            ParameterArgumentInfo::Bool(true),
+            ParameterArgumentInfo::Integer {
+                negative: true,
+                magnitude: 1_u128 << 127,
+            },
+        ]),
+    };
+    let original = TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(call));
+    let bytes = traces::encode(&original).encode_to_vec();
+    let decoded = schema::Trace::decode(bytes.as_slice()).unwrap();
+    assert_eq!(traces::decode(decoded).unwrap(), original);
+}
+
+#[test]
+fn parameter_integer_codec_rejects_non_128_bit_magnitude() {
+    let original = TraceInfo::ParameterCall(ParameterCallInfo {
+        callable: CallableId::declaration(key("visit", DefinitionKind::Flow)).unwrap(),
+        signature: TypeInfoRef(0),
+        position: 0,
+        arguments: Some(vec![ParameterArgumentInfo::Integer {
+            negative: false,
+            magnitude: 42,
+        }]),
+    });
+    let mut encoded = traces::encode(&original);
+    let Some(schema::trace::Kind::ParameterCall(call)) = &mut encoded.kind else {
+        unreachable!()
+    };
+    let Some(schema::parameter_argument::Kind::Integer(value)) =
+        &mut call.arguments.as_mut().unwrap().values[0].kind
+    else {
+        unreachable!()
+    };
+    assert!(value.magnitude.pop().is_some());
+    assert!(traces::decode(encoded).is_err());
+}
+
+#[test]
+fn parameter_nonreturn_survives_full_package_artifact_roundtrip() {
+    use crate::*;
+    let flow = key("visit", DefinitionKind::Flow);
+    let call = ParameterCallInfo {
+        callable: CallableId::declaration(flow).unwrap(),
+        signature: TypeInfoRef(0),
+        position: 0,
+        arguments: Some(vec![
+            ParameterArgumentInfo::Input { position: 1 },
+            ParameterArgumentInfo::Integer {
+                negative: true,
+                magnitude: 1_u128 << 127,
+            },
+        ]),
+    };
+    let graph = DefinitionDescriptorSet {
+        headers: None,
+        graph: DescriptorGraphInput {
+            types: vec![
+                TypeInfo::Function(SignatureInfo {
+                    generics: vec![],
+                    parameters: vec![
+                        ParameterInfo {
+                            name: Some("f".into()),
+                            ty: TypeInfoRef(1),
+                        },
+                        ParameterInfo {
+                            name: Some("value".into()),
+                            ty: TypeInfoRef(3),
+                        },
+                    ],
+                    output: TypeInfoRef(2),
+                    declared_output: None,
+                    effects: Some(EffectRowInfoRef(0)),
+                }),
+                TypeInfo::Function(SignatureInfo {
+                    generics: vec![],
+                    parameters: vec![
+                        ParameterInfo {
+                            name: Some("value".into()),
+                            ty: TypeInfoRef(3),
+                        },
+                        ParameterInfo {
+                            name: Some("boundary".into()),
+                            ty: TypeInfoRef(4),
+                        },
+                    ],
+                    output: TypeInfoRef(2),
+                    declared_output: None,
+                    effects: Some(EffectRowInfoRef(0)),
+                }),
+                TypeInfo::Primitive(PrimitiveInfo::Unit),
+                TypeInfo::Primitive(PrimitiveInfo::Bool),
+                TypeInfo::Primitive(PrimitiveInfo::I128),
+            ],
+            rows: vec![EffectRowInfo {
+                effects: vec![],
+                tail: None,
+            }],
+            traces: vec![TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(
+                call,
+            ))],
+            ..Default::default()
+        },
+        declarations: vec![],
+    };
+    let mut metadata = PackageMetadata {
+        version: 1,
+        package: PackageIdentity {
+            name: "descriptor-test".into(),
+            version: "0.1.0".into(),
+            edition: "2026".into(),
+        },
+        ..Default::default()
+    };
+    metadata.public_metadata.definition_descriptors = Some(graph);
+    let header = MetadataArtifactHeader {
+        artifact_schema_version: ARTIFACT_SCHEMA_VERSION,
+        compiler_version: "test".into(),
+        package_id: "descriptor-test".into(),
+        package_version: "0.1.0".into(),
+        source_payload_hash: "source".into(),
+        manifest_hash: "manifest".into(),
+        dependency_lock_hash: "lock".into(),
+        created_target: "test".into(),
+    };
+    let bytes = encode_metadata_artifact(&header, package_metadata_to_sections(&metadata).unwrap())
+        .unwrap();
+    assert_eq!(
+        package_metadata_from_artifact(std::path::Path::new("descriptor.etasmeta"), &bytes)
+            .unwrap()
+            .1,
+        metadata
+    );
+}
+
 fn key(name: &str, kind: DefinitionKind) -> DefinitionKey {
     DefinitionKey::new(
         PackageKey::from_canonical_fingerprint(CodeFingerprint::from_bytes([9; 32])),
@@ -43,6 +184,7 @@ fn fixture() -> DefinitionDescriptorSet {
         callable: CallableId::method(method.clone()),
         signature: TypeInfoRef(10),
         position: 0,
+        arguments: None,
     };
     let event = EffectInfo {
         target: EffectTargetInfo::Action {
@@ -205,6 +347,7 @@ fn fixture() -> DefinitionDescriptorSet {
                             callable: CallableId::declaration(flow.clone()).unwrap(),
                             signature: TypeInfoRef(10),
                             position: 0,
+                            arguments: None,
                         },
                     ],
                 },

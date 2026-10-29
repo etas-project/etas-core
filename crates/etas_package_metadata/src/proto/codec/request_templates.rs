@@ -9,6 +9,12 @@ pub(super) fn request_template_to_proto(
             .iter()
             .map(|instance| ProtoActionRequestTemplate {
                 action: Some(effect_ref_to_proto(&instance.action)),
+                signature: instance.signature.as_ref().map(|signature| {
+                    ProtoActionRequestSignature {
+                        params: signature.params.iter().map(type_to_proto).collect(),
+                        output: Some(type_to_proto(&signature.output)),
+                    }
+                }),
                 type_bindings: instance.type_bindings.as_ref().map(|bindings| {
                     ProtoActionTypeBindings {
                         bindings: bindings
@@ -47,6 +53,21 @@ pub(super) fn request_template_from_proto(
                             .action
                             .ok_or_else(|| invalid("request instance has no action identity"))?,
                     )?,
+                    signature: instance
+                        .signature
+                        .map(|signature| {
+                            Ok::<_, MetadataArtifactError>(ActionRequestSignature {
+                                params: signature
+                                    .params
+                                    .into_iter()
+                                    .map(type_from_proto)
+                                    .collect::<Result<_, _>>()?,
+                                output: type_from_proto(signature.output.ok_or_else(|| {
+                                    invalid("request signature has no output type")
+                                })?)?,
+                            })
+                        })
+                        .transpose()?,
                     type_bindings: instance
                         .type_bindings
                         .map(|bindings| {
@@ -115,6 +136,18 @@ mod tests {
                 actions: vec![ActionRequestTemplate {
                     action: action(),
                     type_bindings: bindings,
+                    signature: Some(ActionRequestSignature {
+                        params: vec![Type {
+                            kind: TypeKind::Primitive,
+                            name: "string".into(),
+                            ..Default::default()
+                        }],
+                        output: Type {
+                            kind: TypeKind::Primitive,
+                            name: "unit".into(),
+                            ..Default::default()
+                        },
+                    }),
                 }],
                 parameters: vec![ParameterRequestTemplate {
                     parameter: "callback".into(),
@@ -144,6 +177,7 @@ mod tests {
             actions: vec![ActionRequestTemplate {
                 action: action(),
                 type_bindings: Some(vec![binding.clone(), binding]),
+                signature: None,
             }],
             parameters: vec![],
         };
@@ -152,10 +186,29 @@ mod tests {
             actions: vec![ProtoActionRequestTemplate {
                 action: None,
                 type_bindings: None,
+                signature: None,
             }],
             parameters: vec![],
         };
         assert!(request_template_from_proto(wire).is_err());
+        let wire = ProtoRequestInstantiationTemplate {
+            actions: vec![ProtoActionRequestTemplate {
+                action: Some(effect_ref_to_proto(&action())),
+                type_bindings: None,
+                signature: Some(ProtoActionRequestSignature {
+                    params: vec![],
+                    output: None,
+                }),
+            }],
+            parameters: vec![],
+        };
+        let error = request_template_from_proto(wire).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("request signature has no output"),
+            "{error}"
+        );
     }
 
     #[test]
@@ -181,6 +234,7 @@ mod tests {
                 handler_requests: Some(RequestInstantiationTemplate {
                     actions: vec![ActionRequestTemplate {
                         action: action(),
+                        signature: None,
                         type_bindings: Some(vec![ActionTypeBinding {
                             parameter: "A".into(),
                             ty,
@@ -192,12 +246,25 @@ mod tests {
             });
         let error = package_metadata_to_sections(&metadata).unwrap_err();
         assert!(error.to_string().contains("maximum depth"), "{error}");
+        let request = &mut metadata.public_metadata.effect_summaries[0]
+            .handler_requests
+            .as_mut()
+            .unwrap()
+            .actions[0];
+        let binding = request.type_bindings.take().unwrap().remove(0);
+        request.signature = Some(ActionRequestSignature {
+            params: vec![],
+            output: binding.ty,
+        });
+        let error = package_metadata_to_sections(&metadata).unwrap_err();
+        assert!(error.to_string().contains("maximum depth"), "{error}");
         metadata.public_metadata.effect_summaries[0].handler_requests =
             Some(RequestInstantiationTemplate {
                 actions: vec![
                     ActionRequestTemplate {
                         action: action(),
-                        type_bindings: None
+                        type_bindings: None,
+                        signature: None,
                     };
                     crate::MAX_METADATA_GRAPH_NODES
                 ],

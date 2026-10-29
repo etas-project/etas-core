@@ -24,6 +24,13 @@ pub(super) fn encode(headers: &DefinitionHeaders) -> p::Headers {
                             DeterminismInfo::RuntimeMediated => 2,
                             DeterminismInfo::NonDeterministic => 3,
                         }),
+                        independent_determinism: callable.analysis.independent_determinism.map(
+                            |value| match value {
+                                DeterminismInfo::Deterministic => 1,
+                                DeterminismInfo::RuntimeMediated => 2,
+                                DeterminismInfo::NonDeterministic => 3,
+                            },
+                        ),
                         trace: callable.analysis.trace.map(|r| r.0),
                         outcomes: callable.analysis.outcomes.map(|r| r.0),
                     }),
@@ -88,6 +95,15 @@ pub(super) fn decode(headers: p::Headers) -> Result<DefinitionHeaders, Error> {
                                 2 => Ok(DeterminismInfo::RuntimeMediated),
                                 3 => Ok(DeterminismInfo::NonDeterministic),
                                 _ => Err(invalid("unknown determinism descriptor")),
+                            })
+                            .transpose()?,
+                        independent_determinism: analysis
+                            .independent_determinism
+                            .map(|value| match value {
+                                1 => Ok(DeterminismInfo::Deterministic),
+                                2 => Ok(DeterminismInfo::RuntimeMediated),
+                                3 => Ok(DeterminismInfo::NonDeterministic),
+                                _ => Err(invalid("unknown independent determinism descriptor")),
                             })
                             .transpose()?,
                         trace: analysis.trace.map(TraceInfoRef),

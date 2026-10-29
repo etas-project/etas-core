@@ -1,6 +1,6 @@
 use crate::descriptor::{
     CallableOutcomeInfo, DescriptorError, DescriptorGraph, EffectInfo, EffectTargetInfo,
-    ReturnObservationInfo, StaticEffectArgInfo,
+    ParameterArgumentInfo, ReturnObservationInfo, StaticEffectArgInfo,
 };
 use crate::{CallableId, CodeFingerprint, DefinitionKey};
 
@@ -48,6 +48,7 @@ pub enum TraceLabel {
         callable: CallableId,
         position: u32,
         signature: CodeFingerprint,
+        arguments: Option<Vec<ParameterArgumentInfo>>,
     },
     Returned {
         ty: CodeFingerprint,
@@ -57,6 +58,12 @@ pub enum TraceLabel {
         error: CodeFingerprint,
     },
     NonReturn,
+    ParameterNonReturn {
+        callable: CallableId,
+        position: u32,
+        signature: CodeFingerprint,
+        arguments: Option<Vec<ParameterArgumentInfo>>,
+    },
 }
 
 impl TraceLabel {
@@ -64,6 +71,30 @@ impl TraceLabel {
         match (self, candidate) {
             (Self::NonReturn, Self::NonReturn) => true,
             (Self::Action(bound), Self::Action(actual)) => bound.covers(actual),
+            (
+                Self::ParameterCall {
+                    arguments: None, ..
+                },
+                Self::ParameterCall { .. },
+            )
+            | (
+                Self::ParameterCall { .. },
+                Self::ParameterCall {
+                    arguments: None, ..
+                },
+            )
+            | (
+                Self::ParameterNonReturn {
+                    arguments: None, ..
+                },
+                Self::ParameterNonReturn { .. },
+            )
+            | (
+                Self::ParameterNonReturn { .. },
+                Self::ParameterNonReturn {
+                    arguments: None, ..
+                },
+            ) => false,
             (
                 Self::Returned {
                     ty: expected,
@@ -95,6 +126,12 @@ pub(super) fn outcome_label(
             error: graph.type_fingerprint(*error)?,
         },
         CallableOutcomeInfo::NonReturn => TraceLabel::NonReturn,
+        CallableOutcomeInfo::ParameterNonReturn(call) => TraceLabel::ParameterNonReturn {
+            callable: call.callable.clone(),
+            position: call.position,
+            signature: graph.type_fingerprint(call.signature)?,
+            arguments: call.arguments.clone(),
+        },
     })
 }
 

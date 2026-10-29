@@ -144,7 +144,7 @@ pub(super) fn register(builder: &mut StdRegistryBuilder, module: crate::StdModul
             "ChangeReport",
             vec![
                 field("schema", string()),
-                field("identity", named("AgentId")),
+                field("identity", named("DefinitionId")),
                 field("old_revision", named("RevisionInfo")),
                 field("new_revision", named("RevisionInfo")),
                 field("old_body_available", boolean()),

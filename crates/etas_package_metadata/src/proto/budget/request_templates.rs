@@ -13,6 +13,14 @@ impl ModelGraphValidator {
         template.validate_shape()?;
         for action in &template.actions {
             self.effect_ref(&action.action, 0)?;
+            if let Some(signature) = &action.signature {
+                self.budget
+                    .charge(signature.params.len() + 1, "request input signature")?;
+                for ty in &signature.params {
+                    self.ty(ty, 0)?;
+                }
+                self.ty(&signature.output, 0)?;
+            }
             if let Some(bindings) = &action.type_bindings {
                 self.budget
                     .charge(bindings.len(), "request type bindings")?;
@@ -41,6 +49,16 @@ impl ProtoGraphValidator {
             "request instantiation template",
         )?;
         for action in &template.actions {
+            if let Some(signature) = &action.signature {
+                self.budget
+                    .charge(signature.params.len() + 1, "request input signature")?;
+                for ty in &signature.params {
+                    self.ty(ty, 0)?;
+                }
+                if let Some(ty) = &signature.output {
+                    self.ty(ty, 0)?;
+                }
+            }
             if let Some(action) = &action.action {
                 self.effect_ref(action, 0)?;
             }

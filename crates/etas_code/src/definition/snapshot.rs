@@ -35,17 +35,24 @@ pub struct FrozenDefinition<C> {
 
 impl<C> FrozenDefinition<C> {
     pub fn new(input: FrozenDefinitionInput<C>) -> Result<Arc<Self>, DefinitionError> {
-        if input.identity.kind() != DefinitionKind::Agent {
-            return Err(DefinitionError::NotAgent);
+        if !matches!(
+            input.identity.kind(),
+            DefinitionKind::Agent | DefinitionKind::Flow
+        ) {
+            return Err(DefinitionError::UnsupportedDefinitionKind);
         }
         let callable = match (&input.default_entry, &input.default_callable) {
             (Some(entry), Some(callable)) => {
-                let method = callable
-                    .as_method()
-                    .ok_or(DefinitionError::InvalidDefaultEntry)?;
-                if method.implementation().subject() != &input.identity
-                    || method.implementation().selected_spec().is_some()
-                    || method.name() != "run"
+                let valid_identity = match input.identity.kind() {
+                    DefinitionKind::Agent => callable.as_method().is_some_and(|method| {
+                        method.implementation().subject() == &input.identity
+                            && method.implementation().selected_spec().is_none()
+                            && method.name() == "run"
+                    }),
+                    DefinitionKind::Flow => callable.as_declaration() == Some(&input.identity),
+                    _ => false,
+                };
+                if !valid_identity
                     || !matches!(
                         input.descriptors.type_info(*entry),
                         Some(TypeInfo::Function(_))
@@ -55,8 +62,10 @@ impl<C> FrozenDefinition<C> {
                 }
                 callable.clone()
             }
-            (None, None) => CallableId::declaration(input.identity.clone())
-                .map_err(|_| DefinitionError::InvalidDefaultEntry)?,
+            (None, None) if input.identity.kind() == DefinitionKind::Agent => {
+                CallableId::declaration(input.identity.clone())
+                    .map_err(|_| DefinitionError::InvalidDefaultEntry)?
+            }
             _ => return Err(DefinitionError::InvalidDefaultEntry),
         };
         Ok(Arc::new(Self {
@@ -106,7 +115,7 @@ impl<C> FrozenDefinition<C> {
 
 /// Code data only. No constructor here can publish an executable or a proof.
 #[derive(Debug, etas_core::RetainedSize)]
-pub struct AgentDefinition<C, S> {
+pub struct DefinitionSnapshot<C, S> {
     base: Arc<FrozenDefinition<C>>,
     body: Option<SyntaxBlockRef>,
     revision: RevisionInfo,
@@ -123,7 +132,7 @@ pub struct BaseRevisionInput<S> {
     pub summaries: Option<Arc<S>>,
 }
 
-impl<C, S> AgentDefinition<C, S> {
+impl<C, S> DefinitionSnapshot<C, S> {
     pub fn from_base(
         base: Arc<FrozenDefinition<C>>,
         input: BaseRevisionInput<S>,
@@ -221,7 +230,7 @@ fn revision<C>(
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DefinitionError {
-    NotAgent,
+    UnsupportedDefinitionKind,
     InvalidDefaultEntry,
     MissingDefaultEntry,
     BodyContentMismatch,
@@ -230,7 +239,9 @@ pub enum DefinitionError {
 impl fmt::Display for DefinitionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
-            Self::NotAgent => "agent definition requires a nominal agent identity",
+            Self::UnsupportedDefinitionKind => {
+                "editable definition requires an agent or ordinary-flow identity"
+            }
             Self::InvalidDefaultEntry => {
                 "default entry must reference a checked callable descriptor"
             }

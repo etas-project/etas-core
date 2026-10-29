@@ -73,6 +73,22 @@ pub(super) fn to_proto(set: &DefinitionDescriptorSet) -> ProtoDescriptorGraph {
         version: match &set.headers {
             Some(headers)
                 if headers
+                    .snapshots
+                    .as_ref()
+                    .is_some_and(|snapshots| !snapshots.methods.is_empty()) =>
+            {
+                7
+            }
+            Some(headers)
+                if headers
+                    .snapshots
+                    .as_ref()
+                    .is_some_and(|snapshots| !snapshots.flows.is_empty()) =>
+            {
+                6
+            }
+            Some(headers)
+                if headers
                     .agents
                     .iter()
                     .any(|agent| agent.method_info.is_some()) =>
@@ -121,10 +137,12 @@ pub(super) fn from_proto(
             | (3, Some((true, false, false)))
             | (4, Some((true, true, false)))
             | (5, Some((_, _, true)))
+            | (6, Some((true, _, _)))
+            | (7, Some((true, _, _)))
     ) {
         return Err(invalid("unsupported descriptor graph schema"));
     }
-    if input.version == 5
+    if matches!(input.version, 5..=7)
         && input.headers.as_ref().is_some_and(|headers| {
             headers
                 .agents
@@ -134,6 +152,27 @@ pub(super) fn from_proto(
     {
         return Err(invalid(
             "method selection schema omits an agent's selection table",
+        ));
+    }
+    let has_flows = input
+        .headers
+        .as_ref()
+        .and_then(|headers| headers.snapshots.as_ref())
+        .is_some_and(|snapshots| !snapshots.flows.is_empty());
+    if (has_flows && !matches!(input.version, 6 | 7)) || (input.version == 6 && !has_flows) {
+        return Err(invalid(
+            "flow snapshot coordinates require their descriptor schema",
+        ));
+    }
+    if input
+        .headers
+        .as_ref()
+        .and_then(|headers| headers.snapshots.as_ref())
+        .is_some_and(|snapshots| !snapshots.methods.is_empty())
+        != (input.version == 7)
+    {
+        return Err(invalid(
+            "method snapshot coordinates require their descriptor schema",
         ));
     }
     let declarations = input

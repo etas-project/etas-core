@@ -194,6 +194,9 @@ impl Remapper<'_> {
             TraceInfo::Event(effect) => self.effect(effect)?,
             TraceInfo::Outcome(CallableOutcomeInfo::Returned { ty, .. })
             | TraceInfo::Outcome(CallableOutcomeInfo::Raised { error: ty }) => self.type_ref(ty)?,
+            TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(call)) => {
+                self.type_ref(&mut call.signature)?
+            }
             TraceInfo::ParameterCall(call) => self.type_ref(&mut call.signature)?,
             TraceInfo::Seq(parts) | TraceInfo::Choice(parts) => {
                 for part in parts {

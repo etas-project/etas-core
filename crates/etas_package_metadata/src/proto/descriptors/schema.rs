@@ -56,6 +56,8 @@ pub struct Analysis {
     pub trace: Option<u32>,
     #[prost(uint32, optional, tag = "7")]
     pub outcomes: Option<u32>,
+    #[prost(uint32, optional, tag = "8")]
+    pub independent_determinism: Option<u32>,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
@@ -497,6 +499,40 @@ pub struct ParameterCall {
     pub signature: u32,
     #[prost(uint32, tag = "3")]
     pub position: u32,
+    #[prost(message, optional, tag = "4")]
+    pub arguments: Option<ParameterArguments>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct ParameterArguments {
+    #[prost(message, repeated, tag = "1")]
+    pub values: Vec<ParameterArgument>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct ParameterArgument {
+    #[prost(oneof = "parameter_argument::Kind", tags = "1, 2, 3")]
+    pub kind: Option<parameter_argument::Kind>,
+}
+
+pub mod parameter_argument {
+    #[derive(Clone, PartialEq, prost::Oneof)]
+    pub enum Kind {
+        #[prost(bool, tag = "1")]
+        Bool(bool),
+        #[prost(uint32, tag = "2")]
+        Input(u32),
+        #[prost(message, tag = "3")]
+        Integer(super::ParameterInteger),
+    }
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct ParameterInteger {
+    #[prost(bool, tag = "1")]
+    pub negative: bool,
+    #[prost(bytes = "vec", tag = "2")]
+    pub magnitude: Vec<u8>,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
@@ -536,7 +572,7 @@ pub struct Returned {
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct Outcome {
-    #[prost(oneof = "outcome::Kind", tags = "1, 2, 3")]
+    #[prost(oneof = "outcome::Kind", tags = "1, 2, 3, 4")]
     pub kind: Option<outcome::Kind>,
 }
 pub mod outcome {
@@ -548,6 +584,8 @@ pub mod outcome {
         Raised(u32),
         #[prost(bool, tag = "3")]
         NonReturn(bool),
+        #[prost(message, tag = "4")]
+        ParameterNonReturn(super::ParameterCall),
     }
 }
 

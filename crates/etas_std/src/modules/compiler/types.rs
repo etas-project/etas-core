@@ -12,9 +12,9 @@ pub(super) fn register(builder: &mut StdRegistryBuilder, module: crate::StdModul
         ),
         (
             "CallableDef",
-            &[][..],
+            &["F"][..],
             CodeTypeRole::CallableDefinition,
-            "Immutable description of a resolved flow or agent method.",
+            "Typed immutable ordinary-flow definition, or its erased read-only view.",
         ),
         (
             "SyntaxBlock",
@@ -46,6 +46,8 @@ pub(super) fn register(builder: &mut StdRegistryBuilder, module: crate::StdModul
                     "trace",
                     StdType::Option(Box::new(compiler_type("TraceSummary"))),
                 ),
+                crate::StdRecordField::new("revision", compiler_type("RevisionInfo")),
+                crate::StdRecordField::new("dependencies", compiler_type("DependencyInfo")),
             ]);
             if role == CodeTypeRole::AgentDefinition {
                 fields.extend([
@@ -54,7 +56,6 @@ pub(super) fn register(builder: &mut StdRegistryBuilder, module: crate::StdModul
                         StdType::Option(Box::new(compiler_type("SignatureInfo"))),
                     ),
                     crate::StdRecordField::new("identity", compiler_type("AgentId")),
-                    crate::StdRecordField::new("dependencies", compiler_type("DependencyInfo")),
                     crate::StdRecordField::new(
                         "annotations",
                         StdType::Array(Box::new(compiler_type("AnnotationInfo"))),
@@ -72,10 +73,6 @@ pub(super) fn register(builder: &mut StdRegistryBuilder, module: crate::StdModul
                         StdType::Array(Box::new(compiler_type("CallableDef"))),
                     ),
                 ]);
-                fields.push(crate::StdRecordField::new(
-                    "revision",
-                    compiler_type("RevisionInfo"),
-                ));
             } else {
                 fields.extend([
                     crate::StdRecordField::new("id", compiler_type("CallableId")),

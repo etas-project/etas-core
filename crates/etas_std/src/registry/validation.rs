@@ -128,54 +128,73 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                 validate_unique_names(&symbol.qualified_path, "effect parameter", &effect.params)?;
                 validate_effect_extensions(&logical_effects, &symbol.qualified_path, effect)?;
             }
-            StdDecl::Flow(flow) => {
-                if let Some(descriptor) = &symbol.intrinsic {
-                    super::action_forwarder::validate(registry, flow, descriptor)?;
-                    super::default_action::validate(registry, flow, descriptor)?;
-                    super::collection::validate(flow, descriptor)?;
-                }
-                validate_generic_params(registry, &symbol.qualified_path, &flow.type_params)?;
-                let generics = generic_names(&flow.type_params);
-                let owner = symbol.qualified_path.join(".");
-                for ty in flow.params.iter().chain(std::iter::once(&flow.output)) {
-                    validate_type_expr(registry, &owner, ty, &generics)?;
-                }
-                if let Some(method) = &flow.source_method {
-                    if method.operation == crate::FlowSourceMethodOperation::CheckedIntrinsic
-                        && (symbol.intrinsic.is_none()
-                            || method.kind != crate::FlowSourceMethodKind::ValueMethod
-                            || flow.params.first() != Some(&method.receiver)
-                            || symbol.intrinsic.as_ref().is_some_and(|descriptor| {
-                                descriptor.purity != crate::IntrinsicPurity::Pure
-                                    || descriptor.dispatch == crate::IntrinsicDispatch::LoweringOnly
-                            })
-                            || !flow.public_effects.is_empty()
-                            || !flow.requested_actions.is_empty())
+            StdDecl::Flow(primary) => {
+                let mut signatures = Vec::new();
+                for flow in registry.flow_declarations(symbol.id) {
+                    if flow != primary && symbol.intrinsic.is_none() {
+                        return invalid(
+                            symbol.qualified_path.join("."),
+                            "standard flow overloads require one shared intrinsic identity",
+                        );
+                    }
+                    if flow.name != primary.name
+                        || signatures.contains(&(&flow.type_params, &flow.params))
                     {
-                        return Err(StdRegistryValidationError {
+                        return invalid(
+                            symbol.qualified_path.join("."),
+                            "flow overloads require distinct input signatures and the same declaration name",
+                        );
+                    }
+                    signatures.push((&flow.type_params, &flow.params));
+                    if let Some(descriptor) = &symbol.intrinsic {
+                        super::action_forwarder::validate(registry, flow, descriptor)?;
+                        super::default_action::validate(registry, flow, descriptor)?;
+                        super::collection::validate(flow, descriptor)?;
+                    }
+                    validate_generic_params(registry, &symbol.qualified_path, &flow.type_params)?;
+                    let generics = generic_names(&flow.type_params);
+                    let owner = symbol.qualified_path.join(".");
+                    for ty in flow.params.iter().chain(std::iter::once(&flow.output)) {
+                        validate_type_expr(registry, &owner, ty, &generics)?;
+                    }
+                    if let Some(method) = &flow.source_method {
+                        if method.operation == crate::FlowSourceMethodOperation::CheckedIntrinsic
+                            && (symbol.intrinsic.is_none()
+                                || method.kind != crate::FlowSourceMethodKind::ValueMethod
+                                || flow.params.first() != Some(&method.receiver)
+                                || symbol.intrinsic.as_ref().is_some_and(|descriptor| {
+                                    descriptor.purity != crate::IntrinsicPurity::Pure
+                                        || descriptor.dispatch
+                                            == crate::IntrinsicDispatch::LoweringOnly
+                                })
+                                || !flow.public_effects.is_empty()
+                                || !flow.requested_actions.is_empty())
+                        {
+                            return Err(StdRegistryValidationError {
                             symbol: symbol.qualified_path.join("."),
                             reason: "checked intrinsic method requires a pure executable descriptor, an effect-free contract and a matching first receiver parameter".into(),
                         });
+                        }
+                        validate_type_expr(registry, &owner, &method.receiver, &generics)?;
+                        super::checked_index::validate(&owner, flow, method)?;
                     }
-                    validate_type_expr(registry, &owner, &method.receiver, &generics)?;
-                    super::checked_index::validate(&owner, flow, method)?;
+                    validate_effect_row(
+                        registry,
+                        &logical_effects,
+                        &symbol.qualified_path,
+                        &flow.public_effects,
+                        EffectReferenceKind::Effect,
+                        &generics,
+                    )?;
+                    validate_effect_row(
+                        registry,
+                        &logical_effects,
+                        &symbol.qualified_path,
+                        &flow.requested_actions,
+                        EffectReferenceKind::Action,
+                        &generics,
+                    )?;
                 }
-                validate_effect_row(
-                    registry,
-                    &logical_effects,
-                    &symbol.qualified_path,
-                    &flow.public_effects,
-                    EffectReferenceKind::Effect,
-                    &generics,
-                )?;
-                validate_effect_row(
-                    registry,
-                    &logical_effects,
-                    &symbol.qualified_path,
-                    &flow.requested_actions,
-                    EffectReferenceKind::Action,
-                    &generics,
-                )?;
             }
             StdDecl::Tool(tool) => {
                 let generics = BTreeSet::new();
@@ -193,42 +212,62 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                 )?;
                 validate_tool_requirements(registry, &symbol.qualified_path, &tool.requirements)?;
             }
-            StdDecl::EffectAction(action) => {
-                if let Some(role) = action.compiler_role {
-                    let valid_shape = action.type_params.len() == 1
-                        && action.params.len() == 2
-                        && action.params[0] == StdType::Prompt
-                        && action.params[1] == StdType::Schema(Box::new(action.output.clone()))
-                        && matches!(&action.output, StdType::Var(name) if *name == action.type_params[0].name)
-                        && matches!(
-                            action.effect_args.as_slice(),
-                            [
-                                EffectActionArgKind::StaticResourcePath { ty: "Agent" },
-                                EffectActionArgKind::Type
-                            ]
-                        )
-                        && action.runtime_requirement
-                            == Some(crate::StdRuntimeRequirement::Agentic)
-                        && action.stable_id.is_some();
-                    if !action_roles.insert(role) || !valid_shape {
-                        return Err(StdRegistryValidationError {
+            StdDecl::EffectAction(primary) => {
+                let mut signatures = Vec::new();
+                for action in registry.action_declarations(symbol.id) {
+                    if action.name != primary.name
+                        || action.owner != primary.owner
+                        || action.stable_id != primary.stable_id
+                        || action.effect_args != primary.effect_args
+                        || action.selector_param_names != primary.selector_param_names
+                        || action.runtime_requirement != primary.runtime_requirement
+                        || action.high_impact_ack != primary.high_impact_ack
+                        || action.compiler_role != primary.compiler_role
+                        || action.default_handler_effects != primary.default_handler_effects
+                        || signatures.contains(&(&action.type_params, &action.params))
+                    {
+                        return invalid(
+                            symbol.qualified_path.join("."),
+                            "action overloads must preserve action identity, selectors and authority, with distinct input signatures",
+                        );
+                    }
+                    signatures.push((&action.type_params, &action.params));
+                    if let Some(role) = action.compiler_role {
+                        let valid_shape = action.type_params.len() == 1
+                            && action.params.len() == 2
+                            && action.params[0] == StdType::Prompt
+                            && action.params[1] == StdType::Schema(Box::new(action.output.clone()))
+                            && matches!(&action.output, StdType::Var(name) if *name == action.type_params[0].name)
+                            && matches!(
+                                action.effect_args.as_slice(),
+                                [
+                                    EffectActionArgKind::StaticResourcePath { ty: "Agent" },
+                                    EffectActionArgKind::Type
+                                ]
+                            )
+                            && action.runtime_requirement
+                                == Some(crate::StdRuntimeRequirement::Agentic)
+                            && action.stable_id.is_some();
+                        if !action_roles.insert(role) || !valid_shape {
+                            return Err(StdRegistryValidationError {
                             symbol: symbol.qualified_path.join("."),
                             reason: "agent inference role requires a unique action with Prompt/Schema<O> ABI and callable/output selectors".into(),
                         });
+                        }
                     }
+                    validate_action_declaration(registry, &symbol.qualified_path, action)?;
+                    if let Some(effects) = &action.default_handler_effects {
+                        validate_effect_row(
+                            registry,
+                            &logical_effects,
+                            &symbol.qualified_path,
+                            effects,
+                            EffectReferenceKind::Effect,
+                            &generic_names(&action.type_params),
+                        )?;
+                    }
+                    validate_action_owner(&logical_effects, &symbol.qualified_path, action)?;
                 }
-                validate_action_declaration(registry, &symbol.qualified_path, action)?;
-                if let Some(effects) = &action.default_handler_effects {
-                    validate_effect_row(
-                        registry,
-                        &logical_effects,
-                        &symbol.qualified_path,
-                        effects,
-                        EffectReferenceKind::Effect,
-                        &generic_names(&action.type_params),
-                    )?;
-                }
-                validate_action_owner(&logical_effects, &symbol.qualified_path, action)?;
             }
             StdDecl::Value(value) => validate_type_expr(
                 registry,
@@ -764,7 +803,11 @@ fn validate_named_type(
             format!("spec `{name}` cannot be used as a value type"),
         );
     }
-    if declaration.params.len() != arity {
+    let erased_view = arity == 0
+        && declaration
+            .code_role
+            .is_some_and(crate::CodeTypeRole::has_read_only_erased_view);
+    if declaration.params.len() != arity && !erased_view {
         return invalid(
             owner.to_owned(),
             format!(

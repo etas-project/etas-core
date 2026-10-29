@@ -66,6 +66,7 @@ pub struct CallableValueParameter {
 pub enum CallableValueSource {
     Parameter(CallableValueParameter),
     Value(u32),
+    FrozenContract(u32),
 }
 
 /// Finite analysis data. References may be cyclic; nodes do not embed other nodes.
@@ -262,7 +263,9 @@ impl CallableValueGraph {
     ) -> Result<(), crate::MetadataArtifactError> {
         let scope = match source {
             CallableValueSource::Parameter(parameter) => parameter.scope,
-            CallableValueSource::Value(index) => self.value(index)?.parent_scope,
+            CallableValueSource::Value(index) | CallableValueSource::FrozenContract(index) => {
+                self.value(index)?.parent_scope
+            }
         };
         if !scopes.contains(&scope) {
             return Err(invalid(
@@ -287,7 +290,7 @@ impl CallableValueGraph {
             }
             match source {
                 CallableValueSource::Parameter(parameter) => self.parameter(*parameter, root)?,
-                CallableValueSource::Value(index) => {
+                CallableValueSource::Value(index) | CallableValueSource::FrozenContract(index) => {
                     self.value(*index)?;
                 }
             }

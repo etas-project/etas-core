@@ -173,6 +173,9 @@ pub(super) fn references(
                 CallableOutcomeInfo::Returned { ty, .. } => visit(DescriptorNode::Type(*ty)),
                 CallableOutcomeInfo::Raised { error } => visit(DescriptorNode::Type(*error)),
                 CallableOutcomeInfo::NonReturn => {}
+                CallableOutcomeInfo::ParameterNonReturn(call) => {
+                    visit(DescriptorNode::Type(call.signature))
+                }
             },
             TraceInfo::ParameterCall(call) => visit(DescriptorNode::Type(call.signature)),
             TraceInfo::Event(effect) => {

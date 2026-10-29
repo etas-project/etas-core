@@ -6,7 +6,7 @@ mod bodies;
 mod headers;
 pub use bodies::{BodyAccess, CallableBodyInfo, DefinitionBodies};
 mod snapshots;
-pub use snapshots::{AgentSnapshotInfo, DefinitionSnapshots};
+pub use snapshots::{DefinitionSnapshotInfo, DefinitionSnapshots};
 
 /// Portable descriptions. These records do not retain executable code or proofs.
 #[derive(

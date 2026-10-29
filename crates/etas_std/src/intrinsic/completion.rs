@@ -31,7 +31,11 @@ pub fn intrinsic_completion_semantics(id: StdIntrinsicId) -> Option<IntrinsicCom
         runtime::CODE_PARSE_BODY
         | runtime::CODE_FORMAT
         | runtime::CODE_WITH_BODY
+        | runtime::CODE_DIFF
         | runtime::CHECKPOINT
+        | pure::TEXT_TRIM
+        | pure::TEXT_LOWERCASE
+        | pure::TEXT_UPPERCASE
         | pure::LIST_LEN
         | pure::LIST_IS_EMPTY => Some(IntrinsicCompletionSemantics::Returns),
         _ => None,
@@ -52,6 +56,10 @@ mod tests {
             Some(IntrinsicCompletionSemantics::Returns)
         );
         assert_eq!(
+            intrinsic_completion_semantics(StdIntrinsicId(runtime::CODE_DIFF)),
+            Some(IntrinsicCompletionSemantics::Returns)
+        );
+        assert_eq!(
             intrinsic_completion_semantics(StdIntrinsicId(runtime::CODE_COMPILE)),
             Some(IntrinsicCompletionSemantics::ReturnsOrRaisesDeclaredErrors)
         );
@@ -59,7 +67,13 @@ mod tests {
             intrinsic_completion_semantics(StdIntrinsicId(crate::intrinsic::pure::OPTION_UNWRAP)),
             None
         );
-        for id in [pure::LIST_LEN, pure::LIST_IS_EMPTY] {
+        for id in [
+            pure::LIST_LEN,
+            pure::LIST_IS_EMPTY,
+            pure::TEXT_TRIM,
+            pure::TEXT_LOWERCASE,
+            pure::TEXT_UPPERCASE,
+        ] {
             assert_eq!(
                 intrinsic_completion_semantics(StdIntrinsicId(id)),
                 Some(IntrinsicCompletionSemantics::Returns)

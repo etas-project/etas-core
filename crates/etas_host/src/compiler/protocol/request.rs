@@ -1,4 +1,4 @@
-use etas_code::definition::AgentDefinitionRef;
+use etas_code::definition::DefinitionRef;
 
 use crate::{
     ActionInstance, AuthorityContext, ExecutionBudget, HostRequestId, HostTraceFieldSensitivity,
@@ -24,7 +24,7 @@ impl CompilerOperation {
 pub struct CompilerRequest {
     pub id: HostRequestId,
     pub operation: CompilerOperation,
-    pub definition: AgentDefinitionRef,
+    pub definition: DefinitionRef,
     pub authority: AuthorityContext,
     pub trace: TraceContext,
     pub budget: ExecutionBudget,

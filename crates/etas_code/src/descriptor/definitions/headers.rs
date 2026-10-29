@@ -221,8 +221,19 @@ pub(super) fn measure(
         }
     }
     if let Some(snapshots) = &headers.snapshots {
-        budget.nodes(snapshots.agents.len())?;
-        for snapshot in &snapshots.agents {
+        budget.nodes(
+            snapshots
+                .agents
+                .len()
+                .saturating_add(snapshots.flows.len())
+                .saturating_add(snapshots.methods.len()),
+        )?;
+        for snapshot in snapshots
+            .agents
+            .iter()
+            .chain(&snapshots.flows)
+            .chain(&snapshots.methods)
+        {
             budget.key(&snapshot.identity)?;
             budget.callable(&snapshot.revision.definition)?;
             budget.nodes(6)?;
@@ -259,6 +270,19 @@ pub(super) fn validate(
     input: &DescriptorGraphInput,
     declarations: &[DefinitionTypeBinding],
 ) -> Result<(), DescriptorError> {
+    if headers
+        .snapshots
+        .as_ref()
+        .is_some_and(|snapshots| !snapshots.flows.is_empty() || !snapshots.methods.is_empty())
+        && headers
+            .agents
+            .iter()
+            .any(|agent| agent.method_info.is_none())
+    {
+        return Err(invalid(
+            "flow snapshot schema omits agent method selection metadata",
+        ));
+    }
     if headers
         .agents
         .iter()

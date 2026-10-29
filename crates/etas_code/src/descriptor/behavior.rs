@@ -101,6 +101,23 @@ pub struct ParameterCallInfo {
     pub callable: CallableId,
     pub signature: TypeInfoRef,
     pub position: u32,
+    /// None means argument values were not proved, not a zero-argument call.
+    pub arguments: Option<Vec<ParameterArgumentInfo>>,
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub enum ParameterArgumentInfo {
+    Bool(bool),
+    Integer {
+        negative: bool,
+        magnitude: u128,
+    },
+    /// The unchanged value of a checked parameter of the owning callable.
+    Input {
+        position: u32,
+    },
 }
 
 #[derive(
@@ -125,6 +142,8 @@ pub enum CallableOutcomeInfo {
         error: TypeInfoRef,
     },
     NonReturn,
+    /// A checked callback invocation that does not return to its caller.
+    ParameterNonReturn(ParameterCallInfo),
 }
 
 /// The existing action-trace abstract domain, not an execution log or a proof.
@@ -160,6 +179,9 @@ pub enum TraceInfo {
 pub struct CallableAnalysisInfo {
     pub effects: EffectSummaryInfo,
     pub determinism: Option<DeterminismInfo>,
+    /// The checked contribution excluding unresolved callback parameters.
+    #[serde(default)]
+    pub independent_determinism: Option<DeterminismInfo>,
     pub trace: Option<TraceInfoRef>,
     pub outcomes: Option<TraceInfoRef>,
 }
