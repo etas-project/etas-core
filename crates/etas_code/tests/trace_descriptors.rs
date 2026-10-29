@@ -143,6 +143,78 @@ fn trace_fingerprint_does_not_depend_on_local_trace_indices() {
 }
 
 #[test]
+fn relocated_roots_preserve_shared_types_and_trace_order() {
+    let mut event = action();
+    event
+        .arguments
+        .push(StaticEffectArgInfo::Type(TypeInfoRef(0)));
+    let source = DescriptorGraph::new(
+        DescriptorGraphInput {
+            types: vec![TypeInfo::Primitive(PrimitiveInfo::Bool)],
+            traces: vec![
+                TraceInfo::Event(event),
+                TraceInfo::Seq(vec![TraceInfoRef(0), TraceInfoRef(0)]),
+            ],
+            ..Default::default()
+        },
+        Default::default(),
+    )
+    .unwrap();
+    let mut target = DescriptorGraphInput {
+        types: vec![TypeInfo::Primitive(PrimitiveInfo::Unit)],
+        traces: vec![TraceInfo::Empty],
+        ..Default::default()
+    };
+    let (segment, roots) = source
+        .relocate_roots(
+            &[
+                DescriptorNode::Trace(TraceInfoRef(1)),
+                DescriptorNode::Type(TypeInfoRef(0)),
+            ],
+            DescriptorGraphOffsets {
+                types: 1,
+                rows: 0,
+                binders: 0,
+                traces: 1,
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        roots,
+        [
+            DescriptorNode::Trace(TraceInfoRef(1)),
+            DescriptorNode::Type(TypeInfoRef(1))
+        ]
+    );
+    assert_eq!(segment.types.len(), 1);
+    target.types.extend(segment.types);
+    target.rows.extend(segment.rows);
+    target.binders.extend(segment.binders);
+    target.traces.extend(segment.traces);
+    let target = DescriptorGraph::new(target, Default::default()).unwrap();
+    assert_eq!(
+        source.trace_fingerprint(TraceInfoRef(1)).unwrap(),
+        target.trace_fingerprint(TraceInfoRef(1)).unwrap()
+    );
+    assert!(
+        matches!(target.trace(TraceInfoRef(1)), Some(TraceInfo::Seq(parts)) if parts == &[TraceInfoRef(2), TraceInfoRef(2)])
+    );
+    assert!(matches!(
+        source.relocate_roots(
+            &[DescriptorNode::Trace(TraceInfoRef(1))],
+            DescriptorGraphOffsets {
+                traces: u32::MAX,
+                ..Default::default()
+            }
+        ),
+        Err(DescriptorError::Limit {
+            resource: "descriptor arena indices",
+            ..
+        })
+    ));
+}
+
+#[test]
 fn root_projection_preserves_trace_events_outcomes_and_callback_placeholders() {
     let mut event = action();
     event

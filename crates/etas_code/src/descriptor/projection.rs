@@ -8,6 +8,15 @@ use super::{
 
 mod remap;
 
+/// Arena offsets for a projected segment that will be appended to another graph.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DescriptorGraphOffsets {
+    pub types: u32,
+    pub rows: u32,
+    pub binders: u32,
+    pub traces: u32,
+}
+
 impl DescriptorGraph {
     /// Copies only the root's reference closure. The root becomes index zero in
     /// its own arena; all reachable references are remapped, including cycles.
@@ -21,6 +30,35 @@ impl DescriptorGraph {
         &self,
         roots: &[DescriptorNode],
     ) -> Result<(Self, Vec<DescriptorNode>), DescriptorError> {
+        let (output, roots) = self.relocate_roots(roots, DescriptorGraphOffsets::default())?;
+        Ok((Self::from_validated_projection(output), roots))
+    }
+
+    /// Relocate a reference-closed segment for appending at `offsets`. The
+    /// segment's references address the combined graph, not the segment alone;
+    /// the combined graph must be validated after insertion.
+    pub fn relocate_roots(
+        &self,
+        roots: &[DescriptorNode],
+        offsets: DescriptorGraphOffsets,
+    ) -> Result<(DescriptorGraphInput, Vec<DescriptorNode>), DescriptorError> {
+        for (offset, count) in [
+            (offsets.types, self.data().types.len()),
+            (offsets.rows, self.data().rows.len()),
+            (offsets.binders, self.data().binders.len()),
+            (offsets.traces, self.data().traces.len()),
+        ] {
+            if u32::try_from(count)
+                .ok()
+                .and_then(|count| offset.checked_add(count))
+                .is_none()
+            {
+                return Err(DescriptorError::Limit {
+                    resource: "descriptor arena indices",
+                    limit: u32::MAX as usize,
+                });
+            }
+        }
         for root in roots {
             if node_index(self.data(), *root).is_none() {
                 return Err(DescriptorError::MissingReference {
@@ -29,7 +67,10 @@ impl DescriptorGraph {
                 });
             }
         }
-        let mut mapping = Mapping::default();
+        let mut mapping = Mapping {
+            offsets,
+            ..Mapping::default()
+        };
         let mut nodes = Vec::new();
         let mut pending = roots.iter().rev().copied().collect::<Vec<_>>();
         while let Some(node) = pending.pop() {
@@ -82,12 +123,13 @@ impl DescriptorGraph {
             })
             .collect::<Result<Vec<_>, _>>()?;
         // A reference-closed subgraph preserves the original validation limits.
-        Ok((Self::from_validated_projection(output), roots))
+        Ok((output, roots))
     }
 }
 
 #[derive(Default)]
 struct Mapping {
+    offsets: DescriptorGraphOffsets,
     types: BTreeMap<TypeInfoRef, TypeInfoRef>,
     rows: BTreeMap<EffectRowInfoRef, EffectRowInfoRef>,
     binders: BTreeMap<GenericParameterRef, GenericParameterRef>,
@@ -117,19 +159,19 @@ impl Mapping {
         }
         match node {
             DescriptorNode::Type(key) => {
-                let index = TypeInfoRef(self.types.len() as u32);
+                let index = TypeInfoRef(self.offsets.types + self.types.len() as u32);
                 insert(&mut self.types, key, index)
             }
             DescriptorNode::Row(key) => {
-                let index = EffectRowInfoRef(self.rows.len() as u32);
+                let index = EffectRowInfoRef(self.offsets.rows + self.rows.len() as u32);
                 insert(&mut self.rows, key, index)
             }
             DescriptorNode::Binder(key) => {
-                let index = GenericParameterRef(self.binders.len() as u32);
+                let index = GenericParameterRef(self.offsets.binders + self.binders.len() as u32);
                 insert(&mut self.binders, key, index)
             }
             DescriptorNode::Trace(key) => {
-                let index = TraceInfoRef(self.traces.len() as u32);
+                let index = TraceInfoRef(self.offsets.traces + self.traces.len() as u32);
                 insert(&mut self.traces, key, index)
             }
         }

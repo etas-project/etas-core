@@ -33,6 +33,7 @@ pub use definitions::{
     DefinitionSnapshots, DefinitionTypeBinding,
 };
 pub use graph::{DescriptorGraph, DescriptorGraphInput, DescriptorLimits};
+pub use projection::DescriptorGraphOffsets;
 pub use spec::{
     AttachedSpecInfo, TraceConstraintInfo, TracePatternInfo, TraceRuleInfo, TraceSelectorBoundInfo,
 };
