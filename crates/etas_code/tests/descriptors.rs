@@ -60,6 +60,48 @@ fn tree() -> DescriptorGraphInput {
 }
 
 #[test]
+fn merged_descriptor_binders_preserve_identity_and_reject_conflicts() {
+    let original = graph(tree());
+    let roots = [DescriptorNode::Type(TypeInfoRef(0))];
+    let (mut combined, first) = original
+        .relocate_roots(&roots, DescriptorGraphOffsets::default())
+        .unwrap();
+    let offsets = DescriptorGraphOffsets {
+        types: combined.types.len() as u32,
+        rows: combined.rows.len() as u32,
+        binders: combined.binders.len() as u32,
+        traces: combined.traces.len() as u32,
+    };
+    let (second, second_roots) = original.relocate_roots(&roots, offsets).unwrap();
+    combined.types.extend(second.types);
+    combined.rows.extend(second.rows);
+    combined.binders.extend(second.binders);
+    combined.traces.extend(second.traces);
+    assert!(DescriptorGraph::new(combined.clone(), Default::default()).is_err());
+    let merged =
+        DescriptorGraph::new_with_merged_binders(combined.clone(), Default::default()).unwrap();
+    assert_eq!(merged.data().binders.len(), 1);
+    let (DescriptorNode::Type(first), DescriptorNode::Type(second)) = (first[0], second_roots[0])
+    else {
+        panic!("type roots");
+    };
+    assert_eq!(
+        merged.type_fingerprint(first).unwrap(),
+        original.type_fingerprint(TypeInfoRef(0)).unwrap()
+    );
+    assert_eq!(
+        merged.type_fingerprint(second).unwrap(),
+        original.type_fingerprint(TypeInfoRef(0)).unwrap()
+    );
+    let mut conflict = combined.clone();
+    conflict.binders[1].bounds[0].definition = key("Different", DefinitionKind::Spec);
+    assert!(DescriptorGraph::new_with_merged_binders(conflict, Default::default()).is_err());
+    let mut malformed = combined;
+    malformed.binders[1].bounds[0].arguments[0] = TypeInfoRef(u32::MAX);
+    assert!(DescriptorGraph::new_with_merged_binders(malformed, Default::default()).is_err());
+}
+
+#[test]
 fn recursive_nominal_graphs_and_self_referential_spec_bounds_are_finite() {
     let graph = graph(tree());
     assert!(graph.type_info(TypeInfoRef(0)).is_some());

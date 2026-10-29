@@ -71,6 +71,21 @@ pub(super) fn validate(
     input: &DescriptorGraphInput,
     limits: DescriptorLimits,
 ) -> Result<(), DescriptorError> {
+    validate_inner(input, limits, false)
+}
+
+pub(super) fn validate_for_binder_merge(
+    input: &DescriptorGraphInput,
+    limits: DescriptorLimits,
+) -> Result<(), DescriptorError> {
+    validate_inner(input, limits, true)
+}
+
+fn validate_inner(
+    input: &DescriptorGraphInput,
+    limits: DescriptorLimits,
+    allow_duplicate_binders: bool,
+) -> Result<(), DescriptorError> {
     let count = input
         .types
         .len()
@@ -112,9 +127,9 @@ pub(super) fn validate(
                 }
             }
         }
-        if !binder_identities.insert((&binder.owner, binder.position))
-            || !binder_names.insert((&binder.owner, &binder.name))
-        {
+        let unique_identity = binder_identities.insert((&binder.owner, binder.position));
+        let unique_name = binder_names.insert((&binder.owner, &binder.name));
+        if (!unique_identity || !unique_name) && !allow_duplicate_binders {
             return Err(DescriptorError::Invalid {
                 node,
                 reason: "duplicate generic binder identity or name",
