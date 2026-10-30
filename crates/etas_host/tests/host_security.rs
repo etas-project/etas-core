@@ -167,6 +167,60 @@ async fn local_filesystem_client_rejects_path_escape() {
 }
 
 #[tokio::test]
+async fn bounded_filesystem_read_requires_existing_region_read_authority_and_sandbox() {
+    let workspace = TestWorkspace::create("bounded-read-authority").unwrap();
+    std::fs::write(workspace.path().join("input"), b"abcd").unwrap();
+    let root = workspace.root().unwrap();
+    let (adapter, region) = fs_adapter(root.clone());
+    for case in 0..5 {
+        let mut authority = fs_authority(root.clone());
+        authority.grants = vec![HostActionGrant::allow("Fs", "read")];
+        let selected_region = match case {
+            1 => {
+                authority.grants.clear();
+                region.clone()
+            }
+            2 => {
+                authority.sandbox = SandboxPolicy::deny_all();
+                region.clone()
+            }
+            3 => WorkspaceRegionId::new("test.workspace.Unmapped").unwrap(),
+            _ => region.clone(),
+        };
+        let response = adapter
+            .execute(FilesystemRequest {
+                id: HostRequestId(90 + case),
+                operation: FilesystemOperation::ReadLimited {
+                    path: WorkspacePathRef::new(selected_region, "input").unwrap(),
+                    max_bytes: if case == 4 { 3 } else { 4 },
+                },
+                authority,
+                trace: TraceContext::root(TraceId((90 + case).into())),
+                budget: etas_host::ExecutionBudget::default(),
+            })
+            .await
+            .unwrap();
+        match case {
+            0 => assert_eq!(
+                response.result.unwrap(),
+                etas_host::FilesystemEntry::LimitedRead(etas_host::BoundedFileRead::Complete(
+                    b"abcd".to_vec()
+                ))
+            ),
+            4 => assert_eq!(
+                response.result.unwrap(),
+                etas_host::FilesystemEntry::LimitedRead(
+                    etas_host::BoundedFileRead::LimitExceeded { max_bytes: 3 }
+                )
+            ),
+            _ => {
+                assert!(response.result.is_err(), "case {case} bypassed authority");
+            }
+        }
+    }
+}
+
+#[tokio::test]
 async fn local_filesystem_client_writes_root_file_with_create_dirs() {
     let workspace = TestWorkspace::create("fs-root-write").expect("workspace");
     let root = workspace.root().expect("root");

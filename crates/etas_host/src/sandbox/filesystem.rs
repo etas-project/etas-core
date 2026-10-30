@@ -6,7 +6,9 @@ use std::{
 use cap_std::fs::{Dir, OpenOptions};
 
 use super::workspace::{normalize_relative, read_options, workspace_io_error};
-use crate::{HostError, HostErrorCode, WorkspacePath, WorkspaceRoot};
+use crate::{BoundedFileRead, HostError, HostErrorCode, WorkspacePath, WorkspaceRoot};
+
+mod bounded_read;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WorkspaceFileMetadata {
@@ -59,13 +61,46 @@ impl FilesystemSandbox {
     }
 
     pub fn read_file(&self, root: &WorkspaceRoot, path: &Path) -> Result<Vec<u8>, HostError> {
+        let mut file = self.open_read_file(root, path)?;
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes).map_err(workspace_io_error)?;
+        Ok(bytes)
+    }
+
+    pub fn read_file_limited(
+        &self,
+        root: &WorkspaceRoot,
+        path: &Path,
+        max_bytes: usize,
+    ) -> Result<BoundedFileRead, HostError> {
+        let mut file = self.open_read_file(root, path)?;
+        bounded_read::read(&mut file, max_bytes)
+    }
+
+    pub(crate) fn read_file_limited_controlled(
+        &self,
+        root: &WorkspaceRoot,
+        path: &Path,
+        max_bytes: usize,
+        check: &mut impl FnMut() -> Result<(), HostError>,
+    ) -> Result<BoundedFileRead, HostError> {
+        check()?;
+        let mut file = self.open_read_file(root, path)?;
+        bounded_read::read_controlled(&mut file, max_bytes, check)
+    }
+
+    fn open_read_file(
+        &self,
+        root: &WorkspaceRoot,
+        path: &Path,
+    ) -> Result<cap_std::fs::File, HostError> {
         ensure_root_allowed(
             &self.policy.read_roots,
             root,
             "filesystem read is not allowed",
         )?;
         let relative = normalize_relative(path)?;
-        let mut file = root
+        let file = root
             .directory()
             .open_with(&relative, &read_options())
             .map_err(workspace_io_error)?;
@@ -77,9 +112,7 @@ impl FilesystemSandbox {
         }
         #[cfg(test)]
         tests::after_resolution();
-        let mut bytes = Vec::new();
-        file.read_to_end(&mut bytes).map_err(workspace_io_error)?;
-        Ok(bytes)
+        Ok(file)
     }
 
     pub fn atomic_write(

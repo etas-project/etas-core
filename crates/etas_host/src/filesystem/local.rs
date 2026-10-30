@@ -19,9 +19,9 @@ impl LocalFilesystemClient {
     ) -> Result<FilesystemResponse, HostError> {
         let client = self.clone();
         operation
-            .run_blocking(request.budget.clone(), move |_| {
+            .run_blocking(request.budget.clone(), move |operation| {
                 let id = request.id;
-                let result = execute_local_filesystem(&client.regions, request);
+                let result = execute_local_filesystem(&client.regions, request, Some(&operation));
                 Ok(FilesystemResponse { id, result })
             })
             .await
@@ -41,7 +41,7 @@ impl FilesystemClient for LocalFilesystemClient {
     fn execute(&self, request: FilesystemRequest) -> Self::ExecuteFuture<'_> {
         Box::pin(async move {
             let id = request.id;
-            let result = execute_local_filesystem(&self.regions, request);
+            let result = execute_local_filesystem(&self.regions, request, None);
             Ok(FilesystemResponse { id, result })
         })
     }
@@ -50,6 +50,7 @@ impl FilesystemClient for LocalFilesystemClient {
 fn execute_local_filesystem(
     regions: &WorkspaceRegionRegistry,
     request: FilesystemRequest,
+    operation: Option<&crate::execution::OperationContext>,
 ) -> Result<FilesystemEntry, HostError> {
     require_filesystem_authority(&request)?;
     let broker = SandboxBroker::new(request.authority.sandbox);
@@ -59,6 +60,19 @@ fn execute_local_filesystem(
             broker
                 .read_file(&path.root, &path.relative)
                 .map(FilesystemEntry::Bytes)
+        }
+        FilesystemOperation::ReadLimited { path, max_bytes } => {
+            let path = regions.bind(&path)?;
+            let mut check = || {
+                request.budget.check_time()?;
+                if let Some(operation) = operation {
+                    operation.signal().check()?;
+                }
+                Ok(())
+            };
+            broker
+                .read_file_limited_controlled(&path.root, &path.relative, max_bytes, &mut check)
+                .map(FilesystemEntry::LimitedRead)
         }
         FilesystemOperation::Write {
             path,
@@ -116,7 +130,9 @@ fn execute_local_filesystem(
 
 fn require_filesystem_authority(request: &FilesystemRequest) -> Result<(), HostError> {
     let (action, path) = match &request.operation {
-        FilesystemOperation::Read { path } => ("read", path),
+        FilesystemOperation::Read { path } | FilesystemOperation::ReadLimited { path, .. } => {
+            ("read", path)
+        }
         FilesystemOperation::Write { path, .. } => ("write", path),
         FilesystemOperation::Delete { path } => ("delete", path),
         FilesystemOperation::ReadDir { path } => ("list", path),

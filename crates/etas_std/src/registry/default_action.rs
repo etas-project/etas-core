@@ -32,6 +32,15 @@ pub(super) fn validate(
             && projected.as_ref() == Some(&action.params)
             && match reducer {
                 None => flow.output == action.output,
+                Some(crate::StdActionReducer::BoundedFileRead { limit_parameter }) => {
+                    symbol.qualified_path == ["std", "effects", "actions", "Fs", "read"]
+                        && flow.output == StdType::parse("bytes")
+                        && action.output == flow.output
+                        && enum_result_valid(registry, &["std", "fs", "ReadLimitError"], &[("LimitExceeded", vec![StdType::parse("usize")])])
+                        && payload.len() == 1 && flow.params.len() == 2
+                        && flow.params.get(*limit_parameter) == Some(&StdType::parse("usize"))
+                        && !payload.contains(limit_parameter)
+                }
                 Some(crate::StdActionReducer::ReadUntilLimit { limit_parameter, timeout_parameter }) => {
                     flow.output == StdType::parse("bytes")
                         && action.output == StdType::parse("std.stream.StreamRead")
@@ -44,7 +53,14 @@ pub(super) fn validate(
                         && limit_parameter != timeout_parameter
                 }
             }
-            && action.default_handler_effects.as_ref() == Some(&flow.public_effects)
+            && match reducer {
+                Some(crate::StdActionReducer::BoundedFileRead { .. }) => action.default_handler_effects.as_ref().is_some_and(|effects| {
+                    let mut expected = effects.clone();
+                    expected.push(StdEffectRef::typed(&["Error"], StdType::parse("std.fs.ReadLimitError")));
+                    expected == flow.public_effects
+                }),
+                _ => action.default_handler_effects.as_ref() == Some(&flow.public_effects),
+            }
             && matches!(flow.requested_actions.as_slice(), [effect] if
                 (effect.path == [action.owner.clone(), action.name.clone()] || effect.path == symbol.qualified_path)
                 && selectors_match(action, effect))
@@ -80,21 +96,82 @@ fn selectors_match(action: &EffectActionDecl, effect: &StdEffectRef) -> bool {
 }
 
 fn read_result_valid(registry: &StdRegistry) -> bool {
-    let Some(owner) = registry.lookup_qualified(&["std", "stream", "StreamRead"]) else {
+    enum_result_valid(
+        registry,
+        &["std", "stream", "StreamRead"],
+        &[("Data", vec![StdType::parse("bytes")]), ("Eof", vec![])],
+    )
+}
+
+fn enum_result_valid(
+    registry: &StdRegistry,
+    path: &[&str],
+    variants: &[(&str, Vec<StdType>)],
+) -> bool {
+    let Some(owner) = registry.lookup_qualified(path) else {
         return false;
     };
     if !matches!(&owner.decl, StdDecl::Type(decl) if decl.kind == crate::TypeDeclKind::Enum) {
         return false;
     }
     let constructors = registry.enum_constructors(owner.id).collect::<Vec<_>>();
-    constructors.len() == 2 && [("Data", vec![StdType::parse("bytes")]), ("Eof", vec![])]
+    constructors.len() == variants.len() && variants
         .iter().all(|(name, params)| constructors.iter().any(|symbol|
-            matches!(&symbol.decl, StdDecl::Flow(flow) if flow.name == *name && flow.params == *params && flow.output == StdType::parse("std.stream.StreamRead"))))
+            matches!(&symbol.decl, StdDecl::Flow(flow) if flow.name == *name && flow.params == *params && flow.output == StdType::parse(&path.join(".")))))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bounded_file_reducer_requires_read_authority_limit_and_exact_failure_row() {
+        let registry = crate::standard_registry();
+        let symbol = registry
+            .lookup_qualified(&["std", "fs", "read_bytes_limited"])
+            .unwrap();
+        let StdDecl::Flow(flow) = &symbol.decl else {
+            panic!("flow")
+        };
+        let descriptor = symbol.intrinsic.as_ref().unwrap();
+        validate(&registry, flow, descriptor).unwrap();
+        assert_eq!(
+            flow.requested_actions,
+            vec![StdEffectRef::typed(
+                &["Fs", "read"],
+                StdType::Var("R".into())
+            )]
+        );
+        for change in 0..5 {
+            let mut flow = flow.clone();
+            let mut descriptor = descriptor.clone();
+            match change {
+                0 => flow.params[1] = StdType::parse("i32"),
+                1 => {
+                    flow.public_effects.pop();
+                }
+                2 => flow.output = StdType::parse("Result[bytes, std.fs.ReadLimitError]"),
+                3 => {
+                    descriptor.lowering = LoweringHint::ActionReducer {
+                        stable_id: 136,
+                        payload: vec![1],
+                        reducer: crate::StdActionReducer::BoundedFileRead { limit_parameter: 1 },
+                    }
+                }
+                _ => {
+                    descriptor.lowering = LoweringHint::ActionReducer {
+                        stable_id: 136,
+                        payload: vec![0],
+                        reducer: crate::StdActionReducer::BoundedFileRead { limit_parameter: 0 },
+                    }
+                }
+            }
+            assert!(
+                validate(&registry, &flow, &descriptor).is_err(),
+                "invalid bounded file reducer {change}"
+            );
+        }
+    }
 
     #[test]
     fn read_reducer_requires_the_declared_action_and_reduction_abi() {

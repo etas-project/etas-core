@@ -16,6 +16,10 @@ pub enum FilesystemOperation {
     Read {
         path: WorkspacePathRef,
     },
+    ReadLimited {
+        path: WorkspacePathRef,
+        max_bytes: usize,
+    },
     Write {
         path: WorkspacePathRef,
         contents: Vec<u8>,
@@ -43,8 +47,15 @@ pub struct FilesystemResponse {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum BoundedFileRead {
+    Complete(Vec<u8>),
+    LimitExceeded { max_bytes: usize },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FilesystemEntry {
     Bytes(Vec<u8>),
+    LimitedRead(crate::BoundedFileRead),
     Entries(Vec<WorkspacePathRef>),
     Stat(FilesystemStat),
     Unit,

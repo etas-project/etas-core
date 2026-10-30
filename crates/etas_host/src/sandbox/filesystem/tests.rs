@@ -83,6 +83,88 @@ pub(super) fn after_resolution() {
     }
 }
 
+#[test]
+fn limited_read_detects_growth_after_open_and_returns_no_partial_success() {
+    let fixture = TestWorkspace::create("limited-read-growth").unwrap();
+    fs::write(fixture.path().join("data"), b"small").unwrap();
+    let root = fixture.root().unwrap();
+    let sandbox = FilesystemSandbox::new(FilesystemPolicy::allow_workspace(root.clone()));
+    let path = fixture.path().join("data");
+    AFTER_RESOLUTION.with(|slot| {
+        *slot.borrow_mut() = Some(Box::new(move || {
+            fs::write(path, vec![7; 65_536]).unwrap();
+        }))
+    });
+    assert_eq!(
+        sandbox
+            .read_file_limited(&root, Path::new("data"), 2048)
+            .unwrap(),
+        BoundedFileRead::LimitExceeded { max_bytes: 2048 }
+    );
+}
+
+#[test]
+fn limited_read_preserves_root_regular_file_and_exact_limit_checks() {
+    let fixture = TestWorkspace::create("limited-read-boundaries").unwrap();
+    fs::write(fixture.path().join("data"), b"abc").unwrap();
+    fs::write(fixture.path().join("empty"), b"").unwrap();
+    fs::create_dir(fixture.path().join("directory")).unwrap();
+    let root = fixture.root().unwrap();
+    let sandbox = FilesystemSandbox::new(FilesystemPolicy::allow_workspace(root.clone()));
+    assert_eq!(
+        sandbox
+            .read_file_limited(&root, Path::new("data"), 3)
+            .unwrap(),
+        BoundedFileRead::Complete(b"abc".to_vec())
+    );
+    assert_eq!(
+        sandbox
+            .read_file_limited(&root, Path::new("empty"), 0)
+            .unwrap(),
+        BoundedFileRead::Complete(vec![])
+    );
+    assert_eq!(
+        sandbox
+            .read_file_limited(&root, Path::new("data"), 0)
+            .unwrap(),
+        BoundedFileRead::LimitExceeded { max_bytes: 0 }
+    );
+    assert!(
+        sandbox
+            .read_file_limited(&root, Path::new("directory"), 2048)
+            .is_err()
+    );
+    assert!(
+        sandbox
+            .read_file_limited(&root, Path::new("../data"), 2048)
+            .is_err()
+    );
+    assert!(
+        FilesystemSandbox::new(FilesystemPolicy::deny_all())
+            .read_file_limited(&root, Path::new("data"), 2048)
+            .is_err()
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn limited_read_uses_retained_file_after_parent_replacement() {
+    let fixture = TestWorkspace::create("limited-read-parent").unwrap();
+    let outside = TestWorkspace::create("limited-read-outside").unwrap();
+    fs::create_dir(fixture.path().join("parent")).unwrap();
+    fs::write(fixture.path().join("parent/data"), b"authorized").unwrap();
+    fs::write(outside.path().join("data"), b"outside").unwrap();
+    let root = fixture.root().unwrap();
+    let sandbox = FilesystemSandbox::new(FilesystemPolicy::allow_workspace(root.clone()));
+    replace_parent_after_resolution(&fixture, &outside);
+    assert_eq!(
+        sandbox
+            .read_file_limited(&root, Path::new("parent/data"), 10)
+            .unwrap(),
+        BoundedFileRead::Complete(b"authorized".to_vec())
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn read_uses_opened_file_after_parent_replaced_by_outside_symlink() {
