@@ -1,6 +1,5 @@
 use std::{
     fs,
-    io::Write,
     path::{Path, PathBuf},
     sync::{
         Arc,
@@ -11,6 +10,10 @@ use std::{
 };
 
 use etas_host::TestWorkspace;
+
+#[path = "landlock_symlink_race/observation.rs"]
+mod observation;
+use observation::{Observations, read_through, write_through};
 
 struct Racer {
     stop: Arc<AtomicBool>,
@@ -92,6 +95,7 @@ pub(super) async fn run() {
         fs::write(path.join("writable"), text).unwrap();
     }
     replace(fixture.path(), &inside);
+    observation::print_environment(&inside, outside.path());
     let root = fixture.root().unwrap();
     let mut request = super::request(root.clone(), "symlink-race");
     request.authority.sandbox.filesystem.write_roots.push(root);
@@ -99,48 +103,118 @@ pub(super) async fn run() {
         .env
         .push(("ROOT".into(), fixture.path().display().to_string()));
     let racer = Racer::start(fixture.path().to_owned(), inside, outside.path().to_owned());
-    super::execute(request).await;
+    let output = super::execute_child(request).await;
     let swaps = racer.finish();
-    assert!(swaps > 2, "the link must change during child execution");
+    println!("{}", String::from_utf8_lossy(&output.stdout));
+    eprintln!("{}", String::from_utf8_lossy(&output.stderr));
     assert_eq!(
         fs::read_to_string(outside.path().join("writable")).unwrap(),
         "outside"
     );
     println!("ETAS_ISOLATION_SYMLINK swaps={swaps} outside_unchanged=true cleanup=settled");
-}
-
-fn write_through(link: &Path) -> std::io::Result<()> {
-    fs::OpenOptions::new()
-        .write(true)
-        .open(link.join("writable"))?
-        .write_all(b"inside")
+    assert_eq!(output.exit_code, 0, "isolated race probe failed");
+    assert!(swaps > 2, "the link must change during child execution");
 }
 
 pub(super) fn probe() {
     let root = PathBuf::from(std::env::var("ROOT").unwrap());
     let link = root.join("switch");
-    assert_eq!(fs::read_to_string(link.join("readable")).unwrap(), "inside");
-    write_through(&link).unwrap();
+    let (inside_read, text) = read_through(&link).unwrap();
+    assert_eq!(text, "inside");
+    let inside_write = write_through(&link).unwrap();
     fs::write(root.join("ready"), "ready").unwrap();
     let stop = AtomicBool::new(false);
     assert!(wait_for(&root.join("outside-ready"), &stop));
     assert_eq!(
-        fs::read(link.join("readable")).unwrap_err().raw_os_error(),
+        read_through(&link).unwrap_err().error.raw_os_error(),
         Some(libc::EACCES)
     );
     assert_eq!(
-        write_through(&link).unwrap_err().raw_os_error(),
+        write_through(&link).unwrap_err().error.raw_os_error(),
         Some(libc::EACCES)
     );
     fs::write(root.join("outside-checked"), "ready").unwrap();
     assert!(wait_for(&root.join("racing"), &stop));
-    for _ in 0..4096 {
-        match fs::read_to_string(link.join("readable")) {
-            Ok(text) => assert_eq!(text, "inside", "outside data escaped confinement"),
-            Err(error) => assert_eq!(error.raw_os_error(), Some(libc::EACCES)),
+    let mut observations = Observations::default();
+    for iteration in 0..4096 {
+        match read_through(&link) {
+            Ok((identity, text)) => {
+                assert_eq!(
+                    identity, inside_read,
+                    "outside read descriptor escaped confinement"
+                );
+                assert_eq!(text, "inside", "outside data escaped confinement");
+                observations.reads += 1;
+            }
+            Err(error) => observations.denied(iteration, &link, error),
         }
-        if let Err(error) = write_through(&link) {
-            assert_eq!(error.raw_os_error(), Some(libc::EACCES));
+        match write_through(&link) {
+            Ok(identity) => {
+                assert_eq!(
+                    identity, inside_write,
+                    "outside write descriptor escaped confinement"
+                );
+                observations.writes += 1;
+            }
+            Err(error) => observations.denied(iteration, &link, error),
         }
     }
+    observations.print();
+}
+
+pub(super) fn unconfined_control() {
+    let fixture = TestWorkspace::create("symlink-rename-control").unwrap();
+    let inside = fixture.path().join("inside");
+    let outside = fixture.path().join("outside");
+    fs::create_dir(&inside).unwrap();
+    fs::create_dir(&outside).unwrap();
+    for (path, text) in [(&inside, "inside"), (&outside, "outside")] {
+        fs::write(path.join("readable"), text).unwrap();
+    }
+    replace(fixture.path(), &inside);
+    let link = fixture.path().join("switch");
+    let inside_id = read_through(&link).unwrap().0;
+    replace(fixture.path(), &outside);
+    let outside_id = read_through(&link).unwrap().0;
+    let racer = Racer::start(fixture.path().to_owned(), inside, outside);
+    fs::write(fixture.path().join("ready"), "ready").unwrap();
+    fs::write(fixture.path().join("outside-checked"), "ready").unwrap();
+    let ready = wait_for(&fixture.path().join("racing"), &AtomicBool::new(false));
+    let mut inside_reads = 0;
+    let mut outside_reads = 0;
+    let result = (|| {
+        if !ready {
+            return Err(observation::Failure {
+                stage: "control.wait_for_racing",
+                error: std::io::Error::new(std::io::ErrorKind::TimedOut, "racer did not start"),
+            });
+        }
+        for _ in 0..100_000 {
+            let (identity, text) = read_through(&link)?;
+            if identity == inside_id && text == "inside" {
+                inside_reads += 1;
+            } else if identity == outside_id && text == "outside" {
+                outside_reads += 1;
+            } else {
+                return Err(observation::Failure {
+                    stage: "control.identity",
+                    error: std::io::Error::other("descriptor or content differs from both targets"),
+                });
+            }
+        }
+        Ok(())
+    })();
+    let swaps = racer.finish();
+    println!(
+        "ETAS_ISOLATION_SYMLINK_CONTROL {}",
+        serde_json::json!({
+            "inside_reads": inside_reads, "outside_reads": outside_reads, "swaps": swaps,
+            "failure": result.as_ref().err().map(|failure| serde_json::json!({
+                "stage": failure.stage, "errno": failure.error.raw_os_error(),
+            })),
+            "cleanup": "settled",
+        })
+    );
+    result.unwrap();
+    assert!(swaps > 2 && inside_reads > 0 && outside_reads > 0);
 }
