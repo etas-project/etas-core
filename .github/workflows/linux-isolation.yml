@@ -5,6 +5,12 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      symlink_repetitions:
+        description: Number of real symlink-race samples per architecture
+        type: number
+        required: true
+        default: 50
 
 permissions:
   contents: read
@@ -24,7 +30,13 @@ jobs:
       - name: Validate gate accounting
         run: python3 -B -m unittest discover -s scripts -p 'test_linux_isolation_gate.py'
       - name: Enforce actual kernel isolation
-        run: python3 -B scripts/linux_isolation_gate.py
+        env:
+          SYMLINK_REPETITIONS: ${{ inputs.symlink_repetitions }}
+        run: python3 -B scripts/linux_isolation_gate.py --symlink-repetitions "${SYMLINK_REPETITIONS:-1}"
+      - name: Check Linux-only test code
+        run: |
+          cargo test --locked -p etas_utils
+          cargo clippy --locked -p etas_host --test landlock --all-features -- -D warnings
       - name: Preserve platform and enforcement evidence
         if: always()
         uses: actions/upload-artifact@v4
