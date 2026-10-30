@@ -33,10 +33,61 @@ pub fn check_trace_inclusion(
     frozen_root: TraceInfoRef,
     limits: TraceProofLimits,
 ) -> Result<TraceInclusion, TraceProofError> {
-    let mut budget = ProofBudget { limits, steps: 0 };
+    let mut budget = ProofBudget::new(limits, None);
     let candidate = Nfa::build(candidate, candidate_root, &mut budget)?;
     let frozen = Nfa::build(frozen, frozen_root, &mut budget)?;
-    let initial = frozen.closure([frozen.start], &mut budget)?;
+    check_nfa_inclusion(&candidate, &frozen, &mut budget)
+}
+
+/// Prove that the non-return alternatives describe exactly the prefixes at
+/// which a parameter call can occur, including repeated and widened traces.
+pub fn check_parameter_exit_coverage(
+    graph: &DescriptorGraph,
+    trace: TraceInfoRef,
+    outcomes: TraceInfoRef,
+    limits: TraceProofLimits,
+) -> Result<bool, TraceProofError> {
+    parameter_exit_coverage(graph, trace, outcomes, limits, None)
+}
+
+pub fn check_parameter_exit_coverage_controlled(
+    graph: &DescriptorGraph,
+    trace: TraceInfoRef,
+    outcomes: TraceInfoRef,
+    limits: TraceProofLimits,
+    control: &dyn etas_utils::PipelineExecutionControl,
+) -> Result<bool, TraceProofError> {
+    parameter_exit_coverage(graph, trace, outcomes, limits, Some(control))
+}
+
+fn parameter_exit_coverage(
+    graph: &DescriptorGraph,
+    trace: TraceInfoRef,
+    outcomes: TraceInfoRef,
+    limits: TraceProofLimits,
+    control: Option<&dyn etas_utils::PipelineExecutionControl>,
+) -> Result<bool, TraceProofError> {
+    let mut budget = ProofBudget::new(limits, control);
+    let expected = Nfa::build(graph, trace, &mut budget)?.parameter_exit_prefixes(&mut budget)?;
+    let actual = Nfa::build(graph, outcomes, &mut budget)?.parameter_exit_outcomes(&mut budget)?;
+    if !matches!(
+        check_nfa_inclusion(&expected, &actual, &mut budget)?,
+        TraceInclusion::Included
+    ) {
+        return Ok(false);
+    }
+    Ok(matches!(
+        check_nfa_inclusion(&actual, &expected, &mut budget)?,
+        TraceInclusion::Included
+    ))
+}
+
+fn check_nfa_inclusion(
+    candidate: &Nfa,
+    frozen: &Nfa,
+    budget: &mut ProofBudget,
+) -> Result<TraceInclusion, TraceProofError> {
+    let initial = frozen.closure([frozen.start], budget)?;
     let mut search = Vec::new();
     let mut visited = BTreeMap::new();
     let mut members = 0usize;
@@ -49,12 +100,12 @@ pub fn check_trace_inclusion(
             frozen: initial,
             parent: None,
         },
-        &budget,
+        budget,
     )?;
     let mut cursor = 0;
     while cursor < search.len() {
         budget.charge(1)?;
-        let states = candidate.closure([search[cursor].candidate], &mut budget)?;
+        let states = candidate.closure([search[cursor].candidate], budget)?;
         if states.contains(&candidate.end) && !search[cursor].frozen.contains(&frozen.end) {
             return Ok(TraceInclusion::NotProven(witness(&search, cursor, None)));
         }
@@ -78,7 +129,7 @@ pub fn check_trace_inclusion(
                         }
                     }
                 }
-                let next = frozen.closure(next, &mut budget)?;
+                let next = frozen.closure(next, budget)?;
                 if next.is_empty() {
                     return Ok(TraceInclusion::NotProven(witness(
                         &search,
@@ -95,7 +146,7 @@ pub fn check_trace_inclusion(
                         frozen: next,
                         parent: Some((cursor, edge.source, label.value.clone())),
                     },
-                    &budget,
+                    budget,
                 )?;
             }
         }

@@ -44,6 +44,159 @@ fn proves(graph: &DescriptorGraph, candidate: u32, frozen: u32) -> bool {
 }
 
 #[test]
+fn parameter_exit_coverage_handles_repeated_and_widened_traces() {
+    let callable = etas_code::CallableId::declaration(
+        DefinitionKey::new(
+            PackageKey::from_canonical_fingerprint(CodeFingerprint::from_bytes([8; 32])),
+            vec!["app".into()],
+            vec!["apply".into()],
+            DefinitionKind::Flow,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let f = ParameterCallInfo {
+        callable: callable.clone(),
+        signature: TypeInfoRef(0),
+        position: 0,
+        arguments: Some(vec![]),
+        handlers: Some(vec![]),
+    };
+    let g = ParameterCallInfo {
+        position: 1,
+        ..f.clone()
+    };
+    let graph = DescriptorGraph::new(
+        DescriptorGraphInput {
+            types: vec![
+                TypeInfo::Function(SignatureInfo {
+                    generics: vec![],
+                    parameters: vec![
+                        ParameterInfo {
+                            name: Some("f".into()),
+                            ty: TypeInfoRef(1),
+                        },
+                        ParameterInfo {
+                            name: Some("g".into()),
+                            ty: TypeInfoRef(1),
+                        },
+                    ],
+                    output: TypeInfoRef(2),
+                    declared_output: None,
+                    effects: None,
+                }),
+                TypeInfo::Function(SignatureInfo {
+                    generics: vec![],
+                    parameters: vec![],
+                    output: TypeInfoRef(2),
+                    declared_output: None,
+                    effects: Some(EffectRowInfoRef(0)),
+                }),
+                TypeInfo::Primitive(PrimitiveInfo::Unit),
+            ],
+            rows: vec![EffectRowInfo {
+                effects: vec![],
+                tail: None,
+            }],
+            traces: vec![
+                TraceInfo::ParameterCall(f.clone()), // 0
+                TraceInfo::Repeat(TraceInfoRef(0)),  // 1
+                TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(f.clone())), // 2
+                TraceInfo::Seq(vec![TraceInfoRef(1), TraceInfoRef(2)]), // 3
+                TraceInfo::Seq(vec![TraceInfoRef(0), TraceInfoRef(2)]), // 4
+                TraceInfo::Widened {
+                    actions: EffectRowInfoRef(0),
+                    parameter_calls: vec![f],
+                }, // 5
+                TraceInfo::Seq(vec![TraceInfoRef(5), TraceInfoRef(2)]), // 6
+                TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(g.clone())), // 7
+                TraceInfo::Seq(vec![TraceInfoRef(5), TraceInfoRef(7)]), // 8
+                TraceInfo::Choice(vec![TraceInfoRef(6), TraceInfoRef(8)]), // 9
+                TraceInfo::Seq(vec![TraceInfoRef(1), TraceInfoRef(2), TraceInfoRef(0)]), // 10
+                TraceInfo::ParameterCall(g),         // 11
+                TraceInfo::Seq(vec![TraceInfoRef(0), TraceInfoRef(11)]), // 12
+                TraceInfo::Seq(vec![TraceInfoRef(0), TraceInfoRef(7)]), // 13
+                TraceInfo::Choice(vec![TraceInfoRef(2), TraceInfoRef(13)]), // 14
+                TraceInfo::Choice(vec![TraceInfoRef(0), TraceInfoRef(11)]), // 15
+                TraceInfo::Choice(vec![TraceInfoRef(2), TraceInfoRef(7)]), // 16
+                TraceInfo::Event(action("signal", None)), // 17
+                TraceInfo::Seq(vec![TraceInfoRef(0), TraceInfoRef(17), TraceInfoRef(11)]), // 18
+                TraceInfo::Seq(vec![TraceInfoRef(0), TraceInfoRef(17), TraceInfoRef(7)]), // 19
+                TraceInfo::Choice(vec![TraceInfoRef(2), TraceInfoRef(19)]), // 20
+            ],
+            ..Default::default()
+        },
+        DescriptorLimits::default(),
+    )
+    .unwrap();
+    let check = |trace, outcomes| {
+        check_parameter_exit_coverage(
+            &graph,
+            TraceInfoRef(trace),
+            TraceInfoRef(outcomes),
+            TraceProofLimits::default(),
+        )
+    };
+    assert_eq!(check(1, 3), Ok(true));
+    assert_eq!(check(1, 4), Ok(false));
+    assert_eq!(check(5, 6), Ok(true));
+    assert_eq!(check(5, 9), Ok(false));
+    assert_eq!(check(12, 14), Ok(true));
+    assert_eq!(check(12, 16), Ok(false));
+    assert_eq!(check(15, 16), Ok(true));
+    assert_eq!(check(15, 14), Ok(false));
+    assert_eq!(check(18, 20), Ok(true));
+    assert_eq!(check(18, 14), Ok(false));
+    assert_eq!(check(1, 10), Err(TraceProofError::InvalidOutcomeTrace));
+    assert!(matches!(
+        check_parameter_exit_coverage(
+            &graph,
+            TraceInfoRef(1),
+            TraceInfoRef(3),
+            TraceProofLimits {
+                max_steps: 1,
+                ..Default::default()
+            },
+        ),
+        Err(TraceProofError::Limit { .. })
+    ));
+
+    struct StopDuringProof(std::sync::atomic::AtomicUsize);
+    impl etas_utils::PipelineExecutionControl for StopDuringProof {
+        fn checkpoint(&self) -> Result<(), etas_utils::PipelineInterruption> {
+            if self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 1 {
+                return Err(etas_utils::PipelineInterruption {
+                    kind: etas_utils::PipelineInterruptionKind::Cancelled,
+                    reason: "cancel proof".into(),
+                });
+            }
+            Ok(())
+        }
+    }
+    let mut long = graph.data().clone();
+    let root = TraceInfoRef(long.traces.len() as u32);
+    long.traces.push(TraceInfo::Seq(vec![TraceInfoRef(0); 300]));
+    let long = DescriptorGraph::new(long, DescriptorLimits::default()).unwrap();
+    let control = StopDuringProof(std::sync::atomic::AtomicUsize::new(0));
+    assert!(matches!(
+        check_parameter_exit_coverage_controlled(
+            &long,
+            root,
+            TraceInfoRef(3),
+            TraceProofLimits::default(),
+            &control
+        ),
+        Err(TraceProofError::Interrupted(
+            etas_utils::PipelineInterruption {
+                kind: etas_utils::PipelineInterruptionKind::Cancelled,
+                ..
+            }
+        ))
+    ));
+    assert_eq!(control.0.load(std::sync::atomic::Ordering::SeqCst), 2);
+}
+
+#[test]
 fn proof_budget_charges_each_handler_arm_and_selector() {
     let callable = etas_code::CallableId::declaration(
         DefinitionKey::new(

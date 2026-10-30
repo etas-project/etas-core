@@ -227,6 +227,120 @@ impl Nfa {
         Ok(visited)
     }
 
+    pub(super) fn parameter_exit_prefixes(
+        mut self,
+        budget: &mut ProofBudget,
+    ) -> Result<Self, TraceProofError> {
+        let mut exits = Vec::new();
+        for (from, edges) in self.edges.iter().enumerate() {
+            for edge in edges {
+                budget.charge(1)?;
+                if let Some(label) = &edge.label {
+                    match label.value.as_ref() {
+                        TraceLabel::ParameterCall {
+                            callable,
+                            position,
+                            signature,
+                            arguments,
+                            handlers,
+                        } => {
+                            budget.charge(label.comparison_work)?;
+                            exits.push((
+                                from,
+                                edge.source,
+                                TraceLabel::ParameterNonReturn {
+                                    callable: callable.clone(),
+                                    position: *position,
+                                    signature: *signature,
+                                    arguments: arguments.clone(),
+                                    handlers: handlers.clone(),
+                                },
+                            ));
+                        }
+                        TraceLabel::Returned { .. }
+                        | TraceLabel::Raised { .. }
+                        | TraceLabel::NonReturn
+                        | TraceLabel::ParameterNonReturn { .. } => {
+                            return Err(TraceProofError::InvalidOutcomeTrace);
+                        }
+                        TraceLabel::Action(_) => {}
+                    }
+                }
+            }
+        }
+        let end = self.state(budget)?;
+        self.end = end;
+        for (from, source, label) in exits {
+            self.edge(from, end, Some(CompiledLabel::new(label)), source, budget)?;
+        }
+        self.prune_nonterminating(budget)?;
+        Ok(self)
+    }
+
+    pub(super) fn parameter_exit_outcomes(
+        mut self,
+        budget: &mut ProofBudget,
+    ) -> Result<Self, TraceProofError> {
+        let old_end = self.end;
+        let mut exits = Vec::new();
+        for (from, edges) in self.edges.iter().enumerate() {
+            for edge in edges {
+                budget.charge(1)?;
+                if let Some(label) = &edge.label
+                    && matches!(label.value.as_ref(), TraceLabel::ParameterNonReturn { .. })
+                {
+                    if !self.closure([edge.to], budget)?.contains(&old_end) {
+                        return Err(TraceProofError::InvalidOutcomeTrace);
+                    }
+                    exits.push((from, edge.source, label.clone()));
+                }
+            }
+        }
+        for edges in &mut self.edges {
+            edges.retain(|edge| {
+                !edge.label.as_ref().is_some_and(|label| {
+                    matches!(
+                        label.value.as_ref(),
+                        TraceLabel::Returned { .. }
+                            | TraceLabel::Raised { .. }
+                            | TraceLabel::NonReturn
+                            | TraceLabel::ParameterNonReturn { .. }
+                    )
+                })
+            });
+        }
+        let end = self.state(budget)?;
+        self.end = end;
+        for (from, source, label) in exits {
+            self.edge(from, end, Some(label), source, budget)?;
+        }
+        self.prune_nonterminating(budget)?;
+        Ok(self)
+    }
+
+    fn prune_nonterminating(&mut self, budget: &mut ProofBudget) -> Result<(), TraceProofError> {
+        let mut incoming = vec![Vec::new(); self.edges.len()];
+        for (from, edges) in self.edges.iter().enumerate() {
+            for edge in edges {
+                budget.charge(1)?;
+                incoming[edge.to].push(from);
+            }
+        }
+        let mut live = vec![false; self.edges.len()];
+        let mut pending = vec![self.end];
+        while let Some(state) = pending.pop() {
+            budget.charge(1)?;
+            if std::mem::replace(&mut live[state], true) {
+                continue;
+            }
+            pending.extend(incoming[state].iter().copied());
+        }
+        for edges in &mut self.edges {
+            edges.retain(|edge| live[edge.to]);
+        }
+        Ok(())
+    }
+
     fn action_label(
         &mut self,
         graph: &DescriptorGraph,
