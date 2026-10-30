@@ -63,23 +63,19 @@ fn trace_spec_decision(request: &PolicyEvaluationRequest) -> PolicyDecision {
         };
     }
 
-    if let Some(requirement) = facts
+    let mut needs_approval = false;
+    for requirement in facts
         .iter()
         .filter(|fact| policy_fact_kind_value(fact) == Some("require_before"))
-        .find(|fact| require_before_target_matches_subject(fact, request))
+        .filter(|fact| require_before_target_matches_subject(fact, request))
     {
-        if current_action_has_grant(request) {
-            return PolicyDecision::Allow;
-        }
         let Some(guard_label) = policy_fact_guard_label(requirement) else {
             return PolicyDecision::Deny {
                 reason: "trace spec require-before fact is missing guard label".to_owned(),
             };
         };
-        if !policy_label_terms(&guard_label)
-            .iter()
-            .any(|term| policy_label_term_is_approval_request(term))
-        {
+        let guard_terms = policy_label_terms(&guard_label);
+        if guard_terms.len() != 1 || !policy_label_term_is_unscoped_approval(&guard_terms[0]) {
             let target =
                 policy_fact_target_label(requirement).unwrap_or_else(|| "<unknown>".to_owned());
             return PolicyDecision::Deny {
@@ -88,14 +84,27 @@ fn trace_spec_decision(request: &PolicyEvaluationRequest) -> PolicyDecision {
                 ),
             };
         }
-        let approval_id = HostRequestId(request.id.0.saturating_add(10_000_000));
+        needs_approval = true;
+    }
+    if needs_approval {
+        let Some(approval_id) = request.id.0.checked_add(10_000_000).map(HostRequestId) else {
+            return PolicyDecision::Deny {
+                reason: "trace spec approval request identity overflow".into(),
+            };
+        };
+        let requested_grants = current_action_grants(request);
+        if requested_grants.is_empty() {
+            return PolicyDecision::Deny {
+                reason: "trace spec approval requires a checked action identity".into(),
+            };
+        }
         let subject = subject_attr_string(request, "qualified_action")
             .unwrap_or_else(|| request.subject.kind.clone());
         return PolicyDecision::RequireApproval {
             request: ApprovalRequest {
                 id: approval_id,
                 reason: format!("trace spec requires approval before {subject}"),
-                requested_grants: current_action_grants(request),
+                requested_grants,
                 trace: request.trace.clone(),
             },
         };
@@ -118,17 +127,6 @@ fn require_before_target_matches_subject(
     policy_fact_target_label(fact)
         .as_deref()
         .is_some_and(|label| policy_label_matches_subject(label, request))
-}
-
-fn current_action_has_grant(request: &PolicyEvaluationRequest) -> bool {
-    let Some(action) = current_action_instance(request) else {
-        return false;
-    };
-    request
-        .authority
-        .grants
-        .iter()
-        .any(|grant| grant.allows(&action))
 }
 
 fn current_action_grants(request: &PolicyEvaluationRequest) -> Vec<HostActionGrant> {
@@ -287,12 +285,8 @@ fn policy_label_term_matches_subject(
     false
 }
 
-fn policy_label_term_is_approval_request(term: &str) -> bool {
-    let base = term
-        .split_once('[')
-        .map(|(base, _)| base.trim())
-        .unwrap_or_else(|| term.trim());
-    base == "Approval" || base == "Approval.request"
+fn policy_label_term_is_unscoped_approval(term: &str) -> bool {
+    matches!(term.trim(), "Approval" | "Approval.request")
 }
 
 fn policy_label_arg_matches_subject(arg: &str, request: &PolicyEvaluationRequest) -> bool {
@@ -321,8 +315,8 @@ fn subject_attr_string(request: &PolicyEvaluationRequest, name: &str) -> Option<
 #[cfg(test)]
 mod tests {
     use crate::{
-        AuthorityContext, HostActionGrant, HostRequestId, PolicyContext, PolicySubject,
-        TraceContext, TraceId,
+        ApprovalGrant, AuthorityContext, HostActionGrant, HostRequestId, PolicyContext,
+        PolicySubject, TraceContext, TraceId,
     };
 
     use super::*;
@@ -365,8 +359,31 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn trace_spec_uses_existing_approval_grant() {
+    async fn trace_spec_does_not_reuse_unbound_approval_grant() {
         let client = TraceSpecRuntimeClient;
+        let mut request = request(vec![
+            allow("[Console]"),
+            require_before("Approval.request", "[Console]"),
+        ]);
+        request.authority.approvals = vec![ApprovalGrant {
+            id: HostRequestId(9),
+            grants: vec![HostActionGrant::Allow(ActionPattern::Exact(
+                ActionInstance::new(
+                    "Console",
+                    "stdout_write",
+                    vec![HostValue::String("stdio".to_owned())],
+                ),
+            ))],
+        }];
+        let response = client.evaluate(request).await.unwrap();
+        assert!(matches!(
+            response.decision,
+            PolicyDecision::RequireApproval { .. }
+        ));
+    }
+
+    #[tokio::test]
+    async fn ordinary_action_authority_does_not_satisfy_approval_guard() {
         let mut request = request(vec![
             allow("[Console]"),
             require_before("Approval.request", "[Console]"),
@@ -378,8 +395,75 @@ mod tests {
                 vec![HostValue::String("stdio".to_owned())],
             ),
         ))];
-        let response = client.evaluate(request).await.unwrap();
-        assert!(matches!(response.decision, PolicyDecision::Allow));
+        let response = TraceSpecRuntimeClient.evaluate(request).await.unwrap();
+        assert!(matches!(
+            response.decision,
+            PolicyDecision::RequireApproval { .. }
+        ));
+    }
+
+    #[tokio::test]
+    async fn every_matching_guard_is_validated_before_requesting_approval() {
+        let mut request = request(vec![
+            allow("[Console]"),
+            require_before("Approval.request", "[Console]"),
+            require_before("HumanReview", "[Console]"),
+        ]);
+        request.authority.grants = vec![HostActionGrant::Allow(ActionPattern::Exact(
+            ActionInstance::new(
+                "Console",
+                "stdout_write",
+                vec![HostValue::String("stdio".to_owned())],
+            ),
+        ))];
+        let response = TraceSpecRuntimeClient.evaluate(request).await.unwrap();
+        assert!(matches!(response.decision, PolicyDecision::Deny { .. }));
+    }
+
+    #[tokio::test]
+    async fn approval_for_another_action_does_not_satisfy_guard() {
+        let mut request = request(vec![
+            allow("[Console]"),
+            require_before("Approval.request", "[Console]"),
+        ]);
+        request.authority.approvals = vec![ApprovalGrant {
+            id: HostRequestId(9),
+            grants: vec![HostActionGrant::Allow(ActionPattern::Exact(
+                ActionInstance::new(
+                    "Console",
+                    "stderr_write",
+                    vec![HostValue::String("stdio".to_owned())],
+                ),
+            ))],
+        }];
+        let response = TraceSpecRuntimeClient.evaluate(request).await.unwrap();
+        assert!(matches!(
+            response.decision,
+            PolicyDecision::RequireApproval { .. }
+        ));
+    }
+
+    #[tokio::test]
+    async fn scoped_approval_cannot_be_satisfied_without_scope_evidence() {
+        let response = TraceSpecRuntimeClient
+            .evaluate(request(vec![
+                allow("[Console]"),
+                require_before("Approval.request[draft_hash]", "[Console]"),
+            ]))
+            .await
+            .unwrap();
+        assert!(matches!(response.decision, PolicyDecision::Deny { .. }));
+    }
+
+    #[tokio::test]
+    async fn approval_request_id_overflow_is_denied() {
+        let mut request = request(vec![
+            allow("[Console]"),
+            require_before("Approval.request", "[Console]"),
+        ]);
+        request.id = HostRequestId(u32::MAX);
+        let response = TraceSpecRuntimeClient.evaluate(request).await.unwrap();
+        assert!(matches!(response.decision, PolicyDecision::Deny { .. }));
     }
 
     #[tokio::test]
