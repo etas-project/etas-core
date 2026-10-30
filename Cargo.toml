@@ -19,6 +19,7 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/etas-project/etas-core"
 
 [workspace.dependencies]
+icu_properties = { version = "=2.1.2", default-features = false, features = ["compiled_data"] }
 etas_builtin = { path = "crates/etas_builtin" }
 etas_cache = { path = "crates/etas_cache" }
 etas_code = { path = "crates/etas_code" }
