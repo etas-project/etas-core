@@ -153,3 +153,100 @@ fn implementation_graphs_share_the_whole_artifact_node_budget() {
             .contains("node count")
     );
 }
+
+#[test]
+fn method_contracts_round_trip_without_inventing_declaration_paths() {
+    let implementation = implementation();
+    let target = crate::CallableContractTarget::Method(implementation.methods[0].identity.clone());
+    let flow = CallableSpecSatisfaction {
+        item: target.clone(),
+        spec: vec!["api".into(), "Pure".into()],
+        args: Vec::new(),
+    };
+    let trace = TraceSpecConformance {
+        item: target,
+        target: TraceSpecConformanceTarget::Named {
+            spec: vec!["api".into(), "ReadOnly".into()],
+            args: Vec::new(),
+        },
+    };
+    assert_eq!(
+        callable_spec_satisfaction_from_proto(callable_spec_satisfaction_to_proto(&flow)).unwrap(),
+        flow
+    );
+    assert_eq!(
+        trace_spec_conformance_from_proto(trace_spec_conformance_to_proto(&trace)).unwrap(),
+        trace
+    );
+    let mut package = PackageMetadata {
+        version: 1,
+        package: PackageIdentity {
+            name: "library".into(),
+            version: "0.1.0".into(),
+            edition: "2026".into(),
+        },
+        ..Default::default()
+    };
+    package.public_metadata.spec_impls.push(implementation);
+    package
+        .public_metadata
+        .callable_spec_satisfactions
+        .push(flow);
+    package.public_metadata.trace_spec_conformances.push(trace);
+    validate_package_metadata_graph(&package).unwrap();
+    let sections = crate::package_metadata_to_sections(&package).unwrap();
+    let bytes = crate::encode_metadata_artifact(
+        &crate::MetadataArtifactHeader {
+            artifact_schema_version: crate::ARTIFACT_SCHEMA_VERSION,
+            compiler_version: "test".into(),
+            package_id: "library".into(),
+            package_version: "0.1.0".into(),
+            source_payload_hash: "blake3:source".into(),
+            manifest_hash: "blake3:manifest".into(),
+            dependency_lock_hash: "blake3:lock".into(),
+            created_target: "test".into(),
+        },
+        sections,
+    )
+    .unwrap();
+    let (_, decoded) =
+        crate::package_metadata_from_artifact(std::path::Path::new("library.etasmeta"), &bytes)
+            .unwrap();
+    assert_eq!(decoded, package);
+    package.public_metadata.spec_impls.clear();
+    assert!(
+        validate_package_metadata_graph(&package)
+            .unwrap_err()
+            .to_string()
+            .contains("published implementation owner")
+    );
+    let untrusted_wire = package_metadata_to_proto(&package).encode_to_vec();
+    assert!(
+        crate::package_metadata_from_package_graph_payload(&untrusted_wire)
+            .unwrap_err()
+            .to_string()
+            .contains("published implementation owner")
+    );
+}
+
+#[test]
+fn contract_codec_rejects_missing_or_ambiguous_callable_identity() {
+    let identity = implementation().methods.remove(0).identity;
+    for target in [
+        None,
+        Some(ProtoCallableContractTarget::default()),
+        Some(ProtoCallableContractTarget {
+            path: vec!["api".into(), "fake".into()],
+            method: Some(super::super::descriptors::encode_method_identity(&identity)),
+        }),
+    ] {
+        assert!(
+            trace_spec_conformance_from_proto(ProtoTraceSpecConformance {
+                item: target,
+                target_kind: "inline".into(),
+                ..Default::default()
+            })
+            .is_err()
+        );
+    }
+}

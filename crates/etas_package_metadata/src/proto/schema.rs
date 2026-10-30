@@ -350,8 +350,8 @@ pub struct ProtoTypeSpecSatisfaction {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoCallableSpecSatisfaction {
-    #[prost(string, repeated, tag = "1")]
-    pub item: Vec<String>,
+    #[prost(message, optional, tag = "1")]
+    pub item: Option<ProtoCallableContractTarget>,
     #[prost(string, repeated, tag = "2")]
     pub spec: Vec<String>,
     #[prost(message, repeated, tag = "3")]
@@ -360,14 +360,22 @@ pub struct ProtoCallableSpecSatisfaction {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoTraceSpecConformance {
-    #[prost(string, repeated, tag = "1")]
-    pub item: Vec<String>,
+    #[prost(message, optional, tag = "1")]
+    pub item: Option<ProtoCallableContractTarget>,
     #[prost(string, tag = "2")]
     pub target_kind: String,
     #[prost(string, repeated, tag = "3")]
     pub spec: Vec<String>,
     #[prost(message, repeated, tag = "4")]
     pub args: Vec<ProtoType>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoCallableContractTarget {
+    #[prost(string, repeated, tag = "1")]
+    pub path: Vec<String>,
+    #[prost(message, optional, tag = "2")]
+    pub method: Option<super::descriptors::ProtoMethodIdentity>,
 }
 
 #[derive(Clone, PartialEq, Message)]

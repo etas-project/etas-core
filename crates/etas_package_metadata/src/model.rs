@@ -617,16 +617,16 @@ pub struct TypeSpecSatisfaction {
     pub args: Vec<Type>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CallableSpecSatisfaction {
-    pub item: Vec<String>,
+    pub item: crate::CallableContractTarget,
     pub spec: Vec<String>,
     pub args: Vec<Type>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TraceSpecConformance {
-    pub item: Vec<String>,
+    pub item: crate::CallableContractTarget,
     pub target: TraceSpecConformanceTarget,
 }
 
