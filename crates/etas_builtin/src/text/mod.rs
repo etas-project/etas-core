@@ -1,3 +1,4 @@
+pub mod case;
 pub mod char;
 pub mod input;
 pub mod join;
