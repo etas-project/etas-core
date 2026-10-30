@@ -35,6 +35,28 @@ impl SandboxBroker {
         self.filesystem.read_file(root, path)
     }
 
+    pub fn read_file_limited(
+        &self,
+        root: &WorkspaceRoot,
+        path: &Path,
+        max_bytes: usize,
+    ) -> Result<crate::BoundedFileRead, HostError> {
+        self.ensure_not_deny_all()?;
+        self.filesystem.read_file_limited(root, path, max_bytes)
+    }
+
+    pub(crate) fn read_file_limited_controlled(
+        &self,
+        root: &WorkspaceRoot,
+        path: &Path,
+        max_bytes: usize,
+        check: &mut impl FnMut() -> Result<(), HostError>,
+    ) -> Result<crate::BoundedFileRead, HostError> {
+        self.ensure_not_deny_all()?;
+        self.filesystem
+            .read_file_limited_controlled(root, path, max_bytes, check)
+    }
+
     pub fn atomic_write(
         &self,
         root: &WorkspaceRoot,
