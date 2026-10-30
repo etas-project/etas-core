@@ -52,7 +52,9 @@ pub fn map_case(
 ) -> Result<CaseOutput, BuiltinError> {
     let mut bytes = 0usize;
     let mut changed = false;
+    let mut has_sigma = false;
     for ch in input.chunks().flat_map(str::chars) {
+        has_sigma |= ch == 'Σ';
         let mapped = mapping.scalar(ch);
         changed |= !mapped.clone().eq(std::iter::once(ch));
         for ch in mapped {
@@ -77,7 +79,8 @@ pub fn map_case(
         .map_err(|_| BuiltinError::NumericOverflow)?;
     let chars = input.chunks().flat_map(str::chars);
     match mapping {
-        CaseMapping::Lowercase => lowercase(chars, &mut output),
+        CaseMapping::Lowercase if has_sigma => lowercase(chars, &mut output),
+        CaseMapping::Lowercase => output.extend(chars.flat_map(char::to_lowercase)),
         CaseMapping::Uppercase => output.extend(chars.flat_map(char::to_uppercase)),
     }
     Ok(CaseOutput::Changed(output))

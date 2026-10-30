@@ -72,6 +72,28 @@ fn unchanged_case_results_can_reuse_the_callers_backing() {
 }
 
 #[test]
+fn single_scalar_mappings_match_native_for_every_scalar() {
+    for raw in 0..=0x10ffff {
+        let Some(ch) = char::from_u32(raw) else {
+            continue;
+        };
+        let mut buffer = [0; 4];
+        let source = ch.encode_utf8(&mut buffer);
+        let parts = ["", source, ""];
+        assert_eq!(
+            mapped(&parts, CaseMapping::Lowercase),
+            source.to_lowercase(),
+            "lowercase U+{raw:04X}"
+        );
+        assert_eq!(
+            mapped(&parts, CaseMapping::Uppercase),
+            source.to_uppercase(),
+            "uppercase U+{raw:04X}"
+        );
+    }
+}
+
+#[test]
 fn sigma_context_properties_match_the_rust_unicode_tables_for_every_scalar() {
     // The native flat path and the segmented path must agree even when a Rust
     // toolchain updates its Unicode tables. These contexts distinguish cased,
