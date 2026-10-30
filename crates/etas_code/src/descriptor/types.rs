@@ -78,6 +78,8 @@ pub enum BuiltinTypeInfo {
     Secret,
     Public,
     Sanitized,
+    /// A checked `CallableDef<F>` role supplied by the standard registry.
+    CallableDefinition,
 }
 
 impl BuiltinTypeInfo {

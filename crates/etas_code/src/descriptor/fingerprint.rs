@@ -423,5 +423,6 @@ fn builtin_tag(constructor: BuiltinTypeInfo) -> u8 {
         BuiltinTypeInfo::Secret => 19,
         BuiltinTypeInfo::Public => 20,
         BuiltinTypeInfo::Sanitized => 21,
+        BuiltinTypeInfo::CallableDefinition => 22,
     }
 }

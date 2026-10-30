@@ -100,6 +100,10 @@ impl<C> FrozenDefinition<C> {
         }
     }
 
+    pub fn signature_type(&self) -> Option<TypeInfoRef> {
+        self.default_entry
+    }
+
     pub fn contract(&self) -> &C {
         &self.contract
     }

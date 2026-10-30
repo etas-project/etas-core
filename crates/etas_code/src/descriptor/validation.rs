@@ -394,6 +394,10 @@ fn validate_inner(
                 match input.types.get(parameter_type.0 as usize) {
                     Some(TypeInfo::Function(callback)) => break callback,
                     Some(TypeInfo::Alias { target, .. }) => parameter_type = *target,
+                    Some(TypeInfo::Builtin {
+                        constructor: super::BuiltinTypeInfo::CallableDefinition,
+                        arguments,
+                    }) if arguments.len() == 1 => parameter_type = arguments[0],
                     Some(_) => {
                         return Err(DescriptorError::Invalid {
                             node,

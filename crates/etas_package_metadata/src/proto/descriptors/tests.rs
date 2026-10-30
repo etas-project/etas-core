@@ -555,6 +555,7 @@ fn every_primitive_and_compiler_constructor_has_a_stable_wire_mapping() {
         B::Secret,
         B::Public,
         B::Sanitized,
+        B::CallableDefinition,
     ];
     let set = DefinitionDescriptorSet {
         headers: None,
@@ -575,7 +576,17 @@ fn every_primitive_and_compiler_constructor_has_a_stable_wire_mapping() {
         },
         declarations: vec![],
     };
-    assert_eq!(from_proto(to_proto(&set)).unwrap(), set);
+    let wire = to_proto(&set);
+    assert_eq!(wire.version, 8);
+    assert_eq!(from_proto(wire.clone()).unwrap(), set);
+    let mut downgraded = wire;
+    downgraded.version = 1;
+    assert!(from_proto(downgraded).is_err());
+    let mut old = set;
+    old.graph.types.pop();
+    let mut falsely_upgraded = to_proto(&old);
+    falsely_upgraded.version = 8;
+    assert!(from_proto(falsely_upgraded).is_err());
 }
 
 #[test]

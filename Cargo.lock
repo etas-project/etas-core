@@ -1876,3 +1876,31 @@ dependencies = [
  "cc",
  "pkg-config",
 ]
+
+[[patch.unused]]
+name = "etas_effects"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "etas_frontend"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "etas_hir"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "etas_hir_analysis"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "etas_syntax"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "etas_syntax_derive"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "etas_types"
+version = "0.1.0"

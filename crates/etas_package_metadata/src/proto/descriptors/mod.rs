@@ -71,6 +71,18 @@ pub(super) fn to_proto(set: &DefinitionDescriptorSet) -> ProtoDescriptorGraph {
     let input = &set.graph;
     ProtoDescriptorGraph {
         version: match &set.headers {
+            _ if input.types.iter().any(|ty| {
+                matches!(
+                    ty,
+                    etas_code::descriptor::TypeInfo::Builtin {
+                        constructor: etas_code::descriptor::BuiltinTypeInfo::CallableDefinition,
+                        ..
+                    }
+                )
+            }) =>
+            {
+                8
+            }
             Some(headers)
                 if headers
                     .snapshots
@@ -139,10 +151,29 @@ pub(super) fn from_proto(
             | (5, Some((_, _, true)))
             | (6, Some((true, _, _)))
             | (7, Some((true, _, _)))
+            | (8, None)
+            | (8, Some((false, false, false)))
+            | (8, Some((true, _, _)))
+            | (8, Some((_, _, true)))
     ) {
         return Err(invalid("unsupported descriptor graph schema"));
     }
-    if matches!(input.version, 5..=7)
+    let has_callable_definition = input.types.iter().any(|ty| {
+        matches!(&ty.kind, Some(schema::ty::Kind::Builtin(builtin)) if builtin.constructor == 23)
+    });
+    if has_callable_definition != (input.version == 8) {
+        return Err(invalid(
+            "callable definition types require their descriptor schema",
+        ));
+    }
+    if (matches!(input.version, 5..=7)
+        || (input.version == 8
+            && input.headers.as_ref().is_some_and(|headers| {
+                headers
+                    .agents
+                    .iter()
+                    .any(|agent| agent.method_info.is_some())
+            })))
         && input.headers.as_ref().is_some_and(|headers| {
             headers
                 .agents
@@ -159,18 +190,17 @@ pub(super) fn from_proto(
         .as_ref()
         .and_then(|headers| headers.snapshots.as_ref())
         .is_some_and(|snapshots| !snapshots.flows.is_empty());
-    if (has_flows && !matches!(input.version, 6 | 7)) || (input.version == 6 && !has_flows) {
+    if (has_flows && !matches!(input.version, 6..=8)) || (input.version == 6 && !has_flows) {
         return Err(invalid(
             "flow snapshot coordinates require their descriptor schema",
         ));
     }
-    if input
+    let has_methods = input
         .headers
         .as_ref()
         .and_then(|headers| headers.snapshots.as_ref())
-        .is_some_and(|snapshots| !snapshots.methods.is_empty())
-        != (input.version == 7)
-    {
+        .is_some_and(|snapshots| !snapshots.methods.is_empty());
+    if (has_methods && !matches!(input.version, 7 | 8)) || (input.version == 7 && !has_methods) {
         return Err(invalid(
             "method snapshot coordinates require their descriptor schema",
         ));

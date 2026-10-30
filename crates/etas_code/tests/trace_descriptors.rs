@@ -510,6 +510,41 @@ fn parameter_trace_calls_require_callable_types_including_widened_traces() {
     callback.effects = Some(EffectRowInfoRef(0));
     input.traces[0] = TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(call));
     assert!(DescriptorGraph::new(input.clone(), DescriptorLimits::default()).is_ok());
+
+    input.types.push(TypeInfo::Builtin {
+        constructor: BuiltinTypeInfo::CallableDefinition,
+        arguments: vec![TypeInfoRef(2)],
+    });
+    let TypeInfo::Function(owner) = &mut input.types[0] else {
+        unreachable!()
+    };
+    owner.parameters[0].ty = TypeInfoRef(4);
+    assert!(DescriptorGraph::new(input.clone(), DescriptorLimits::default()).is_ok());
+    let TypeInfo::Builtin { constructor, .. } = &mut input.types[4] else {
+        unreachable!()
+    };
+    *constructor = BuiltinTypeInfo::Option;
+    assert!(matches!(
+        DescriptorGraph::new(input.clone(), DescriptorLimits::default()),
+        Err(DescriptorError::Invalid { .. })
+    ));
+    let TypeInfo::Builtin {
+        constructor,
+        arguments,
+    } = &mut input.types[4]
+    else {
+        unreachable!()
+    };
+    *constructor = BuiltinTypeInfo::CallableDefinition;
+    arguments[0] = TypeInfoRef(1);
+    assert!(matches!(
+        DescriptorGraph::new(input.clone(), DescriptorLimits::default()),
+        Err(DescriptorError::Invalid { .. })
+    ));
+    let TypeInfo::Function(owner) = &mut input.types[0] else {
+        unreachable!()
+    };
+    owner.parameters[0].ty = TypeInfoRef(3);
     let TypeInfo::Alias { target, .. } = &mut input.types[3] else {
         unreachable!()
     };
