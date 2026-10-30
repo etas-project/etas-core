@@ -3,11 +3,29 @@ import hashlib
 from pathlib import Path
 import tempfile
 import sys
+import json
+import errno
 
 from linux_isolation_gate import (CALIBRATION, PORTABLE, GateFailure, REQUIRED, SYMLINK_RACE, command,
                                   repeat_symlink_probe, test_inventory,
                                   test_invocation, verify_enforcement_evidence,
-                                  verify_execution)
+                                  verify_execution, verify_race_observations,
+                                  verify_control_observations)
+
+
+def race_observations(counts=None, quiescent=None):
+    counts = counts if counts is not None else {
+        "reads": 2048, "writes": 2048, "denied_reads": 2048, "denied_writes": 2048,
+        "read_lookup_unavailable": 0, "write_lookup_unavailable": 0,
+        "errors": [{"stage": stage, "errno": errno.EACCES, "count": 2048}
+                   for stage in ["read.open", "write.open"]],
+    }
+    quiescent = quiescent if quiescent is not None else {
+        "outside_read_errno": errno.EACCES, "outside_write_errno": errno.EACCES,
+        "inside_restored": True,
+    }
+    return ("ETAS_ISOLATION_SYMLINK_OPERATIONS " + json.dumps(counts) + "\n"
+            + "ETAS_ISOLATION_SYMLINK_QUIESCENT " + json.dumps(quiescent) + "\n")
 
 
 class InventoryTests(unittest.TestCase):
@@ -57,7 +75,7 @@ class InventoryTests(unittest.TestCase):
         calls = []
         def run(name, arguments):
             calls.append((name, arguments))
-            return f"test {SYMLINK_RACE} ... ok\n"
+            return f"test {SYMLINK_RACE} ... ok\n" + race_observations()
         report = {}
         repeat_symlink_probe(run, 4, report)
         self.assertEqual(report["symlink_repetitions_completed"], 4)
@@ -107,6 +125,54 @@ class InventoryTests(unittest.TestCase):
             with self.subTest(control=control), self.assertRaises(GateFailure):
                 verify_execution(portable + control, {PORTABLE, CALIBRATION})
         verify_execution(portable + f"test {CALIBRATION} ... ok\n", {PORTABLE, CALIBRATION})
+
+    def test_lookup_miss_is_counted_separately_and_never_as_a_denial(self):
+        counts = {
+            "reads": 2048, "writes": 2048, "denied_reads": 2047, "denied_writes": 2048,
+            "read_lookup_unavailable": 1, "write_lookup_unavailable": 0,
+            "errors": [{"stage": "read.open", "errno": errno.EACCES, "count": 2047},
+                       {"stage": "write.open", "errno": errno.EACCES, "count": 2048},
+                       {"stage": "read.open", "errno": errno.ENOENT, "count": 1}],
+        }
+        verify_race_observations(race_observations(counts))
+        counts["denied_reads"] = 0
+        counts["read_lookup_unavailable"] = 2048
+        with self.assertRaises(GateFailure):
+            verify_race_observations(race_observations(counts))
+
+    def test_post_open_errors_unknown_errno_and_static_lookup_misses_are_rejected(self):
+        for stage, error in [("read.fstat", errno.ENOENT), ("read.content", errno.EACCES),
+                             ("write.open", errno.EIO), ("read.open", errno.EAGAIN)]:
+            counts = json.loads(race_observations().splitlines()[0].split(" ", 1)[1])
+            counts["errors"][0].update(stage=stage, errno=error)
+            with self.subTest(stage=stage, error=error), self.assertRaises(GateFailure):
+                verify_race_observations(race_observations(counts))
+        with self.assertRaises(GateFailure):
+            verify_race_observations(race_observations(quiescent={
+                "outside_read_errno": errno.ENOENT, "outside_write_errno": errno.EACCES,
+                "inside_restored": True,
+            }))
+
+    def test_missing_duplicate_or_malformed_observations_cannot_pass(self):
+        text = race_observations()
+        for invalid in ["", text + text, text.splitlines()[0],
+                        "ETAS_ISOLATION_SYMLINK_OPERATIONS {broken\n"]:
+            with self.subTest(text=invalid), self.assertRaises(GateFailure):
+                verify_race_observations(invalid)
+
+    def test_control_lookup_misses_do_not_replace_both_real_target_observations(self):
+        control = {"inside_reads": 50_000, "outside_reads": 49_999, "lookup_unavailable": 1,
+                   "swaps": 10_000, "cleanup": "settled", "failure": None}
+        def text():
+            return "ETAS_ISOLATION_SYMLINK_CONTROL " + json.dumps(control) + "\n"
+        verify_control_observations(text())
+        control.update(inside_reads=0, outside_reads=0, lookup_unavailable=100_000)
+        with self.assertRaises(GateFailure):
+            verify_control_observations(text())
+        control.update(inside_reads=50_000, outside_reads=50_000, lookup_unavailable=0,
+                       failure={"stage": "read.open", "errno": errno.EACCES})
+        with self.assertRaises(GateFailure):
+            verify_control_observations(text())
 
 
 if __name__ == "__main__":

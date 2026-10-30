@@ -3,6 +3,7 @@
 
 import argparse
 import ctypes
+import errno
 import hashlib
 import json
 import os
@@ -86,6 +87,69 @@ def verify_enforcement_evidence(text):
         raise GateFailure("no isolated cancellation/reap evidence was emitted")
 
 
+def observation(text, kind):
+    prefix = "ETAS_ISOLATION_SYMLINK_" + kind + " "
+    records = [line[len(prefix):] for line in text.splitlines() if line.startswith(prefix)]
+    if len(records) != 1:
+        raise GateFailure(f"expected one {kind} observation, got {len(records)}")
+    try:
+        value = json.loads(records[0])
+    except json.JSONDecodeError as error:
+        raise GateFailure(f"invalid {kind} observation") from error
+    if not isinstance(value, dict):
+        raise GateFailure(f"invalid {kind} observation object")
+    return value
+
+
+def verify_race_observations(text):
+    counts = observation(text, "OPERATIONS")
+    expected_errors = {}
+    for name, stage in [("reads", "read.open"), ("writes", "write.open")]:
+        denied = "denied_" + name
+        missing = name[:-1] + "_lookup_unavailable"
+        values = [counts.get(key) for key in [name, denied, missing]]
+        if any(type(value) is not int or value < 0 for value in values):
+            raise GateFailure("invalid race operation counters")
+        if sum(values) != 4096 or not counts[name] or not counts[denied]:
+            raise GateFailure("race must exercise inside successes and permission denials")
+        for error, count in [(errno.EACCES, counts[denied]), (errno.ENOENT, counts[missing])]:
+            if count:
+                expected_errors[(stage, error)] = count
+    errors = counts.get("errors")
+    if not isinstance(errors, list):
+        raise GateFailure("missing race error counts")
+    actual_errors = {}
+    for error in errors:
+        if not isinstance(error, dict) or not isinstance(error.get("stage"), str):
+            raise GateFailure("invalid race error counter")
+        if type(error.get("errno")) is not int or type(error.get("count")) is not int:
+            raise GateFailure("invalid race error counter types")
+        key = (error["stage"], error["errno"])
+        if key in actual_errors:
+            raise GateFailure("duplicate race error counter")
+        actual_errors[key] = error["count"]
+    if actual_errors != expected_errors:
+        raise GateFailure("unexpected syscall stage, errno or race error count")
+    quiescent = observation(text, "QUIESCENT")
+    denials = [quiescent.get(name) for name in ["outside_read_errno", "outside_write_errno"]]
+    if (any(type(value) is not int or value != errno.EACCES for value in denials)
+            or quiescent.get("inside_restored") is not True):
+        raise GateFailure("quiescent outside denial and inside restoration were not proved")
+
+
+def verify_control_observations(text):
+    control = observation(text, "CONTROL")
+    values = [control.get(name) for name in ["inside_reads", "outside_reads", "lookup_unavailable"]]
+    if any(type(value) is not int or value < 0 for value in values):
+        raise GateFailure("invalid unconfined control counters")
+    if sum(values) != 100_000 or not control["inside_reads"] or not control["outside_reads"]:
+        raise GateFailure("unconfined control did not exercise both target identities")
+    if (type(control.get("swaps")) is not int or control["swaps"] <= 2
+            or control.get("cleanup") != "settled"
+            or "failure" not in control or control["failure"] is not None):
+        raise GateFailure("unconfined control failed or did not settle")
+
+
 def repeat_symlink_probe(run, repetitions, report):
     report["symlink_repetitions_completed"] = 1  # The full enforcement invocation already ran it.
     for sample in range(1, repetitions):
@@ -93,6 +157,7 @@ def repeat_symlink_probe(run, repetitions, report):
             "--ignored", "--exact", SYMLINK_RACE, "--test-threads=1", "--show-output",
         ])
         verify_execution(text, {SYMLINK_RACE})
+        verify_race_observations(text)
         report["symlink_repetitions_completed"] += 1
 
 
@@ -154,9 +219,11 @@ def main():
         report["cleanup"] = "unconfirmed"
         ordinary = run("ordinary", ["--test-threads=1", "--show-output"])
         report["ordinary_results"] = verify_execution(ordinary, {PORTABLE, CALIBRATION})
+        verify_control_observations(ordinary)
         enforced = run("enforcement", ["--ignored", "landlock_", "--test-threads=1", "--show-output"])
         report["test_results"] = verify_execution(enforced, listed)
         verify_enforcement_evidence(enforced)
+        verify_race_observations(enforced)
         repeat_symlink_probe(run, args.symlink_repetitions, report)
         report.update(status="passed", cleanup="settled")
     except (GateFailure, OSError) as error:

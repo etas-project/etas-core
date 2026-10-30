@@ -10,11 +10,57 @@ use serde_json::json;
 
 #[derive(Debug)]
 pub(super) struct Failure {
-    pub stage: &'static str,
+    pub stage: Stage,
     pub error: io::Error,
 }
 
-fn stage<T>(name: &'static str, result: io::Result<T>) -> Result<T, Failure> {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub(super) enum Stage {
+    #[serde(rename = "read.open")]
+    ReadOpen,
+    #[serde(rename = "read.fstat")]
+    ReadStat,
+    #[serde(rename = "read.content")]
+    ReadContent,
+    #[serde(rename = "write.open")]
+    WriteOpen,
+    #[serde(rename = "write.fstat")]
+    WriteStat,
+    #[serde(rename = "write.content")]
+    WriteContent,
+    #[serde(rename = "control.wait_for_racing")]
+    ControlWait,
+    #[serde(rename = "control.identity")]
+    ControlIdentity,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum FailureClass {
+    AccessDenied,
+    LookupUnavailable,
+    Unexpected,
+}
+
+impl Failure {
+    fn classify(&self) -> FailureClass {
+        // A racing lookup miss produced no descriptor; it is not evidence of
+        // permission denial. Stable outside probes still require EACCES.
+        if !matches!(self.stage, Stage::ReadOpen | Stage::WriteOpen) {
+            return FailureClass::Unexpected;
+        }
+        match self.error.raw_os_error() {
+            Some(libc::EACCES) => FailureClass::AccessDenied,
+            Some(libc::ENOENT) => FailureClass::LookupUnavailable,
+            _ => FailureClass::Unexpected,
+        }
+    }
+
+    pub fn is_lookup_miss(&self) -> bool {
+        self.classify() == FailureClass::LookupUnavailable
+    }
+}
+
+fn stage<T>(name: Stage, result: io::Result<T>) -> Result<T, Failure> {
     result.map_err(|error| Failure { stage: name, error })
 }
 
@@ -33,20 +79,20 @@ fn identity(file: &File) -> io::Result<Identity> {
 }
 
 pub(super) fn read_through(link: &Path) -> Result<(Identity, String), Failure> {
-    let mut file = stage("read.open", File::open(link.join("readable")))?;
-    let identity = stage("read.fstat", identity(&file))?;
+    let mut file = stage(Stage::ReadOpen, File::open(link.join("readable")))?;
+    let identity = stage(Stage::ReadStat, identity(&file))?;
     let mut text = String::new();
-    stage("read.content", file.read_to_string(&mut text))?;
+    stage(Stage::ReadContent, file.read_to_string(&mut text))?;
     Ok((identity, text))
 }
 
 pub(super) fn write_through(link: &Path) -> Result<Identity, Failure> {
     let mut file = stage(
-        "write.open",
+        Stage::WriteOpen,
         OpenOptions::new().write(true).open(link.join("writable")),
     )?;
-    let identity = stage("write.fstat", identity(&file))?;
-    stage("write.content", file.write_all(b"inside"))?;
+    let identity = stage(Stage::WriteStat, identity(&file))?;
+    stage(Stage::WriteContent, file.write_all(b"inside"))?;
     Ok(identity)
 }
 
@@ -54,19 +100,24 @@ pub(super) fn write_through(link: &Path) -> Result<Identity, Failure> {
 pub(super) struct Observations {
     pub reads: usize,
     pub writes: usize,
+    pub denied_reads: usize,
+    pub denied_writes: usize,
+    read_lookup_unavailable: usize,
+    write_lookup_unavailable: usize,
     errors: Vec<ErrorCount>,
 }
 
 #[derive(Serialize)]
 struct ErrorCount {
-    stage: &'static str,
+    stage: Stage,
     errno: Option<i32>,
     count: usize,
 }
 
 impl Observations {
-    pub fn denied(&mut self, iteration: usize, link: &Path, failure: Failure) {
+    pub fn observe_racing_failure(&mut self, iteration: usize, link: &Path, failure: Failure) {
         let errno = failure.error.raw_os_error();
+        let class = failure.classify();
         if let Some(entry) = self
             .errors
             .iter_mut()
@@ -80,7 +131,16 @@ impl Observations {
                 count: 1,
             });
         }
-        if errno != Some(libc::EACCES) {
+        match (&class, failure.stage) {
+            (FailureClass::AccessDenied, Stage::ReadOpen) => self.denied_reads += 1,
+            (FailureClass::AccessDenied, Stage::WriteOpen) => self.denied_writes += 1,
+            (FailureClass::LookupUnavailable, Stage::ReadOpen) => self.read_lookup_unavailable += 1,
+            (FailureClass::LookupUnavailable, Stage::WriteOpen) => {
+                self.write_lookup_unavailable += 1
+            }
+            _ => {}
+        }
+        if class == FailureClass::Unexpected {
             self.print();
             // These are post-error observations, not an atomic description of
             // the link at the time of the failed lookup.
@@ -98,10 +158,10 @@ impl Observations {
                 })
             );
         }
-        assert_eq!(
-            errno,
-            Some(libc::EACCES),
-            "unexpected error at {} iteration {iteration}",
+        assert_ne!(
+            class,
+            FailureClass::Unexpected,
+            "unexpected errno {errno:?} at {:?} iteration {iteration}",
             failure.stage
         );
     }
@@ -138,8 +198,40 @@ pub(super) fn print_environment(inside: &Path, outside: &Path) {
 fn read_failure_preserves_the_open_stage_and_kernel_errno() {
     let fixture = etas_host::TestWorkspace::create("symlink-observation-missing").unwrap();
     let failure = read_through(fixture.path()).unwrap_err();
-    assert_eq!(failure.stage, "read.open");
+    assert_eq!(failure.stage, Stage::ReadOpen);
     assert_eq!(failure.error.raw_os_error(), Some(libc::ENOENT));
+}
+
+#[test]
+fn lookup_unavailability_is_not_a_permission_denial_or_a_post_open_error() {
+    for stage in [
+        Stage::ReadOpen,
+        Stage::ReadStat,
+        Stage::ReadContent,
+        Stage::WriteOpen,
+        Stage::WriteStat,
+        Stage::WriteContent,
+    ] {
+        let open = matches!(stage, Stage::ReadOpen | Stage::WriteOpen);
+        for errno in [
+            libc::ENOENT,
+            libc::EACCES,
+            libc::EIO,
+            libc::EAGAIN,
+            libc::EBADF,
+        ] {
+            let failure = Failure {
+                stage,
+                error: io::Error::from_raw_os_error(errno),
+            };
+            let expected = match (open, errno) {
+                (true, libc::ENOENT) => FailureClass::LookupUnavailable,
+                (true, libc::EACCES) => FailureClass::AccessDenied,
+                _ => FailureClass::Unexpected,
+            };
+            assert_eq!(failure.classify(), expected, "{stage:?}: {errno}");
+        }
+    }
 }
 
 #[test]

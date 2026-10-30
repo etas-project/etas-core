@@ -35,12 +35,23 @@ impl Racer {
             }
             let deadline = Instant::now() + Duration::from_secs(10);
             let mut swaps = 0;
-            while !stopped.load(Ordering::Acquire) && Instant::now() < deadline {
+            while !stopped.load(Ordering::Acquire)
+                && Instant::now() < deadline
+                && !root.join("race-checked").exists()
+            {
                 replace(&root, &inside);
                 replace(&root, &outside);
                 swaps += 2;
                 if swaps == 2 {
                     fs::write(root.join("racing"), "ready").unwrap();
+                }
+            }
+            if !stopped.load(Ordering::Acquire) && root.join("race-checked").exists() {
+                replace(&root, &outside);
+                fs::write(root.join("outside-final"), "ready").unwrap();
+                if wait_for(&root.join("outside-rechecked"), &stopped) {
+                    replace(&root, &inside);
+                    fs::write(root.join("inside-final"), "ready").unwrap();
                 }
             }
             swaps
@@ -146,7 +157,7 @@ pub(super) fn probe() {
                 assert_eq!(text, "inside", "outside data escaped confinement");
                 observations.reads += 1;
             }
-            Err(error) => observations.denied(iteration, &link, error),
+            Err(error) => observations.observe_racing_failure(iteration, &link, error),
         }
         match write_through(&link) {
             Ok(identity) => {
@@ -156,10 +167,31 @@ pub(super) fn probe() {
                 );
                 observations.writes += 1;
             }
-            Err(error) => observations.denied(iteration, &link, error),
+            Err(error) => observations.observe_racing_failure(iteration, &link, error),
         }
     }
     observations.print();
+    assert!(observations.reads > 0 && observations.writes > 0);
+    assert!(observations.denied_reads > 0 && observations.denied_writes > 0);
+    fs::write(root.join("race-checked"), "ready").unwrap();
+    assert!(wait_for(&root.join("outside-final"), &stop));
+    let outside_read = read_through(&link).unwrap_err().error.raw_os_error();
+    let outside_write = write_through(&link).unwrap_err().error.raw_os_error();
+    assert_eq!(outside_read, Some(libc::EACCES));
+    assert_eq!(outside_write, Some(libc::EACCES));
+    fs::write(root.join("outside-rechecked"), "ready").unwrap();
+    assert!(wait_for(&root.join("inside-final"), &stop));
+    let (identity, text) = read_through(&link).unwrap();
+    assert_eq!(identity, inside_read);
+    assert_eq!(text, "inside");
+    assert_eq!(write_through(&link).unwrap(), inside_write);
+    println!(
+        "\nETAS_ISOLATION_SYMLINK_QUIESCENT {}",
+        serde_json::json!({
+            "outside_read_errno": outside_read, "outside_write_errno": outside_write,
+            "inside_restored": true,
+        })
+    );
 }
 
 pub(super) fn unconfined_control() {
@@ -182,22 +214,30 @@ pub(super) fn unconfined_control() {
     let ready = wait_for(&fixture.path().join("racing"), &AtomicBool::new(false));
     let mut inside_reads = 0;
     let mut outside_reads = 0;
+    let mut lookup_unavailable = 0;
     let result = (|| {
         if !ready {
             return Err(observation::Failure {
-                stage: "control.wait_for_racing",
+                stage: observation::Stage::ControlWait,
                 error: std::io::Error::new(std::io::ErrorKind::TimedOut, "racer did not start"),
             });
         }
         for _ in 0..100_000 {
-            let (identity, text) = read_through(&link)?;
+            let (identity, text) = match read_through(&link) {
+                Ok(value) => value,
+                Err(failure) if failure.is_lookup_miss() => {
+                    lookup_unavailable += 1;
+                    continue;
+                }
+                Err(failure) => return Err(failure),
+            };
             if identity == inside_id && text == "inside" {
                 inside_reads += 1;
             } else if identity == outside_id && text == "outside" {
                 outside_reads += 1;
             } else {
                 return Err(observation::Failure {
-                    stage: "control.identity",
+                    stage: observation::Stage::ControlIdentity,
                     error: std::io::Error::other("descriptor or content differs from both targets"),
                 });
             }
@@ -208,7 +248,8 @@ pub(super) fn unconfined_control() {
     println!(
         "ETAS_ISOLATION_SYMLINK_CONTROL {}",
         serde_json::json!({
-            "inside_reads": inside_reads, "outside_reads": outside_reads, "swaps": swaps,
+        "inside_reads": inside_reads, "outside_reads": outside_reads, "swaps": swaps,
+        "lookup_unavailable": lookup_unavailable,
             "failure": result.as_ref().err().map(|failure| serde_json::json!({
                 "stage": failure.stage, "errno": failure.error.raw_os_error(),
             })),
