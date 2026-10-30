@@ -10,6 +10,7 @@ pub mod model;
 pub mod network;
 mod network_address;
 pub mod policy;
+pub mod replay;
 pub mod sandbox;
 pub mod secret;
 pub mod session;

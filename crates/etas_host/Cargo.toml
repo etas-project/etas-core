@@ -1,6 +1,6 @@
 [package]
 name = "etas_host"
-version = "0.1.2"
+version = "0.1.3"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -14,6 +14,7 @@ etas_core.workspace = true
 etas_code.workspace = true
 etas_std.workspace = true
 getrandom.workspace = true
+zeroize.workspace = true
 libc.workspace = true
 reqwest.workspace = true
 rustls.workspace = true
