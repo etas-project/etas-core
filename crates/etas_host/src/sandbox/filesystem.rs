@@ -106,7 +106,7 @@ impl FilesystemSandbox {
             .map_err(workspace_io_error)?;
         if !file.metadata().map_err(workspace_io_error)?.is_file() {
             return Err(HostError::new(
-                HostErrorCode::InvalidRequest,
+                HostErrorCode::IoFailure,
                 "workspace read target is not a file",
             ));
         }
@@ -236,7 +236,7 @@ impl FilesystemSandbox {
         let metadata = parent.symlink_metadata(&name).map_err(workspace_io_error)?;
         if !metadata.is_file() && !metadata.is_symlink() {
             return Err(HostError::new(
-                HostErrorCode::InvalidRequest,
+                HostErrorCode::IoFailure,
                 "workspace delete target is not a file",
             ));
         }
