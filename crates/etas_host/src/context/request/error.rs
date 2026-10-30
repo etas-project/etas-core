@@ -43,6 +43,8 @@ pub enum HostErrorCode {
     ToolUnavailable,
     InvalidRequest,
     InvalidResponse,
+    /// A failed resource I/O operation, not an authority, protocol, or execution-control error.
+    IoFailure,
     SchemaMismatch,
     BudgetExceeded,
     AuthorityDenied,
@@ -61,6 +63,7 @@ impl HostErrorCode {
             Self::ToolUnavailable => "ToolUnavailable",
             Self::InvalidRequest => "InvalidRequest",
             Self::InvalidResponse => "InvalidResponse",
+            Self::IoFailure => "IoFailure",
             Self::SchemaMismatch => "SchemaMismatch",
             Self::BudgetExceeded => "BudgetExceeded",
             Self::AuthorityDenied => "AuthorityDenied",

@@ -455,6 +455,48 @@ async fn local_filesystem_client_stats_and_atomic_replaces_under_workspace_polic
 }
 
 #[tokio::test]
+async fn local_filesystem_missing_stat_distinguishes_io_failure_from_authority_denial() {
+    let workspace = TestWorkspace::create("missing-stat-error-contract").unwrap();
+    let root = workspace.root().unwrap();
+    let (adapter, region) = fs_adapter(root.clone());
+    for authorized in [false, true] {
+        let mut authority = fs_authority(root.clone());
+        authority.grants = if authorized {
+            vec![HostActionGrant::allow("Fs", "stat")]
+        } else {
+            vec![]
+        };
+        authority.sandbox.filesystem = etas_host::FilesystemPolicy {
+            read_roots: vec![root.clone()],
+            write_roots: vec![],
+            delete_roots: vec![],
+        };
+        let response = adapter
+            .execute(FilesystemRequest {
+                id: HostRequestId(62),
+                operation: FilesystemOperation::Stat {
+                    path: WorkspacePathRef::new(region.clone(), "missing.txt").unwrap(),
+                },
+                authority,
+                trace: TraceContext::root(TraceId(62)),
+                budget: Default::default(),
+            })
+            .await
+            .unwrap();
+        let error = response.result.unwrap_err();
+        assert_eq!(
+            error.code.as_str(),
+            if authorized {
+                "IoFailure"
+            } else {
+                "AuthorityDenied"
+            },
+            "{error}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn tcp_client_rejects_unallowlisted_endpoint_before_provider_lookup() {
     let adapter = UnavailableTcpClient;
     let response = adapter
