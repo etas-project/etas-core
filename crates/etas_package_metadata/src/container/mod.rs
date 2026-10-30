@@ -12,7 +12,7 @@ use crate::MetadataArtifactError;
 
 pub const PACKAGE_METADATA_FILE: &str = ".etas/package.etasmeta";
 pub const MAGIC: &[u8; 8] = b"ETASMETA";
-pub const ARTIFACT_SCHEMA_VERSION: u32 = 13;
+pub const ARTIFACT_SCHEMA_VERSION: u32 = 14;
 pub const COMPRESSION_ZSTD: u8 = 1;
 const SECTION_TABLE_ENTRY_SIZE: usize = 2 + 1 + 8 + 8 + 8 + 32;
 pub const MAX_METADATA_ARTIFACT_SIZE: usize = 64 * 1024 * 1024;

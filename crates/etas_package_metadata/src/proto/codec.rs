@@ -1350,7 +1350,7 @@ fn callable_spec_satisfaction_to_proto(
     fact: &CallableSpecSatisfaction,
 ) -> ProtoCallableSpecSatisfaction {
     ProtoCallableSpecSatisfaction {
-        item: fact.item.clone(),
+        item: Some(callable_contract_target_to_proto(&fact.item)),
         spec: fact.spec.clone(),
         args: fact.args.iter().map(type_to_proto).collect(),
     }
@@ -1360,7 +1360,7 @@ fn callable_spec_satisfaction_from_proto(
     fact: ProtoCallableSpecSatisfaction,
 ) -> Result<CallableSpecSatisfaction, MetadataArtifactError> {
     Ok(CallableSpecSatisfaction {
-        item: required_path(fact.item, "callable spec satisfaction item path")?,
+        item: callable_contract_target_from_proto(fact.item)?,
         spec: required_path(fact.spec, "callable spec satisfaction spec path")?,
         args: fact
             .args
@@ -1373,13 +1373,13 @@ fn callable_spec_satisfaction_from_proto(
 fn trace_spec_conformance_to_proto(fact: &TraceSpecConformance) -> ProtoTraceSpecConformance {
     match &fact.target {
         TraceSpecConformanceTarget::Inline => ProtoTraceSpecConformance {
-            item: fact.item.clone(),
+            item: Some(callable_contract_target_to_proto(&fact.item)),
             target_kind: "inline".to_owned(),
             spec: Vec::new(),
             args: Vec::new(),
         },
         TraceSpecConformanceTarget::Named { spec, args } => ProtoTraceSpecConformance {
-            item: fact.item.clone(),
+            item: Some(callable_contract_target_to_proto(&fact.item)),
             target_kind: "named".to_owned(),
             spec: spec.clone(),
             args: args.iter().map(type_to_proto).collect(),
@@ -1390,7 +1390,7 @@ fn trace_spec_conformance_to_proto(fact: &TraceSpecConformance) -> ProtoTraceSpe
 fn trace_spec_conformance_from_proto(
     fact: ProtoTraceSpecConformance,
 ) -> Result<TraceSpecConformance, MetadataArtifactError> {
-    let item = required_path(fact.item, "trace spec conformance item path")?;
+    let item = callable_contract_target_from_proto(fact.item)?;
     let target = match fact.target_kind.as_str() {
         "inline" | "" if fact.spec.is_empty() => TraceSpecConformanceTarget::Inline,
         "named" => TraceSpecConformanceTarget::Named {
@@ -1408,6 +1408,39 @@ fn trace_spec_conformance_from_proto(
         }
     };
     Ok(TraceSpecConformance { item, target })
+}
+
+fn callable_contract_target_to_proto(
+    target: &crate::CallableContractTarget,
+) -> ProtoCallableContractTarget {
+    match target {
+        crate::CallableContractTarget::Item(path) => ProtoCallableContractTarget {
+            path: path.clone(),
+            method: None,
+        },
+        crate::CallableContractTarget::Method(method) => ProtoCallableContractTarget {
+            path: Vec::new(),
+            method: Some(super::descriptors::encode_method_identity(method)),
+        },
+    }
+}
+
+fn callable_contract_target_from_proto(
+    target: Option<ProtoCallableContractTarget>,
+) -> Result<crate::CallableContractTarget, MetadataArtifactError> {
+    let target = target.ok_or_else(|| invalid("missing callable contract identity"))?;
+    match (target.path.is_empty(), target.method) {
+        (false, None) => Ok(crate::CallableContractTarget::Item(required_path(
+            target.path,
+            "callable contract item path",
+        )?)),
+        (true, Some(method)) => Ok(crate::CallableContractTarget::Method(
+            super::descriptors::decode_method_identity(method)?,
+        )),
+        _ => Err(invalid(
+            "callable contract requires exactly one item or method identity",
+        )),
+    }
 }
 
 fn action_signature_to_proto(signature: &ActionSignature) -> ProtoActionSignature {

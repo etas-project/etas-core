@@ -1,4 +1,6 @@
+mod callable_contracts;
 mod callable_values;
+pub use callable_contracts::CallableContractTarget;
 pub mod container;
 pub mod error;
 pub mod model;

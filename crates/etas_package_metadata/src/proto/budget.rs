@@ -99,6 +99,30 @@ struct ModelGraphValidator {
 }
 
 impl ModelGraphValidator {
+    fn callable_contract(
+        &mut self,
+        target: &crate::CallableContractTarget,
+        methods: &std::collections::BTreeMap<&etas_code::MethodId, &SpecImplMethod>,
+    ) -> Result<(), MetadataArtifactError> {
+        match target {
+            crate::CallableContractTarget::Item(path) => {
+                self.budget.charge(path.len(), "callable contract path")?;
+                if path.is_empty() || path.iter().any(String::is_empty) {
+                    return Err(invalid("callable contract has an empty declaration path"));
+                }
+            }
+            crate::CallableContractTarget::Method(identity) => {
+                super::descriptors::validate_model_method_identity(identity, &mut self.budget)?;
+                if !methods.contains_key(identity) {
+                    return Err(invalid(
+                        "callable contract method requires one published implementation owner",
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn dependency(
         &mut self,
         dependency: &ResolvedDependency,
@@ -195,12 +219,20 @@ impl ModelGraphValidator {
                 self.spec_bound(bound)?;
             }
         }
+        let mut methods = std::collections::BTreeMap::<_, &SpecImplMethod>::new();
         for implementation in &metadata.spec_impls {
             self.ty(&implementation.self_type, 0)?;
             for arg in &implementation.args {
                 self.ty(arg, 0)?;
             }
             for method in &implementation.methods {
+                if let Some(previous) = methods.insert(&method.identity, method)
+                    && previous.callable != method.callable
+                {
+                    return Err(invalid(
+                        "method identity has conflicting published behavior graphs",
+                    ));
+                }
                 super::descriptors::validate_model_method_identity(
                     &method.identity,
                     &mut self.budget,
@@ -217,11 +249,13 @@ impl ModelGraphValidator {
             }
         }
         for satisfaction in &metadata.callable_spec_satisfactions {
+            self.callable_contract(&satisfaction.item, &methods)?;
             for arg in &satisfaction.args {
                 self.ty(arg, 0)?;
             }
         }
         for conformance in &metadata.trace_spec_conformances {
+            self.callable_contract(&conformance.item, &methods)?;
             if let TraceSpecConformanceTarget::Named { args, .. } = &conformance.target {
                 for arg in args {
                     self.ty(arg, 0)?;
@@ -435,6 +469,24 @@ struct ProtoGraphValidator {
 }
 
 impl ProtoGraphValidator {
+    fn callable_contract(
+        &mut self,
+        target: Option<&proto::ProtoCallableContractTarget>,
+    ) -> Result<(), MetadataArtifactError> {
+        let target = target.ok_or_else(|| invalid("missing callable contract identity"))?;
+        match (target.path.is_empty(), target.method.as_ref()) {
+            (false, None) => self
+                .budget
+                .charge(target.path.len(), "callable contract path"),
+            (true, Some(method)) => {
+                super::descriptors::validate_method_identity(method, &mut self.budget)
+            }
+            _ => Err(invalid(
+                "callable contract requires exactly one item or method identity",
+            )),
+        }
+    }
+
     fn dependency(
         &mut self,
         dependency: &proto::ProtoResolvedDependency,
@@ -556,11 +608,13 @@ impl ProtoGraphValidator {
             }
         }
         for satisfaction in &metadata.callable_spec_satisfactions {
+            self.callable_contract(satisfaction.item.as_ref())?;
             for arg in &satisfaction.args {
                 self.ty(arg, 0)?;
             }
         }
         for conformance in &metadata.trace_spec_conformances {
+            self.callable_contract(conformance.item.as_ref())?;
             for arg in &conformance.args {
                 self.ty(arg, 0)?;
             }
