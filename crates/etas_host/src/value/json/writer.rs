@@ -21,6 +21,49 @@ struct JsonWriter {
 }
 
 impl JsonWriter {
+    fn text<'a>(
+        &mut self,
+        byte_len: usize,
+        chunks: impl IntoIterator<Item = &'a str>,
+    ) -> Result<(), HostError> {
+        use serde_json::ser::{CharEscape, CompactFormatter, Formatter};
+
+        let mut length = crate::value::projection::text::TextLength::new(byte_len)?;
+        let mut formatter = CompactFormatter;
+        let encode = |error: std::io::Error| json_number_error(error.to_string());
+        formatter.begin_string(&mut self.output).map_err(encode)?;
+        for chunk in chunks {
+            length.consume(chunk)?;
+            let mut start = 0;
+            for (index, byte) in chunk.bytes().enumerate() {
+                let escape = match byte {
+                    b'"' => CharEscape::Quote,
+                    b'\\' => CharEscape::ReverseSolidus,
+                    b'\x08' => CharEscape::Backspace,
+                    b'\x0c' => CharEscape::FormFeed,
+                    b'\n' => CharEscape::LineFeed,
+                    b'\r' => CharEscape::CarriageReturn,
+                    b'\t' => CharEscape::Tab,
+                    0..=0x1f => CharEscape::AsciiControl(byte),
+                    _ => continue,
+                };
+                // Only ASCII bytes split the fragment, so every boundary is UTF-8 safe.
+                formatter
+                    .write_string_fragment(&mut self.output, &chunk[start..index])
+                    .map_err(encode)?;
+                formatter
+                    .write_char_escape(&mut self.output, escape)
+                    .map_err(encode)?;
+                start = index + 1;
+            }
+            formatter
+                .write_string_fragment(&mut self.output, &chunk[start..])
+                .map_err(encode)?;
+        }
+        length.finish()?;
+        formatter.end_string(&mut self.output).map_err(encode)
+    }
+
     fn scalar(&mut self, value: &(impl Serialize + ?Sized)) -> Result<(), HostError> {
         serde_json::to_writer(&mut self.output, value)
             .map_err(|error| json_number_error(error.to_string()))
@@ -74,6 +117,14 @@ impl JsonWriter {
 
 impl HostValueVisitor for &mut JsonWriter {
     type Output = ();
+
+    fn text<'a>(
+        self,
+        byte_len: usize,
+        chunks: impl IntoIterator<Item = &'a str>,
+    ) -> Result<(), HostError> {
+        JsonWriter::text(self, byte_len, chunks)
+    }
 
     fn scalar(self, value: HostScalar<'_>) -> Result<(), HostError> {
         match value {
@@ -144,6 +195,13 @@ impl HostValueVisitor for &mut JsonWriter {
 
 impl HostJsonVisitor for &mut JsonWriter {
     type Output = ();
+    fn text<'a>(
+        self,
+        byte_len: usize,
+        chunks: impl IntoIterator<Item = &'a str>,
+    ) -> Result<(), HostError> {
+        JsonWriter::text(self, byte_len, chunks)
+    }
     fn null(self) -> Result<(), HostError> {
         JsonWriter::scalar(self, &())
     }
