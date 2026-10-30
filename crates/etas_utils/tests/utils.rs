@@ -106,6 +106,33 @@ fn fixpoint_engine_reports_convergence_and_iteration_limits() {
 }
 
 #[test]
+fn apply_transfers_runs_every_transfer_in_order_even_after_an_earlier_change() {
+    for (limit, iterations, status) in [
+        (1, 1, ConvergenceStatus::IterationLimitReached),
+        (3, 2, ConvergenceStatus::Converged),
+    ] {
+        let calls = Rc::new(RefCell::new(Vec::new()));
+        let transfers = (0..3).map(|index| {
+            let calls = Rc::clone(&calls);
+            move |state: &mut BTreeSet<usize>| {
+                calls.borrow_mut().push(index);
+                state.insert(index)
+            }
+        });
+        let result = FixpointEngine::new(IterationLimit::new(limit))
+            .apply_transfers(BTreeSet::new(), transfers);
+        assert_eq!(result.value, BTreeSet::from([0, 1, 2]));
+        assert_eq!(result.status, status);
+        assert_eq!(result.stats.iterations, iterations);
+        assert_eq!(result.stats.changes, 1);
+        assert_eq!(
+            *calls.borrow(),
+            (0..iterations).flat_map(|_| 0..3).collect::<Vec<_>>()
+        );
+    }
+}
+
+#[test]
 fn worklist_fixpoint_reschedules_successors_on_change() {
     let g = graph(&[("a", &["b"]), ("b", &["c"]), ("c", &[])]);
     let engine = FixpointEngine::default();

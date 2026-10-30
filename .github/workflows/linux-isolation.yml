@@ -34,7 +34,9 @@ jobs:
           SYMLINK_REPETITIONS: ${{ inputs.symlink_repetitions }}
         run: python3 -B scripts/linux_isolation_gate.py --symlink-repetitions "${SYMLINK_REPETITIONS:-1}"
       - name: Check Linux-only test code
-        run: cargo clippy --locked -p etas_host --test landlock --all-features -- -D warnings
+        run: |
+          cargo test --locked -p etas_utils
+          cargo clippy --locked -p etas_host --test landlock --all-features -- -D warnings
       - name: Preserve platform and enforcement evidence
         if: always()
         uses: actions/upload-artifact@v4
