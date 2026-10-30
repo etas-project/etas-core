@@ -96,6 +96,16 @@ pub(super) fn write_through(link: &Path) -> Result<Identity, Failure> {
     Ok(identity)
 }
 
+pub(super) fn assert_outside_denied(link: &Path) -> (Option<i32>, Option<i32>) {
+    let read = read_through(link).unwrap_err();
+    let write = write_through(link).unwrap_err();
+    assert_eq!(read.stage, Stage::ReadOpen);
+    assert_eq!(write.stage, Stage::WriteOpen);
+    assert_eq!(read.classify(), FailureClass::AccessDenied);
+    assert_eq!(write.classify(), FailureClass::AccessDenied);
+    (read.error.raw_os_error(), write.error.raw_os_error())
+}
+
 #[derive(Default, Serialize)]
 pub(super) struct Observations {
     pub reads: usize,

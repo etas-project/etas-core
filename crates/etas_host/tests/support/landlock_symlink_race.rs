@@ -136,14 +136,7 @@ pub(super) fn probe() {
     fs::write(root.join("ready"), "ready").unwrap();
     let stop = AtomicBool::new(false);
     assert!(wait_for(&root.join("outside-ready"), &stop));
-    assert_eq!(
-        read_through(&link).unwrap_err().error.raw_os_error(),
-        Some(libc::EACCES)
-    );
-    assert_eq!(
-        write_through(&link).unwrap_err().error.raw_os_error(),
-        Some(libc::EACCES)
-    );
+    let _ = observation::assert_outside_denied(&link);
     fs::write(root.join("outside-checked"), "ready").unwrap();
     assert!(wait_for(&root.join("racing"), &stop));
     let mut observations = Observations::default();
@@ -175,10 +168,7 @@ pub(super) fn probe() {
     assert!(observations.denied_reads > 0 && observations.denied_writes > 0);
     fs::write(root.join("race-checked"), "ready").unwrap();
     assert!(wait_for(&root.join("outside-final"), &stop));
-    let outside_read = read_through(&link).unwrap_err().error.raw_os_error();
-    let outside_write = write_through(&link).unwrap_err().error.raw_os_error();
-    assert_eq!(outside_read, Some(libc::EACCES));
-    assert_eq!(outside_write, Some(libc::EACCES));
+    let (outside_read, outside_write) = observation::assert_outside_denied(&link);
     fs::write(root.join("outside-rechecked"), "ready").unwrap();
     assert!(wait_for(&root.join("inside-final"), &stop));
     let (identity, text) = read_through(&link).unwrap();
