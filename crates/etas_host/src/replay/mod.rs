@@ -1,6 +1,7 @@
 mod directory;
 mod key;
 mod memory;
+mod seal;
 
 pub use directory::DirectoryReplayKeyProvider;
 pub use key::{ReplayFingerprint, ReplayKey, ReplayKeyId};

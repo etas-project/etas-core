@@ -261,7 +261,7 @@ dependencies = [
 
 [[package]]
 name = "etas_host"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "blake3",
  "cap-fs-ext",
@@ -274,6 +274,7 @@ dependencies = [
  "landlock",
  "libc",
  "reqwest",
+ "ring",
  "rusqlite",
  "rustls",
  "rustls-pki-types",
