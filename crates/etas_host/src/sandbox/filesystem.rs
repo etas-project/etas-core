@@ -265,6 +265,7 @@ pub(super) fn ensure_root_allowed(
 }
 
 pub(super) fn atomic_write_at(parent: &Dir, name: &Path, bytes: &[u8]) -> Result<(), HostError> {
+    let permissions = replacement_permissions(parent, name)?;
     let mut random = [0u8; 16];
     getrandom::fill(&mut random).map_err(|error| {
         HostError::new(
@@ -274,14 +275,27 @@ pub(super) fn atomic_write_at(parent: &Dir, name: &Path, bytes: &[u8]) -> Result
         .with_detail("error", error.to_string())
     })?;
     let temp = format!(".etas-tmp-{:032x}", u128::from_le_bytes(random));
+    let mut options = OpenOptions::new();
+    options.create_new(true).write(true);
+    #[cfg(unix)]
+    if let Some(permissions) = &permissions {
+        use cap_std::fs::{OpenOptionsExt, PermissionsExt};
+        // Never expose replacement content at a broader creation/umask mode.
+        options.mode(permissions.mode() & 0o600);
+    }
     let mut file = parent
-        .open_with(&temp, OpenOptions::new().create_new(true).write(true))
+        .open_with(&temp, &options)
         .map_err(workspace_io_error)?;
     let mut published = false;
     let result = (|| {
         #[cfg(test)]
         tests::atomic_stage("pre-write")?;
         file.write_all(bytes)?;
+        if let Some(permissions) = permissions {
+            #[cfg(test)]
+            tests::atomic_stage("pre-permissions")?;
+            file.set_permissions(permissions)?;
+        }
         file.sync_all()?;
         drop(file);
         #[cfg(test)]
@@ -306,6 +320,36 @@ pub(super) fn atomic_write_at(parent: &Dir, name: &Path, bytes: &[u8]) -> Result
         }
         error
     })
+}
+
+fn replacement_permissions(
+    parent: &Dir,
+    name: &Path,
+) -> Result<Option<cap_std::fs::Permissions>, HostError> {
+    let metadata = match parent.symlink_metadata(name) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(workspace_io_error(error).with_detail("publication", "unchanged"));
+        }
+    };
+    if !metadata.is_file() {
+        return Err(HostError::new(
+            HostErrorCode::InvalidRequest,
+            "atomic replacement target must be a regular file, not a symlink or directory",
+        )
+        .with_detail("publication", "unchanged"));
+    }
+    #[cfg(unix)]
+    {
+        use cap_std::fs::PermissionsExt;
+        // Preserve the observed rwx bits, not ownership, ACLs or set-ID bits.
+        Ok(Some(cap_std::fs::Permissions::from_mode(
+            metadata.permissions().mode() & 0o777,
+        )))
+    }
+    #[cfg(not(unix))]
+    Ok(None)
 }
 
 #[cfg(test)]

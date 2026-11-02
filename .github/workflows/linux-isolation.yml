@@ -37,6 +37,10 @@ jobs:
         run: |
           cargo test --locked -p etas_utils
           cargo clippy --locked -p etas_host --test landlock --all-features -- -D warnings
+      - name: Verify atomic replacement permissions
+        run: |
+          cargo test --locked -p etas_host --lib atomic_replace
+          cargo test --locked -p etas_host --test host_security local_filesystem_atomic_replace_preserves_unix_permissions
       - name: Preserve platform and enforcement evidence
         if: always()
         uses: actions/upload-artifact@v4

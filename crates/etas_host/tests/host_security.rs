@@ -454,6 +454,45 @@ async fn local_filesystem_client_stats_and_atomic_replaces_under_workspace_polic
     );
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn local_filesystem_atomic_replace_preserves_unix_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+    let workspace = TestWorkspace::create("fs-replace-modes").unwrap();
+    let root = workspace.root().unwrap();
+    let (adapter, region) = fs_adapter(root.clone());
+    let target = workspace.path().join("data");
+    for expected in [0o600, 0o700, 0o444] {
+        if target.exists() {
+            std::fs::remove_file(&target).unwrap();
+        }
+        std::fs::write(&target, b"old").unwrap();
+        std::fs::set_permissions(&target, std::fs::Permissions::from_mode(expected)).unwrap();
+        let mut authority = fs_authority(root.clone());
+        authority.sandbox.filesystem.read_roots.clear();
+        let response = adapter
+            .execute(FilesystemRequest {
+                id: HostRequestId(46),
+                operation: FilesystemOperation::AtomicReplace {
+                    path: WorkspacePathRef::new(region.clone(), "data").unwrap(),
+                    contents: b"new".to_vec(),
+                },
+                authority,
+                trace: TraceContext::root(TraceId(46)),
+                budget: etas_host::ExecutionBudget::default(),
+            })
+            .await
+            .unwrap();
+        assert_eq!(response.id, HostRequestId(46));
+        assert_eq!(response.result.unwrap(), FilesystemEntry::Unit);
+        assert_eq!(std::fs::read(&target).unwrap(), b"new");
+        assert_eq!(
+            std::fs::metadata(&target).unwrap().permissions().mode() & 0o7777,
+            expected
+        );
+    }
+}
+
 #[tokio::test]
 async fn local_filesystem_missing_stat_distinguishes_io_failure_from_authority_denial() {
     let workspace = TestWorkspace::create("missing-stat-error-contract").unwrap();

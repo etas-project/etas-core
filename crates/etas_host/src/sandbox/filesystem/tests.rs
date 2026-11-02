@@ -3,12 +3,23 @@ use crate::TestWorkspace;
 use std::cell::RefCell;
 use std::fs;
 
+#[cfg(unix)]
+mod atomic_mode;
+
+type AtomicObserver = Box<dyn FnMut(&'static str)>;
+
 thread_local! {
     static AFTER_RESOLUTION: RefCell<Option<Box<dyn FnOnce()>>> = RefCell::new(None);
     static ATOMIC_FAILURE: RefCell<Option<&'static str>> = const { RefCell::new(None) };
+    static ATOMIC_OBSERVER: RefCell<Option<AtomicObserver>> = RefCell::new(None);
 }
 
 pub(super) fn atomic_stage(stage: &'static str) -> std::io::Result<()> {
+    ATOMIC_OBSERVER.with(|slot| {
+        if let Some(observer) = slot.borrow_mut().as_mut() {
+            observer(stage);
+        }
+    });
     ATOMIC_FAILURE.with(|slot| {
         if *slot.borrow() == Some(stage) {
             slot.borrow_mut().take();
