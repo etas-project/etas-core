@@ -2,6 +2,10 @@ use std::{future::Future, pin::Pin};
 
 use serde_json::{Value, json};
 
+#[cfg(test)]
+#[path = "openai/response_tests.rs"]
+mod response_tests;
+
 use crate::{
     AuthConfig, HostError, HostErrorCode, HostValue, HttpTransport, ModelClient, ModelContent,
     ModelMessage, ModelProviderCapabilities, ModelRequest, ModelResponse, ModelRole, ModelToolCall,
@@ -543,8 +547,23 @@ fn decode_openai_chat_response(
 fn decode_openai_tool_calls(
     message: &Value,
 ) -> Result<(Vec<ModelContent>, Vec<ModelToolCall>), HostError> {
-    let Some(tool_calls) = message.get("tool_calls") else {
-        if let Some(function_call) = message.get("function_call") {
+    if message
+        .get("tool_calls")
+        .is_some_and(|value| !value.is_null())
+        && message
+            .get("function_call")
+            .is_some_and(|value| !value.is_null())
+    {
+        return Err(HostError::new(
+            HostErrorCode::InvalidResponse,
+            "OpenAI-compatible response contains both tool_calls and function_call",
+        ));
+    }
+    let Some(tool_calls) = message.get("tool_calls").filter(|value| !value.is_null()) else {
+        if let Some(function_call) = message
+            .get("function_call")
+            .filter(|value| !value.is_null())
+        {
             return decode_openai_legacy_function_call(function_call);
         }
         return Ok((Vec::new(), Vec::new()));
