@@ -13,7 +13,7 @@ pub use openai::{
     OpenAiTypedOutputEncoding,
 };
 pub use protocol::{
-    ModelContent, ModelCostUsage, ModelMessage, ModelName, ModelOptions, ModelProviderCapabilities,
-    ModelProviderId, ModelRequest, ModelResponse, ModelRole, ModelToolCall, ModelToolChoice,
-    ModelUsage,
+    ModelContent, ModelCostUsage, ModelMessage, ModelName, ModelOptions, ModelOutput,
+    ModelProviderCapabilities, ModelProviderId, ModelRequest, ModelResponse, ModelRole,
+    ModelToolCall, ModelToolChoice, ModelUsage,
 };

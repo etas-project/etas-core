@@ -169,13 +169,15 @@ fn model_protocol_adapter_preserves_boundary_context() {
 
     let response = ModelResponse {
         id: request.id,
-        message: ModelMessage {
-            role: ModelRole::Assistant,
-            content: vec![ModelContent::Text("ok".to_owned())],
-            tool_call_id: None,
+        result: Ok(etas_host::ModelOutput {
+            message: ModelMessage {
+                role: ModelRole::Assistant,
+                content: vec![ModelContent::Text("ok".to_owned())],
+                tool_call_id: None,
+                tool_calls: Vec::new(),
+            },
             tool_calls: Vec::new(),
-        },
-        tool_calls: Vec::new(),
+        }),
         usage: Some(ModelUsage {
             input_tokens: 2,
             output_tokens: 1,

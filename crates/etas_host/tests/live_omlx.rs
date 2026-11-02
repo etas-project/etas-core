@@ -127,6 +127,7 @@ fn live_auth() -> AuthConfig {
 }
 
 fn assert_non_empty_completion(response: ModelResponse) {
+    let response = response.result.expect("provider must complete generation");
     let text = response
         .message
         .content
