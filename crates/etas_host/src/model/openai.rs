@@ -2,11 +2,15 @@ use std::{future::Future, pin::Pin};
 
 use serde_json::{Value, json};
 
+#[cfg(test)]
+#[path = "openai/response_tests.rs"]
+mod response_tests;
+
 use crate::{
     AuthConfig, HostError, HostErrorCode, HostValue, HttpTransport, ModelClient, ModelContent,
-    ModelMessage, ModelProviderCapabilities, ModelRequest, ModelResponse, ModelRole, ModelToolCall,
-    ModelToolChoice, ModelUsage, PrivateResolutionPolicy, RetryPolicy, TransportTimeoutPolicy,
-    host_json_to_value, host_value_to_json, host_value_to_json_string,
+    ModelMessage, ModelOutput, ModelProviderCapabilities, ModelRequest, ModelResponse, ModelRole,
+    ModelToolCall, ModelToolChoice, ModelUsage, PrivateResolutionPolicy, RetryPolicy,
+    TransportTimeoutPolicy, host_json_to_value, host_value_to_json, host_value_to_json_string,
 };
 
 use super::tool_schema::{host_schema_to_json_schema, openai_legacy_functions, openai_tools};
@@ -496,17 +500,79 @@ fn decode_openai_chat_response(
         )
         .with_detail("error", error.to_string())
     })?;
-    let message = value
+    Ok(ModelResponse {
+        id,
+        usage: decode_openai_usage(&value)?,
+        result: decode_openai_output(&value),
+    })
+}
+
+fn decode_openai_output(value: &Value) -> Result<ModelOutput, HostError> {
+    let choice = value
         .get("choices")
         .and_then(Value::as_array)
         .and_then(|choices| choices.first())
-        .and_then(|choice| choice.get("message"))
+        .ok_or_else(|| {
+            HostError::new(
+                HostErrorCode::InvalidResponse,
+                "OpenAI-compatible response is missing choices[0]",
+            )
+        })?;
+    let reason = choice
+        .get("finish_reason")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            HostError::new(
+                HostErrorCode::InvalidResponse,
+                "OpenAI-compatible response is missing a non-null finish_reason",
+            )
+        })?;
+    match reason {
+        "stop" | "tool_calls" | "function_call" => {}
+        "length" => {
+            return Err(HostError::new(
+                HostErrorCode::IncompleteResponse,
+                "OpenAI-compatible generation is incomplete (finish_reason=length)",
+            ));
+        }
+        "content_filter" => {
+            return Err(HostError::new(
+                HostErrorCode::ProviderRejected,
+                "OpenAI-compatible generation was stopped by content filtering",
+            ));
+        }
+        _ => {
+            return Err(HostError::new(
+                HostErrorCode::InvalidResponse,
+                "OpenAI-compatible response has an unknown finish_reason",
+            ));
+        }
+    }
+    let message = choice
+        .get("message")
+        .filter(|message| message.is_object())
         .ok_or_else(|| {
             HostError::new(
                 HostErrorCode::InvalidResponse,
                 "OpenAI-compatible response is missing choices[0].message",
             )
         })?;
+    let has_tools = message
+        .get("tool_calls")
+        .and_then(Value::as_array)
+        .is_some_and(|calls| !calls.is_empty());
+    let has_function = message
+        .get("function_call")
+        .is_some_and(|value| !value.is_null());
+    if (reason == "stop" && (has_tools || has_function))
+        || (reason == "tool_calls" && !has_tools)
+        || (reason == "function_call" && !has_function)
+    {
+        return Err(HostError::new(
+            HostErrorCode::InvalidResponse,
+            "OpenAI-compatible finish_reason does not match its message payload",
+        ));
+    }
     let mut content = match message.get("content") {
         Some(Value::String(content)) if !content.is_empty() => {
             vec![ModelContent::Text(content.clone())]
@@ -527,8 +593,7 @@ fn decode_openai_chat_response(
             "OpenAI-compatible response contained no assistant content or tool calls",
         ));
     }
-    Ok(ModelResponse {
-        id,
+    Ok(ModelOutput {
         message: ModelMessage {
             role: ModelRole::Assistant,
             content,
@@ -536,15 +601,29 @@ fn decode_openai_chat_response(
             tool_calls: tool_calls.clone(),
         },
         tool_calls,
-        usage: decode_openai_usage(&value)?,
     })
 }
 
 fn decode_openai_tool_calls(
     message: &Value,
 ) -> Result<(Vec<ModelContent>, Vec<ModelToolCall>), HostError> {
-    let Some(tool_calls) = message.get("tool_calls") else {
-        if let Some(function_call) = message.get("function_call") {
+    if message
+        .get("tool_calls")
+        .is_some_and(|value| !value.is_null())
+        && message
+            .get("function_call")
+            .is_some_and(|value| !value.is_null())
+    {
+        return Err(HostError::new(
+            HostErrorCode::InvalidResponse,
+            "OpenAI-compatible response contains both tool_calls and function_call",
+        ));
+    }
+    let Some(tool_calls) = message.get("tool_calls").filter(|value| !value.is_null()) else {
+        if let Some(function_call) = message
+            .get("function_call")
+            .filter(|value| !value.is_null())
+        {
             return decode_openai_legacy_function_call(function_call);
         }
         return Ok((Vec::new(), Vec::new()));
@@ -1059,6 +1138,7 @@ mod tests {
     fn openai_output_tool_call_decodes_to_structured_model_content() {
         let body = json!({
             "choices": [{
+                "finish_reason": "tool_calls",
                 "message": {
                     "role": "assistant",
                     "content": null,
@@ -1077,6 +1157,7 @@ mod tests {
 
         let response =
             decode_openai_chat_response(HostRequestId(7), &body).expect("response decodes");
+        let response = response.result.expect("complete output");
         assert!(response.tool_calls.is_empty());
         assert_eq!(
             response.message.content,
@@ -1093,6 +1174,7 @@ mod tests {
     fn openai_legacy_function_call_decodes_to_tool_call() {
         let body = json!({
             "choices": [{
+                "finish_reason": "function_call",
                 "message": {
                     "role": "assistant",
                     "content": null,
@@ -1107,6 +1189,7 @@ mod tests {
 
         let response =
             decode_openai_chat_response(HostRequestId(7), &body).expect("response decodes");
+        let response = response.result.expect("complete output");
         assert_eq!(response.tool_calls.len(), 1);
         assert_eq!(response.tool_calls[0].id, "function-call-1");
         assert_eq!(response.tool_calls[0].tool, "host.echo");

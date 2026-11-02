@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 
 use crate::{
     AuthConfig, HostError, HostErrorCode, HttpTransport, ModelClient, ModelContent, ModelMessage,
-    ModelProviderCapabilities, ModelRequest, ModelResponse, ModelRole, ModelToolCall,
+    ModelOutput, ModelProviderCapabilities, ModelRequest, ModelResponse, ModelRole, ModelToolCall,
     ModelToolChoice, ModelUsage, PrivateResolutionPolicy, RetryPolicy, TransportTimeoutPolicy,
     host_json_to_value, host_value_to_json_string,
 };
@@ -326,6 +326,35 @@ fn decode_anthropic_messages_response(
         )
         .with_detail("error", error.to_string())
     })?;
+    Ok(ModelResponse {
+        id,
+        usage: decode_anthropic_usage(&value)?,
+        result: decode_anthropic_output(&value),
+    })
+}
+
+fn decode_anthropic_output(value: &Value) -> Result<ModelOutput, HostError> {
+    match value.get("stop_reason").and_then(Value::as_str) {
+        Some("end_turn" | "stop_sequence" | "tool_use") => {}
+        Some("max_tokens" | "pause_turn" | "model_context_window_exceeded") => {
+            return Err(HostError::new(
+                HostErrorCode::IncompleteResponse,
+                "Anthropic-compatible generation is incomplete",
+            ));
+        }
+        Some("refusal") => {
+            return Err(HostError::new(
+                HostErrorCode::ProviderRejected,
+                "Anthropic-compatible generation was refused",
+            ));
+        }
+        _ => {
+            return Err(HostError::new(
+                HostErrorCode::InvalidResponse,
+                "Anthropic-compatible response has a missing or unknown stop_reason",
+            ));
+        }
+    }
     let content_blocks = value
         .get("content")
         .and_then(Value::as_array)
@@ -390,8 +419,7 @@ fn decode_anthropic_messages_response(
             "Anthropic-compatible response contained no assistant content or tool calls",
         ));
     }
-    Ok(ModelResponse {
-        id,
+    Ok(ModelOutput {
         message: ModelMessage {
             role: ModelRole::Assistant,
             content,
@@ -399,7 +427,6 @@ fn decode_anthropic_messages_response(
             tool_calls: tool_calls.clone(),
         },
         tool_calls,
-        usage: decode_anthropic_usage(&value)?,
     })
 }
 
@@ -448,6 +475,35 @@ mod tests {
     use super::*;
 
     #[test]
+    fn stop_reason_is_checked_before_content_and_retains_usage() {
+        for (reason, code) in [
+            ("max_tokens", HostErrorCode::IncompleteResponse),
+            ("pause_turn", HostErrorCode::IncompleteResponse),
+            (
+                "model_context_window_exceeded",
+                HostErrorCode::IncompleteResponse,
+            ),
+            ("refusal", HostErrorCode::ProviderRejected),
+            ("unknown", HostErrorCode::InvalidResponse),
+        ] {
+            let body = json!({"stop_reason":reason,"content":[],"usage":{"input_tokens":10,"output_tokens":4}}).to_string();
+            let response = decode_anthropic_messages_response(HostRequestId(49), &body).unwrap();
+            assert_eq!(response.usage.unwrap().output_tokens, 4);
+            assert_eq!(response.result.unwrap_err().code, code);
+        }
+        for reason in ["end_turn", "stop_sequence"] {
+            let body = json!({"stop_reason":reason,"content":[{"type":"text","text":"complete"}]})
+                .to_string();
+            assert!(
+                decode_anthropic_messages_response(HostRequestId(49), &body)
+                    .unwrap()
+                    .result
+                    .is_ok()
+            );
+        }
+    }
+
+    #[test]
     fn anthropic_request_for_typed_output_uses_forced_output_tool() {
         let request = typed_request();
         let body = encode_anthropic_messages_request(&request).expect("request should encode");
@@ -464,6 +520,7 @@ mod tests {
     #[test]
     fn anthropic_output_tool_response_decodes_to_structured_model_content() {
         let body = json!({
+            "stop_reason": "tool_use",
             "content": [{
                 "type": "tool_use",
                 "id": "out-1",
@@ -475,6 +532,7 @@ mod tests {
 
         let response =
             decode_anthropic_messages_response(HostRequestId(7), &body).expect("response decodes");
+        let response = response.result.expect("complete output");
         assert!(response.tool_calls.is_empty());
         assert_eq!(
             response.message.content,

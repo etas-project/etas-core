@@ -56,10 +56,10 @@ pub use memory::{
 };
 pub use model::{
     AnthropicProtocolAdapter, AnthropicProviderRequest, AnthropicProviderResponse, ModelClient,
-    ModelContent, ModelCostUsage, ModelMessage, ModelName, ModelOptions, ModelProviderCapabilities,
-    ModelProviderId, ModelRequest, ModelResponse, ModelRole, ModelToolCall, ModelToolChoice,
-    ModelUsage, OmlxRequestOptions, OpenAiProtocolAdapter, OpenAiProviderRequest,
-    OpenAiProviderResponse, OpenAiTypedOutputEncoding,
+    ModelContent, ModelCostUsage, ModelMessage, ModelName, ModelOptions, ModelOutput,
+    ModelProviderCapabilities, ModelProviderId, ModelRequest, ModelResponse, ModelRole,
+    ModelToolCall, ModelToolChoice, ModelUsage, OmlxRequestOptions, OpenAiProtocolAdapter,
+    OpenAiProviderRequest, OpenAiProviderResponse, OpenAiTypedOutputEncoding,
 };
 pub use network::{
     LocalTcpClient, TcpClient, TcpConnectOperation, TcpConnectRequest, TcpConnectResponse,
