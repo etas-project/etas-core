@@ -97,19 +97,54 @@ fn execute_local_filesystem(
         FilesystemOperation::ReadDir { path } => {
             let region = path.region.clone();
             let parent = path.relative.clone();
-            let path = regions.bind(&path)?;
-            if path.relative.as_os_str().is_empty() {
-                return Err(HostError::new(
-                    HostErrorCode::InvalidRequest,
-                    "filesystem read_dir path must not be empty",
-                ));
-            }
+            let path = regions.bind_directory(&path)?;
             let entries = broker
                 .read_dir(&path.root, &path.relative)?
                 .into_iter()
                 .map(|entry| WorkspacePathRef::new(region.clone(), parent.join(entry)))
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(FilesystemEntry::Entries(entries))
+        }
+        FilesystemOperation::ReadDirLimited {
+            path,
+            max_entries,
+            max_bytes,
+        } => {
+            let region = path.region.clone();
+            let path = regions.bind_directory(&path)?;
+            let mut check = || {
+                request.budget.check_time()?;
+                if let Some(operation) = operation {
+                    operation.signal().check()?;
+                }
+                Ok(())
+            };
+            let result = broker.read_dir_limited_controlled(
+                &path.root,
+                &path.relative,
+                max_entries,
+                max_bytes,
+                &mut check,
+            )?;
+            Ok(FilesystemEntry::LimitedEntries(match result {
+                crate::BoundedDirectoryList::Complete(names) => {
+                    crate::BoundedDirectoryList::Complete(
+                        names
+                            .into_iter()
+                            .map(|name| {
+                                WorkspacePathRef::new(region.clone(), path.relative.join(name))
+                            })
+                            .collect::<Result<Vec<_>, _>>()?,
+                    )
+                }
+                crate::BoundedDirectoryList::LimitExceeded {
+                    max_entries,
+                    max_bytes,
+                } => crate::BoundedDirectoryList::LimitExceeded {
+                    max_entries,
+                    max_bytes,
+                },
+            }))
         }
         FilesystemOperation::Stat { path } => {
             let path = regions.bind(&path)?;
@@ -135,7 +170,8 @@ fn require_filesystem_authority(request: &FilesystemRequest) -> Result<(), HostE
         }
         FilesystemOperation::Write { path, .. } => ("write", path),
         FilesystemOperation::Delete { path } => ("delete", path),
-        FilesystemOperation::ReadDir { path } => ("list", path),
+        FilesystemOperation::ReadDir { path }
+        | FilesystemOperation::ReadDirLimited { path, .. } => ("list", path),
         FilesystemOperation::Stat { path } => ("stat", path),
         FilesystemOperation::AtomicReplace { path, .. } => ("atomic_replace", path),
     };

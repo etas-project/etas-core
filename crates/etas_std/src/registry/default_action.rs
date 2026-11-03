@@ -32,6 +32,17 @@ pub(super) fn validate(
             && projected.as_ref() == Some(&action.params)
             && match reducer {
                 None => flow.output == action.output,
+                Some(crate::StdActionReducer::BoundedDirectoryList { entry_limit_parameter, byte_limit_parameter }) => {
+                    symbol.qualified_path == ["std", "effects", "actions", "Fs", "list"]
+                        && flow.output == StdType::parse("List[WorkspacePath[R]]")
+                        && action.output == flow.output
+                        && enum_result_valid(registry, &["std", "fs", "ListLimitError"], &[("LimitExceeded", vec![StdType::parse("usize"), StdType::parse("usize")])])
+                        && payload.len() == 1 && flow.params.len() == 3
+                        && entry_limit_parameter != byte_limit_parameter
+                        && flow.params.get(*entry_limit_parameter) == Some(&StdType::parse("usize"))
+                        && flow.params.get(*byte_limit_parameter) == Some(&StdType::parse("usize"))
+                        && !payload.contains(entry_limit_parameter) && !payload.contains(byte_limit_parameter)
+                }
                 Some(crate::StdActionReducer::BoundedFileRead { limit_parameter }) => {
                     symbol.qualified_path == ["std", "effects", "actions", "Fs", "read"]
                         && flow.output == StdType::parse("bytes")
@@ -54,6 +65,11 @@ pub(super) fn validate(
                 }
             }
             && match reducer {
+                Some(crate::StdActionReducer::BoundedDirectoryList { .. }) => action.default_handler_effects.as_ref().is_some_and(|effects| {
+                    let mut expected = effects.clone();
+                    expected.push(StdEffectRef::typed(&["Error"], StdType::parse("std.fs.ListLimitError")));
+                    expected == flow.public_effects
+                }),
                 Some(crate::StdActionReducer::BoundedFileRead { .. }) => action.default_handler_effects.as_ref().is_some_and(|effects| {
                     let mut expected = effects.clone();
                     expected.push(StdEffectRef::typed(&["Error"], StdType::parse("std.fs.ReadLimitError")));
@@ -123,6 +139,44 @@ fn enum_result_valid(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bounded_directory_reducer_preserves_list_authority_and_both_limit_arguments() {
+        let registry = crate::standard_registry();
+        let symbol = registry
+            .lookup_qualified(&["std", "fs", "list_limited"])
+            .unwrap();
+        let StdDecl::Flow(flow) = &symbol.decl else {
+            panic!("flow");
+        };
+        let descriptor = symbol.intrinsic.as_ref().unwrap();
+        validate(&registry, flow, descriptor).unwrap();
+        for change in 0..4 {
+            let mut flow = flow.clone();
+            let mut descriptor = descriptor.clone();
+            match change {
+                0 => {
+                    flow.public_effects.pop();
+                }
+                1 => flow.params[2] = StdType::parse("i32"),
+                2 => {
+                    descriptor.lowering = LoweringHint::ActionReducer {
+                        stable_id: 138,
+                        payload: vec![0],
+                        reducer: crate::StdActionReducer::BoundedDirectoryList {
+                            entry_limit_parameter: 1,
+                            byte_limit_parameter: 1,
+                        },
+                    }
+                }
+                _ => flow.output = StdType::parse("List[string]"),
+            }
+            assert!(
+                validate(&registry, &flow, &descriptor).is_err(),
+                "mutation {change}"
+            );
+        }
+    }
 
     #[test]
     fn bounded_file_reducer_requires_read_authority_limit_and_exact_failure_row() {

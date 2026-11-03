@@ -39,9 +39,32 @@ impl WorkspacePathRef {
     pub fn new(region: WorkspaceRegionId, relative: impl AsRef<Path>) -> Result<Self, HostError> {
         Ok(Self {
             region,
-            relative: normalize_relative(relative.as_ref())?,
+            relative: normalize_directory_relative(relative.as_ref())?,
         })
     }
+
+    pub fn root(region: WorkspaceRegionId) -> Self {
+        Self {
+            region,
+            relative: PathBuf::from("."),
+        }
+    }
+
+    pub fn relative_name(&self) -> Result<&str, HostError> {
+        self.relative.to_str().ok_or_else(|| {
+            HostError::new(
+                HostErrorCode::InvalidRequest,
+                "workspace relative name is not valid UTF-8",
+            )
+        })
+    }
+}
+
+pub(crate) fn normalize_directory_relative(path: &Path) -> Result<PathBuf, HostError> {
+    if path.as_os_str() == "." {
+        return Ok(PathBuf::from("."));
+    }
+    normalize_relative(path)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

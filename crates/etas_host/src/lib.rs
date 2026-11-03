@@ -46,8 +46,8 @@ pub use context::{
     TimeBudget, TokenBudget, TokenReservation, TraceContext, TraceEvent, TraceId, TraceSpanId,
 };
 pub use filesystem::{
-    BoundedFileRead, FilesystemClient, FilesystemEntry, FilesystemOperation, FilesystemRequest,
-    FilesystemResponse, FilesystemStat, LocalFilesystemClient,
+    BoundedDirectoryList, BoundedFileRead, FilesystemClient, FilesystemEntry, FilesystemOperation,
+    FilesystemRequest, FilesystemResponse, FilesystemStat, LocalFilesystemClient,
 };
 pub use memory::{
     InMemoryMemoryClient, MemoryClient, MemoryConflict, MemoryCursor, MemoryEntry, MemoryOperation,

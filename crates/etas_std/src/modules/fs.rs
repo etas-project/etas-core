@@ -60,6 +60,88 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             "The file contains more than the requested maximum number of bytes.",
         )
         .expect("ReadLimitError owner is registered");
+    let list_limit_error = builder.symbol(
+        module,
+        "ListLimitError",
+        StdSymbolKind::Type,
+        StdDecl::Type(TypeDecl::generic("ListLimitError", &[], TypeDeclKind::Enum)),
+        "A complete directory listing exceeded its entry or aggregate relative-name byte limit.",
+    );
+    builder
+        .enum_constructor(
+            list_limit_error,
+            FlowDecl::pure(
+                "LimitExceeded",
+                &["usize", "usize"],
+                "std.fs.ListLimitError",
+            ),
+            "The maximum entry count or aggregate UTF-8 relative-name bytes was exceeded.",
+        )
+        .expect("ListLimitError owner is registered");
+    for (name, params, output, id) in [
+        (
+            "root",
+            vec![],
+            "WorkspacePath[R]",
+            intrinsic::runtime::FS_ROOT,
+        ),
+        (
+            "relative_name",
+            vec!["WorkspacePath[R]"],
+            "string",
+            intrinsic::runtime::FS_RELATIVE_NAME,
+        ),
+    ] {
+        register_intrinsic_flow(
+            builder,
+            module,
+            &["std", "fs"],
+            IntrinsicFlowRegistration {
+                name,
+                type_params: &[region_param()],
+                params: &params,
+                output,
+                public_effects: &[],
+                requested_actions: &[],
+                intrinsic_id: id,
+                summary: "Inspect or construct a relative path identity without granting filesystem authority.",
+                purity: IntrinsicPurity::Runtime,
+                dispatch: IntrinsicDispatch::Runtime,
+                lowering: LoweringHint::RuntimeCall,
+            },
+        );
+    }
+    register_intrinsic_flow(
+        builder,
+        module,
+        &["std", "fs"],
+        IntrinsicFlowRegistration {
+            name: "list_limited",
+            type_params: &[region_param()],
+            params: &["WorkspacePath[R]", "usize", "usize"],
+            output: "List[WorkspacePath[R]]",
+            public_effects: &[
+                StdEffectRef::typed(&["Error"], StdType::parse("std.fs.IOError")),
+                StdEffectRef::typed(&["Error"], StdType::parse("std.fs.ListLimitError")),
+            ],
+            requested_actions: &[StdEffectRef::typed(
+                &["Fs", "list"],
+                StdType::Var("R".into()),
+            )],
+            intrinsic_id: intrinsic::runtime::FS_LIST_LIMITED,
+            summary: "Return a complete sorted directory listing within entry and aggregate UTF-8 relative-name byte limits, or raise ListLimitError without a partial result.",
+            purity: IntrinsicPurity::Host,
+            dispatch: IntrinsicDispatch::Host,
+            lowering: LoweringHint::ActionReducer {
+                stable_id: 138,
+                payload: vec![0],
+                reducer: crate::StdActionReducer::BoundedDirectoryList {
+                    entry_limit_parameter: 1,
+                    byte_limit_parameter: 2,
+                },
+            },
+        },
+    );
     register_intrinsic_flow(
         builder,
         module,
