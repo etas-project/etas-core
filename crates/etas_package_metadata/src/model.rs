@@ -297,6 +297,7 @@ pub struct Type {
     pub fields: Vec<TypeField>,
     pub effects: Option<EffectRow>,
     pub produced_effects: Option<EffectRow>,
+    pub bounds: Vec<SpecBound>,
 }
 
 #[derive(
@@ -865,6 +866,7 @@ pub enum Visibility {
     etas_core::RetainedSize,
 )]
 pub enum TypeKind {
+    Existential,
     #[default]
     Primitive,
     Var,

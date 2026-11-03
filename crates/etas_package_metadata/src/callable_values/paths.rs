@@ -133,6 +133,10 @@ fn remap_parts(
                 );
             }
             Part::Type(ty) => {
+                for bound in &mut ty.bounds {
+                    bound.spec = remap(CallableValuePathKind::Spec, &bound.spec);
+                    work.extend(bound.args.iter_mut().map(Part::Type));
+                }
                 if matches!(
                     ty.kind,
                     TypeKind::Named

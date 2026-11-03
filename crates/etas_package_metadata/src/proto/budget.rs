@@ -456,15 +456,10 @@ impl ModelGraphValidator {
 
     fn ty(&mut self, ty: &Type, depth: usize) -> Result<(), MetadataArtifactError> {
         self.budget.enter(depth, "type graph")?;
-        crate::type_validation::validate_type_shape(
-            ty.kind,
-            &ty.name,
-            &ty.path,
-            &ty.children,
-            &ty.fields,
-            &ty.effects,
-            &ty.produced_effects,
-        )?;
+        crate::type_validation::validate_type_shape(ty)?;
+        for bound in &ty.bounds {
+            self.spec_bound_at_depth(bound, depth + 1)?;
+        }
         for child in &ty.children {
             self.ty(child, depth + 1)?;
         }
@@ -946,6 +941,9 @@ impl ProtoGraphValidator {
 
     fn ty(&mut self, ty: &proto::ProtoType, depth: usize) -> Result<(), MetadataArtifactError> {
         self.budget.enter(depth, "type graph")?;
+        for bound in &ty.bounds {
+            self.spec_bound_at_depth(bound, depth + 1)?;
+        }
         for child in &ty.children {
             self.ty(child, depth + 1)?;
         }

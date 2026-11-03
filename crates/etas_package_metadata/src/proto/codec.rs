@@ -1633,6 +1633,7 @@ fn type_to_proto(ty: &Type) -> ProtoType {
         fields: ty.fields.iter().map(type_field_to_proto).collect(),
         effects: ty.effects.as_ref().map(effect_row_to_proto),
         produced_effects: ty.produced_effects.as_ref().map(effect_row_to_proto),
+        bounds: ty.bounds.iter().map(spec_bound_to_proto).collect(),
     }
 }
 
@@ -1665,16 +1666,22 @@ fn type_from_proto_with_budget(
         .produced_effects
         .map(|row| effect_row_from_proto_with_budget(row, depth + 1, budget))
         .transpose()?;
-    validate_type_shape(
-        kind,
-        &ty.name,
-        &ty.path,
-        &children,
-        &fields,
-        &effects,
-        &produced_effects,
-    )?;
-    Ok(Type {
+    let bounds = ty
+        .bounds
+        .into_iter()
+        .map(|bound| {
+            budget.enter(depth + 1, "existential spec bound")?;
+            Ok(SpecBound {
+                spec: required_path(bound.spec, "existential spec bound")?,
+                args: bound
+                    .args
+                    .into_iter()
+                    .map(|arg| type_from_proto_with_budget(arg, depth + 2, budget))
+                    .collect::<Result<_, _>>()?,
+            })
+        })
+        .collect::<Result<Vec<_>, MetadataArtifactError>>()?;
+    let ty = Type {
         kind,
         name: ty.name,
         path: ty.path,
@@ -1682,7 +1689,10 @@ fn type_from_proto_with_budget(
         fields,
         effects,
         produced_effects,
-    })
+        bounds,
+    };
+    validate_type_shape(&ty)?;
+    Ok(ty)
 }
 
 fn type_field_to_proto(field: &TypeField) -> ProtoTypeField {
@@ -2462,6 +2472,7 @@ fn spec_kind_from_wire(value: &str) -> Result<SpecKind, MetadataArtifactError> {
 
 fn type_kind_from_wire(value: &str) -> Result<TypeKind, MetadataArtifactError> {
     match value {
+        "existential" => Ok(TypeKind::Existential),
         "primitive" => Ok(TypeKind::Primitive),
         "var" => Ok(TypeKind::Var),
         "named" => Ok(TypeKind::Named),
@@ -2805,6 +2816,25 @@ mod tests {
         let error = package_metadata_from_proto(graph).unwrap_err();
 
         assert!(error.to_string().contains("exactly one child"));
+    }
+
+    #[test]
+    fn existential_type_binary_roundtrip_preserves_bound_paths_and_arguments() {
+        let ty = Type {
+            kind: TypeKind::Existential,
+            bounds: vec![SpecBound {
+                spec: vec!["library".into(), "Within".into()],
+                args: vec![Type {
+                    kind: TypeKind::Primitive,
+                    name: "i32".into(),
+                    ..Default::default()
+                }],
+            }],
+            ..Default::default()
+        };
+        let bytes = type_to_proto(&ty).encode_to_vec();
+        let restored = type_from_proto(ProtoType::decode(bytes.as_slice()).unwrap()).unwrap();
+        assert_eq!(restored, ty);
     }
 
     #[test]

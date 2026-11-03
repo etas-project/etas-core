@@ -121,6 +121,9 @@ pub struct VariantInfo {
     Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
 )]
 pub enum TypeInfo {
+    Existential {
+        bounds: Vec<super::SpecInfo>,
+    },
     Primitive(PrimitiveInfo),
     Builtin {
         constructor: BuiltinTypeInfo,

@@ -60,6 +60,13 @@ impl Remapper<'_> {
 
     pub fn ty(&self, ty: &mut TypeInfo) -> Result<(), DescriptorError> {
         match ty {
+            TypeInfo::Existential { bounds } => {
+                for bound in bounds {
+                    for argument in &mut bound.arguments {
+                        self.type_ref(argument)?;
+                    }
+                }
+            }
             TypeInfo::Primitive(_) => {}
             TypeInfo::Builtin { arguments, .. } | TypeInfo::Tuple(arguments) => {
                 for ty in arguments {

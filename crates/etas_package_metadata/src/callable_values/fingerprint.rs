@@ -6,6 +6,7 @@ use crate::{
 };
 
 enum Task<'a> {
+    Bound(&'a crate::SpecBound),
     Type(&'a Type),
     Field(&'a TypeField),
     Row(&'a EffectRow),
@@ -18,7 +19,7 @@ struct Encoder(blake3::Hasher);
 impl Encoder {
     fn new() -> Self {
         Self(blake3::Hasher::new_derive_key(
-            "etas.metadata.callable-value-input.v3",
+            "etas.metadata.callable-value-input.v4",
         ))
     }
     fn byte(&mut self, value: u8) {
@@ -83,6 +84,12 @@ impl Encoder {
         let mut pending = vec![root];
         while let Some(task) = pending.pop() {
             match task {
+                Task::Bound(bound) => {
+                    self.byte(6);
+                    self.path(&bound.spec);
+                    self.number(bound.args.len());
+                    pending.extend(bound.args.iter().rev().map(Task::Type));
+                }
                 Task::Type(ty) => {
                     self.byte(0);
                     self.byte(match ty.kind {
@@ -117,11 +124,13 @@ impl Encoder {
                         TypeKind::Store => 28,
                         TypeKind::MemoryRegion => 29,
                         TypeKind::ResourceHandle => 30,
+                        TypeKind::Existential => 31,
                     });
                     self.text(&ty.name);
                     self.path(&ty.path);
                     self.number(ty.children.len());
                     self.number(ty.fields.len());
+                    self.number(ty.bounds.len());
                     self.option(ty.effects.is_some());
                     self.option(ty.produced_effects.is_some());
                     if let Some(row) = &ty.produced_effects {
@@ -132,6 +141,7 @@ impl Encoder {
                     }
                     pending.extend(ty.fields.iter().rev().map(Task::Field));
                     pending.extend(ty.children.iter().rev().map(Task::Type));
+                    pending.extend(ty.bounds.iter().rev().map(Task::Bound));
                 }
                 Task::Field(field) => {
                     self.byte(1);

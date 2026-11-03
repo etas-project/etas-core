@@ -113,15 +113,11 @@ impl CallableValueGraph {
                         | TypeKind::Enum => valid_path(&ty.path)?,
                         _ => {}
                     }
-                    crate::type_validation::validate_type_shape(
-                        ty.kind,
-                        &ty.name,
-                        &ty.path,
-                        &ty.children,
-                        &ty.fields,
-                        &ty.effects,
-                        &ty.produced_effects,
-                    )?;
+                    crate::type_validation::validate_type_shape(ty)?;
+                    for bound in &ty.bounds {
+                        valid_path(&bound.spec)?;
+                        work.extend(bound.args.iter().map(Part::Type));
+                    }
                     let mut fields = BTreeSet::new();
                     for field in &ty.fields {
                         if field.name.is_empty() || !fields.insert(&field.name) {

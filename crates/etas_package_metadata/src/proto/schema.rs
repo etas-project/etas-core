@@ -516,6 +516,8 @@ pub struct ProtoType {
     pub effects: Option<ProtoEffectRow>,
     #[prost(message, optional, tag = "7")]
     pub produced_effects: Option<ProtoEffectRow>,
+    #[prost(message, repeated, tag = "8")]
+    pub bounds: Vec<ProtoSpecBound>,
 }
 
 #[derive(Clone, PartialEq, Message)]

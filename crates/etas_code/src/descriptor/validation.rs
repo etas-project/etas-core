@@ -148,6 +148,17 @@ fn validate_inner(
     for (index, ty) in input.types.iter().enumerate() {
         let node = DescriptorNode::Type(TypeInfoRef(index as u32));
         match ty {
+            TypeInfo::Existential { bounds } => {
+                if bounds.is_empty() {
+                    return Err(DescriptorError::Invalid {
+                        node,
+                        reason: "existential type requires a spec bound",
+                    });
+                }
+                for bound in bounds {
+                    validator.kind(node, &bound.definition, DefinitionKind::Spec)?;
+                }
+            }
             TypeInfo::Primitive(_) | TypeInfo::Tuple(_) => {}
             TypeInfo::Builtin {
                 constructor,
