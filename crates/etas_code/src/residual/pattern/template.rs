@@ -9,12 +9,13 @@ use super::{
 };
 use crate::{
     CodeFingerprint,
-    descriptor::DescriptorLimits,
+    descriptor::{DescriptorFingerprintBudget, DescriptorLimits},
     identity::canonical::CanonicalEncoder,
     residual::{
         identity::{
             GenericArgumentIdentity, GenericParameterId, MAX_RESIDUAL_REFERENCE_SUBSTITUTIONS,
         },
+        type_binding::TypeArgumentDescriptors,
         type_template::{
             StaticTypeNode, StaticTypeTemplate, TypeTemplateError, TypeTemplateLimits,
         },
@@ -53,7 +54,7 @@ pub enum ActionPatternTemplateError {
     MissingBinding(GenericParameterId),
     BindingCycle(GenericParameterId),
     BindingKind(GenericParameterId),
-    MissingTypeStructure(GenericParameterId),
+    MissingTypeDescriptor(GenericParameterId),
     TypeIdentityMismatch(GenericParameterId),
     ResourceLimit,
 }
@@ -135,25 +136,23 @@ impl ActionPatternTemplate {
     pub fn instantiate(
         &self,
         bindings: &BTreeMap<GenericParameterId, GenericArgumentIdentity>,
-        structures: &BTreeMap<GenericParameterId, StaticTypeTemplate>,
+        type_descriptors: &TypeArgumentDescriptors,
         limits: PatternTemplateLimits,
     ) -> Result<ActionPattern, ActionPatternTemplateError> {
         let mut remaining = limits.max_binding_steps;
-        self.instantiate_with_budget(bindings, structures, limits, &mut remaining)
+        self.instantiate_with_budget(bindings, type_descriptors, limits, &mut remaining)
     }
 
     /// Uses the caller's shared budget across all patterns in a plan.
     pub fn instantiate_with_budget(
         &self,
         bindings: &BTreeMap<GenericParameterId, GenericArgumentIdentity>,
-        structures: &BTreeMap<GenericParameterId, StaticTypeTemplate>,
+        type_descriptors: &TypeArgumentDescriptors,
         limits: PatternTemplateLimits,
         remaining: &mut usize,
     ) -> Result<ActionPattern, ActionPatternTemplateError> {
         use ActionPatternTemplateError as Error;
-        if bindings.len() > MAX_RESIDUAL_REFERENCE_SUBSTITUTIONS
-            || structures.len() > MAX_RESIDUAL_REFERENCE_SUBSTITUTIONS
-        {
+        if bindings.len() > MAX_RESIDUAL_REFERENCE_SUBSTITUTIONS {
             return Err(Error::ResourceLimit);
         }
         *remaining = (*remaining).min(limits.max_binding_steps);
@@ -178,34 +177,41 @@ impl ActionPatternTemplate {
                         }
                         let (resolved, fingerprint) =
                             resolve_type(*parameter, bindings, remaining)?;
-                        let structure = structures
-                            .get(&resolved)
-                            .ok_or(Error::MissingTypeStructure(resolved))?;
-                        let (nodes, edges, bytes) = structure.resource_usage();
-                        let work = nodes
-                            .checked_add(edges)
-                            .and_then(|n| n.checked_add(bytes))
-                            .ok_or(Error::ResourceLimit)?;
-                        *remaining = remaining.checked_sub(work).ok_or(Error::ResourceLimit)?;
-                        let structure = structure
-                            .substitute(&BTreeMap::new(), limits.types)
-                            .map_err(Error::Type)?;
-                        let actual = structure
-                            .closed_descriptor_fingerprint(limits.descriptor)
-                            .map_err(Error::Type)?
-                            .ok_or(Error::MissingTypeStructure(resolved))?;
+                        let (root, actual) = type_descriptors
+                            .argument(resolved)
+                            .ok_or(Error::MissingTypeDescriptor(resolved))?;
                         if actual != fingerprint {
                             return Err(Error::TypeIdentityMismatch(resolved));
                         }
-                        replacements.insert(*parameter, structure);
+                        replacements.insert(*parameter, root);
                     }
-                    let closed = template
-                        .substitute(&replacements, limits.types)
+                    let data = type_descriptors.graph().data();
+                    let work = [
+                        data.types.len(),
+                        data.rows.len(),
+                        data.binders.len(),
+                        data.traces.len(),
+                    ]
+                    .into_iter()
+                    .try_fold(0usize, usize::checked_add)
+                    .ok_or(Error::ResourceLimit)?;
+                    *remaining = remaining.checked_sub(work).ok_or(Error::ResourceLimit)?;
+                    let template = template
+                        .substitute(&BTreeMap::new(), limits.types)
                         .map_err(Error::Type)?;
-                    let fingerprint = closed
-                        .closed_descriptor_fingerprint(limits.descriptor)
+                    let (graph, root) = template
+                        .instantiate_descriptor_graph(
+                            type_descriptors.graph(),
+                            &replacements,
+                            limits.descriptor,
+                        )
                         .map_err(Error::Type)?
                         .ok_or(Error::ResourceLimit)?;
+                    let mut budget = DescriptorFingerprintBudget::new(*remaining);
+                    let fingerprint = graph
+                        .type_fingerprint_with_budget(root, &mut budget)
+                        .map_err(|error| Error::Type(TypeTemplateError::Descriptor(error)))?;
+                    *remaining = budget.remaining();
                     CanonicalSelector::Type(fingerprint)
                 }
             });
@@ -316,12 +322,34 @@ mod tests {
     use super::*;
     use crate::{
         DefinitionKind, PackageKey,
-        descriptor::{BuiltinTypeInfo, PrimitiveInfo},
+        descriptor::{
+            BuiltinTypeInfo, DescriptorGraph, DescriptorGraphInput, PrimitiveInfo, TypeInfo,
+            TypeInfoRef,
+        },
         residual::type_template::StaticTypeNode,
     };
 
     fn parameter(byte: u8) -> GenericParameterId {
         GenericParameterId::from_canonical_fingerprint(CodeFingerprint::from_bytes([byte; 32]))
+    }
+
+    fn type_arguments(
+        parameter: GenericParameterId,
+        primitive: PrimitiveInfo,
+    ) -> TypeArgumentDescriptors {
+        TypeArgumentDescriptors::new(
+            DescriptorGraph::new(
+                DescriptorGraphInput {
+                    types: vec![TypeInfo::Primitive(primitive)],
+                    ..Default::default()
+                },
+                limits().descriptor,
+            )
+            .unwrap(),
+            BTreeMap::from([(parameter, TypeInfoRef(0))]),
+            limits().descriptor,
+        )
+        .unwrap()
     }
 
     fn limits() -> PatternTemplateLimits {
@@ -390,19 +418,23 @@ mod tests {
             (u, GenericArgumentIdentity::Type(actual)),
         ]);
         let pattern = template
-            .instantiate(&bindings, &BTreeMap::new(), limits())
+            .instantiate(&bindings, &TypeArgumentDescriptors::default(), limits())
             .unwrap();
         assert_eq!(
             pattern.effect().arguments,
             vec![CanonicalSelector::Type(actual)]
         );
         assert_eq!(
-            template.instantiate(&BTreeMap::new(), &BTreeMap::new(), limits()),
+            template.instantiate(
+                &BTreeMap::new(),
+                &TypeArgumentDescriptors::default(),
+                limits()
+            ),
             Err(ActionPatternTemplateError::MissingBinding(t))
         );
         let wrong = BTreeMap::from([(t, GenericArgumentIdentity::EffectRow(actual))]);
         assert_eq!(
-            template.instantiate(&wrong, &BTreeMap::new(), limits()),
+            template.instantiate(&wrong, &TypeArgumentDescriptors::default(), limits()),
             Err(ActionPatternTemplateError::BindingKind(t))
         );
         let cycle = BTreeMap::from([
@@ -410,13 +442,13 @@ mod tests {
             (u, GenericArgumentIdentity::TypeParameter(t)),
         ]);
         assert_eq!(
-            template.instantiate(&cycle, &BTreeMap::new(), limits()),
+            template.instantiate(&cycle, &TypeArgumentDescriptors::default(), limits()),
             Err(ActionPatternTemplateError::BindingCycle(t))
         );
         assert_eq!(
             template.instantiate(
                 &bindings,
-                &BTreeMap::new(),
+                &TypeArgumentDescriptors::default(),
                 PatternTemplateLimits {
                     max_binding_steps: 1,
                     ..limits()
@@ -460,17 +492,12 @@ mod tests {
         .unwrap();
         let bindings = BTreeMap::from([(t, GenericArgumentIdentity::Type(actual))]);
         assert_eq!(
-            template.instantiate(&bindings, &BTreeMap::new(), limits()),
-            Err(ActionPatternTemplateError::MissingTypeStructure(t))
+            template.instantiate(&bindings, &TypeArgumentDescriptors::default(), limits()),
+            Err(ActionPatternTemplateError::MissingTypeDescriptor(t))
         );
-        let wrong = StaticTypeTemplate::new(
-            vec![StaticTypeNode::Primitive(PrimitiveInfo::Bool)],
-            0,
-            limits().types,
-        )
-        .unwrap();
+        let wrong = type_arguments(t, PrimitiveInfo::Bool);
         assert_eq!(
-            template.instantiate(&bindings, &BTreeMap::from([(t, wrong)]), limits()),
+            template.instantiate(&bindings, &wrong, limits()),
             Err(ActionPatternTemplateError::TypeIdentityMismatch(t))
         );
         let expected = composite
@@ -489,7 +516,7 @@ mod tests {
         assert_eq!(
             template.instantiate(
                 &bindings,
-                &BTreeMap::from([(t, primitive.clone())]),
+                &type_arguments(t, PrimitiveInfo::I32),
                 restricted
             ),
             Err(ActionPatternTemplateError::Type(
@@ -497,7 +524,7 @@ mod tests {
             ))
         );
         let pattern = template
-            .instantiate(&bindings, &BTreeMap::from([(t, primitive)]), limits())
+            .instantiate(&bindings, &type_arguments(t, PrimitiveInfo::I32), limits())
             .unwrap();
         assert_eq!(
             pattern.effect().arguments,

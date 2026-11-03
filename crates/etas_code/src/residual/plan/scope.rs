@@ -6,17 +6,20 @@ use std::collections::BTreeMap;
 use crate::{
     contract::CanonicalEffect,
     residual::{
-        identity::{GenericArgumentIdentity, GenericParameterId, MonitorTemplateId, PlanHash},
+        identity::{
+            ActivationSiteId, GenericArgumentIdentity, GenericParameterId, MonitorTemplateId,
+            PlanHash, SemanticScopeId,
+        },
         model::{ActionPredicateDecision, ActionPredicateError},
         monitor::{
-            ActionAttemptId, ActionComponentInput, AlternativeScope, ConcreteActionAttempt,
-            ConcretePriorEvidence, ScopeCheckResult, ScopeExit, ScopeInvocationId,
-            SemanticEventCursor, TraceBatchCommitError, TraceComponentDecision,
+            ActionAttemptId, ActionComponentInput, AlternativeScope, BoundTraceComponent,
+            ConcreteActionAttempt, ConcretePriorEvidence, ScopeCheckResult, ScopeExit,
+            ScopeInvocationId, SemanticEventCursor, TraceBatchCommitError, TraceComponentDecision,
             TraceComponentDelta, TraceComponentError, TraceComponentEvidenceRequirements,
             TraceComponentState, TraceComponentTransition, commit_trace_transitions,
         },
         predicate::PredicateDecision,
-        type_template::StaticTypeTemplate,
+        type_binding::TypeArgumentDescriptors,
     },
 };
 
@@ -54,6 +57,16 @@ pub struct ResidualScopeState {
     version: u64,
     last_cursor: Option<SemanticEventCursor>,
     components: BTreeMap<MonitorTemplateId, ComponentState>,
+}
+
+/// Immutable native factory for one checked type application. Invocation state
+/// is allocated separately; generic monitor compilation is shared by calls.
+#[derive(Clone, Debug)]
+pub struct SpecializedResidualScope {
+    plan: PlanHash,
+    scope: SemanticScopeId,
+    activation: ActivationSiteId,
+    traces: BTreeMap<MonitorTemplateId, BoundTraceComponent>,
 }
 
 /// Data-only checkpoint form of one scope's monitor state. It names its plan
@@ -149,6 +162,44 @@ pub enum ResidualScopeError {
 }
 
 impl SemanticResidualPlan {
+    pub fn specialize_scope(
+        &self,
+        scope: SemanticScopeId,
+        activation: ActivationSiteId,
+        bindings: &BTreeMap<GenericParameterId, GenericArgumentIdentity>,
+        types: &TypeArgumentDescriptors,
+        max_components: usize,
+    ) -> Result<SpecializedResidualScope, ResidualScopeError> {
+        let mut traces = BTreeMap::new();
+        let mut count = 0;
+        for (id, component) in &self.components {
+            let identity = component.obligation().identity();
+            if identity.scope != scope || identity.activation != activation {
+                continue;
+            }
+            count += 1;
+            if count > max_components {
+                return Err(ResidualScopeError::ComponentLimit);
+            }
+            if let SemanticPlanComponent::Trace(trace) = component {
+                traces.insert(
+                    *id,
+                    trace
+                        .bind_types(bindings, types)
+                        .map_err(|error| ResidualScopeError::Component { id: *id, error })?,
+                );
+            }
+        }
+        if count == 0 {
+            return Err(ResidualScopeError::NoComponents);
+        }
+        Ok(SpecializedResidualScope {
+            plan: self.hash,
+            scope,
+            activation,
+            traces,
+        })
+    }
     /// Activates every component for the scope. The native engine must still
     /// validate source/owner bindings and ensure unique invocation identities.
     pub fn initial_scope(
@@ -156,7 +207,12 @@ impl SemanticResidualPlan {
         scope: AlternativeScope,
         max_components: usize,
     ) -> Result<ResidualScopeState, ResidualScopeError> {
-        self.initial_scope_with_bindings(scope, max_components, &BTreeMap::new(), &BTreeMap::new())
+        self.initial_scope_with_bindings(
+            scope,
+            max_components,
+            &BTreeMap::new(),
+            &TypeArgumentDescriptors::default(),
+        )
     }
 
     pub fn initial_scope_with_bindings(
@@ -164,8 +220,25 @@ impl SemanticResidualPlan {
         scope: AlternativeScope,
         max_components: usize,
         bindings: &BTreeMap<GenericParameterId, GenericArgumentIdentity>,
-        structures: &BTreeMap<GenericParameterId, StaticTypeTemplate>,
+        type_descriptors: &TypeArgumentDescriptors,
     ) -> Result<ResidualScopeState, ResidualScopeError> {
+        let prepared = self.specialize_scope(
+            scope.scope,
+            scope.activation,
+            bindings,
+            type_descriptors,
+            max_components,
+        )?;
+        self.initial_specialized_scope(scope, max_components, &prepared)
+    }
+
+    pub fn initial_specialized_scope(
+        &self,
+        scope: AlternativeScope,
+        max_components: usize,
+        prepared: &SpecializedResidualScope,
+    ) -> Result<ResidualScopeState, ResidualScopeError> {
+        self.validate_specialized_scope(scope, prepared)?;
         let mut components = BTreeMap::new();
         for (id, component) in &self.components {
             let obligation = component.obligation();
@@ -181,11 +254,13 @@ impl SemanticResidualPlan {
                 SemanticPlanComponent::Action(_) => ComponentState::Action,
                 SemanticPlanComponent::Trace(trace) => ComponentState::Trace(Box::new(
                     trace
-                        .initial_state_with_bindings(
+                        .initial_bound_state(
                             scope,
                             obligation.identity().origin.revision,
-                            bindings,
-                            structures,
+                            prepared
+                                .traces
+                                .get(id)
+                                .ok_or(ResidualScopeError::ComponentCoverage)?,
                         )
                         .map_err(|error| ResidualScopeError::Component { id: *id, error })?,
                 )),
@@ -218,7 +293,7 @@ impl SemanticResidualPlan {
             data,
             max_components,
             &BTreeMap::new(),
-            &BTreeMap::new(),
+            &TypeArgumentDescriptors::default(),
         )
     }
 
@@ -228,8 +303,40 @@ impl SemanticResidualPlan {
         data: &ResidualScopeStateData,
         max_components: usize,
         bindings: &BTreeMap<GenericParameterId, GenericArgumentIdentity>,
-        structures: &BTreeMap<GenericParameterId, StaticTypeTemplate>,
+        type_descriptors: &TypeArgumentDescriptors,
     ) -> Result<ResidualScopeState, ResidualScopeError> {
+        let prepared = self.specialize_scope(
+            scope.scope,
+            scope.activation,
+            bindings,
+            type_descriptors,
+            max_components,
+        )?;
+        self.restore_specialized_scope(scope, data, max_components, &prepared)
+    }
+
+    fn validate_specialized_scope(
+        &self,
+        scope: AlternativeScope,
+        prepared: &SpecializedResidualScope,
+    ) -> Result<(), ResidualScopeError> {
+        if prepared.plan != self.hash {
+            return Err(ResidualScopeError::PlanMismatch);
+        }
+        if prepared.scope != scope.scope || prepared.activation != scope.activation {
+            return Err(ResidualScopeError::ScopeMismatch);
+        }
+        Ok(())
+    }
+
+    pub fn restore_specialized_scope(
+        &self,
+        scope: AlternativeScope,
+        data: &ResidualScopeStateData,
+        max_components: usize,
+        prepared: &SpecializedResidualScope,
+    ) -> Result<ResidualScopeState, ResidualScopeError> {
+        self.validate_specialized_scope(scope, prepared)?;
         if data.plan != self.hash {
             return Err(ResidualScopeError::PlanMismatch);
         }
@@ -256,12 +363,14 @@ impl SemanticResidualPlan {
                 (SemanticPlanComponent::Trace(trace), Some(state)) => {
                     ComponentState::Trace(Box::new(
                         trace
-                            .restore_state_with_bindings(
+                            .restore_bound_state(
                                 scope,
                                 component.obligation().identity().origin.revision,
                                 state,
-                                bindings,
-                                structures,
+                                prepared
+                                    .traces
+                                    .get(&entry.component)
+                                    .ok_or(ResidualScopeError::ComponentCoverage)?,
                             )
                             .map_err(|error| ResidualScopeError::Component {
                                 id: entry.component,
