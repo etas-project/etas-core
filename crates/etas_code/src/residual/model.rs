@@ -150,6 +150,27 @@ impl ResidualObligation {
         self.bindings
     }
 
+    /// Whether a reference specializes this source obligation's exact binders.
+    /// This checks descriptive linkage, not native installation.
+    pub fn accepts_reference(&self, reference: &super::identity::ResidualObligationRef) -> bool {
+        use super::identity::{GenericArgumentIdentity as Argument, StaticBindingRecipe as Recipe};
+        let recipes = &self.identity.static_bindings;
+        reference.obligation() == self.id
+            && recipes.len() == reference.substitutions().len()
+            && recipes.iter().all(|(parameter, recipe)| {
+                matches!(
+                    (recipe, reference.substitutions().get(parameter)),
+                    (
+                        Recipe::TypeParameter(_),
+                        Some(Argument::Type(_) | Argument::TypeParameter(_))
+                    ) | (
+                        Recipe::EffectRowParameter(_),
+                        Some(Argument::EffectRow(_) | Argument::EffectRowParameter(_))
+                    )
+                )
+            })
+    }
+
     /// Validates only graph/layout linkage; plan coverage, provider support and
     /// runtime installation remain separate mandatory checks.
     pub fn validate_predicate_binding(
@@ -1010,8 +1031,8 @@ mod tests {
                 let plan = SemanticResidualPlan::build(
                     required,
                     vec![
-                        SemanticPlanComponent::Trace(first_component),
-                        SemanticPlanComponent::Trace(second_component),
+                        SemanticPlanComponent::Trace(Box::new(first_component)),
+                        SemanticPlanComponent::Trace(Box::new(second_component)),
                     ],
                     vec![layout.clone()],
                     vec![
@@ -1347,8 +1368,8 @@ mod tests {
             let plan = SemanticResidualPlan::build(
                 required,
                 vec![
-                    SemanticPlanComponent::Trace(allow),
-                    SemanticPlanComponent::Trace(guarded),
+                    SemanticPlanComponent::Trace(Box::new(allow)),
+                    SemanticPlanComponent::Trace(Box::new(guarded)),
                 ],
                 vec![layout.clone()],
                 vec![
@@ -1726,7 +1747,7 @@ mod tests {
             .unwrap();
             let make_components = || {
                 vec![
-                    SemanticPlanComponent::Action(
+                    SemanticPlanComponent::Action(Box::new(
                         CompiledActionPredicate::compile(
                             item.clone(),
                             pattern.clone(),
@@ -1735,8 +1756,8 @@ mod tests {
                             component_limits,
                         )
                         .unwrap(),
-                    ),
-                    SemanticPlanComponent::Trace(
+                    )),
+                    SemanticPlanComponent::Trace(Box::new(
                         CompiledTraceComponent::compile(
                             trace.clone(),
                             template.template(),
@@ -1749,7 +1770,7 @@ mod tests {
                             },
                         )
                         .unwrap(),
-                    ),
+                    )),
                 ]
             };
             let make_obligations = || {
@@ -1870,12 +1891,12 @@ mod tests {
                     .collect();
                 assert_eq!(
                     BoundResidualPlan::bind(&plan, &revision, &generic, 3).unwrap_err(),
-                    BoundResidualPlanError::UnsupportedSubstitution(item.id())
+                    BoundResidualPlanError::InvalidSubstitution(item.id())
                 );
                 assert_eq!(
                     BoundResidualPlan::from_data(data.clone(), &plan, &revision, &generic, 3)
                         .unwrap_err(),
-                    BoundResidualPlanError::UnsupportedSubstitution(item.id())
+                    BoundResidualPlanError::InvalidSubstitution(item.id())
                 );
                 let mut changed = data.clone();
                 changed.schema_version += 1;
@@ -2139,8 +2160,8 @@ mod tests {
                 let mixed = SemanticResidualPlan::build(
                     required,
                     vec![
-                        SemanticPlanComponent::Action(action),
-                        SemanticPlanComponent::Trace(trace_component),
+                        SemanticPlanComponent::Action(Box::new(action)),
+                        SemanticPlanComponent::Trace(Box::new(trace_component)),
                     ],
                     vec![layout.clone(), two_layout],
                     vec![

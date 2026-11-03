@@ -34,5 +34,5 @@ pub use template::{
 pub use trace_component::{
     CompiledTraceComponent, TraceBatchCommitError, TraceComponentDecision, TraceComponentDelta,
     TraceComponentError, TraceComponentEvidenceRequirements, TraceComponentLimits,
-    TraceComponentState, TraceComponentTransition, commit_trace_transitions,
+    TraceComponentMonitor, TraceComponentState, TraceComponentTransition, commit_trace_transitions,
 };
