@@ -122,36 +122,8 @@ impl HostTraceMetadata {
         payload: &HostTracePayload,
         key: &HostTraceDigestKey,
     ) -> Result<Self, HostError> {
-        if payload.qualified_action.is_empty() {
-            return Err(HostError::new(
-                HostErrorCode::InvalidRequest,
-                "host trace payload requires a non-empty qualified action",
-            ));
-        }
-        if payload.subject_kind.is_empty() {
-            return Err(HostError::new(
-                HostErrorCode::InvalidRequest,
-                "host trace payload requires a non-empty subject kind",
-            ));
-        }
-        let mut fields = payload.fields.iter().collect::<Vec<_>>();
-        fields.sort_by(|left, right| left.name.cmp(&right.name));
-        if fields.windows(2).any(|pair| pair[0].name == pair[1].name) {
-            return Err(HostError::new(
-                HostErrorCode::InvalidRequest,
-                "host trace payload contains duplicate field names",
-            ));
-        }
-
-        let mut hasher = blake3::Hasher::new_keyed(key.bytes());
-        hash_bytes(&mut hasher, b"etas.host.trace.payload.v2");
-        hash_bytes(&mut hasher, payload.subject_kind.as_bytes());
-        hash_bytes(&mut hasher, payload.qualified_action.as_bytes());
-        for field in &fields {
-            hash_bytes(&mut hasher, field.name.as_bytes());
-            hash_bytes(&mut hasher, sensitivity_name(field.sensitivity).as_bytes());
-            hash_host_value(&mut hasher, &field.value);
-        }
+        let fields = payload.validated_fields()?;
+        let digest = payload_digest(payload, &fields, key.bytes(), b"etas.host.trace.payload.v2");
         let fields = fields
             .into_iter()
             .map(|field| HostTraceFieldMetadata {
@@ -165,7 +137,7 @@ impl HostTraceMetadata {
             qualified_action: payload.qualified_action.clone(),
             subject_kind: payload.subject_kind.clone(),
             fields,
-            payload_digest: hasher.finalize().to_hex().to_string(),
+            payload_digest: digest.to_hex().to_string(),
         })
     }
 
@@ -176,6 +148,59 @@ impl HostTraceMetadata {
     ) -> Result<Self, HostError> {
         Self::from_payload(&HostTracePayload::new(subject_kind, qualified_action), key)
     }
+}
+
+impl HostTracePayload {
+    pub(crate) fn keyed_digest(
+        &self,
+        key: &[u8; 32],
+        domain: &[u8],
+    ) -> Result<blake3::Hash, HostError> {
+        let fields = self.validated_fields()?;
+        Ok(payload_digest(self, &fields, key, domain))
+    }
+
+    fn validated_fields(&self) -> Result<Vec<&HostTracePayloadField>, HostError> {
+        if self.qualified_action.is_empty() {
+            return Err(HostError::new(
+                HostErrorCode::InvalidRequest,
+                "host trace payload requires a non-empty qualified action",
+            ));
+        }
+        if self.subject_kind.is_empty() {
+            return Err(HostError::new(
+                HostErrorCode::InvalidRequest,
+                "host trace payload requires a non-empty subject kind",
+            ));
+        }
+        let mut fields = self.fields.iter().collect::<Vec<_>>();
+        fields.sort_by(|left, right| left.name.cmp(&right.name));
+        if fields.windows(2).any(|pair| pair[0].name == pair[1].name) {
+            return Err(HostError::new(
+                HostErrorCode::InvalidRequest,
+                "host trace payload contains duplicate field names",
+            ));
+        }
+        Ok(fields)
+    }
+}
+
+fn payload_digest(
+    payload: &HostTracePayload,
+    fields: &[&HostTracePayloadField],
+    key: &[u8; 32],
+    domain: &[u8],
+) -> blake3::Hash {
+    let mut hasher = blake3::Hasher::new_keyed(key);
+    hash_bytes(&mut hasher, domain);
+    hash_bytes(&mut hasher, payload.subject_kind.as_bytes());
+    hash_bytes(&mut hasher, payload.qualified_action.as_bytes());
+    for field in fields {
+        hash_bytes(&mut hasher, field.name.as_bytes());
+        hash_bytes(&mut hasher, sensitivity_name(field.sensitivity).as_bytes());
+        hash_host_value(&mut hasher, &field.value);
+    }
+    hasher.finalize()
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

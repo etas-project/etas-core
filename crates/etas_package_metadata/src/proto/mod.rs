@@ -1,5 +1,7 @@
 mod budget;
 mod codec;
+pub(crate) use budget::validate_callable_request_target;
+pub(crate) use codec::spec_invocations::fingerprint as callable_request_target_fingerprint;
 mod descriptors;
 pub(crate) use descriptors::fingerprint as descriptors_fingerprint;
 pub(crate) use descriptors::validate as validate_descriptors;

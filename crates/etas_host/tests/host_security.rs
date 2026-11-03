@@ -167,6 +167,60 @@ async fn local_filesystem_client_rejects_path_escape() {
 }
 
 #[tokio::test]
+async fn bounded_filesystem_read_requires_existing_region_read_authority_and_sandbox() {
+    let workspace = TestWorkspace::create("bounded-read-authority").unwrap();
+    std::fs::write(workspace.path().join("input"), b"abcd").unwrap();
+    let root = workspace.root().unwrap();
+    let (adapter, region) = fs_adapter(root.clone());
+    for case in 0..5 {
+        let mut authority = fs_authority(root.clone());
+        authority.grants = vec![HostActionGrant::allow("Fs", "read")];
+        let selected_region = match case {
+            1 => {
+                authority.grants.clear();
+                region.clone()
+            }
+            2 => {
+                authority.sandbox = SandboxPolicy::deny_all();
+                region.clone()
+            }
+            3 => WorkspaceRegionId::new("test.workspace.Unmapped").unwrap(),
+            _ => region.clone(),
+        };
+        let response = adapter
+            .execute(FilesystemRequest {
+                id: HostRequestId(90 + case),
+                operation: FilesystemOperation::ReadLimited {
+                    path: WorkspacePathRef::new(selected_region, "input").unwrap(),
+                    max_bytes: if case == 4 { 3 } else { 4 },
+                },
+                authority,
+                trace: TraceContext::root(TraceId((90 + case).into())),
+                budget: etas_host::ExecutionBudget::default(),
+            })
+            .await
+            .unwrap();
+        match case {
+            0 => assert_eq!(
+                response.result.unwrap(),
+                etas_host::FilesystemEntry::LimitedRead(etas_host::BoundedFileRead::Complete(
+                    b"abcd".to_vec()
+                ))
+            ),
+            4 => assert_eq!(
+                response.result.unwrap(),
+                etas_host::FilesystemEntry::LimitedRead(
+                    etas_host::BoundedFileRead::LimitExceeded { max_bytes: 3 }
+                )
+            ),
+            _ => {
+                assert!(response.result.is_err(), "case {case} bypassed authority");
+            }
+        }
+    }
+}
+
+#[tokio::test]
 async fn local_filesystem_client_writes_root_file_with_create_dirs() {
     let workspace = TestWorkspace::create("fs-root-write").expect("workspace");
     let root = workspace.root().expect("root");
@@ -398,6 +452,87 @@ async fn local_filesystem_client_stats_and_atomic_replaces_under_workspace_polic
         std::fs::read(root.display_path().join("data.bin")).expect("replaced file"),
         b"new"
     );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn local_filesystem_atomic_replace_preserves_unix_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+    let workspace = TestWorkspace::create("fs-replace-modes").unwrap();
+    let root = workspace.root().unwrap();
+    let (adapter, region) = fs_adapter(root.clone());
+    let target = workspace.path().join("data");
+    for expected in [0o600, 0o700, 0o444] {
+        if target.exists() {
+            std::fs::remove_file(&target).unwrap();
+        }
+        std::fs::write(&target, b"old").unwrap();
+        std::fs::set_permissions(&target, std::fs::Permissions::from_mode(expected)).unwrap();
+        let mut authority = fs_authority(root.clone());
+        authority.sandbox.filesystem.read_roots.clear();
+        let response = adapter
+            .execute(FilesystemRequest {
+                id: HostRequestId(46),
+                operation: FilesystemOperation::AtomicReplace {
+                    path: WorkspacePathRef::new(region.clone(), "data").unwrap(),
+                    contents: b"new".to_vec(),
+                },
+                authority,
+                trace: TraceContext::root(TraceId(46)),
+                budget: etas_host::ExecutionBudget::default(),
+            })
+            .await
+            .unwrap();
+        assert_eq!(response.id, HostRequestId(46));
+        assert_eq!(response.result.unwrap(), FilesystemEntry::Unit);
+        assert_eq!(std::fs::read(&target).unwrap(), b"new");
+        assert_eq!(
+            std::fs::metadata(&target).unwrap().permissions().mode() & 0o7777,
+            expected
+        );
+    }
+}
+
+#[tokio::test]
+async fn local_filesystem_missing_stat_distinguishes_io_failure_from_authority_denial() {
+    let workspace = TestWorkspace::create("missing-stat-error-contract").unwrap();
+    let root = workspace.root().unwrap();
+    let (adapter, region) = fs_adapter(root.clone());
+    for authorized in [false, true] {
+        let mut authority = fs_authority(root.clone());
+        authority.grants = if authorized {
+            vec![HostActionGrant::allow("Fs", "stat")]
+        } else {
+            vec![]
+        };
+        authority.sandbox.filesystem = etas_host::FilesystemPolicy {
+            read_roots: vec![root.clone()],
+            write_roots: vec![],
+            delete_roots: vec![],
+        };
+        let response = adapter
+            .execute(FilesystemRequest {
+                id: HostRequestId(62),
+                operation: FilesystemOperation::Stat {
+                    path: WorkspacePathRef::new(region.clone(), "missing.txt").unwrap(),
+                },
+                authority,
+                trace: TraceContext::root(TraceId(62)),
+                budget: Default::default(),
+            })
+            .await
+            .unwrap();
+        let error = response.result.unwrap_err();
+        assert_eq!(
+            error.code.as_str(),
+            if authorized {
+                "IoFailure"
+            } else {
+                "AuthorityDenied"
+            },
+            "{error}"
+        );
+    }
 }
 
 #[tokio::test]

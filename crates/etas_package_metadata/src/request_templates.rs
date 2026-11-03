@@ -20,11 +20,9 @@ impl RequestInstantiationTemplate {
             }
         }
         for parameter in &self.parameters {
-            if parameter.parameter.is_empty() {
-                return Err(invalid(
-                    "request template has an invalid callback parameter",
-                ));
-            }
+            parameter.parameter.validate_shape().map_err(|reason| {
+                MetadataArtifactError::invalid(crate::PACKAGE_METADATA_FILE, reason)
+            })?;
             for effect in &parameter.excluded {
                 if effect.path.is_empty() || effect.path.iter().any(String::is_empty) {
                     return Err(invalid("request template handler mask path is required"));

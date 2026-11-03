@@ -1,6 +1,7 @@
 use crate::{
-    IntrinsicDispatch, IntrinsicPurity, LoweringHint, StdDecl, StdEffectRef, StdGenericParam,
-    StdRegistryBuilder, StdSpecRef, StdSymbolKind, StdType, TypeDecl, TypeDeclKind, intrinsic,
+    FlowDecl, IntrinsicDispatch, IntrinsicPurity, LoweringHint, StdDecl, StdEffectRef,
+    StdGenericParam, StdRegistryBuilder, StdSpecRef, StdSymbolKind, StdType, TypeDecl,
+    TypeDeclKind, intrinsic,
 };
 
 use crate::modules::registration::{IntrinsicFlowRegistration, register_intrinsic_flow};
@@ -45,6 +46,20 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             "Filesystem substrate support type.",
         );
     }
+    let read_limit_error = builder.symbol(
+        module,
+        "ReadLimitError",
+        StdSymbolKind::Type,
+        StdDecl::Type(TypeDecl::generic("ReadLimitError", &[], TypeDeclKind::Enum)),
+        "A bounded workspace read exceeded its requested byte limit.",
+    );
+    builder
+        .enum_constructor(
+            read_limit_error,
+            FlowDecl::pure("LimitExceeded", &["usize"], "std.fs.ReadLimitError"),
+            "The file contains more than the requested maximum number of bytes.",
+        )
+        .expect("ReadLimitError owner is registered");
     register_intrinsic_flow(
         builder,
         module,
@@ -85,6 +100,34 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             purity: IntrinsicPurity::Host,
             dispatch: IntrinsicDispatch::Host,
             lowering: LoweringHint::default_action(136, &[0]),
+        },
+    );
+    register_intrinsic_flow(
+        builder,
+        module,
+        &["std", "fs"],
+        IntrinsicFlowRegistration {
+            name: "read_bytes_limited",
+            type_params: &[region_param()],
+            params: &["WorkspacePath[R]", "usize"],
+            output: "bytes",
+            public_effects: &[
+                StdEffectRef::typed(&["Error"], StdType::parse("std.fs.IOError")),
+                StdEffectRef::typed(&["Error"], StdType::parse("std.fs.ReadLimitError")),
+            ],
+            requested_actions: &[StdEffectRef::typed(
+                &["Fs", "read"],
+                StdType::Var("R".to_owned()),
+            )],
+            intrinsic_id: intrinsic::runtime::FS_READ_BYTES_LIMITED,
+            summary: "Read a complete workspace file within a byte limit, or raise ReadLimitError without a partial result.",
+            purity: IntrinsicPurity::Host,
+            dispatch: IntrinsicDispatch::Host,
+            lowering: LoweringHint::ActionReducer {
+                stable_id: 136,
+                payload: vec![0],
+                reducer: crate::StdActionReducer::BoundedFileRead { limit_parameter: 1 },
+            },
         },
     );
     register_intrinsic_flow(

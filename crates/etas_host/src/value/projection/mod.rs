@@ -4,6 +4,7 @@
 use crate::{HostError, HostJsonValue, HostValue};
 
 mod materialize;
+pub(crate) mod text;
 pub use materialize::project_to_host_value;
 
 pub enum HostScalar<'a> {
@@ -23,6 +24,11 @@ pub trait HostValueProjection {
 pub trait HostValueVisitor: Sized {
     type Output;
     fn scalar(self, value: HostScalar<'_>) -> Result<Self::Output, HostError>;
+    fn text<'a>(
+        self,
+        byte_len: usize,
+        chunks: impl IntoIterator<Item = &'a str>,
+    ) -> Result<Self::Output, HostError>;
     fn list<P: HostValueProjection>(
         self,
         values: impl IntoIterator<Item = P>,
@@ -53,6 +59,11 @@ pub trait HostJsonVisitor: Sized {
     fn boolean(self, value: bool) -> Result<Self::Output, HostError>;
     fn number(self, value: f64) -> Result<Self::Output, HostError>;
     fn string(self, value: &str) -> Result<Self::Output, HostError>;
+    fn text<'a>(
+        self,
+        byte_len: usize,
+        chunks: impl IntoIterator<Item = &'a str>,
+    ) -> Result<Self::Output, HostError>;
     fn array<P: HostJsonProjection>(
         self,
         values: impl IntoIterator<Item = P>,

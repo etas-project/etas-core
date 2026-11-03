@@ -65,9 +65,11 @@ impl FixpointEngine {
     {
         let transfers = transfers.into_iter().collect::<Vec<_>>();
         self.solve(state, |state| {
-            transfers
-                .iter()
-                .fold(false, |changed, transfer| transfer.apply(state) || changed)
+            let mut changed = false;
+            for transfer in &transfers {
+                changed |= transfer.apply(state);
+            }
+            changed
         })
     }
 

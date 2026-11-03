@@ -9,6 +9,14 @@ struct ValueBuilder;
 impl HostValueVisitor for ValueBuilder {
     type Output = HostValue;
 
+    fn text<'a>(
+        self,
+        byte_len: usize,
+        chunks: impl IntoIterator<Item = &'a str>,
+    ) -> Result<Self::Output, HostError> {
+        text::materialize(byte_len, chunks).map(HostValue::String)
+    }
+
     fn scalar(self, value: HostScalar<'_>) -> Result<Self::Output, HostError> {
         Ok(match value {
             HostScalar::Unit => HostValue::Unit,
@@ -77,6 +85,13 @@ struct JsonBuilder;
 
 impl HostJsonVisitor for JsonBuilder {
     type Output = HostJsonValue;
+    fn text<'a>(
+        self,
+        byte_len: usize,
+        chunks: impl IntoIterator<Item = &'a str>,
+    ) -> Result<Self::Output, HostError> {
+        text::materialize(byte_len, chunks).map(HostJsonValue::String)
+    }
     fn null(self) -> Result<Self::Output, HostError> {
         Ok(HostJsonValue::Null)
     }

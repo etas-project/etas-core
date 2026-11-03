@@ -1,9 +1,13 @@
+mod callable_contracts;
 mod callable_values;
+pub use callable_contracts::CallableContractTarget;
 pub mod container;
 pub mod error;
 pub mod model;
 mod proto;
 mod request_templates;
+mod spec_invocations;
+mod spec_receivers;
 mod type_validation;
 
 pub use callable_values::*;
@@ -19,6 +23,7 @@ pub use container::{
 };
 pub use error::MetadataArtifactError;
 pub use model::*;
+pub use spec_invocations::*;
 
 /// Checks graph-local references and resource bounds outside the binary codec.
 /// The frontend must also validate root references against its resolved interface.
@@ -54,6 +59,7 @@ pub fn validate_definition_descriptors(
 
 #[cfg(test)]
 mod tests {
+    mod spec_invocations;
     use std::path::Path;
 
     use super::*;
@@ -80,33 +86,6 @@ mod tests {
 
         assert_eq!(header.package_id, "demo");
         assert_eq!(decoded, metadata);
-    }
-
-    #[test]
-    fn behavioral_spec_implementation_module_round_trips_and_is_required() {
-        let mut metadata = sample_metadata();
-        metadata.public_metadata.spec_impls.push(SpecImpl {
-            self_type: Type {
-                kind: TypeKind::Primitive,
-                name: "i32".into(),
-                ..Default::default()
-            },
-            spec: vec!["demo".into(), "Show".into()],
-            args: vec![],
-            methods: vec!["show".into()],
-            implementation_module: vec!["demo".into(), "implementations".into()],
-        });
-        let encoded = encode_sample(&metadata);
-        let (_, decoded) =
-            package_metadata_from_artifact(Path::new("package.etasmeta"), &encoded).unwrap();
-        assert_eq!(decoded, metadata);
-        metadata.public_metadata.spec_impls[0]
-            .implementation_module
-            .clear();
-        assert!(package_metadata_to_sections(&metadata).is_err());
-        metadata.public_metadata.spec_impls[0].implementation_module =
-            vec!["demo".into(), "".into()];
-        assert!(package_metadata_to_sections(&metadata).is_err());
     }
 
     #[test]
@@ -226,7 +205,7 @@ mod tests {
             ],
         }];
         metadata.public_metadata.trace_spec_conformances = vec![TraceSpecConformance {
-            item: vec!["demo".into(), "run".into()],
+            item: vec!["demo".into(), "run".into()].into(),
             target: TraceSpecConformanceTarget::Named {
                 spec: vec!["demo".into(), "Safe".into()],
                 definition: test_trace_spec_key("Safe"),
@@ -358,10 +337,10 @@ mod tests {
     fn empty_parameter_call_is_rejected_before_encoding() {
         let mut metadata = sample_metadata();
         metadata.public_metadata.effect_summaries[0].action_trace = ActionTrace::ParameterCall {
-            parameter: String::new(),
+            parameter: String::new().into(),
         };
         let error = package_metadata_to_sections(&metadata).unwrap_err();
-        assert!(error.to_string().contains("empty parameter"), "{error}");
+        assert!(error.to_string().contains("parameter is empty"), "{error}");
     }
 
     #[test]
@@ -804,7 +783,7 @@ mod tests {
                 path: vec!["Console".to_owned(), "stdout_write".to_owned()],
                 args: Vec::new(),
             }],
-            parameter_calls: vec!["f".to_owned()],
+            parameter_calls: vec![CallableRequestTarget::Parameter("f".to_owned())],
         };
 
         let bytes = encode_sample(&metadata);
@@ -843,7 +822,7 @@ mod tests {
     fn metadata_artifact_rejects_excessively_deep_action_trace() {
         let mut metadata = sample_metadata();
         let mut trace = ActionTrace::ParameterCall {
-            parameter: "f".to_owned(),
+            parameter: CallableRequestTarget::Parameter("f".to_owned()),
         };
         for _ in 0..70 {
             trace = ActionTrace::Repeat(Box::new(trace));
@@ -1141,7 +1120,7 @@ mod tests {
                             source: ActionTraceEventSource::Perform,
                         }),
                         ActionTrace::ParameterCall {
-                            parameter: "f".to_owned(),
+                            parameter: CallableRequestTarget::Parameter("f".to_owned()),
                         },
                     ]),
                 }],

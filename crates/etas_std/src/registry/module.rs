@@ -49,3 +49,24 @@ pub enum StdSymbolKind {
     Value,
     Module,
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, etas_core::RetainedSize)]
+pub enum StdNamespace {
+    Type,
+    Value,
+    Effect,
+    Module,
+}
+
+impl StdSymbolKind {
+    pub fn namespace(self) -> StdNamespace {
+        match self {
+            Self::Type => StdNamespace::Type,
+            Self::Effect | Self::EffectAction => StdNamespace::Effect,
+            Self::Module => StdNamespace::Module,
+            Self::Constructor | Self::Flow | Self::Tool | Self::Requirement | Self::Value => {
+                StdNamespace::Value
+            }
+        }
+    }
+}

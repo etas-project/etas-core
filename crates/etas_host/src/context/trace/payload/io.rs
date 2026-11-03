@@ -49,6 +49,13 @@ impl HostTraceRequest for FilesystemRequest {
             FilesystemOperation::Read { path } => {
                 ("Fs.read", variant("Read", vec![workspace_path(path)]))
             }
+            FilesystemOperation::ReadLimited { path, max_bytes } => (
+                "Fs.read",
+                variant(
+                    "ReadLimited",
+                    vec![workspace_path(path), HostValue::UInt(*max_bytes as u128)],
+                ),
+            ),
             FilesystemOperation::Write {
                 path,
                 contents,

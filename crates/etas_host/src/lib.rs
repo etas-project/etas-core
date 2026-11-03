@@ -10,6 +10,7 @@ pub mod model;
 pub mod network;
 mod network_address;
 pub mod policy;
+pub mod replay;
 pub mod sandbox;
 pub mod secret;
 pub mod session;
@@ -45,8 +46,8 @@ pub use context::{
     TimeBudget, TokenBudget, TokenReservation, TraceContext, TraceEvent, TraceId, TraceSpanId,
 };
 pub use filesystem::{
-    FilesystemClient, FilesystemEntry, FilesystemOperation, FilesystemRequest, FilesystemResponse,
-    FilesystemStat, LocalFilesystemClient,
+    BoundedFileRead, FilesystemClient, FilesystemEntry, FilesystemOperation, FilesystemRequest,
+    FilesystemResponse, FilesystemStat, LocalFilesystemClient,
 };
 pub use memory::{
     InMemoryMemoryClient, MemoryClient, MemoryConflict, MemoryCursor, MemoryEntry, MemoryOperation,
@@ -55,10 +56,10 @@ pub use memory::{
 };
 pub use model::{
     AnthropicProtocolAdapter, AnthropicProviderRequest, AnthropicProviderResponse, ModelClient,
-    ModelContent, ModelCostUsage, ModelMessage, ModelName, ModelOptions, ModelProviderCapabilities,
-    ModelProviderId, ModelRequest, ModelResponse, ModelRole, ModelToolCall, ModelToolChoice,
-    ModelUsage, OmlxRequestOptions, OpenAiProtocolAdapter, OpenAiProviderRequest,
-    OpenAiProviderResponse, OpenAiTypedOutputEncoding,
+    ModelContent, ModelCostUsage, ModelMessage, ModelName, ModelOptions, ModelOutput,
+    ModelProviderCapabilities, ModelProviderId, ModelRequest, ModelResponse, ModelRole,
+    ModelToolCall, ModelToolChoice, ModelUsage, OmlxRequestOptions, OpenAiProtocolAdapter,
+    OpenAiProviderRequest, OpenAiProviderResponse, OpenAiTypedOutputEncoding,
 };
 pub use network::{
     LocalTcpClient, TcpClient, TcpConnectOperation, TcpConnectRequest, TcpConnectResponse,

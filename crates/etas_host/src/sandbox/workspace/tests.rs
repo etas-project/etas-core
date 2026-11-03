@@ -3,6 +3,21 @@ use crate::{FilesystemPolicy, FilesystemSandbox, HostErrorCode, TestWorkspace};
 use std::{fs, path::Path};
 
 #[test]
+fn workspace_io_failures_do_not_erase_control_plane_error_classes() {
+    use std::io::ErrorKind;
+    for (kind, code) in [
+        (ErrorKind::NotFound, HostErrorCode::IoFailure),
+        (ErrorKind::UnexpectedEof, HostErrorCode::IoFailure),
+        (ErrorKind::Other, HostErrorCode::IoFailure),
+        (ErrorKind::PermissionDenied, HostErrorCode::AuthorityDenied),
+        (ErrorKind::InvalidInput, HostErrorCode::InvalidRequest),
+        (ErrorKind::Interrupted, HostErrorCode::Interrupted),
+    ] {
+        assert_eq!(workspace_io_error(std::io::Error::from(kind)).code, code);
+    }
+}
+
+#[test]
 fn reopening_same_directory_does_not_inherit_binding_authority() {
     let fixture = TestWorkspace::create("workspace-reopen").unwrap();
     fs::write(fixture.path().join("data"), b"original").unwrap();

@@ -69,6 +69,18 @@ fn request(root: WorkspaceRoot, mode: &str) -> CommandRequest {
 }
 
 async fn execute(request: CommandRequest) -> etas_host::CommandOutput {
+    let output = execute_child(request).await;
+    assert_eq!(
+        output.exit_code,
+        0,
+        "stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    output
+}
+
+async fn execute_child(request: CommandRequest) -> etas_host::CommandOutput {
     let output = tokio::time::timeout(
         Duration::from_secs(10),
         LocalCommandClient::new().execute(request),
@@ -78,13 +90,6 @@ async fn execute(request: CommandRequest) -> etas_host::CommandOutput {
     .expect("Landlock ABI v5 + seccomp must activate")
     .result
     .expect("child output");
-    assert_eq!(
-        output.exit_code,
-        0,
-        "stdout={} stderr={}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
     assert_eq!(
         output.isolation.backend(),
         Some(PlatformSandboxHook::Landlock)
@@ -245,6 +250,11 @@ async fn landlock_retains_directory_object_after_root_replacement() {
 #[ignore = "requires a Linux kernel with Landlock ABI v5 enabled; run --ignored landlock_"]
 async fn landlock_enforces_confinement_during_symlink_replacement() {
     symlink_race::run().await;
+}
+
+#[test]
+fn unconfined_atomic_symlink_replacement_control() {
+    symlink_race::unconfined_control();
 }
 
 #[tokio::test(flavor = "current_thread")]

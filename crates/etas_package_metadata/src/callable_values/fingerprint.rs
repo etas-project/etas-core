@@ -18,7 +18,7 @@ struct Encoder(blake3::Hasher);
 impl Encoder {
     fn new() -> Self {
         Self(blake3::Hasher::new_derive_key(
-            "etas.metadata.callable-value-input.v2",
+            "etas.metadata.callable-value-input.v3",
         ))
     }
     fn byte(&mut self, value: u8) {
@@ -30,6 +30,10 @@ impl Encoder {
     fn text(&mut self, value: &str) {
         self.number(value.len());
         self.0.update(value.as_bytes());
+    }
+    fn target(&mut self, target: &crate::CallableRequestTarget) {
+        self.0
+            .update(crate::proto::callable_request_target_fingerprint(target).as_bytes());
     }
     fn path(&mut self, path: &[String]) {
         self.number(path.len());
@@ -183,7 +187,7 @@ impl Encoder {
                         }
                         ActionTrace::ParameterCall { parameter } => {
                             self.byte(2);
-                            self.text(parameter);
+                            self.target(parameter);
                         }
                         ActionTrace::Seq(parts) => {
                             self.byte(3);
@@ -210,7 +214,10 @@ impl Encoder {
                         } => {
                             self.byte(7);
                             self.number(actions.len());
-                            self.texts(parameter_calls);
+                            self.number(parameter_calls.len());
+                            for parameter in parameter_calls {
+                                self.target(parameter);
+                            }
                             pending.extend(actions.iter().rev().map(Task::Effect));
                         }
                     }
@@ -259,7 +266,7 @@ pub fn callable_value_graph_input_fingerprint(
             }
             e.number(requests.parameters.len());
             for parameter in &requests.parameters {
-                e.text(&parameter.parameter);
+                e.target(&parameter.parameter);
                 e.number(parameter.excluded.len());
                 for effect in &parameter.excluded {
                     e.encode(Task::Effect(effect));

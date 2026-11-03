@@ -2,13 +2,14 @@ use crate::type_validation::{type_kind_to_wire, validate_type_shape};
 use prost::Message;
 mod callable_values;
 mod request_templates;
+pub(super) mod spec_invocations;
 use request_templates::{request_template_from_proto, request_template_to_proto};
 
 pub(crate) fn callable_value_graph_fingerprint(
     graph: &crate::CallableValueGraph,
 ) -> etas_code::CodeFingerprint {
     etas_code::CodeFingerprint::of_bytes(
-        "etas.metadata.callable-values.v12",
+        "etas.metadata.callable-values.v14",
         &callable_values::to_proto(graph).encode_to_vec(),
     )
 }
@@ -27,6 +28,10 @@ use super::budget::{
 use super::schema::*;
 use crate::model::*;
 
+#[cfg(test)]
+mod implementation_tests;
+#[cfg(test)]
+mod receiver_tests;
 #[cfg(test)]
 #[path = "selector_tests.rs"]
 mod selector_tests;
@@ -1239,18 +1244,23 @@ fn spec_method_to_proto(method: &SpecMethod) -> ProtoSpecMethod {
         name: method.name.clone(),
         path: method.path.clone(),
         signature: method.signature.as_ref().map(callable_signature_to_proto),
+        receiver_param: method.receiver_param,
     }
 }
 
 fn spec_method_from_proto(method: ProtoSpecMethod) -> Result<SpecMethod, MetadataArtifactError> {
-    Ok(SpecMethod {
+    let method = SpecMethod {
         name: required(method.name, "spec method name")?,
         path: required_path(method.path, "spec method path")?,
         signature: method
             .signature
             .map(callable_signature_from_proto)
             .transpose()?,
-    })
+        receiver_param: method.receiver_param,
+    };
+    crate::spec_receivers::validate(&method)
+        .map_err(|reason| MetadataArtifactError::invalid(crate::PACKAGE_METADATA_FILE, reason))?;
+    Ok(method)
 }
 
 fn spec_bound_to_proto(bound: &SpecBound) -> ProtoSpecBound {
@@ -1276,8 +1286,14 @@ fn spec_impl_to_proto(implementation: &SpecImpl) -> ProtoSpecImpl {
         self_type: Some(type_to_proto(&implementation.self_type)),
         spec: implementation.spec.clone(),
         args: implementation.args.iter().map(type_to_proto).collect(),
-        methods: implementation.methods.clone(),
-        implementation_module: implementation.implementation_module.clone(),
+        methods: implementation
+            .methods
+            .iter()
+            .map(|method| ProtoSpecImplMethod {
+                identity: Some(super::descriptors::encode_method_identity(&method.identity)),
+                callable: Some(callable_values::to_proto(&method.callable)),
+            })
+            .collect(),
     }
 }
 
@@ -1293,8 +1309,25 @@ fn spec_impl_from_proto(implementation: ProtoSpecImpl) -> Result<SpecImpl, Metad
             .into_iter()
             .map(type_from_proto)
             .collect::<Result<Vec<_>, _>>()?,
-        methods: implementation.methods,
-        implementation_module: implementation.implementation_module,
+        methods: implementation
+            .methods
+            .into_iter()
+            .map(|method| {
+                let method = SpecImplMethod {
+                    identity: super::descriptors::decode_method_identity(required_message(
+                        method.identity,
+                        "spec implementation method identity",
+                    )?)?,
+                    callable: callable_values::from_proto(required_message(
+                        method.callable,
+                        "spec implementation method callable graph",
+                    )?)?,
+                };
+                method.root()?;
+                method.callable.validate_references(Some((0, &[])))?;
+                Ok(method)
+            })
+            .collect::<Result<_, MetadataArtifactError>>()?,
     })
 }
 
@@ -1327,7 +1360,7 @@ fn callable_spec_satisfaction_to_proto(
     fact: &CallableSpecSatisfaction,
 ) -> ProtoCallableSpecSatisfaction {
     ProtoCallableSpecSatisfaction {
-        item: fact.item.clone(),
+        item: Some(callable_contract_target_to_proto(&fact.item)),
         spec: fact.spec.clone(),
         args: fact.args.iter().map(type_to_proto).collect(),
     }
@@ -1337,7 +1370,7 @@ fn callable_spec_satisfaction_from_proto(
     fact: ProtoCallableSpecSatisfaction,
 ) -> Result<CallableSpecSatisfaction, MetadataArtifactError> {
     Ok(CallableSpecSatisfaction {
-        item: required_path(fact.item, "callable spec satisfaction item path")?,
+        item: callable_contract_target_from_proto(fact.item)?,
         spec: required_path(fact.spec, "callable spec satisfaction spec path")?,
         args: fact
             .args
@@ -1350,7 +1383,7 @@ fn callable_spec_satisfaction_from_proto(
 fn trace_spec_conformance_to_proto(fact: &TraceSpecConformance) -> ProtoTraceSpecConformance {
     match &fact.target {
         TraceSpecConformanceTarget::Inline => ProtoTraceSpecConformance {
-            item: fact.item.clone(),
+            item: Some(callable_contract_target_to_proto(&fact.item)),
             target_kind: "inline".to_owned(),
             spec: Vec::new(),
             args: Vec::new(),
@@ -1361,7 +1394,7 @@ fn trace_spec_conformance_to_proto(fact: &TraceSpecConformance) -> ProtoTraceSpe
             definition,
             args,
         } => ProtoTraceSpecConformance {
-            item: fact.item.clone(),
+            item: Some(callable_contract_target_to_proto(&fact.item)),
             target_kind: "named".to_owned(),
             spec: spec.clone(),
             args: args.iter().map(type_to_proto).collect(),
@@ -1373,7 +1406,7 @@ fn trace_spec_conformance_to_proto(fact: &TraceSpecConformance) -> ProtoTraceSpe
 fn trace_spec_conformance_from_proto(
     fact: ProtoTraceSpecConformance,
 ) -> Result<TraceSpecConformance, MetadataArtifactError> {
-    let item = required_path(fact.item, "trace spec conformance item path")?;
+    let item = callable_contract_target_from_proto(fact.item)?;
     let target = match fact.target_kind.as_str() {
         "inline" if fact.spec.is_empty() && fact.args.is_empty() && fact.definition.is_none() => {
             TraceSpecConformanceTarget::Inline
@@ -1394,6 +1427,39 @@ fn trace_spec_conformance_from_proto(
         }
     };
     Ok(TraceSpecConformance { item, target })
+}
+
+fn callable_contract_target_to_proto(
+    target: &crate::CallableContractTarget,
+) -> ProtoCallableContractTarget {
+    match target {
+        crate::CallableContractTarget::Item(path) => ProtoCallableContractTarget {
+            path: path.clone(),
+            method: None,
+        },
+        crate::CallableContractTarget::Method(method) => ProtoCallableContractTarget {
+            path: Vec::new(),
+            method: Some(super::descriptors::encode_method_identity(method)),
+        },
+    }
+}
+
+fn callable_contract_target_from_proto(
+    target: Option<ProtoCallableContractTarget>,
+) -> Result<crate::CallableContractTarget, MetadataArtifactError> {
+    let target = target.ok_or_else(|| invalid("missing callable contract identity"))?;
+    match (target.path.is_empty(), target.method) {
+        (false, None) => Ok(crate::CallableContractTarget::Item(required_path(
+            target.path,
+            "callable contract item path",
+        )?)),
+        (true, Some(method)) => Ok(crate::CallableContractTarget::Method(
+            super::descriptors::decode_method_identity(method)?,
+        )),
+        _ => Err(invalid(
+            "callable contract requires exactly one item or method identity",
+        )),
+    }
 }
 
 fn action_signature_to_proto(signature: &ActionSignature) -> ProtoActionSignature {
@@ -1917,7 +1983,7 @@ fn action_trace_to_proto(trace: &ActionTrace) -> ProtoActionTrace {
     let mut proto = ProtoActionTrace {
         kind: ProtoActionTraceKind::Empty as i32,
         event: None,
-        parameter: String::new(),
+        parameter: None,
         children: Vec::new(),
         actions: Vec::new(),
         parameter_calls: Vec::new(),
@@ -1933,7 +1999,7 @@ fn action_trace_to_proto(trace: &ActionTrace) -> ProtoActionTrace {
         }
         ActionTrace::ParameterCall { parameter } => {
             proto.kind = ProtoActionTraceKind::ParameterCall as i32;
-            proto.parameter.clone_from(parameter);
+            proto.parameter = Some(spec_invocations::to_proto(parameter));
         }
         ActionTrace::Seq(children) => {
             proto.kind = ProtoActionTraceKind::Seq as i32;
@@ -1957,7 +2023,10 @@ fn action_trace_to_proto(trace: &ActionTrace) -> ProtoActionTrace {
         } => {
             proto.kind = ProtoActionTraceKind::Widened as i32;
             proto.actions = actions.iter().map(effect_ref_to_proto).collect();
-            proto.parameter_calls.clone_from(parameter_calls);
+            proto.parameter_calls = parameter_calls
+                .iter()
+                .map(spec_invocations::to_proto)
+                .collect();
         }
     }
     proto
@@ -1990,16 +2059,15 @@ fn action_trace_from_proto_with_budget(
                 source: action_trace_source_from_proto(event.source)?,
             }))
         }
-        ProtoActionTraceKind::ParameterCall => {
-            if trace.parameter.is_empty() {
-                return Err(invalid(
-                    "effect summary parameter-call trace has empty parameter",
-                ));
-            }
-            Ok(ActionTrace::ParameterCall {
-                parameter: trace.parameter,
-            })
-        }
+        ProtoActionTraceKind::ParameterCall => Ok(ActionTrace::ParameterCall {
+            parameter: spec_invocations::from_proto(
+                trace
+                    .parameter
+                    .ok_or_else(|| invalid("effect summary call trace has no checked target"))?,
+                depth + 1,
+                budget,
+            )?,
+        }),
         ProtoActionTraceKind::Seq => Ok(ActionTrace::Seq(
             trace
                 .children
@@ -2035,27 +2103,19 @@ fn action_trace_from_proto_with_budget(
                 .collect::<Result<Vec<_>, _>>()?,
         )),
         ProtoActionTraceKind::Widened => {
-            if trace.parameter_calls.iter().any(String::is_empty) {
-                return Err(invalid(
-                    "effect summary widened trace has an empty parameter call",
-                ));
-            }
-            let unique = trace
+            let parameter_calls = trace
                 .parameter_calls
-                .iter()
-                .collect::<std::collections::BTreeSet<_>>();
-            if unique.len() != trace.parameter_calls.len() {
-                return Err(invalid(
-                    "effect summary widened trace has duplicate parameter calls",
-                ));
-            }
+                .into_iter()
+                .map(|target| spec_invocations::from_proto(target, depth + 1, budget))
+                .collect::<Result<Vec<_>, _>>()?;
+            spec_invocations::ensure_distinct(&parameter_calls)?;
             Ok(ActionTrace::Widened {
                 actions: trace
                     .actions
                     .into_iter()
                     .map(effect_ref_from_proto)
                     .collect::<Result<Vec<_>, _>>()?,
-                parameter_calls: trace.parameter_calls,
+                parameter_calls,
             })
         }
     }
@@ -2494,6 +2554,7 @@ fn invalid(message: impl Into<String>) -> MetadataArtifactError {
 
 #[cfg(test)]
 mod tests {
+    pub(crate) mod spec_invocations;
     use super::super::budget::MAX_METADATA_GRAPH_NODES;
     use super::*;
 
@@ -2537,7 +2598,9 @@ mod tests {
             },
             ProtoActionTrace {
                 kind: ProtoActionTraceKind::Seq as i32,
-                parameter_calls: vec!["callback".into()],
+                parameter_calls: vec![crate::proto::codec::spec_invocations::to_proto(
+                    &crate::CallableRequestTarget::Parameter("callback".into()),
+                )],
                 ..Default::default()
             },
             ProtoActionTrace {
@@ -2557,7 +2620,10 @@ mod tests {
     #[test]
     fn trace_conformance_rejects_missing_or_non_spec_identity() {
         let named = ProtoTraceSpecConformance {
-            item: vec!["dep".into(), "f".into()],
+            item: Some(ProtoCallableContractTarget {
+                path: vec!["dep".into(), "f".into()],
+                method: None,
+            }),
             target_kind: "named".into(),
             spec: vec!["dep".into(), "Safe".into()],
             args: vec![],

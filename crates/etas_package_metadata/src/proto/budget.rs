@@ -4,7 +4,9 @@ use super::schema as proto;
 
 mod callable_values;
 mod request_templates;
+mod spec_invocations;
 pub(crate) use callable_values::validate as validate_callable_values;
+pub(crate) use spec_invocations::validate as validate_callable_request_target;
 
 pub const MAX_METADATA_GRAPH_DEPTH: usize = 64;
 pub const MAX_METADATA_GRAPH_NODES: usize = 100_000;
@@ -110,6 +112,30 @@ impl ModelGraphValidator {
         )
     }
 
+    fn callable_contract(
+        &mut self,
+        target: &crate::CallableContractTarget,
+        methods: &std::collections::BTreeMap<&etas_code::MethodId, &SpecImplMethod>,
+    ) -> Result<(), MetadataArtifactError> {
+        match target {
+            crate::CallableContractTarget::Item(path) => {
+                self.budget.charge(path.len(), "callable contract path")?;
+                if path.is_empty() || path.iter().any(String::is_empty) {
+                    return Err(invalid("callable contract has an empty declaration path"));
+                }
+            }
+            crate::CallableContractTarget::Method(identity) => {
+                super::descriptors::validate_model_method_identity(identity, &mut self.budget)?;
+                if !methods.contains_key(identity) {
+                    return Err(invalid(
+                        "callable contract method requires one published implementation owner",
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn dependency(
         &mut self,
         dependency: &ResolvedDependency,
@@ -211,6 +237,7 @@ impl ModelGraphValidator {
                 self.callable(callable)?;
             }
             for method in &signature.methods {
+                crate::spec_receivers::validate(method).map_err(invalid)?;
                 if let Some(callable) = &method.signature {
                     self.callable(callable)?;
                 }
@@ -219,18 +246,27 @@ impl ModelGraphValidator {
                 self.spec_bound(bound)?;
             }
         }
+        let mut methods = std::collections::BTreeMap::<_, &SpecImplMethod>::new();
         for implementation in &metadata.spec_impls {
-            self.budget.charge(
-                implementation.implementation_module.len(),
-                "spec implementation module",
-            )?;
-            validate_spec_implementation_module(
-                &implementation.methods,
-                &implementation.implementation_module,
-            )?;
             self.ty(&implementation.self_type, 0)?;
             for arg in &implementation.args {
                 self.ty(arg, 0)?;
+            }
+            for method in &implementation.methods {
+                if let Some(previous) = methods.insert(&method.identity, method)
+                    && previous.callable != method.callable
+                {
+                    return Err(invalid(
+                        "method identity has conflicting published behavior graphs",
+                    ));
+                }
+                super::descriptors::validate_model_method_identity(
+                    &method.identity,
+                    &mut self.budget,
+                )?;
+                self.callable_values(&method.callable)?;
+                method.root()?;
+                method.callable.validate_references(Some((0, &[])))?;
             }
         }
         for satisfaction in &metadata.type_spec_satisfactions {
@@ -240,11 +276,13 @@ impl ModelGraphValidator {
             }
         }
         for satisfaction in &metadata.callable_spec_satisfactions {
+            self.callable_contract(&satisfaction.item, &methods)?;
             for arg in &satisfaction.args {
                 self.ty(arg, 0)?;
             }
         }
         for conformance in &metadata.trace_spec_conformances {
+            self.callable_contract(&conformance.item, &methods)?;
             if let TraceSpecConformanceTarget::Named {
                 args, definition, ..
             } = &conformance.target
@@ -342,15 +380,33 @@ impl ModelGraphValidator {
     }
 
     fn generic_param(&mut self, param: &GenericParam) -> Result<(), MetadataArtifactError> {
+        self.generic_param_at_depth(param, 0)
+    }
+
+    fn generic_param_at_depth(
+        &mut self,
+        param: &GenericParam,
+        depth: usize,
+    ) -> Result<(), MetadataArtifactError> {
+        self.budget.enter(depth, "generic parameter")?;
         for bound in &param.bounds {
-            self.spec_bound(bound)?;
+            self.spec_bound_at_depth(bound, depth + 1)?;
         }
         Ok(())
     }
 
     fn spec_bound(&mut self, bound: &SpecBound) -> Result<(), MetadataArtifactError> {
+        self.spec_bound_at_depth(bound, 0)
+    }
+
+    fn spec_bound_at_depth(
+        &mut self,
+        bound: &SpecBound,
+        depth: usize,
+    ) -> Result<(), MetadataArtifactError> {
+        self.budget.enter(depth, "spec bound")?;
         for arg in &bound.args {
-            self.ty(arg, 0)?;
+            self.ty(arg, depth + 1)?;
         }
         Ok(())
     }
@@ -431,34 +487,24 @@ impl ModelGraphValidator {
                 }
             }
             ActionTrace::Repeat(child) => self.action_trace(child, depth + 1)?,
-            ActionTrace::UnknownOrder(actions) => {
-                for action in actions {
-                    self.effect_ref(action, depth + 1)?;
-                }
-            }
-            ActionTrace::Widened {
-                actions,
-                parameter_calls,
-            } => {
-                self.budget
-                    .charge(parameter_calls.len(), "action trace parameter calls")?;
-                if parameter_calls.iter().any(String::is_empty) {
-                    return Err(invalid(
-                        "effect summary widened trace has an empty parameter call",
-                    ));
-                }
+            ActionTrace::UnknownOrder(actions) | ActionTrace::Widened { actions, .. } => {
                 for action in actions {
                     self.effect_ref(action, depth + 1)?;
                 }
             }
             ActionTrace::ParameterCall { parameter } => {
-                if parameter.is_empty() {
-                    return Err(invalid(
-                        "effect summary parameter-call trace has empty parameter",
-                    ));
-                }
+                self.callable_request_target(parameter, depth + 1)?
             }
             ActionTrace::Empty => {}
+        }
+        if let ActionTrace::Widened {
+            parameter_calls, ..
+        } = trace
+        {
+            for parameter in parameter_calls {
+                self.callable_request_target(parameter, depth + 1)?;
+            }
+            super::codec::spec_invocations::ensure_distinct(parameter_calls)?;
         }
         Ok(())
     }
@@ -493,6 +539,24 @@ impl ProtoGraphValidator {
             1 + definition.module.len() + definition.declaration.len(),
             "trace spec definition identity",
         )
+    }
+
+    fn callable_contract(
+        &mut self,
+        target: Option<&proto::ProtoCallableContractTarget>,
+    ) -> Result<(), MetadataArtifactError> {
+        let target = target.ok_or_else(|| invalid("missing callable contract identity"))?;
+        match (target.path.is_empty(), target.method.as_ref()) {
+            (false, None) => self
+                .budget
+                .charge(target.path.len(), "callable contract path"),
+            (true, Some(method)) => {
+                super::descriptors::validate_method_identity(method, &mut self.budget)
+            }
+            _ => Err(invalid(
+                "callable contract requires exactly one item or method identity",
+            )),
+        }
     }
 
     fn dependency(
@@ -606,19 +670,19 @@ impl ProtoGraphValidator {
             }
         }
         for implementation in &metadata.spec_impls {
-            self.budget.charge(
-                implementation.implementation_module.len(),
-                "spec implementation module",
-            )?;
-            validate_spec_implementation_module(
-                &implementation.methods,
-                &implementation.implementation_module,
-            )?;
             if let Some(ty) = implementation.self_type.as_ref() {
                 self.ty(ty, 0)?;
             }
             for arg in &implementation.args {
                 self.ty(arg, 0)?;
+            }
+            for method in &implementation.methods {
+                if let Some(identity) = &method.identity {
+                    super::descriptors::validate_method_identity(identity, &mut self.budget)?;
+                }
+                if let Some(graph) = &method.callable {
+                    self.callable_values(graph)?;
+                }
             }
         }
         for satisfaction in &metadata.type_spec_satisfactions {
@@ -630,11 +694,13 @@ impl ProtoGraphValidator {
             }
         }
         for satisfaction in &metadata.callable_spec_satisfactions {
+            self.callable_contract(satisfaction.item.as_ref())?;
             for arg in &satisfaction.args {
                 self.ty(arg, 0)?;
             }
         }
         for conformance in &metadata.trace_spec_conformances {
+            self.callable_contract(conformance.item.as_ref())?;
             if let Some(definition) = &conformance.definition {
                 self.trace_spec_definition(definition)?;
             }
@@ -763,15 +829,33 @@ impl ProtoGraphValidator {
         &mut self,
         generic: &proto::ProtoActionGenericParam,
     ) -> Result<(), MetadataArtifactError> {
+        self.generic_param_at_depth(generic, 0)
+    }
+
+    fn generic_param_at_depth(
+        &mut self,
+        generic: &proto::ProtoActionGenericParam,
+        depth: usize,
+    ) -> Result<(), MetadataArtifactError> {
+        self.budget.enter(depth, "generic parameter")?;
         for bound in &generic.bounds {
-            self.spec_bound(bound)?;
+            self.spec_bound_at_depth(bound, depth + 1)?;
         }
         Ok(())
     }
 
     fn spec_bound(&mut self, bound: &proto::ProtoSpecBound) -> Result<(), MetadataArtifactError> {
+        self.spec_bound_at_depth(bound, 0)
+    }
+
+    fn spec_bound_at_depth(
+        &mut self,
+        bound: &proto::ProtoSpecBound,
+        depth: usize,
+    ) -> Result<(), MetadataArtifactError> {
+        self.budget.enter(depth, "spec bound")?;
         for arg in &bound.args {
-            self.ty(arg, 0)?;
+            self.ty(arg, depth + 1)?;
         }
         Ok(())
     }
@@ -851,6 +935,12 @@ impl ProtoGraphValidator {
         for action in &trace.actions {
             self.effect_ref(action, depth + 1)?;
         }
+        if let Some(parameter) = &trace.parameter {
+            self.callable_request_target(parameter, depth + 1)?;
+        }
+        for parameter in &trace.parameter_calls {
+            self.callable_request_target(parameter, depth + 1)?;
+        }
         Ok(())
     }
 
@@ -880,7 +970,7 @@ pub(super) fn validate_proto_action_trace_shape(
         .map_err(|_| invalid("effect summary action trace has unknown kind"))?;
     let (event, parameter, children, actions, parameter_calls) = (
         trace.event.is_some(),
-        !trace.parameter.is_empty(),
+        trace.parameter.is_some(),
         !trace.children.is_empty(),
         !trace.actions.is_empty(),
         !trace.parameter_calls.is_empty(),
@@ -909,15 +999,7 @@ pub(super) fn validate_proto_action_trace_shape(
             }
         }
         K::UnknownOrder if !event && !parameter && !children && !parameter_calls => Ok(()),
-        K::Widened if !event && !parameter && !children => {
-            if trace.parameter_calls.iter().any(String::is_empty) {
-                Err(invalid(
-                    "effect summary widened trace has an empty parameter call",
-                ))
-            } else {
-                Ok(())
-            }
-        }
+        K::Widened if !event && !parameter && !children => Ok(()),
         K::Event if !event => Err(invalid(
             "effect summary action trace event is missing payload",
         )),
@@ -928,22 +1010,6 @@ pub(super) fn validate_proto_action_trace_shape(
             "effect summary action trace contains fields invalid for its kind",
         )),
     }
-}
-
-fn validate_spec_implementation_module(
-    methods: &[String],
-    module: &[String],
-) -> Result<(), MetadataArtifactError> {
-    if (!methods.is_empty() && module.is_empty())
-        || module
-            .iter()
-            .any(|segment| segment.is_empty() || segment.contains('\0'))
-    {
-        return Err(invalid(
-            "spec implementation methods require a valid source module",
-        ));
-    }
-    Ok(())
 }
 
 fn invalid(message: impl Into<String>) -> MetadataArtifactError {
@@ -1086,25 +1152,5 @@ fn model_effect_arg_matches_kind(arg: &EffectArg, kind: &ActionArgKind) -> bool 
             arg.kind,
             EffectArgKind::String | EffectArgKind::Int | EffectArgKind::Path
         ),
-    }
-}
-
-#[cfg(test)]
-mod spec_implementation_tests {
-    use super::*;
-
-    #[test]
-    fn proto_graph_rejects_implementation_without_module() {
-        let graph = proto::ProtoPackageGraphSection {
-            public_metadata: Some(proto::ProtoPublicMetadataSection {
-                spec_impls: vec![proto::ProtoSpecImpl {
-                    methods: vec!["show".into()],
-                    ..Default::default()
-                }],
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-        assert!(validate_proto_package_metadata_graph(&graph).is_err());
     }
 }

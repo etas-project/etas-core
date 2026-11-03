@@ -11,10 +11,9 @@ pub use root::WorkspaceRoot;
 pub(crate) fn workspace_io_error(error: std::io::Error) -> HostError {
     let code = match error.kind() {
         std::io::ErrorKind::PermissionDenied => HostErrorCode::AuthorityDenied,
-        std::io::ErrorKind::NotFound | std::io::ErrorKind::InvalidInput => {
-            HostErrorCode::InvalidRequest
-        }
-        _ => HostErrorCode::ProviderUnavailable,
+        std::io::ErrorKind::InvalidInput => HostErrorCode::InvalidRequest,
+        std::io::ErrorKind::Interrupted => HostErrorCode::Interrupted,
+        _ => HostErrorCode::IoFailure,
     };
     HostError::new(code, "workspace capability operation failed")
         .with_detail("error", error.to_string())

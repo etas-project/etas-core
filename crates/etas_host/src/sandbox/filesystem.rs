@@ -6,7 +6,9 @@ use std::{
 use cap_std::fs::{Dir, OpenOptions};
 
 use super::workspace::{normalize_relative, read_options, workspace_io_error};
-use crate::{HostError, HostErrorCode, WorkspacePath, WorkspaceRoot};
+use crate::{BoundedFileRead, HostError, HostErrorCode, WorkspacePath, WorkspaceRoot};
+
+mod bounded_read;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WorkspaceFileMetadata {
@@ -59,27 +61,58 @@ impl FilesystemSandbox {
     }
 
     pub fn read_file(&self, root: &WorkspaceRoot, path: &Path) -> Result<Vec<u8>, HostError> {
+        let mut file = self.open_read_file(root, path)?;
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes).map_err(workspace_io_error)?;
+        Ok(bytes)
+    }
+
+    pub fn read_file_limited(
+        &self,
+        root: &WorkspaceRoot,
+        path: &Path,
+        max_bytes: usize,
+    ) -> Result<BoundedFileRead, HostError> {
+        let mut file = self.open_read_file(root, path)?;
+        bounded_read::read(&mut file, max_bytes)
+    }
+
+    pub(crate) fn read_file_limited_controlled(
+        &self,
+        root: &WorkspaceRoot,
+        path: &Path,
+        max_bytes: usize,
+        check: &mut impl FnMut() -> Result<(), HostError>,
+    ) -> Result<BoundedFileRead, HostError> {
+        check()?;
+        let mut file = self.open_read_file(root, path)?;
+        bounded_read::read_controlled(&mut file, max_bytes, check)
+    }
+
+    fn open_read_file(
+        &self,
+        root: &WorkspaceRoot,
+        path: &Path,
+    ) -> Result<cap_std::fs::File, HostError> {
         ensure_root_allowed(
             &self.policy.read_roots,
             root,
             "filesystem read is not allowed",
         )?;
         let relative = normalize_relative(path)?;
-        let mut file = root
+        let file = root
             .directory()
             .open_with(&relative, &read_options())
             .map_err(workspace_io_error)?;
         if !file.metadata().map_err(workspace_io_error)?.is_file() {
             return Err(HostError::new(
-                HostErrorCode::InvalidRequest,
+                HostErrorCode::IoFailure,
                 "workspace read target is not a file",
             ));
         }
         #[cfg(test)]
         tests::after_resolution();
-        let mut bytes = Vec::new();
-        file.read_to_end(&mut bytes).map_err(workspace_io_error)?;
-        Ok(bytes)
+        Ok(file)
     }
 
     pub fn atomic_write(
@@ -203,7 +236,7 @@ impl FilesystemSandbox {
         let metadata = parent.symlink_metadata(&name).map_err(workspace_io_error)?;
         if !metadata.is_file() && !metadata.is_symlink() {
             return Err(HostError::new(
-                HostErrorCode::InvalidRequest,
+                HostErrorCode::IoFailure,
                 "workspace delete target is not a file",
             ));
         }
@@ -232,6 +265,7 @@ pub(super) fn ensure_root_allowed(
 }
 
 pub(super) fn atomic_write_at(parent: &Dir, name: &Path, bytes: &[u8]) -> Result<(), HostError> {
+    let permissions = replacement_permissions(parent, name)?;
     let mut random = [0u8; 16];
     getrandom::fill(&mut random).map_err(|error| {
         HostError::new(
@@ -241,14 +275,27 @@ pub(super) fn atomic_write_at(parent: &Dir, name: &Path, bytes: &[u8]) -> Result
         .with_detail("error", error.to_string())
     })?;
     let temp = format!(".etas-tmp-{:032x}", u128::from_le_bytes(random));
+    let mut options = OpenOptions::new();
+    options.create_new(true).write(true);
+    #[cfg(unix)]
+    if let Some(permissions) = &permissions {
+        use cap_std::fs::{OpenOptionsExt, PermissionsExt};
+        // Never expose replacement content at a broader creation/umask mode.
+        options.mode(permissions.mode() & 0o600);
+    }
     let mut file = parent
-        .open_with(&temp, OpenOptions::new().create_new(true).write(true))
+        .open_with(&temp, &options)
         .map_err(workspace_io_error)?;
     let mut published = false;
     let result = (|| {
         #[cfg(test)]
         tests::atomic_stage("pre-write")?;
         file.write_all(bytes)?;
+        if let Some(permissions) = permissions {
+            #[cfg(test)]
+            tests::atomic_stage("pre-permissions")?;
+            file.set_permissions(permissions)?;
+        }
         file.sync_all()?;
         drop(file);
         #[cfg(test)]
@@ -273,6 +320,36 @@ pub(super) fn atomic_write_at(parent: &Dir, name: &Path, bytes: &[u8]) -> Result
         }
         error
     })
+}
+
+fn replacement_permissions(
+    parent: &Dir,
+    name: &Path,
+) -> Result<Option<cap_std::fs::Permissions>, HostError> {
+    let metadata = match parent.symlink_metadata(name) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(workspace_io_error(error).with_detail("publication", "unchanged"));
+        }
+    };
+    if !metadata.is_file() {
+        return Err(HostError::new(
+            HostErrorCode::InvalidRequest,
+            "atomic replacement target must be a regular file, not a symlink or directory",
+        )
+        .with_detail("publication", "unchanged"));
+    }
+    #[cfg(unix)]
+    {
+        use cap_std::fs::PermissionsExt;
+        // Preserve the observed rwx bits, not ownership, ACLs or set-ID bits.
+        Ok(Some(cap_std::fs::Permissions::from_mode(
+            metadata.permissions().mode() & 0o777,
+        )))
+    }
+    #[cfg(not(unix))]
+    Ok(None)
 }
 
 #[cfg(test)]

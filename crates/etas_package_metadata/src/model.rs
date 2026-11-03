@@ -433,8 +433,8 @@ pub struct ActionTypeBinding {
     Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
 )]
 pub struct ParameterRequestTemplate {
-    /// Resolved through the containing callable's parameter binding table.
-    pub parameter: String,
+    /// A checked callback binding or static spec-method evidence selection.
+    pub parameter: crate::CallableRequestTarget,
     pub excluded: Vec<EffectRef>,
 }
 
@@ -477,7 +477,7 @@ pub enum ActionTrace {
     Empty,
     Event(ActionTraceEvent),
     ParameterCall {
-        parameter: String,
+        parameter: crate::CallableRequestTarget,
     },
     Seq(Vec<ActionTrace>),
     Choice(Vec<ActionTrace>),
@@ -485,7 +485,7 @@ pub enum ActionTrace {
     UnknownOrder(Vec<EffectRef>),
     Widened {
         actions: Vec<EffectRef>,
-        parameter_calls: Vec<String>,
+        parameter_calls: Vec<crate::CallableRequestTarget>,
     },
 }
 
@@ -568,6 +568,7 @@ pub struct SpecMethod {
     pub name: String,
     pub path: Vec<String>,
     pub signature: Option<CallableSignature>,
+    pub receiver_param: Option<u32>,
 }
 
 #[derive(
@@ -590,8 +591,36 @@ pub struct SpecImpl {
     pub self_type: Type,
     pub spec: Vec<String>,
     pub args: Vec<Type>,
-    pub methods: Vec<String>,
-    pub implementation_module: Vec<String>,
+    pub methods: Vec<SpecImplMethod>,
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub struct SpecImplMethod {
+    pub identity: etas_code::MethodId,
+    pub callable: crate::CallableValueGraph,
+}
+
+impl SpecImplMethod {
+    pub fn root(&self) -> Result<&crate::CallableValueNode, crate::MetadataArtifactError> {
+        let [crate::CallableValueSource::Value(index)] = self.callable.sources.as_slice() else {
+            return Err(crate::MetadataArtifactError::invalid(
+                crate::PACKAGE_METADATA_FILE,
+                "spec implementation method requires one owned callable graph root",
+            ));
+        };
+        self.callable
+            .values
+            .get(*index as usize)
+            .filter(|node| node.parent_scope == crate::CallableValueScope::Root)
+            .ok_or_else(|| {
+                crate::MetadataArtifactError::invalid(
+                    crate::PACKAGE_METADATA_FILE,
+                    "spec implementation method has no valid root node",
+                )
+            })
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -601,16 +630,16 @@ pub struct TypeSpecSatisfaction {
     pub args: Vec<Type>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CallableSpecSatisfaction {
-    pub item: Vec<String>,
+    pub item: crate::CallableContractTarget,
     pub spec: Vec<String>,
     pub args: Vec<Type>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TraceSpecConformance {
-    pub item: Vec<String>,
+    pub item: crate::CallableContractTarget,
     pub target: TraceSpecConformanceTarget,
 }
 

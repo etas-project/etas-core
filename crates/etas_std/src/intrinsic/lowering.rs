@@ -23,6 +23,9 @@ pub enum LoweringHint {
 
 #[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum StdActionReducer {
+    BoundedFileRead {
+        limit_parameter: usize,
+    },
     ReadUntilLimit {
         limit_parameter: usize,
         timeout_parameter: usize,

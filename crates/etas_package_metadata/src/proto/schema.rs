@@ -308,6 +308,8 @@ pub struct ProtoSpecMethod {
     pub path: Vec<String>,
     #[prost(message, optional, tag = "3")]
     pub signature: Option<ProtoCallableSignature>,
+    #[prost(uint32, optional, tag = "4")]
+    pub receiver_param: Option<u32>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -326,10 +328,16 @@ pub struct ProtoSpecImpl {
     pub spec: Vec<String>,
     #[prost(message, repeated, tag = "3")]
     pub args: Vec<ProtoType>,
-    #[prost(string, repeated, tag = "4")]
-    pub methods: Vec<String>,
-    #[prost(string, repeated, tag = "5")]
-    pub implementation_module: Vec<String>,
+    #[prost(message, repeated, tag = "4")]
+    pub methods: Vec<ProtoSpecImplMethod>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoSpecImplMethod {
+    #[prost(message, optional, tag = "1")]
+    pub identity: Option<super::descriptors::ProtoMethodIdentity>,
+    #[prost(message, optional, tag = "2")]
+    pub callable: Option<ProtoCallableValueGraph>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -344,8 +352,8 @@ pub struct ProtoTypeSpecSatisfaction {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoCallableSpecSatisfaction {
-    #[prost(string, repeated, tag = "1")]
-    pub item: Vec<String>,
+    #[prost(message, optional, tag = "1")]
+    pub item: Option<ProtoCallableContractTarget>,
     #[prost(string, repeated, tag = "2")]
     pub spec: Vec<String>,
     #[prost(message, repeated, tag = "3")]
@@ -354,8 +362,8 @@ pub struct ProtoCallableSpecSatisfaction {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoTraceSpecConformance {
-    #[prost(string, repeated, tag = "1")]
-    pub item: Vec<String>,
+    #[prost(message, optional, tag = "1")]
+    pub item: Option<ProtoCallableContractTarget>,
     #[prost(string, tag = "2")]
     pub target_kind: String,
     #[prost(string, repeated, tag = "3")]
@@ -364,6 +372,14 @@ pub struct ProtoTraceSpecConformance {
     pub args: Vec<ProtoType>,
     #[prost(message, optional, tag = "5")]
     pub definition: Option<ProtoDefinitionKey>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoCallableContractTarget {
+    #[prost(string, repeated, tag = "1")]
+    pub path: Vec<String>,
+    #[prost(message, optional, tag = "2")]
+    pub method: Option<super::descriptors::ProtoMethodIdentity>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -576,8 +592,8 @@ pub struct ProtoActionTypeBindings {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoParameterRequestTemplate {
-    #[prost(string, tag = "1")]
-    pub parameter: String,
+    #[prost(message, optional, tag = "1")]
+    pub parameter: Option<ProtoCallableRequestTarget>,
     #[prost(message, repeated, tag = "2")]
     pub excluded: Vec<ProtoEffectRef>,
 }
@@ -606,14 +622,72 @@ pub struct ProtoActionTrace {
     pub kind: i32,
     #[prost(message, optional, tag = "2")]
     pub event: Option<ProtoActionTraceEvent>,
-    #[prost(string, tag = "3")]
-    pub parameter: String,
+    #[prost(message, optional, tag = "3")]
+    pub parameter: Option<ProtoCallableRequestTarget>,
     #[prost(message, repeated, tag = "4")]
     pub children: Vec<ProtoActionTrace>,
     #[prost(message, repeated, tag = "5")]
     pub actions: Vec<ProtoEffectRef>,
-    #[prost(string, repeated, tag = "6")]
-    pub parameter_calls: Vec<String>,
+    #[prost(message, repeated, tag = "6")]
+    pub parameter_calls: Vec<ProtoCallableRequestTarget>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoCallableRequestTarget {
+    #[prost(oneof = "proto_callable_request_target::Target", tags = "1, 2")]
+    pub target: Option<proto_callable_request_target::Target>,
+}
+
+pub mod proto_callable_request_target {
+    #[derive(Clone, PartialEq, prost::Oneof)]
+    pub enum Target {
+        #[prost(string, tag = "1")]
+        Parameter(String),
+        #[prost(message, boxed, tag = "2")]
+        SpecMethod(Box<super::ProtoSpecMethodInvocation>),
+    }
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoSpecMethodInvocation {
+    #[prost(message, optional, tag = "1")]
+    pub receiver: Option<ProtoType>,
+    #[prost(string, repeated, tag = "2")]
+    pub spec: Vec<String>,
+    #[prost(message, repeated, tag = "3")]
+    pub spec_args: Vec<ProtoType>,
+    #[prost(string, tag = "4")]
+    pub method: String,
+    #[prost(uint32, tag = "5")]
+    pub arity: u32,
+    #[prost(message, repeated, tag = "6")]
+    pub generic_arguments: Vec<ProtoSpecMethodGenericArgument>,
+    #[prost(message, repeated, tag = "7")]
+    pub callable_arguments: Vec<ProtoSpecMethodCallableArgument>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoSpecMethodGenericArgument {
+    #[prost(oneof = "proto_spec_method_generic_argument::Argument", tags = "1, 2")]
+    pub argument: Option<proto_spec_method_generic_argument::Argument>,
+}
+
+pub mod proto_spec_method_generic_argument {
+    #[derive(Clone, PartialEq, prost::Oneof)]
+    pub enum Argument {
+        #[prost(message, boxed, tag = "1")]
+        Type(Box<super::ProtoType>),
+        #[prost(message, tag = "2")]
+        EffectRow(super::ProtoEffectRow),
+    }
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoSpecMethodCallableArgument {
+    #[prost(uint32, tag = "1")]
+    pub position: u32,
+    #[prost(message, optional, tag = "2")]
+    pub sources: Option<ProtoCallableValueGraph>,
 }
 
 #[derive(Clone, PartialEq, Message)]

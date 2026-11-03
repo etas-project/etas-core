@@ -67,9 +67,15 @@ pub enum ModelContent {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ModelResponse {
     pub id: HostRequestId,
+    /// Usage is retained even when generation did not produce a complete output.
+    pub usage: Option<ModelUsage>,
+    pub result: Result<ModelOutput, crate::HostError>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ModelOutput {
     pub message: ModelMessage,
     pub tool_calls: Vec<ModelToolCall>,
-    pub usage: Option<ModelUsage>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
