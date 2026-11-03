@@ -162,6 +162,8 @@ pub struct ProtoPublicMetadataSection {
     pub callable_spec_satisfactions: Vec<ProtoCallableSpecSatisfaction>,
     #[prost(message, repeated, tag = "23")]
     pub trace_spec_conformances: Vec<ProtoTraceSpecConformance>,
+    #[prost(message, repeated, tag = "26")]
+    pub methods: Vec<ProtoPublishedMethod>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -278,6 +280,8 @@ pub struct ProtoTypeContractsSection {
     pub callable_spec_satisfactions: Vec<ProtoCallableSpecSatisfaction>,
     #[prost(message, repeated, tag = "15")]
     pub trace_spec_conformances: Vec<ProtoTraceSpecConformance>,
+    #[prost(message, repeated, tag = "16")]
+    pub methods: Vec<ProtoPublishedMethod>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -329,15 +333,23 @@ pub struct ProtoSpecImpl {
     #[prost(message, repeated, tag = "3")]
     pub args: Vec<ProtoType>,
     #[prost(message, repeated, tag = "4")]
-    pub methods: Vec<ProtoSpecImplMethod>,
+    pub methods: Vec<super::descriptors::ProtoMethodIdentity>,
 }
 
 #[derive(Clone, PartialEq, Message)]
-pub struct ProtoSpecImplMethod {
+pub struct ProtoPublishedMethod {
     #[prost(message, optional, tag = "1")]
     pub identity: Option<super::descriptors::ProtoMethodIdentity>,
     #[prost(message, optional, tag = "2")]
     pub callable: Option<ProtoCallableValueGraph>,
+    #[prost(message, optional, tag = "3")]
+    pub self_type: Option<ProtoType>,
+    #[prost(string, tag = "4")]
+    pub receiver: String,
+    #[prost(uint32, optional, tag = "5")]
+    pub receiver_slot: Option<u32>,
+    #[prost(message, repeated, tag = "6")]
+    pub owner_params: Vec<ProtoActionGenericParam>,
 }
 
 #[derive(Clone, PartialEq, Message)]

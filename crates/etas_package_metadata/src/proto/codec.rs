@@ -1,6 +1,7 @@
 use crate::type_validation::{type_kind_to_wire, validate_type_shape};
 use prost::Message;
 mod callable_values;
+mod methods;
 mod request_templates;
 pub(super) mod spec_invocations;
 use request_templates::{request_template_from_proto, request_template_to_proto};
@@ -136,6 +137,7 @@ pub fn package_metadata_to_sections(
         || !type_contracts.actions.is_empty()
         || !type_contracts.trace_specs.is_empty()
         || !type_contracts.protocols.is_empty()
+        || !type_contracts.methods.is_empty()
     {
         sections.push(section_from_message(
             MetadataSectionKind::TypeContracts,
@@ -277,6 +279,7 @@ fn type_contracts_section(metadata: &PublicMetadata) -> ProtoTypeContractsSectio
             .iter()
             .map(spec_signature_to_proto)
             .collect(),
+        methods: metadata.methods.iter().map(methods::to_proto).collect(),
         spec_impls: metadata.spec_impls.iter().map(spec_impl_to_proto).collect(),
         type_spec_satisfactions: metadata
             .type_spec_satisfactions
@@ -798,6 +801,7 @@ fn public_metadata_to_proto(metadata: &PublicMetadata) -> ProtoPublicMetadataSec
             .iter()
             .map(spec_signature_to_proto)
             .collect(),
+        methods: metadata.methods.iter().map(methods::to_proto).collect(),
         spec_impls: metadata.spec_impls.iter().map(spec_impl_to_proto).collect(),
         type_spec_satisfactions: metadata
             .type_spec_satisfactions
@@ -920,6 +924,11 @@ fn public_metadata_from_proto(
             .spec_impls
             .into_iter()
             .map(spec_impl_from_proto)
+            .collect::<Result<Vec<_>, _>>()?,
+        methods: metadata
+            .methods
+            .into_iter()
+            .map(methods::from_proto)
             .collect::<Result<Vec<_>, _>>()?,
         type_spec_satisfactions: metadata
             .type_spec_satisfactions
@@ -1289,10 +1298,7 @@ fn spec_impl_to_proto(implementation: &SpecImpl) -> ProtoSpecImpl {
         methods: implementation
             .methods
             .iter()
-            .map(|method| ProtoSpecImplMethod {
-                identity: Some(super::descriptors::encode_method_identity(&method.identity)),
-                callable: Some(callable_values::to_proto(&method.callable)),
-            })
+            .map(super::descriptors::encode_method_identity)
             .collect(),
     }
 }
@@ -1312,21 +1318,7 @@ fn spec_impl_from_proto(implementation: ProtoSpecImpl) -> Result<SpecImpl, Metad
         methods: implementation
             .methods
             .into_iter()
-            .map(|method| {
-                let method = SpecImplMethod {
-                    identity: super::descriptors::decode_method_identity(required_message(
-                        method.identity,
-                        "spec implementation method identity",
-                    )?)?,
-                    callable: callable_values::from_proto(required_message(
-                        method.callable,
-                        "spec implementation method callable graph",
-                    )?)?,
-                };
-                method.root()?;
-                method.callable.validate_references(Some((0, &[])))?;
-                Ok(method)
-            })
+            .map(super::descriptors::decode_method_identity)
             .collect::<Result<_, MetadataArtifactError>>()?,
     })
 }

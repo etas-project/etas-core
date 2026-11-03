@@ -3,6 +3,7 @@ mod callable_values;
 pub use callable_contracts::CallableContractTarget;
 pub mod container;
 pub mod error;
+mod method;
 pub mod model;
 mod proto;
 mod request_templates;

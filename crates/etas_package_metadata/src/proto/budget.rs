@@ -115,7 +115,7 @@ impl ModelGraphValidator {
     fn callable_contract(
         &mut self,
         target: &crate::CallableContractTarget,
-        methods: &std::collections::BTreeMap<&etas_code::MethodId, &SpecImplMethod>,
+        methods: &std::collections::BTreeMap<&etas_code::MethodId, &PublishedMethod>,
     ) -> Result<(), MetadataArtifactError> {
         match target {
             crate::CallableContractTarget::Item(path) => {
@@ -246,27 +246,34 @@ impl ModelGraphValidator {
                 self.spec_bound(bound)?;
             }
         }
-        let mut methods = std::collections::BTreeMap::<_, &SpecImplMethod>::new();
+        let mut methods = std::collections::BTreeMap::new();
+        for method in &metadata.methods {
+            if methods.insert(&method.identity, method).is_some() {
+                return Err(invalid("published method identity is duplicated"));
+            }
+            super::descriptors::validate_model_method_identity(&method.identity, &mut self.budget)?;
+            self.ty(&method.self_type, 0)?;
+            for param in &method.owner_params {
+                self.generic_param(param)?;
+            }
+            self.callable_values(&method.callable)?;
+            method.validate()?;
+        }
         for implementation in &metadata.spec_impls {
             self.ty(&implementation.self_type, 0)?;
             for arg in &implementation.args {
                 self.ty(arg, 0)?;
             }
             for method in &implementation.methods {
-                if let Some(previous) = methods.insert(&method.identity, method)
-                    && previous.callable != method.callable
-                {
+                super::descriptors::validate_model_method_identity(method, &mut self.budget)?;
+                let published = methods.get(method).ok_or_else(|| {
+                    invalid("spec implementation references an unpublished method")
+                })?;
+                if published.self_type != implementation.self_type {
                     return Err(invalid(
-                        "method identity has conflicting published behavior graphs",
+                        "spec implementation method has a different owner type",
                     ));
                 }
-                super::descriptors::validate_model_method_identity(
-                    &method.identity,
-                    &mut self.budget,
-                )?;
-                self.callable_values(&method.callable)?;
-                method.root()?;
-                method.callable.validate_references(Some((0, &[])))?;
             }
         }
         for satisfaction in &metadata.type_spec_satisfactions {
@@ -669,6 +676,20 @@ impl ProtoGraphValidator {
                 self.spec_bound(bound)?;
             }
         }
+        for method in &metadata.methods {
+            if let Some(identity) = &method.identity {
+                super::descriptors::validate_method_identity(identity, &mut self.budget)?;
+            }
+            if let Some(ty) = &method.self_type {
+                self.ty(ty, 0)?;
+            }
+            for param in &method.owner_params {
+                self.generic_param(param)?;
+            }
+            if let Some(graph) = &method.callable {
+                self.callable_values(graph)?;
+            }
+        }
         for implementation in &metadata.spec_impls {
             if let Some(ty) = implementation.self_type.as_ref() {
                 self.ty(ty, 0)?;
@@ -677,12 +698,7 @@ impl ProtoGraphValidator {
                 self.ty(arg, 0)?;
             }
             for method in &implementation.methods {
-                if let Some(identity) = &method.identity {
-                    super::descriptors::validate_method_identity(identity, &mut self.budget)?;
-                }
-                if let Some(graph) = &method.callable {
-                    self.callable_values(graph)?;
-                }
+                super::descriptors::validate_method_identity(method, &mut self.budget)?;
             }
         }
         for satisfaction in &metadata.type_spec_satisfactions {

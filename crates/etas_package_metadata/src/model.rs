@@ -106,6 +106,7 @@ pub struct PublicMetadata {
     pub actions: Vec<ActionSignature>,
     pub trace_specs: Vec<NamedSignature>,
     pub spec_signatures: Vec<SpecSignature>,
+    pub methods: Vec<PublishedMethod>,
     pub spec_impls: Vec<SpecImpl>,
     pub type_spec_satisfactions: Vec<TypeSpecSatisfaction>,
     pub callable_spec_satisfactions: Vec<CallableSpecSatisfaction>,
@@ -135,6 +136,7 @@ impl PublicMetadata {
             && self.actions.is_empty()
             && self.trace_specs.is_empty()
             && self.spec_signatures.is_empty()
+            && self.methods.is_empty()
             && self.spec_impls.is_empty()
             && self.type_spec_satisfactions.is_empty()
             && self.callable_spec_satisfactions.is_empty()
@@ -591,23 +593,35 @@ pub struct SpecImpl {
     pub self_type: Type,
     pub spec: Vec<String>,
     pub args: Vec<Type>,
-    pub methods: Vec<SpecImplMethod>,
+    pub methods: Vec<etas_code::MethodId>,
 }
 
 #[derive(
     Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
 )]
-pub struct SpecImplMethod {
+pub struct PublishedMethod {
     pub identity: etas_code::MethodId,
+    pub self_type: Type,
+    pub receiver: MethodReceiver,
+    pub owner_params: Vec<GenericParam>,
     pub callable: crate::CallableValueGraph,
 }
 
-impl SpecImplMethod {
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub enum MethodReceiver {
+    Value { slot: u32 },
+    Associated,
+    Component,
+}
+
+impl PublishedMethod {
     pub fn root(&self) -> Result<&crate::CallableValueNode, crate::MetadataArtifactError> {
         let [crate::CallableValueSource::Value(index)] = self.callable.sources.as_slice() else {
             return Err(crate::MetadataArtifactError::invalid(
                 crate::PACKAGE_METADATA_FILE,
-                "spec implementation method requires one owned callable graph root",
+                "published method requires one owned callable graph root",
             ));
         };
         self.callable
@@ -617,7 +631,7 @@ impl SpecImplMethod {
             .ok_or_else(|| {
                 crate::MetadataArtifactError::invalid(
                     crate::PACKAGE_METADATA_FILE,
-                    "spec implementation method has no valid root node",
+                    "published method has no valid root node",
                 )
             })
     }
