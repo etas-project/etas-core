@@ -1,5 +1,6 @@
 use crate::{
-    FlowDecl, StdDecl, StdGenericParam, StdRegistryBuilder, StdSymbolKind, TypeDecl, TypeDeclKind,
+    FlowDecl, FlowSourceMethodOperation, IntrinsicDescriptor, IntrinsicPurity, StdDecl,
+    StdGenericParam, StdRegistryBuilder, StdSymbolKind, TypeDecl, TypeDeclKind, intrinsic,
 };
 
 pub fn register(builder: &mut StdRegistryBuilder) {
@@ -69,12 +70,42 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         } else {
             FlowDecl::pure(name, params, output)
         };
-        builder.symbol(
+        let (declaration, id) = match name {
+            "new" => (
+                declaration.with_type_member_method("Prompt", name),
+                intrinsic::runtime::PROMPT_NEW,
+            ),
+            "system" => (
+                declaration.with_value_method("Prompt", name),
+                intrinsic::runtime::PROMPT_SYSTEM,
+            ),
+            "user" => (
+                declaration.with_value_method("Prompt", name),
+                intrinsic::runtime::PROMPT_USER,
+            ),
+            "assistant" => (
+                declaration.with_value_method("Prompt", name),
+                intrinsic::runtime::PROMPT_ASSISTANT,
+            ),
+            "data" => (
+                declaration
+                    .with_value_method("Prompt", name)
+                    .with_method_operation(FlowSourceMethodOperation::RejectSecretData),
+                intrinsic::runtime::PROMPT_DATA,
+            ),
+            _ => unreachable!("prompt API declaration"),
+        };
+        builder.symbol_with_intrinsic(
             module,
             name,
             StdSymbolKind::Flow,
             StdDecl::Flow(declaration),
             docs,
+            Some(IntrinsicDescriptor::runtime(
+                id,
+                &["std", "agent", "prompt", name],
+                IntrinsicPurity::Pure,
+            )),
         );
     }
 }

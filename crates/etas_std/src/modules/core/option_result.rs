@@ -133,17 +133,20 @@ fn pure_helper(
         module,
         name,
         StdSymbolKind::Flow,
-        StdDecl::Flow(FlowDecl::with_type_params_actions(
-            name,
-            &generic_params
-                .iter()
-                .map(|name| StdGenericParam::new(name))
-                .collect::<Vec<_>>(),
-            params,
-            output,
-            &[],
-            &[],
-        )),
+        StdDecl::Flow(
+            FlowDecl::with_type_params_actions(
+                name,
+                &generic_params
+                    .iter()
+                    .map(|name| StdGenericParam::new(name))
+                    .collect::<Vec<_>>(),
+                params,
+                output,
+                &[],
+                &[],
+            )
+            .with_intrinsic_value_method(crate::StdType::parse(params[0]), name),
+        ),
         "Pure standard helper.",
         Some(IntrinsicDescriptor {
             id: StdIntrinsicId(id),

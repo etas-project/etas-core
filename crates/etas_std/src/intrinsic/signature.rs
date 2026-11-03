@@ -12,6 +12,21 @@ pub struct IntrinsicDescriptor {
     pub runtime_requirement: IntrinsicRuntimeRequirement,
 }
 
+impl IntrinsicDescriptor {
+    pub fn runtime(id: u32, path: &[&str], purity: IntrinsicPurity) -> Self {
+        Self {
+            id: StdIntrinsicId(id),
+            qualified_path: path.iter().map(|segment| (*segment).into()).collect(),
+            purity,
+            dispatch: IntrinsicDispatch::Runtime,
+            lowering: LoweringHint::RuntimeCall,
+            latent_effect: IntrinsicLatentEffect::None,
+            memory_access: IntrinsicMemoryAccess::None,
+            runtime_requirement: IntrinsicRuntimeRequirement::None,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum IntrinsicPurity {
     Pure,

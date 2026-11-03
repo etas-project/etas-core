@@ -1,6 +1,7 @@
 use crate::{
-    FlowDecl, StdDecl, StdEffectRef, StdGenericParam, StdRecordField, StdRegistryBuilder,
-    StdStaticArg, StdSymbolKind, StdType, TypeDecl, TypeDeclKind,
+    FlowDecl, FlowSourceMethodOperation, IntrinsicDescriptor, IntrinsicPurity, StdDecl,
+    StdEffectRef, StdGenericParam, StdRecordField, StdRegistryBuilder, StdStaticArg, StdSymbolKind,
+    StdType, TypeDecl, TypeDeclKind, intrinsic,
 };
 
 pub fn register(builder: &mut StdRegistryBuilder) {
@@ -83,7 +84,51 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             &[],
             &requested_actions,
         );
-        builder.symbol(module, name, StdSymbolKind::Flow, StdDecl::Flow(decl), docs);
+        let (decl, id) = match name {
+            "new" => (
+                decl.with_type_member_method("Message[T]", name),
+                intrinsic::runtime::MESSAGE_NEW,
+            ),
+            "cast" => {
+                let mut decl = decl;
+                decl.type_params = vec![
+                    StdGenericParam::new("Source"),
+                    StdGenericParam::new("Target"),
+                ];
+                let source = StdType::Message(Box::new(StdType::Var("Source".into())));
+                decl.params = vec![source.clone()];
+                decl.output = StdType::Option(Box::new(StdType::Message(Box::new(StdType::Var(
+                    "Target".into(),
+                )))));
+                (
+                    decl.with_intrinsic_value_method(source, name)
+                        .with_method_owner_parameters(&["Source"])
+                        .with_method_operation(FlowSourceMethodOperation::CheckedMessageCast),
+                    intrinsic::runtime::MESSAGE_CAST,
+                )
+            }
+            "with_session" => (
+                decl.with_value_method("Message[T]", name),
+                intrinsic::runtime::MESSAGE_WITH_SESSION,
+            ),
+            _ => unreachable!("message API declaration"),
+        };
+        builder.symbol_with_intrinsic(
+            module,
+            name,
+            StdSymbolKind::Flow,
+            StdDecl::Flow(decl),
+            docs,
+            Some(IntrinsicDescriptor::runtime(
+                id,
+                &["std", "agent", "message", name],
+                if requested_actions.is_empty() {
+                    IntrinsicPurity::Pure
+                } else {
+                    IntrinsicPurity::Runtime
+                },
+            )),
+        );
     }
 }
 

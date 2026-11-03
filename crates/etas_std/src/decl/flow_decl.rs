@@ -17,14 +17,27 @@ pub struct FlowSourceMethod {
     pub name: String,
     pub kind: FlowSourceMethodKind,
     pub operation: FlowSourceMethodOperation,
+    pub owner_type_params: Vec<String>,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    etas_core::RetainedSize,
+)]
 pub enum FlowSourceMethodOperation {
     #[default]
     Call,
     CheckedIndex,
     CheckedIntrinsic,
+    RejectSecretData,
+    CheckedMessageCast,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
@@ -90,6 +103,7 @@ impl FlowDecl {
             name: name.to_owned(),
             kind: FlowSourceMethodKind::TypeMember,
             operation: FlowSourceMethodOperation::Call,
+            owner_type_params: Vec::new(),
         });
         self
     }
@@ -100,6 +114,7 @@ impl FlowDecl {
             name: name.to_owned(),
             kind: FlowSourceMethodKind::ValueMethod,
             operation: FlowSourceMethodOperation::Call,
+            owner_type_params: Vec::new(),
         });
         self
     }
@@ -110,6 +125,7 @@ impl FlowDecl {
             name: name.to_owned(),
             kind: FlowSourceMethodKind::ValueMethod,
             operation: FlowSourceMethodOperation::CheckedIndex,
+            owner_type_params: Vec::new(),
         });
         self
     }
@@ -120,7 +136,24 @@ impl FlowDecl {
             name: name.to_owned(),
             kind: FlowSourceMethodKind::ValueMethod,
             operation: FlowSourceMethodOperation::CheckedIntrinsic,
+            owner_type_params: Vec::new(),
         });
+        self
+    }
+
+    pub fn with_method_owner_parameters(mut self, names: &[&str]) -> Self {
+        self.source_method
+            .as_mut()
+            .expect("method descriptor must be declared first")
+            .owner_type_params = names.iter().map(|name| (*name).into()).collect();
+        self
+    }
+
+    pub fn with_method_operation(mut self, operation: FlowSourceMethodOperation) -> Self {
+        self.source_method
+            .as_mut()
+            .expect("method descriptor must be declared first")
+            .operation = operation;
         self
     }
 }
