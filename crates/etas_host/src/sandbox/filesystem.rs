@@ -8,6 +8,7 @@ use cap_std::fs::{Dir, OpenOptions};
 use super::workspace::{normalize_relative, read_options, workspace_io_error};
 use crate::{BoundedFileRead, HostError, HostErrorCode, WorkspacePath, WorkspaceRoot};
 
+mod bounded_list;
 mod bounded_read;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -174,7 +175,7 @@ impl FilesystemSandbox {
         )?;
         let directory = root
             .directory()
-            .open_dir(normalize_relative(path)?)
+            .open_dir(super::workspace::normalize_directory_relative(path)?)
             .map_err(workspace_io_error)?;
         #[cfg(test)]
         tests::after_resolution();
@@ -196,6 +197,57 @@ impl FilesystemSandbox {
             .collect::<Result<Vec<_>, _>>()?;
         names.sort();
         Ok(names)
+    }
+
+    pub(crate) fn read_dir_limited_controlled(
+        &self,
+        root: &WorkspaceRoot,
+        path: &Path,
+        max_entries: usize,
+        max_bytes: usize,
+        check: &mut impl FnMut() -> Result<(), HostError>,
+    ) -> Result<crate::BoundedDirectoryList<String>, HostError> {
+        check()?;
+        ensure_root_allowed(
+            &self.policy.read_roots,
+            root,
+            "filesystem read is not allowed",
+        )?;
+        let relative = super::workspace::normalize_directory_relative(path)?;
+        let directory = root
+            .directory()
+            .open_dir(&relative)
+            .map_err(workspace_io_error)?;
+        let prefix = if relative.as_os_str() == "." {
+            0
+        } else {
+            relative
+                .to_str()
+                .ok_or_else(|| {
+                    HostError::new(
+                        HostErrorCode::InvalidRequest,
+                        "workspace directory path is not UTF-8",
+                    )
+                })?
+                .len()
+                .checked_add(1)
+                .ok_or_else(|| {
+                    HostError::new(
+                        HostErrorCode::InvalidRequest,
+                        "workspace directory path length overflow",
+                    )
+                })?
+        };
+        bounded_list::collect(
+            directory
+                .entries()
+                .map_err(workspace_io_error)?
+                .map(|entry| entry.map(|entry| entry.file_name())),
+            prefix,
+            max_entries,
+            max_bytes,
+            check,
+        )
     }
 
     pub fn stat(

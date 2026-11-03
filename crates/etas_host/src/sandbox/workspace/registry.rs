@@ -26,6 +26,21 @@ impl WorkspaceRegionRegistry {
     }
 
     pub(crate) fn bind(&self, path: &WorkspacePathRef) -> Result<WorkspacePath, HostError> {
+        self.bind_with(path, crate::sandbox::workspace::normalize_relative)
+    }
+
+    pub(crate) fn bind_directory(
+        &self,
+        path: &WorkspacePathRef,
+    ) -> Result<WorkspacePath, HostError> {
+        self.bind_with(path, super::path::normalize_directory_relative)
+    }
+
+    fn bind_with(
+        &self,
+        path: &WorkspacePathRef,
+        normalize: fn(&std::path::Path) -> Result<std::path::PathBuf, HostError>,
+    ) -> Result<WorkspacePath, HostError> {
         let root = self.roots.get(&path.region).ok_or_else(|| {
             HostError::new(
                 HostErrorCode::AuthorityDenied,
@@ -35,7 +50,7 @@ impl WorkspaceRegionRegistry {
         })?;
         Ok(WorkspacePath {
             root: root.clone(),
-            relative: crate::sandbox::workspace::normalize_relative(&path.relative)?,
+            relative: normalize(&path.relative)?,
         })
     }
 }

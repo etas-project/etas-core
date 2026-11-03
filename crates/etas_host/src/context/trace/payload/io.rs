@@ -78,6 +78,21 @@ impl HostTraceRequest for FilesystemRequest {
             FilesystemOperation::ReadDir { path } => {
                 ("Fs.list", variant("ReadDir", vec![workspace_path(path)]))
             }
+            FilesystemOperation::ReadDirLimited {
+                path,
+                max_entries,
+                max_bytes,
+            } => (
+                "Fs.list",
+                variant(
+                    "ReadDirLimited",
+                    vec![
+                        workspace_path(path),
+                        HostValue::UInt(*max_entries as u128),
+                        HostValue::UInt(*max_bytes as u128),
+                    ],
+                ),
+            ),
             FilesystemOperation::Stat { path } => {
                 ("Fs.stat", variant("Stat", vec![workspace_path(path)]))
             }

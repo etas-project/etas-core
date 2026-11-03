@@ -267,6 +267,115 @@ async fn local_filesystem_client_writes_root_file_with_create_dirs() {
 }
 
 #[tokio::test]
+async fn bounded_root_discovery_preserves_authority_and_never_returns_partial_entries() {
+    use etas_host::{BoundedDirectoryList, FilesystemEntry};
+    let workspace = TestWorkspace::create("bounded-root-list").unwrap();
+    std::fs::write(workspace.path().join("b"), b"b").unwrap();
+    std::fs::write(workspace.path().join("a"), b"a").unwrap();
+    let root = workspace.root().unwrap();
+    let (adapter, region) = fs_adapter(root.clone());
+    for case in 0..7 {
+        let mut authority = fs_authority(root.clone());
+        authority.grants = vec![HostActionGrant::allow("Fs", "list")];
+        if case == 6 {
+            authority.grants = vec![HostActionGrant::allow("Fs", "read")];
+        }
+        let selected = if case == 3 {
+            WorkspaceRegionId::new("test.Unmapped").unwrap()
+        } else {
+            region.clone()
+        };
+        if case == 1 {
+            authority.grants.clear();
+        }
+        if case == 2 {
+            authority.sandbox = SandboxPolicy::deny_all();
+        }
+        let path = WorkspacePathRef::root(selected);
+        assert_eq!(path.relative_name().unwrap(), ".");
+        let operation = if case == 6 {
+            FilesystemOperation::Read { path }
+        } else {
+            FilesystemOperation::ReadDirLimited {
+                path,
+                max_entries: if case == 4 { 1 } else { 2 },
+                max_bytes: if case == 5 { 1 } else { 2 },
+            }
+        };
+        let response = adapter
+            .execute(FilesystemRequest {
+                id: HostRequestId(510 + case),
+                operation,
+                authority,
+                trace: TraceContext::root(TraceId((510 + case).into())),
+                budget: Default::default(),
+            })
+            .await
+            .unwrap();
+        match case {
+            0 => match response.result.unwrap() {
+                FilesystemEntry::LimitedEntries(BoundedDirectoryList::Complete(paths)) => {
+                    assert_eq!(
+                        paths
+                            .iter()
+                            .map(|path| path.relative_name().unwrap())
+                            .collect::<Vec<_>>(),
+                        ["a", "b"]
+                    );
+                    assert!(paths.iter().all(|path| path.region == region));
+                }
+                other => panic!("{other:?}"),
+            },
+            4 | 5 => assert!(matches!(
+                response.result.unwrap(),
+                FilesystemEntry::LimitedEntries(BoundedDirectoryList::LimitExceeded { .. })
+            )),
+            _ => assert!(response.result.is_err()),
+        }
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn bounded_discovery_cannot_follow_outside_links() {
+    use std::os::unix::fs::symlink;
+    let workspace = TestWorkspace::create("bounded-list-links").unwrap();
+    let outside = TestWorkspace::create("bounded-list-outside").unwrap();
+    std::fs::write(outside.path().join("secret"), b"private").unwrap();
+    symlink(outside.path(), workspace.path().join("escape")).unwrap();
+    let root = workspace.root().unwrap();
+    let (adapter, region) = fs_adapter(root.clone());
+    for case in 0..2 {
+        let path = if case == 1 {
+            WorkspacePathRef::new(region.clone(), "escape").unwrap()
+        } else {
+            WorkspacePathRef::root(region.clone())
+        };
+        let mut authority = fs_authority(root.clone());
+        authority.grants = vec![HostActionGrant::allow("Fs", "list")];
+        let response = adapter
+            .execute(FilesystemRequest {
+                id: HostRequestId(520 + case),
+                operation: FilesystemOperation::ReadDirLimited {
+                    path,
+                    max_entries: 10,
+                    max_bytes: 100,
+                },
+                authority,
+                trace: TraceContext::root(TraceId((520 + case).into())),
+                budget: Default::default(),
+            })
+            .await
+            .unwrap();
+        if case == 0 {
+            assert!(response.result.is_ok());
+        } else {
+            assert!(response.result.is_err());
+        }
+    }
+}
+
+#[tokio::test]
 async fn local_filesystem_client_requires_exact_region_action_grant() {
     let workspace = TestWorkspace::create("fs-region-grant").expect("workspace");
     let root = workspace.root().expect("root");

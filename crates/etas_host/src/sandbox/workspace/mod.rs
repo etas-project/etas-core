@@ -4,6 +4,7 @@ mod root;
 
 use crate::{HostError, HostErrorCode};
 use cap_std::fs::OpenOptions;
+pub(crate) use path::normalize_directory_relative;
 pub use path::{WorkspacePath, WorkspacePathRef, WorkspaceRegionId, normalize_relative};
 pub use registry::WorkspaceRegionRegistry;
 pub use root::WorkspaceRoot;
