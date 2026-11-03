@@ -1,13 +1,16 @@
 //! Bounded, source-independent structural recipes for symbolic type bindings.
 //! These values describe substitutions; they are not checked-plan evidence.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+
+#[cfg(test)]
+use crate::descriptor::DescriptorGraphInput;
 
 use crate::{
     CodeFingerprint,
     descriptor::{
-        BuiltinTypeInfo, DescriptorError, DescriptorGraph, DescriptorGraphInput, DescriptorLimits,
-        FieldInfo, PrimitiveInfo, TypeInfo, TypeInfoRef, builtin_tag, primitive_tag,
+        BuiltinTypeInfo, DescriptorError, DescriptorGraph, DescriptorLimits, FieldInfo,
+        PrimitiveInfo, TypeInfo, TypeInfoRef, builtin_tag, primitive_tag,
     },
     identity::canonical::CanonicalEncoder,
     residual::identity::GenericParameterId,
@@ -112,6 +115,34 @@ pub enum TypeTemplateError {
 pub struct StaticTypeTemplate {
     nodes: Vec<StaticTypeNode>,
     root: u32,
+}
+
+#[derive(PartialEq, Eq, Hash)]
+enum StructuralDescriptorKey {
+    Primitive(u8),
+    Builtin(u8, Vec<TypeInfoRef>),
+    Tuple(Vec<TypeInfoRef>),
+    Record(Vec<(String, TypeInfoRef)>),
+}
+
+impl StructuralDescriptorKey {
+    fn of(ty: &TypeInfo) -> Option<Self> {
+        Some(match ty {
+            TypeInfo::Primitive(primitive) => Self::Primitive(primitive_tag(*primitive)),
+            TypeInfo::Builtin {
+                constructor,
+                arguments,
+            } => Self::Builtin(builtin_tag(*constructor), arguments.clone()),
+            TypeInfo::Tuple(elements) => Self::Tuple(elements.clone()),
+            TypeInfo::Record(fields) => Self::Record(
+                fields
+                    .iter()
+                    .map(|field| (field.name.clone(), field.ty))
+                    .collect(),
+            ),
+            _ => return None,
+        })
+    }
 }
 
 impl<'de> serde::Deserialize<'de> for StaticTypeTemplate {
@@ -529,44 +560,90 @@ impl StaticTypeTemplate {
         &self,
         limits: DescriptorLimits,
     ) -> Result<Option<CodeFingerprint>, TypeTemplateError> {
-        let mut types = Vec::with_capacity(self.nodes.len());
+        self.instantiate_descriptor_graph(&DescriptorGraph::default(), &BTreeMap::new(), limits)?
+            .map(|(graph, root)| {
+                graph
+                    .type_fingerprint(root)
+                    .map_err(TypeTemplateError::Descriptor)
+            })
+            .transpose()
+    }
+
+    /// Compose the source recipe over the application's canonical descriptor
+    /// graph. A nominal argument remains a graph reference, never its shape.
+    pub fn instantiate_descriptor_graph(
+        &self,
+        arguments: &DescriptorGraph,
+        bindings: &BTreeMap<GenericParameterId, TypeInfoRef>,
+        limits: DescriptorLimits,
+    ) -> Result<Option<(DescriptorGraph, TypeInfoRef)>, TypeTemplateError> {
+        let mut data = arguments.data().clone();
+        let mut interned = data
+            .types
+            .iter()
+            .enumerate()
+            .filter_map(|(index, ty)| {
+                StructuralDescriptorKey::of(ty).map(|key| (key, TypeInfoRef(index as u32)))
+            })
+            .collect::<HashMap<_, _>>();
+        let mut mapped = Vec::<TypeInfoRef>::with_capacity(self.nodes.len());
         for node in &self.nodes {
-            types.push(match node {
+            let child = |id: &u32| {
+                mapped
+                    .get(*id as usize)
+                    .copied()
+                    .ok_or(TypeTemplateError::InvalidReference)
+            };
+            let ty = match node {
                 StaticTypeNode::Primitive(value) => TypeInfo::Primitive(*value),
-                StaticTypeNode::Parameter(_) => return Ok(None),
+                StaticTypeNode::Parameter(parameter) => {
+                    let Some(root) = bindings.get(parameter).copied() else {
+                        return Ok(None);
+                    };
+                    if arguments.type_info(root).is_none() {
+                        return Err(TypeTemplateError::InvalidReference);
+                    }
+                    mapped.push(root);
+                    continue;
+                }
                 StaticTypeNode::Builtin {
                     constructor,
                     arguments,
                 } => TypeInfo::Builtin {
                     constructor: *constructor,
-                    arguments: arguments.iter().copied().map(TypeInfoRef).collect(),
+                    arguments: arguments.iter().map(child).collect::<Result<_, _>>()?,
                 },
                 StaticTypeNode::Tuple(arguments) => {
-                    TypeInfo::Tuple(arguments.iter().copied().map(TypeInfoRef).collect())
+                    TypeInfo::Tuple(arguments.iter().map(child).collect::<Result<_, _>>()?)
                 }
                 StaticTypeNode::Record(fields) => TypeInfo::Record(
                     fields
                         .iter()
-                        .map(|field| FieldInfo {
-                            name: field.name.clone(),
-                            ty: TypeInfoRef(field.ty),
+                        .map(|field| {
+                            Ok(FieldInfo {
+                                name: field.name.clone(),
+                                ty: child(&field.ty)?,
+                            })
                         })
-                        .collect(),
+                        .collect::<Result<_, TypeTemplateError>>()?,
                 ),
-            });
+            };
+            let key = StructuralDescriptorKey::of(&ty).expect("source type recipe is structural");
+            if let Some(existing) = interned.get(&key) {
+                mapped.push(*existing);
+                continue;
+            }
+            let index =
+                u32::try_from(data.types.len()).map_err(|_| TypeTemplateError::NodeLimit)?;
+            if data.types.len() >= limits.max_nodes {
+                return Err(TypeTemplateError::NodeLimit);
+            }
+            data.types.push(ty);
+            mapped.push(TypeInfoRef(index));
+            interned.insert(key, TypeInfoRef(index));
         }
-        let graph = DescriptorGraph::new(
-            DescriptorGraphInput {
-                types,
-                ..Default::default()
-            },
-            limits,
-        )
-        .map_err(TypeTemplateError::Descriptor)?;
-        graph
-            .type_fingerprint(TypeInfoRef(self.root))
-            .map(Some)
-            .map_err(TypeTemplateError::Descriptor)
+        let graph = DescriptorGraph::new(data, limits).map_err(TypeTemplateError::Descriptor)?;
+        Ok(Some((graph, mapped[self.root as usize])))
     }
 }
 

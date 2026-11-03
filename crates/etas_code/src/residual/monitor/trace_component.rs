@@ -14,7 +14,7 @@ use crate::{
         },
         model::{ResidualKind, ResidualObligation},
         pattern::{ActionPattern, PatternTemplateLimits},
-        type_template::StaticTypeTemplate,
+        type_binding::TypeArgumentDescriptors,
     },
 };
 
@@ -63,6 +63,22 @@ pub struct TraceComponentState {
     component: MonitorTemplateId,
     monitor: Arc<CompiledTraceAlternatives>,
     inner: AlternativeState,
+}
+
+#[derive(Clone)]
+pub struct BoundTraceComponent {
+    component: MonitorTemplateId,
+    monitor: Arc<CompiledTraceAlternatives>,
+}
+
+impl std::fmt::Debug for BoundTraceComponent {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("BoundTraceComponent")
+            .field("component", &self.component)
+            .field("monitor", &self.monitor.template_id())
+            .finish()
+    }
 }
 
 pub enum TraceComponentMonitor {
@@ -323,20 +339,25 @@ impl CompiledTraceComponent {
         scope: AlternativeScope,
         source: SourceRevisionKey,
     ) -> Result<TraceComponentState, TraceComponentError> {
-        self.initial_state_with_bindings(scope, source, &BTreeMap::new(), &BTreeMap::new())
+        self.initial_state_with_bindings(
+            scope,
+            source,
+            &BTreeMap::new(),
+            &TypeArgumentDescriptors::default(),
+        )
     }
 
     fn bind_monitor(
         &self,
         bindings: &BTreeMap<GenericParameterId, GenericArgumentIdentity>,
-        structures: &BTreeMap<GenericParameterId, StaticTypeTemplate>,
+        type_descriptors: &TypeArgumentDescriptors,
     ) -> Result<Arc<CompiledTraceAlternatives>, TraceComponentError> {
         match &self.monitor {
             TraceComponentMonitor::Concrete(monitor) => Ok(monitor.clone()),
             TraceComponentMonitor::Symbolic(monitor) => monitor
                 .instantiate(
                     bindings,
-                    structures,
+                    type_descriptors,
                     PatternTemplateLimits {
                         pattern: self.limits.monitor.evidence.pattern,
                         types: Default::default(),
@@ -356,8 +377,32 @@ impl CompiledTraceComponent {
         scope: AlternativeScope,
         source: SourceRevisionKey,
         bindings: &BTreeMap<GenericParameterId, GenericArgumentIdentity>,
-        structures: &BTreeMap<GenericParameterId, StaticTypeTemplate>,
+        type_descriptors: &TypeArgumentDescriptors,
     ) -> Result<TraceComponentState, TraceComponentError> {
+        let bound = self.bind_types(bindings, type_descriptors)?;
+        self.initial_bound_state(scope, source, &bound)
+    }
+
+    pub fn bind_types(
+        &self,
+        bindings: &BTreeMap<GenericParameterId, GenericArgumentIdentity>,
+        types: &TypeArgumentDescriptors,
+    ) -> Result<BoundTraceComponent, TraceComponentError> {
+        Ok(BoundTraceComponent {
+            component: self.id,
+            monitor: self.bind_monitor(bindings, types)?,
+        })
+    }
+
+    pub fn initial_bound_state(
+        &self,
+        scope: AlternativeScope,
+        source: SourceRevisionKey,
+        bound: &BoundTraceComponent,
+    ) -> Result<TraceComponentState, TraceComponentError> {
+        if bound.component != self.id {
+            return Err(TraceComponentError::ComponentMismatch);
+        }
         if scope.scope != self.obligation.identity().scope {
             return Err(TraceComponentError::ScopeMismatch);
         }
@@ -367,7 +412,7 @@ impl CompiledTraceComponent {
         if source != self.obligation.identity().origin.revision {
             return Err(TraceComponentError::SourceRevisionMismatch);
         }
-        let monitor = self.bind_monitor(bindings, structures)?;
+        let monitor = bound.monitor.clone();
         Ok(TraceComponentState {
             component: self.id,
             inner: monitor.initial_state(scope),
@@ -383,7 +428,13 @@ impl CompiledTraceComponent {
         source: SourceRevisionKey,
         data: &super::AlternativeStateData,
     ) -> Result<TraceComponentState, TraceComponentError> {
-        self.restore_state_with_bindings(scope, source, data, &BTreeMap::new(), &BTreeMap::new())
+        self.restore_state_with_bindings(
+            scope,
+            source,
+            data,
+            &BTreeMap::new(),
+            &TypeArgumentDescriptors::default(),
+        )
     }
 
     pub fn restore_state_with_bindings(
@@ -392,8 +443,22 @@ impl CompiledTraceComponent {
         source: SourceRevisionKey,
         data: &super::AlternativeStateData,
         bindings: &BTreeMap<GenericParameterId, GenericArgumentIdentity>,
-        structures: &BTreeMap<GenericParameterId, StaticTypeTemplate>,
+        type_descriptors: &TypeArgumentDescriptors,
     ) -> Result<TraceComponentState, TraceComponentError> {
+        let bound = self.bind_types(bindings, type_descriptors)?;
+        self.restore_bound_state(scope, source, data, &bound)
+    }
+
+    pub fn restore_bound_state(
+        &self,
+        scope: AlternativeScope,
+        source: SourceRevisionKey,
+        data: &super::AlternativeStateData,
+        bound: &BoundTraceComponent,
+    ) -> Result<TraceComponentState, TraceComponentError> {
+        if bound.component != self.id {
+            return Err(TraceComponentError::ComponentMismatch);
+        }
         if scope.scope != self.obligation.identity().scope {
             return Err(TraceComponentError::ScopeMismatch);
         }
@@ -403,7 +468,7 @@ impl CompiledTraceComponent {
         if source != self.obligation.identity().origin.revision {
             return Err(TraceComponentError::SourceRevisionMismatch);
         }
-        let monitor = self.bind_monitor(bindings, structures)?;
+        let monitor = bound.monitor.clone();
         Ok(TraceComponentState {
             component: self.id,
             inner: monitor

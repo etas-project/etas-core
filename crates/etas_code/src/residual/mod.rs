@@ -11,5 +11,6 @@ pub mod pattern;
 pub mod plan;
 pub mod predicate;
 pub mod target;
+pub mod type_binding;
 pub mod type_template;
 pub mod validation;

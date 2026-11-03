@@ -8,7 +8,7 @@ use crate::{
     residual::{
         identity::{GenericArgumentIdentity, GenericParameterId},
         pattern::{ActionPatternTemplate, ActionPatternTemplateError, PatternTemplateLimits},
-        type_template::StaticTypeTemplate,
+        type_binding::TypeArgumentDescriptors,
     },
 };
 
@@ -117,7 +117,7 @@ impl SymbolicTraceAlternatives {
     pub fn instantiate(
         &self,
         bindings: &BTreeMap<GenericParameterId, GenericArgumentIdentity>,
-        structures: &BTreeMap<GenericParameterId, StaticTypeTemplate>,
+        type_descriptors: &TypeArgumentDescriptors,
         pattern_limits: PatternTemplateLimits,
         monitor_limits: AlternativeLimits,
     ) -> Result<CompiledTraceAlternatives, SymbolicTraceError> {
@@ -143,7 +143,7 @@ impl SymbolicTraceAlternatives {
                     pattern
                         .instantiate_with_budget(
                             bindings,
-                            structures,
+                            type_descriptors,
                             pattern_limits,
                             &mut remaining,
                         )
@@ -256,11 +256,20 @@ mod tests {
             GenericArgumentIdentity::Type(CodeFingerprint::from_bytes([3; 32])),
         )]);
         let concrete = symbolic
-            .instantiate(&bindings, &BTreeMap::new(), pattern_limits, monitor_limits)
+            .instantiate(
+                &bindings,
+                &TypeArgumentDescriptors::default(),
+                pattern_limits,
+                monitor_limits,
+            )
             .unwrap();
         let resolve = |value: &ActionPatternTemplate| {
             value
-                .instantiate(&bindings, &BTreeMap::new(), pattern_limits)
+                .instantiate(
+                    &bindings,
+                    &TypeArgumentDescriptors::default(),
+                    pattern_limits,
+                )
                 .unwrap()
         };
         let expected = CompiledTraceAlternatives::compile(
@@ -290,17 +299,22 @@ mod tests {
         assert_ne!(
             concrete.template_id(),
             reversed
-                .instantiate(&bindings, &BTreeMap::new(), pattern_limits, monitor_limits)
+                .instantiate(
+                    &bindings,
+                    &TypeArgumentDescriptors::default(),
+                    pattern_limits,
+                    monitor_limits
+                )
                 .unwrap()
                 .template_id()
         );
         assert!(
-            matches!(symbolic.instantiate(&BTreeMap::new(), &BTreeMap::new(), pattern_limits, monitor_limits), Err(SymbolicTraceError::Pattern { alternative: 0, clause: 0, operand: 0, error: ActionPatternTemplateError::MissingBinding(id) }) if id == t)
+            matches!(symbolic.instantiate(&BTreeMap::new(), &TypeArgumentDescriptors::default(), pattern_limits, monitor_limits), Err(SymbolicTraceError::Pattern { alternative: 0, clause: 0, operand: 0, error: ActionPatternTemplateError::MissingBinding(id) }) if id == t)
         );
         assert!(matches!(
             symbolic.instantiate(
                 &bindings,
-                &BTreeMap::new(),
+                &TypeArgumentDescriptors::default(),
                 PatternTemplateLimits {
                     max_binding_steps: 2,
                     ..pattern_limits

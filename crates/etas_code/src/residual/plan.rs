@@ -9,7 +9,7 @@ pub use bound::{BoundResidualPlan, BoundResidualPlanData, BoundResidualPlanError
 pub use scope::{
     ResidualActionAttempt, ResidualComponentAttempt, ResidualComponentStateData,
     ResidualScopeDecision, ResidualScopeDelta, ResidualScopeError, ResidualScopeEvent,
-    ResidualScopePending, ResidualScopeState, ResidualScopeStateData,
+    ResidualScopePending, ResidualScopeState, ResidualScopeStateData, SpecializedResidualScope,
 };
 
 use crate::identity::canonical::CanonicalEncoder;

@@ -24,6 +24,10 @@ impl DescriptorFingerprintBudget {
         }
     }
 
+    pub fn remaining(&self) -> usize {
+        self.remaining
+    }
+
     fn visit(&mut self) -> Result<(), DescriptorError> {
         self.remaining = self
             .remaining
@@ -41,6 +45,18 @@ impl DescriptorGraph {
     /// Encounter numbers are canonical traversal labels, never compiler/local IDs.
     pub fn type_fingerprint(&self, root: TypeInfoRef) -> Result<CodeFingerprint, DescriptorError> {
         self.node_fingerprint(DescriptorNode::Type(root), "etas.code.type-descriptor.v1")
+    }
+
+    pub fn type_fingerprint_with_budget(
+        &self,
+        root: TypeInfoRef,
+        budget: &mut DescriptorFingerprintBudget,
+    ) -> Result<CodeFingerprint, DescriptorError> {
+        self.node_fingerprint_with_budget(
+            DescriptorNode::Type(root),
+            "etas.code.type-descriptor.v1",
+            budget,
+        )
     }
 
     pub fn row_fingerprint(
