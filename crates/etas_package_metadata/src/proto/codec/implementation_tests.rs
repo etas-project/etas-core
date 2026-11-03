@@ -26,6 +26,7 @@ fn published_method() -> PublishedMethod {
     )
     .unwrap();
     PublishedMethod {
+        requirements: MethodRequirements::default(),
         self_type: Type {
             kind: TypeKind::Nominal,
             path: vec!["api".into(), "Packet".into()],
@@ -69,6 +70,51 @@ fn published_method() -> PublishedMethod {
             }],
         },
     }
+}
+
+#[test]
+fn method_behavior_requirements_round_trip_and_invalidate_the_input_fingerprint() {
+    let mut method = published_method();
+    let before = crate::published_method_input_fingerprint(&method);
+    method.requirements = MethodRequirements {
+        limits: vec![
+            MethodLimitRequirement {
+                kind: MethodLimitKind::Tokens,
+                value: Some(MethodLimitValue::Count(128)),
+            },
+            MethodLimitRequirement {
+                kind: MethodLimitKind::WallTime,
+                value: Some(MethodLimitValue::DurationMillis(2500)),
+            },
+            MethodLimitRequirement {
+                kind: MethodLimitKind::Cost,
+                value: Some(MethodLimitValue::MoneyMicros {
+                    amount: 2000,
+                    currency: "USD".into(),
+                }),
+            },
+        ],
+        trace_requirements: vec![
+            MethodTraceRequirement::Reference("VirtualStages".into()),
+            MethodTraceRequirement::Limit(8),
+        ],
+        trace_obligations: vec![MethodTraceRequirement::Clause(TraceSpecClause {
+            kind: TraceSpecClauseKind::Deny,
+            pattern: Some(EffectRow {
+                effects: vec![EffectRef {
+                    path: vec!["Console".into(), "stdout_write".into()],
+                    args: vec![],
+                }],
+                tail: None,
+            }),
+            ..Default::default()
+        })],
+    };
+    assert_ne!(before, crate::published_method_input_fingerprint(&method));
+    assert_eq!(
+        methods::from_proto(methods::to_proto(&method)).unwrap(),
+        method
+    );
 }
 
 fn implementation() -> SpecImpl {

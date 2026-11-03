@@ -253,6 +253,42 @@ impl ModelGraphValidator {
             }
             super::descriptors::validate_model_method_identity(&method.identity, &mut self.budget)?;
             self.ty(&method.self_type, 0)?;
+            self.budget
+                .charge(method.requirements.limits.len(), "method limits")?;
+            self.budget.charge(
+                method.requirements.trace_requirements.len()
+                    + method.requirements.trace_obligations.len(),
+                "method trace requirements",
+            )?;
+            for requirement in method
+                .requirements
+                .trace_requirements
+                .iter()
+                .chain(&method.requirements.trace_obligations)
+            {
+                let MethodTraceRequirement::Clause(clause) = requirement else {
+                    continue;
+                };
+                self.budget
+                    .charge(clause.selector_bounds.len(), "trace selector bounds")?;
+                for bound in &clause.selector_bounds {
+                    validate_trace_selector_bound(clause, bound)?;
+                    for arg in &bound.spec_args {
+                        self.ty(arg, 0)?;
+                    }
+                }
+                for row in [
+                    &clause.pattern,
+                    &clause.guard,
+                    &clause.target,
+                    &clause.obligation,
+                ]
+                .into_iter()
+                .flatten()
+                {
+                    self.effect_row(row, 0)?;
+                }
+            }
             for param in &method.owner_params {
                 self.generic_param(param)?;
             }
@@ -677,6 +713,38 @@ impl ProtoGraphValidator {
             }
         }
         for method in &metadata.methods {
+            self.budget.charge(method.limits.len(), "method limits")?;
+            self.budget.charge(
+                method.trace_requirements.len() + method.trace_obligations.len(),
+                "method trace requirements",
+            )?;
+            for requirement in method
+                .trace_requirements
+                .iter()
+                .chain(&method.trace_obligations)
+            {
+                let Some(clause) = &requirement.clause else {
+                    continue;
+                };
+                self.budget
+                    .charge(clause.selector_bounds.len(), "trace selector bounds")?;
+                for bound in &clause.selector_bounds {
+                    for arg in &bound.spec_args {
+                        self.ty(arg, 0)?;
+                    }
+                }
+                for row in [
+                    &clause.pattern,
+                    &clause.guard,
+                    &clause.target,
+                    &clause.obligation,
+                ]
+                .into_iter()
+                .flatten()
+                {
+                    self.effect_row(row, 0)?;
+                }
+            }
             if let Some(identity) = &method.identity {
                 super::descriptors::validate_method_identity(identity, &mut self.budget)?;
             }

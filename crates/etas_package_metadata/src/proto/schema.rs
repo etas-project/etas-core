@@ -350,6 +350,34 @@ pub struct ProtoPublishedMethod {
     pub receiver_slot: Option<u32>,
     #[prost(message, repeated, tag = "6")]
     pub owner_params: Vec<ProtoActionGenericParam>,
+    #[prost(message, repeated, tag = "7")]
+    pub limits: Vec<ProtoMethodLimitRequirement>,
+    #[prost(message, repeated, tag = "8")]
+    pub trace_requirements: Vec<ProtoMethodTraceRequirement>,
+    #[prost(message, repeated, tag = "9")]
+    pub trace_obligations: Vec<ProtoMethodTraceRequirement>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoMethodTraceRequirement {
+    #[prost(message, optional, tag = "1")]
+    pub clause: Option<ProtoTraceSpecClause>,
+    #[prost(string, optional, tag = "2")]
+    pub reference: Option<String>,
+    #[prost(uint64, optional, tag = "3")]
+    pub limit: Option<u64>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoMethodLimitRequirement {
+    #[prost(string, tag = "1")]
+    pub kind: String,
+    #[prost(string, tag = "2")]
+    pub value_kind: String,
+    #[prost(string, tag = "3")]
+    pub amount: String,
+    #[prost(string, tag = "4")]
+    pub currency: String,
 }
 
 #[derive(Clone, PartialEq, Message)]

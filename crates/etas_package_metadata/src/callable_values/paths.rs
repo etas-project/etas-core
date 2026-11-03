@@ -21,6 +21,32 @@ impl crate::PublishedMethod {
             Part::Type(&mut self.self_type),
             Part::Graph(&mut self.callable),
         ];
+        for requirement in self
+            .requirements
+            .trace_requirements
+            .iter_mut()
+            .chain(&mut self.requirements.trace_obligations)
+        {
+            let crate::MethodTraceRequirement::Clause(clause) = requirement else {
+                continue;
+            };
+            for bound in &mut clause.selector_bounds {
+                bound.spec_path = remap(CallableValuePathKind::Spec, &bound.spec_path);
+                bound.effect_path = remap(CallableValuePathKind::Effect, &bound.effect_path);
+                parts.extend(bound.spec_args.iter_mut().map(Part::Type));
+            }
+            parts.extend(
+                [
+                    &mut clause.pattern,
+                    &mut clause.guard,
+                    &mut clause.target,
+                    &mut clause.obligation,
+                ]
+                .into_iter()
+                .flatten()
+                .map(Part::Row),
+            );
+        }
         for param in &mut self.owner_params {
             for bound in &mut param.bounds {
                 bound.spec = remap(CallableValuePathKind::Spec, &bound.spec);

@@ -604,7 +604,62 @@ pub struct PublishedMethod {
     pub self_type: Type,
     pub receiver: MethodReceiver,
     pub owner_params: Vec<GenericParam>,
+    pub requirements: MethodRequirements,
     pub callable: crate::CallableValueGraph,
+}
+
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    etas_core::RetainedSize,
+)]
+pub struct MethodRequirements {
+    pub limits: Vec<MethodLimitRequirement>,
+    pub trace_requirements: Vec<MethodTraceRequirement>,
+    pub trace_obligations: Vec<MethodTraceRequirement>,
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub enum MethodTraceRequirement {
+    Clause(TraceSpecClause),
+    Reference(String),
+    Limit(u64),
+}
+
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub enum MethodLimitKind {
+    Iterations,
+    Tokens,
+    ContextTokens,
+    Cost,
+    WallTime,
+    Attempts,
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub struct MethodLimitRequirement {
+    pub kind: MethodLimitKind,
+    pub value: Option<MethodLimitValue>,
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub enum MethodLimitValue {
+    Count(u64),
+    DurationMillis(u64),
+    MoneyMicros { amount: u128, currency: String },
 }
 
 #[derive(
@@ -690,7 +745,16 @@ pub struct TraceSpecSummary {
     pub alternatives: Vec<Vec<TraceSpecClause>>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    etas_core::RetainedSize,
+)]
 pub struct TraceSpecClause {
     pub kind: TraceSpecClauseKind,
     pub pattern: Option<EffectRow>,
@@ -701,7 +765,16 @@ pub struct TraceSpecClause {
 }
 
 /// A checked type-spec constraint on one selector of one clause operand.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    etas_core::RetainedSize,
+)]
 pub struct TraceSelectorBound {
     pub operand: TraceSelectorOperand,
     pub effect_path: Vec<String>,
@@ -711,7 +784,17 @@ pub struct TraceSelectorBound {
     pub spec_args: Vec<Type>,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    etas_core::RetainedSize,
+)]
 pub enum TraceSelectorOperand {
     #[default]
     Pattern,
@@ -720,7 +803,16 @@ pub enum TraceSelectorOperand {
     Obligation,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    etas_core::RetainedSize,
+)]
 pub enum TraceSpecClauseKind {
     #[default]
     Allow,

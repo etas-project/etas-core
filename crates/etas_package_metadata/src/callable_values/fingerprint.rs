@@ -346,7 +346,7 @@ pub fn published_method_input_fingerprint(
     method: &crate::PublishedMethod,
 ) -> etas_code::CodeFingerprint {
     let mut e = Encoder::new();
-    e.text("published-method.v1");
+    e.text("published-method.v2");
     e.0.update(method.identity.fingerprint().as_bytes());
     e.encode(Task::Type(&method.self_type));
     match method.receiver {
@@ -370,6 +370,76 @@ pub fn published_method_input_fingerprint(
             e.number(bound.args.len());
             for ty in &bound.args {
                 e.encode(Task::Type(ty));
+            }
+        }
+    }
+    e.number(method.requirements.limits.len());
+    for limit in &method.requirements.limits {
+        e.byte(limit.kind as u8);
+        e.option(limit.value.is_some());
+        if let Some(value) = &limit.value {
+            match value {
+                crate::MethodLimitValue::Count(value) => {
+                    e.byte(0);
+                    e.0.update(&value.to_le_bytes());
+                }
+                crate::MethodLimitValue::DurationMillis(value) => {
+                    e.byte(1);
+                    e.0.update(&value.to_le_bytes());
+                }
+                crate::MethodLimitValue::MoneyMicros { amount, currency } => {
+                    e.byte(2);
+                    e.0.update(&amount.to_le_bytes());
+                    e.text(currency);
+                }
+            }
+        }
+    }
+    for clauses in [
+        &method.requirements.trace_requirements,
+        &method.requirements.trace_obligations,
+    ] {
+        e.number(clauses.len());
+        for requirement in clauses {
+            let clause = match requirement {
+                crate::MethodTraceRequirement::Clause(clause) => {
+                    e.byte(0);
+                    clause
+                }
+                crate::MethodTraceRequirement::Reference(name) => {
+                    e.byte(1);
+                    e.text(name);
+                    continue;
+                }
+                crate::MethodTraceRequirement::Limit(count) => {
+                    e.byte(2);
+                    e.0.update(&count.to_le_bytes());
+                    continue;
+                }
+            };
+            e.byte(clause.kind.clone() as u8);
+            for row in [
+                &clause.pattern,
+                &clause.guard,
+                &clause.target,
+                &clause.obligation,
+            ] {
+                e.option(row.is_some());
+                if let Some(row) = row {
+                    e.encode(Task::Row(row));
+                }
+            }
+            e.number(clause.selector_bounds.len());
+            for bound in &clause.selector_bounds {
+                e.byte(bound.operand as u8);
+                e.path(&bound.effect_path);
+                e.number(bound.argument as usize);
+                e.text(&bound.binding);
+                e.path(&bound.spec_path);
+                e.number(bound.spec_args.len());
+                for ty in &bound.spec_args {
+                    e.encode(Task::Type(ty));
+                }
             }
         }
     }

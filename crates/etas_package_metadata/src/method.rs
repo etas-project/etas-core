@@ -3,6 +3,21 @@ use crate::{GenericParamKind, MetadataArtifactError, MethodReceiver, PublishedMe
 impl PublishedMethod {
     pub fn validate(&self) -> Result<(), MetadataArtifactError> {
         let root = self.root()?;
+        for limit in &self.requirements.limits {
+            use crate::{MethodLimitKind as K, MethodLimitValue as V};
+            if !matches!(
+                (&limit.kind, &limit.value),
+                (_, None)
+                    | (K::Cost, Some(V::MoneyMicros { .. }))
+                    | (K::WallTime, Some(V::DurationMillis(_)))
+                    | (
+                        K::Iterations | K::Tokens | K::ContextTokens | K::Attempts,
+                        Some(V::Count(_))
+                    )
+            ) {
+                return Err(invalid("method limit value has the wrong budget kind"));
+            }
+        }
         if root.param_names.len() != root.params.len() {
             return Err(invalid(
                 "published method has an incomplete named parameter ABI",
