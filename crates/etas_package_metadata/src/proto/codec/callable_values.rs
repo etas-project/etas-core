@@ -11,25 +11,12 @@ pub(super) fn to_proto(graph: &CallableValueGraph) -> ProtoCallableValueGraph {
             .values
             .iter()
             .map(|node| ProtoCallableValueNode {
+                residual_checks: Some(residual_to_proto(&node.residual_checks)),
                 handler_requests: node
                     .handler_requests
                     .as_ref()
                     .map(request_template_to_proto),
-                behavior: Some(ProtoCallableValueBehavior {
-                    determinism: Some(node.behavior.determinism as i32),
-                    host_requirements: node
-                        .behavior
-                        .host_requirements
-                        .iter()
-                        .map(|kind| *kind as i32)
-                        .collect(),
-                    interpreter_features: node
-                        .behavior
-                        .interpreter_features
-                        .iter()
-                        .map(|kind| *kind as i32)
-                        .collect(),
-                }),
+                behavior: Some(behavior_to_proto(&node.behavior)),
                 parent_scope: Some(scope_to_proto(node.parent_scope)),
                 generic_params: node
                     .generic_params
@@ -89,6 +76,9 @@ pub(super) fn from_proto(
             .into_iter()
             .map(|node| {
                 Ok(CallableValueNode {
+                    residual_checks: residual_from_proto(node.residual_checks.ok_or_else(
+                        || invalid("callable value is missing residual references"),
+                    )?)?,
                     handler_requests: node
                         .handler_requests
                         .map(request_template_from_proto)
@@ -174,6 +164,98 @@ pub(super) fn from_proto(
     Ok(graph)
 }
 
+pub(super) fn residual_to_proto(
+    references: &[etas_code::residual::identity::ResidualObligationRef],
+) -> ProtoResidualReferenceSet {
+    use etas_code::residual::identity::GenericArgumentIdentity as A;
+    ProtoResidualReferenceSet {
+        version: 1,
+        references: references
+            .iter()
+            .map(|reference| ProtoResidualReference {
+                obligation: reference.obligation().fingerprint().as_bytes().to_vec(),
+                substitutions: reference
+                    .substitutions()
+                    .iter()
+                    .map(|(parameter, value)| {
+                        let (kind, value) = match value {
+                            A::Type(value) => (1, *value),
+                            A::EffectRow(value) => (2, *value),
+                            A::TypeParameter(value) => (3, value.fingerprint()),
+                            A::EffectRowParameter(value) => (4, value.fingerprint()),
+                        };
+                        ProtoResidualSubstitution {
+                            parameter: parameter.fingerprint().as_bytes().to_vec(),
+                            kind,
+                            value: value.as_bytes().to_vec(),
+                        }
+                    })
+                    .collect(),
+            })
+            .collect(),
+    }
+}
+
+pub(super) fn residual_from_proto(
+    set: ProtoResidualReferenceSet,
+) -> Result<Vec<etas_code::residual::identity::ResidualObligationRef>, MetadataArtifactError> {
+    use etas_code::{
+        CodeFingerprint,
+        residual::identity::{
+            GenericArgumentIdentity as A, GenericParameterId, MAX_RESIDUAL_REFERENCE_SUBSTITUTIONS,
+            ObligationId, ResidualObligationRef,
+        },
+    };
+    use std::collections::{BTreeMap, BTreeSet};
+    if set.version != 1 || set.references.len() > 4096 {
+        return Err(invalid("invalid residual reference set version or count"));
+    }
+    let fingerprint = |bytes: Vec<u8>| -> Result<CodeFingerprint, MetadataArtifactError> {
+        let bytes: [u8; 32] = bytes
+            .try_into()
+            .map_err(|_| invalid("invalid residual fingerprint length"))?;
+        Ok(CodeFingerprint::from_bytes(bytes))
+    };
+    let mut total = 0usize;
+    let mut seen = BTreeSet::new();
+    let mut references = Vec::with_capacity(set.references.len());
+    for reference in set.references {
+        total = total
+            .checked_add(reference.substitutions.len())
+            .ok_or_else(|| invalid("residual substitution limit exceeded"))?;
+        if reference.substitutions.len() > MAX_RESIDUAL_REFERENCE_SUBSTITUTIONS || total > 65_536 {
+            return Err(invalid("residual substitution limit exceeded"));
+        }
+        let mut substitutions = BTreeMap::new();
+        for binding in reference.substitutions {
+            let parameter =
+                GenericParameterId::from_canonical_fingerprint(fingerprint(binding.parameter)?);
+            let value = fingerprint(binding.value)?;
+            let value = match binding.kind {
+                1 => A::Type(value),
+                2 => A::EffectRow(value),
+                3 => A::TypeParameter(GenericParameterId::from_canonical_fingerprint(value)),
+                4 => A::EffectRowParameter(GenericParameterId::from_canonical_fingerprint(value)),
+                _ => return Err(invalid("invalid residual argument kind")),
+            };
+            if substitutions.insert(parameter, value).is_some() {
+                return Err(invalid("duplicate residual binder"));
+            }
+        }
+        let reference = ResidualObligationRef::new(
+            ObligationId::from_canonical_fingerprint(fingerprint(reference.obligation)?),
+            substitutions,
+        )
+        .map_err(|_| invalid("invalid residual reference"))?;
+        if !seen.insert(reference.clone()) {
+            return Err(invalid("duplicate residual reference"));
+        }
+        references.push(reference);
+    }
+    crate::callable_values::validate_residual_references(&references)?;
+    Ok(references)
+}
+
 fn scope_to_proto(scope: CallableValueScope) -> ProtoCallableValueScope {
     ProtoCallableValueScope {
         kind: Some(match scope {
@@ -183,16 +265,40 @@ fn scope_to_proto(scope: CallableValueScope) -> ProtoCallableValueScope {
     }
 }
 
-fn behavior_from_proto(
+pub(super) fn behavior_to_proto(
+    behavior: &crate::CallableValueBehavior,
+) -> ProtoCallableValueBehavior {
+    ProtoCallableValueBehavior {
+        determinism: Some(behavior.determinism as i32),
+        independent_determinism: behavior.independent_determinism.map(|value| value as i32),
+        host_requirements: behavior
+            .host_requirements
+            .iter()
+            .map(|kind| *kind as i32)
+            .collect(),
+        interpreter_features: behavior
+            .interpreter_features
+            .iter()
+            .map(|kind| *kind as i32)
+            .collect(),
+    }
+}
+
+pub(super) fn behavior_from_proto(
     behavior: ProtoCallableValueBehavior,
 ) -> Result<crate::CallableValueBehavior, MetadataArtifactError> {
-    Ok(crate::CallableValueBehavior {
+    let behavior = crate::CallableValueBehavior {
         determinism: crate::CallableValueDeterminism::try_from(
             behavior
                 .determinism
                 .ok_or_else(|| invalid("callable value is missing determinism"))?,
         )
         .map_err(|_| invalid("unknown callable determinism"))?,
+        independent_determinism: behavior
+            .independent_determinism
+            .map(crate::CallableValueDeterminism::try_from)
+            .transpose()
+            .map_err(|_| invalid("unknown callable independent determinism"))?,
         host_requirements: behavior
             .host_requirements
             .into_iter()
@@ -209,7 +315,16 @@ fn behavior_from_proto(
                     .map_err(|_| invalid("unknown callable interpreter feature"))
             })
             .collect::<Result<_, _>>()?,
-    })
+    };
+    if behavior
+        .independent_determinism
+        .is_some_and(|value| value > behavior.determinism)
+    {
+        return Err(invalid(
+            "callable independent determinism exceeds its summary",
+        ));
+    }
+    Ok(behavior)
 }
 
 fn scope_from_proto(
@@ -251,6 +366,9 @@ fn source_to_proto(source: CallableValueSource) -> ProtoCallableValueSource {
                 super::super::schema::source::Kind::Parameter(parameter_to_proto(parameter))
             }
             CallableValueSource::Value(index) => super::super::schema::source::Kind::Value(index),
+            CallableValueSource::FrozenContract(index) => {
+                super::super::schema::source::Kind::FrozenContract(index)
+            }
         }),
     }
 }
@@ -264,6 +382,9 @@ fn source_from_proto(
         ),
         Some(super::super::schema::source::Kind::Value(index)) => {
             Ok(CallableValueSource::Value(index))
+        }
+        Some(super::super::schema::source::Kind::FrozenContract(index)) => {
+            Ok(CallableValueSource::FrozenContract(index))
         }
         None => Err(invalid("callable return source is missing identity")),
     }

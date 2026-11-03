@@ -38,7 +38,7 @@ pub struct ProtoCallableValueParameter {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoCallableValueSource {
-    #[prost(oneof = "source::Kind", tags = "1, 2")]
+    #[prost(oneof = "source::Kind", tags = "1, 2, 3")]
     pub kind: Option<source::Kind>,
 }
 
@@ -49,6 +49,8 @@ pub mod source {
         Parameter(super::ProtoCallableValueParameter),
         #[prost(uint32, tag = "2")]
         Value(u32),
+        #[prost(uint32, tag = "3")]
+        FrozenContract(u32),
     }
 }
 
@@ -78,6 +80,8 @@ pub struct ProtoCallableValueGenericBinding {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoCallableValueNode {
+    #[prost(message, optional, tag = "16")]
+    pub residual_checks: Option<ProtoResidualReferenceSet>,
     #[prost(message, optional, tag = "15")]
     pub handler_requests: Option<ProtoRequestInstantiationTemplate>,
     #[prost(message, optional, tag = "14")]
@@ -111,6 +115,32 @@ pub struct ProtoCallableValueNode {
 }
 
 #[derive(Clone, PartialEq, Message)]
+pub struct ProtoResidualReferenceSet {
+    #[prost(uint32, tag = "1")]
+    pub version: u32,
+    #[prost(message, repeated, tag = "2")]
+    pub references: Vec<ProtoResidualReference>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoResidualReference {
+    #[prost(bytes = "vec", tag = "1")]
+    pub obligation: Vec<u8>,
+    #[prost(message, repeated, tag = "2")]
+    pub substitutions: Vec<ProtoResidualSubstitution>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoResidualSubstitution {
+    #[prost(bytes = "vec", tag = "1")]
+    pub parameter: Vec<u8>,
+    #[prost(uint32, tag = "2")]
+    pub kind: u32,
+    #[prost(bytes = "vec", tag = "3")]
+    pub value: Vec<u8>,
+}
+
+#[derive(Clone, PartialEq, Message)]
 pub struct ProtoCallableValueBehavior {
     #[prost(int32, optional, tag = "1")]
     pub determinism: Option<i32>,
@@ -118,4 +148,6 @@ pub struct ProtoCallableValueBehavior {
     pub host_requirements: Vec<i32>,
     #[prost(int32, repeated, tag = "3")]
     pub interpreter_features: Vec<i32>,
+    #[prost(int32, optional, tag = "4")]
+    pub independent_determinism: Option<i32>,
 }

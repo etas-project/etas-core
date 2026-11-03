@@ -52,6 +52,10 @@ pub struct SpecMethodCallableArgument {
 }
 
 impl CallableRequestTarget {
+    pub fn input_fingerprint(&self) -> etas_code::CodeFingerprint {
+        crate::proto::callable_request_target_fingerprint(self)
+    }
+
     pub fn validate_resources(&self) -> Result<(), crate::MetadataArtifactError> {
         crate::proto::validate_callable_request_target(self)
     }

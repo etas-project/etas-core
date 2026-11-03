@@ -18,7 +18,7 @@ use super::{GenericParameterRef, TypeInfoRef};
 pub struct EffectRowInfoRef(pub u32);
 
 #[derive(
-    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+    Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
 )]
 pub enum EffectTargetInfo {
     Effect(DefinitionKey),
@@ -26,7 +26,7 @@ pub enum EffectTargetInfo {
 }
 
 #[derive(
-    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+    Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
 )]
 pub enum StaticEffectArgInfo {
     Type(TypeInfoRef),
@@ -38,7 +38,7 @@ pub enum StaticEffectArgInfo {
 }
 
 #[derive(
-    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+    Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
 )]
 pub struct EffectInfo {
     pub target: EffectTargetInfo,
@@ -101,6 +101,72 @@ pub struct ParameterCallInfo {
     pub callable: CallableId,
     pub signature: TypeInfoRef,
     pub position: u32,
+    /// None means argument values were not proved, not a zero-argument call.
+    pub arguments: Option<Vec<ParameterArgumentInfo>>,
+    /// Checked surrounding handlers, ordered from innermost to outermost.
+    /// None means the handler transformer is unavailable, not handler-free.
+    pub handlers: Option<Vec<ParameterHandlerScopeInfo>>,
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub enum ParameterHandlerScopeInfo {
+    /// Ordered, unconditional action arms with precisely known control outcomes.
+    Handle { arms: Vec<ParameterHandlerArmInfo> },
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub struct ParameterHandlerArmInfo {
+    pub action: EffectInfo,
+    /// Checked actions performed by the arm before its control outcome.
+    pub trace: TraceInfoRef,
+    pub completion: ParameterHandlerCompletionInfo,
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub enum ParameterHandlerCompletionInfo {
+    Resume {
+        result_type: TypeInfoRef,
+        value: ReturnObservationInfo,
+    },
+    Finish {
+        result_type: TypeInfoRef,
+        value: ReturnObservationInfo,
+    },
+}
+
+impl ParameterHandlerCompletionInfo {
+    pub fn result_type(&self) -> TypeInfoRef {
+        match self {
+            Self::Resume { result_type, .. } | Self::Finish { result_type, .. } => *result_type,
+        }
+    }
+
+    pub fn value(&self) -> &ReturnObservationInfo {
+        match self {
+            Self::Resume { value, .. } | Self::Finish { value, .. } => value,
+        }
+    }
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub enum ParameterArgumentInfo {
+    Bool(bool),
+    Integer {
+        negative: bool,
+        magnitude: u128,
+    },
+    /// The unchanged value of a checked parameter of the owning callable.
+    Input {
+        position: u32,
+    },
 }
 
 #[derive(
@@ -125,6 +191,11 @@ pub enum CallableOutcomeInfo {
         error: TypeInfoRef,
     },
     NonReturn,
+    /// A checked callback invocation that does not return to its caller.
+    ParameterNonReturn(ParameterCallInfo),
+    /// Descriptive template whose callback effect row is still generic. It is
+    /// not a proved outcome until the row is instantiated and validated.
+    ParameterNonReturnTemplate(ParameterCallInfo),
 }
 
 /// The existing action-trace abstract domain, not an execution log or a proof.
@@ -160,6 +231,9 @@ pub enum TraceInfo {
 pub struct CallableAnalysisInfo {
     pub effects: EffectSummaryInfo,
     pub determinism: Option<DeterminismInfo>,
+    /// The checked contribution excluding unresolved callback parameters.
+    #[serde(default)]
+    pub independent_determinism: Option<DeterminismInfo>,
     pub trace: Option<TraceInfoRef>,
     pub outcomes: Option<TraceInfoRef>,
 }

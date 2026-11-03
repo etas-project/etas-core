@@ -4,15 +4,33 @@ use std::{
 };
 
 use crate::descriptor::{
-    DescriptorGraph, EffectInfo, EffectRowInfoRef, ParameterCallInfo, TraceInfo, TraceInfoRef,
+    DescriptorGraph, EffectInfo, EffectRowInfoRef, EffectTargetInfo, ParameterCallInfo,
+    ParameterHandlerScopeInfo, StaticEffectArgInfo, TraceInfo, TraceInfoRef,
 };
 
+use super::labels::{callable_work, key_work};
 use super::{ProofBudget, TraceLabel, TraceProofError, canonical_effect};
 
 pub(super) struct Edge {
-    pub label: Option<Arc<TraceLabel>>,
+    pub label: Option<CompiledLabel>,
     pub to: usize,
     pub source: TraceInfoRef,
+}
+
+#[derive(Clone)]
+pub(super) struct CompiledLabel {
+    pub value: Arc<TraceLabel>,
+    pub comparison_work: usize,
+}
+
+impl CompiledLabel {
+    fn new(label: TraceLabel) -> Self {
+        let comparison_work = label.comparison_work();
+        Self {
+            value: Arc::new(label),
+            comparison_work,
+        }
+    }
 }
 
 pub(super) struct Nfa {
@@ -20,7 +38,7 @@ pub(super) struct Nfa {
     pub start: usize,
     pub end: usize,
     transitions: usize,
-    labels: BTreeMap<LabelSource, Arc<TraceLabel>>,
+    labels: BTreeMap<LabelSource, CompiledLabel>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -54,12 +72,33 @@ impl Nfa {
             {
                 TraceInfo::Empty => result.edge(start, end, None, source, budget)?,
                 TraceInfo::Outcome(outcome) => {
+                    if matches!(
+                        outcome,
+                        crate::descriptor::CallableOutcomeInfo::ParameterNonReturnTemplate(_)
+                    ) {
+                        return Err(TraceProofError::UninstantiatedGenericOutcome);
+                    }
                     let key = LabelSource::Trace(source);
                     let label = if let Some(label) = result.labels.get(&key) {
                         label.clone()
                     } else {
-                        charge_graph(graph, budget)?;
-                        let label = Arc::new(super::labels::outcome_label(graph, outcome)?);
+                        if let crate::descriptor::CallableOutcomeInfo::ParameterNonReturn(call) =
+                            outcome
+                        {
+                            charge_call(graph, call, budget)?;
+                        } else {
+                            charge_graph(graph, budget)?;
+                            if let crate::descriptor::CallableOutcomeInfo::Returned {
+                                observation:
+                                    crate::descriptor::ReturnObservationInfo::Variant { owner, name },
+                                ..
+                            } = outcome
+                            {
+                                budget.charge(key_work(owner).saturating_add(name.len()))?;
+                            }
+                        }
+                        let label =
+                            CompiledLabel::new(super::labels::outcome_label(graph, outcome)?);
                         result.labels.insert(key, label.clone());
                         label
                     };
@@ -156,7 +195,7 @@ impl Nfa {
         &mut self,
         from: usize,
         to: usize,
-        label: Option<Arc<TraceLabel>>,
+        label: Option<CompiledLabel>,
         source: TraceInfoRef,
         budget: &mut ProofBudget,
     ) -> Result<(), TraceProofError> {
@@ -194,19 +233,133 @@ impl Nfa {
         Ok(visited)
     }
 
+    pub(super) fn parameter_exit_prefixes(
+        mut self,
+        budget: &mut ProofBudget,
+    ) -> Result<Self, TraceProofError> {
+        let mut exits = Vec::new();
+        for (from, edges) in self.edges.iter().enumerate() {
+            for edge in edges {
+                budget.charge(1)?;
+                if let Some(label) = &edge.label {
+                    match label.value.as_ref() {
+                        TraceLabel::ParameterCall {
+                            callable,
+                            position,
+                            signature,
+                            arguments,
+                            handlers,
+                        } => {
+                            budget.charge(label.comparison_work)?;
+                            exits.push((
+                                from,
+                                edge.source,
+                                TraceLabel::ParameterNonReturn {
+                                    callable: callable.clone(),
+                                    position: *position,
+                                    signature: *signature,
+                                    arguments: arguments.clone(),
+                                    handlers: handlers.clone(),
+                                },
+                            ));
+                        }
+                        TraceLabel::Returned { .. }
+                        | TraceLabel::Raised { .. }
+                        | TraceLabel::NonReturn
+                        | TraceLabel::ParameterNonReturn { .. } => {
+                            return Err(TraceProofError::InvalidOutcomeTrace);
+                        }
+                        TraceLabel::Action(_) => {}
+                    }
+                }
+            }
+        }
+        let end = self.state(budget)?;
+        self.end = end;
+        for (from, source, label) in exits {
+            self.edge(from, end, Some(CompiledLabel::new(label)), source, budget)?;
+        }
+        self.prune_nonterminating(budget)?;
+        Ok(self)
+    }
+
+    pub(super) fn parameter_exit_outcomes(
+        mut self,
+        budget: &mut ProofBudget,
+    ) -> Result<Self, TraceProofError> {
+        let old_end = self.end;
+        let mut exits = Vec::new();
+        for (from, edges) in self.edges.iter().enumerate() {
+            for edge in edges {
+                budget.charge(1)?;
+                if let Some(label) = &edge.label
+                    && matches!(label.value.as_ref(), TraceLabel::ParameterNonReturn { .. })
+                {
+                    if !self.closure([edge.to], budget)?.contains(&old_end) {
+                        return Err(TraceProofError::InvalidOutcomeTrace);
+                    }
+                    exits.push((from, edge.source, label.clone()));
+                }
+            }
+        }
+        for edges in &mut self.edges {
+            edges.retain(|edge| {
+                !edge.label.as_ref().is_some_and(|label| {
+                    matches!(
+                        label.value.as_ref(),
+                        TraceLabel::Returned { .. }
+                            | TraceLabel::Raised { .. }
+                            | TraceLabel::NonReturn
+                            | TraceLabel::ParameterNonReturn { .. }
+                    )
+                })
+            });
+        }
+        let end = self.state(budget)?;
+        self.end = end;
+        for (from, source, label) in exits {
+            self.edge(from, end, Some(label), source, budget)?;
+        }
+        self.prune_nonterminating(budget)?;
+        Ok(self)
+    }
+
+    fn prune_nonterminating(&mut self, budget: &mut ProofBudget) -> Result<(), TraceProofError> {
+        let mut incoming = vec![Vec::new(); self.edges.len()];
+        for (from, edges) in self.edges.iter().enumerate() {
+            for edge in edges {
+                budget.charge(1)?;
+                incoming[edge.to].push(from);
+            }
+        }
+        let mut live = vec![false; self.edges.len()];
+        let mut pending = vec![self.end];
+        while let Some(state) = pending.pop() {
+            budget.charge(1)?;
+            if std::mem::replace(&mut live[state], true) {
+                continue;
+            }
+            pending.extend(incoming[state].iter().copied());
+        }
+        for edges in &mut self.edges {
+            edges.retain(|edge| live[edge.to]);
+        }
+        Ok(())
+    }
+
     fn action_label(
         &mut self,
         graph: &DescriptorGraph,
         source: LabelSource,
         effect: &EffectInfo,
         budget: &mut ProofBudget,
-    ) -> Result<Arc<TraceLabel>, TraceProofError> {
+    ) -> Result<CompiledLabel, TraceProofError> {
         budget.charge(1)?;
         if let Some(label) = self.labels.get(&source) {
             return Ok(label.clone());
         }
-        charge_graph(graph, budget)?;
-        let label = Arc::new(TraceLabel::Action(canonical_effect(graph, effect)?));
+        charge_effect(graph, effect, budget)?;
+        let label = CompiledLabel::new(TraceLabel::Action(canonical_effect(graph, effect)?));
         self.labels.insert(source, label.clone());
         Ok(label)
     }
@@ -217,20 +370,67 @@ impl Nfa {
         source: LabelSource,
         call: &ParameterCallInfo,
         budget: &mut ProofBudget,
-    ) -> Result<Arc<TraceLabel>, TraceProofError> {
+    ) -> Result<CompiledLabel, TraceProofError> {
         budget.charge(1)?;
         if let Some(label) = self.labels.get(&source) {
             return Ok(label.clone());
         }
-        charge_graph(graph, budget)?;
-        let label = Arc::new(TraceLabel::ParameterCall {
+        charge_call(graph, call, budget)?;
+        let label = CompiledLabel::new(TraceLabel::ParameterCall {
             callable: call.callable.clone(),
             position: call.position,
             signature: graph.type_fingerprint(call.signature)?,
+            arguments: call.arguments.clone(),
+            handlers: super::labels::handler_scope_labels(graph, call)?,
         });
         self.labels.insert(source, label.clone());
         Ok(label)
     }
+}
+
+fn charge_effect(
+    graph: &DescriptorGraph,
+    effect: &EffectInfo,
+    budget: &mut ProofBudget,
+) -> Result<(), TraceProofError> {
+    let target = match &effect.target {
+        EffectTargetInfo::Effect(key) => key_work(key),
+        EffectTargetInfo::Action { effect, name } => key_work(effect).saturating_add(name.len()),
+    };
+    budget.charge(target)?;
+    budget.charge(effect.arguments.len().saturating_add(1))?;
+    for argument in &effect.arguments {
+        match argument {
+            StaticEffectArgInfo::Type(_) => charge_graph(graph, budget)?,
+            StaticEffectArgInfo::Resource(key) => budget.charge(key_work(key))?,
+            StaticEffectArgInfo::Callable(id) => budget.charge(callable_work(id))?,
+            StaticEffectArgInfo::String(value) | StaticEffectArgInfo::Integer(value) => {
+                budget.charge(value.len())?
+            }
+            StaticEffectArgInfo::Wildcard => {}
+        }
+    }
+    Ok(())
+}
+
+fn charge_call(
+    graph: &DescriptorGraph,
+    call: &ParameterCallInfo,
+    budget: &mut ProofBudget,
+) -> Result<(), TraceProofError> {
+    budget.charge(callable_work(&call.callable))?;
+    charge_graph(graph, budget)?;
+    budget.charge(call.arguments.as_ref().map_or(0, Vec::len))?;
+    for handler in call.handlers.iter().flatten() {
+        let ParameterHandlerScopeInfo::Handle { arms } = handler;
+        budget.charge(arms.len().saturating_add(1))?;
+        for arm in arms {
+            charge_graph(graph, budget)?;
+            charge_graph(graph, budget)?;
+            charge_effect(graph, &arm.action, budget)?;
+        }
+    }
+    Ok(())
 }
 
 fn charge_graph(graph: &DescriptorGraph, budget: &mut ProofBudget) -> Result<(), TraceProofError> {

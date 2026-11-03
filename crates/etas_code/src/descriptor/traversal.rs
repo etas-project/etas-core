@@ -1,7 +1,7 @@
 use super::{
     CallableOutcomeInfo, DescriptorError, DescriptorGraphInput, DescriptorNode, EffectRowInfoRef,
-    GenericParameterRef, StaticEffectArgInfo, TraceInfo, TraceInfoRef, TypeInfo, TypeInfoRef,
-    VariantPayloadInfo,
+    GenericParameterRef, ParameterCallInfo, ParameterHandlerScopeInfo, StaticEffectArgInfo,
+    TraceInfo, TraceInfoRef, TypeInfo, TypeInfoRef, VariantPayloadInfo,
 };
 
 pub(super) fn node_index(input: &DescriptorGraphInput, node: DescriptorNode) -> Option<usize> {
@@ -173,8 +173,12 @@ pub(super) fn references(
                 CallableOutcomeInfo::Returned { ty, .. } => visit(DescriptorNode::Type(*ty)),
                 CallableOutcomeInfo::Raised { error } => visit(DescriptorNode::Type(*error)),
                 CallableOutcomeInfo::NonReturn => {}
+                CallableOutcomeInfo::ParameterNonReturn(call)
+                | CallableOutcomeInfo::ParameterNonReturnTemplate(call) => {
+                    parameter_call_references(call, &mut visit)
+                }
             },
-            TraceInfo::ParameterCall(call) => visit(DescriptorNode::Type(call.signature)),
+            TraceInfo::ParameterCall(call) => parameter_call_references(call, &mut visit),
             TraceInfo::Event(effect) => {
                 for argument in &effect.arguments {
                     if let StaticEffectArgInfo::Type(ty) = argument {
@@ -195,11 +199,30 @@ pub(super) fn references(
                 } = &input.traces[reference.0 as usize]
                 {
                     for call in parameter_calls {
-                        visit(DescriptorNode::Type(call.signature));
+                        parameter_call_references(call, &mut visit);
                     }
                 }
             }
         },
+    }
+}
+
+fn parameter_call_references(call: &ParameterCallInfo, visit: &mut impl FnMut(DescriptorNode)) {
+    visit(DescriptorNode::Type(call.signature));
+    for handler in call.handlers.iter().flatten() {
+        match handler {
+            ParameterHandlerScopeInfo::Handle { arms } => {
+                for arm in arms {
+                    visit(DescriptorNode::Trace(arm.trace));
+                    visit(DescriptorNode::Type(arm.completion.result_type()));
+                    for arg in &arm.action.arguments {
+                        if let StaticEffectArgInfo::Type(ty) = arg {
+                            visit(DescriptorNode::Type(*ty));
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

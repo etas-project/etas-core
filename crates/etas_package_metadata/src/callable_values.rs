@@ -1,9 +1,11 @@
 use crate::{ActionTrace, DefaultHandlerEffects, EffectRow, GenericParam, Type};
 
 mod behavior;
+mod fingerprint;
 mod paths;
 mod validation;
 pub use behavior::*;
+pub use fingerprint::callable_value_graph_input_fingerprint;
 
 fn validate_request_target(
     target: &crate::CallableRequestTarget,
@@ -90,6 +92,7 @@ pub struct CallableValueParameter {
 pub enum CallableValueSource {
     Parameter(CallableValueParameter),
     Value(u32),
+    FrozenContract(u32),
 }
 
 /// Finite analysis data. References may be cyclic; nodes do not embed other nodes.
@@ -132,6 +135,8 @@ pub struct CallableValueGenericBinding {
     Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
 )]
 pub struct CallableValueNode {
+    /// Descriptive references only; a separate validated plan is required to execute.
+    pub residual_checks: Vec<etas_code::residual::identity::ResidualObligationRef>,
     pub handler_requests: Option<crate::RequestInstantiationTemplate>,
     pub behavior: CallableValueBehavior,
     pub parent_scope: CallableValueScope,
@@ -147,6 +152,24 @@ pub struct CallableValueNode {
     pub parameter_bindings: Vec<CallableValueParameterBinding>,
     pub action_trace: ActionTrace,
     pub returned_sources: Option<Vec<CallableValueSource>>,
+}
+
+pub(crate) fn validate_residual_references(
+    references: &[etas_code::residual::identity::ResidualObligationRef],
+) -> Result<(), crate::MetadataArtifactError> {
+    if references.len() > 4096 || references.windows(2).any(|pair| pair[0] >= pair[1]) {
+        return Err(invalid("duplicate or excessive residual references"));
+    }
+    let substitutions = references
+        .iter()
+        .try_fold(0usize, |total, reference| {
+            total.checked_add(reference.substitutions().len())
+        })
+        .ok_or_else(|| invalid("residual substitution limit exceeded"))?;
+    if substitutions > 65_536 {
+        return Err(invalid("residual substitution limit exceeded"));
+    }
+    Ok(())
 }
 
 impl CallableValueGraph {
@@ -175,6 +198,7 @@ impl CallableValueGraph {
             self.validate_source_scope(*source, &BTreeSet::from([CallableValueScope::Root]))?;
         }
         for (index, node) in self.values.iter().enumerate() {
+            validate_residual_references(&node.residual_checks)?;
             if node
                 .behavior
                 .host_requirements
@@ -290,7 +314,9 @@ impl CallableValueGraph {
     ) -> Result<(), crate::MetadataArtifactError> {
         let scope = match source {
             CallableValueSource::Parameter(parameter) => parameter.scope,
-            CallableValueSource::Value(index) => self.value(index)?.parent_scope,
+            CallableValueSource::Value(index) | CallableValueSource::FrozenContract(index) => {
+                self.value(index)?.parent_scope
+            }
         };
         if !scopes.contains(&scope) {
             return Err(invalid(
@@ -315,7 +341,7 @@ impl CallableValueGraph {
             }
             match source {
                 CallableValueSource::Parameter(parameter) => self.parameter(*parameter, root)?,
-                CallableValueSource::Value(index) => {
+                CallableValueSource::Value(index) | CallableValueSource::FrozenContract(index) => {
                     self.value(*index)?;
                 }
             }

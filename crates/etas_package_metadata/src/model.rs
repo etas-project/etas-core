@@ -373,6 +373,8 @@ impl EffectMetadata {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct EffectSummary {
+    pub residual_checks: Vec<etas_code::residual::identity::ResidualObligationRef>,
+    pub behavior: Option<crate::CallableValueBehavior>,
     pub handler_requests: Option<RequestInstantiationTemplate>,
     pub default_handler_effects: Option<DefaultHandlerEffects>,
     pub item: Vec<String>,
@@ -408,6 +410,15 @@ pub struct ActionRequestTemplate {
     pub action: EffectRef,
     /// None means that the request is known, but its payload-generic ABI is not.
     pub type_bindings: Option<Vec<ActionTypeBinding>>,
+    pub signature: Option<ActionRequestSignature>,
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub struct ActionRequestSignature {
+    pub params: Vec<Type>,
+    pub output: Type,
 }
 
 #[derive(
@@ -509,6 +520,7 @@ pub enum ActionTraceEventSource {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LatentFlowSummary {
+    pub residual_checks: Vec<etas_code::residual::identity::ResidualObligationRef>,
     pub declared_bound: EffectRow,
     pub inferred_effects: EffectRow,
 }
@@ -537,6 +549,7 @@ pub struct SpecSignature {
     pub visibility: Visibility,
     pub kind: SpecKind,
     pub param_names: Vec<String>,
+    pub generic_params: Vec<GenericParam>,
     pub callable: Option<CallableSignature>,
     pub methods: Vec<SpecMethod>,
     pub super_specs: Vec<SpecBound>,
@@ -636,6 +649,7 @@ pub enum TraceSpecConformanceTarget {
     Inline,
     Named {
         spec: Vec<String>,
+        definition: etas_code::DefinitionKey,
         args: Vec<Type>,
     },
 }
@@ -655,10 +669,11 @@ pub struct ToolBinding {
     pub action_row: Vec<String>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TraceSpecSummary {
     pub trace_spec: Vec<String>,
-    pub clauses: Vec<TraceSpecClause>,
+    pub definition: etas_code::DefinitionKey,
+    pub alternatives: Vec<Vec<TraceSpecClause>>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -668,6 +683,27 @@ pub struct TraceSpecClause {
     pub guard: Option<EffectRow>,
     pub target: Option<EffectRow>,
     pub obligation: Option<EffectRow>,
+    pub selector_bounds: Vec<TraceSelectorBound>,
+}
+
+/// A checked type-spec constraint on one selector of one clause operand.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TraceSelectorBound {
+    pub operand: TraceSelectorOperand,
+    pub effect_path: Vec<String>,
+    pub argument: u32,
+    pub binding: String,
+    pub spec_path: Vec<String>,
+    pub spec_args: Vec<Type>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TraceSelectorOperand {
+    #[default]
+    Pattern,
+    Guard,
+    Target,
+    Obligation,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

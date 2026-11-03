@@ -5,9 +5,9 @@ use crate::{DefinitionKey, DefinitionKind};
 
 use super::{
     CallableOutcomeInfo, DescriptorGraphInput, DescriptorLimits, EffectInfo, EffectRowInfoRef,
-    EffectTargetInfo, GenericOwner, GenericParameterKind, GenericParameterRef, PrimitiveInfo,
-    ReturnObservationInfo, SignatureInfo, StaticEffectArgInfo, TraceInfo, TraceInfoRef, TypeInfo,
-    TypeInfoRef, VariantPayloadInfo,
+    EffectTargetInfo, GenericOwner, GenericParameterKind, GenericParameterRef,
+    ParameterArgumentInfo, PrimitiveInfo, ReturnObservationInfo, SignatureInfo,
+    StaticEffectArgInfo, TraceInfo, TraceInfoRef, TypeInfo, TypeInfoRef, VariantPayloadInfo,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -71,6 +71,21 @@ pub(super) fn validate(
     input: &DescriptorGraphInput,
     limits: DescriptorLimits,
 ) -> Result<(), DescriptorError> {
+    validate_inner(input, limits, false)
+}
+
+pub(super) fn validate_for_binder_merge(
+    input: &DescriptorGraphInput,
+    limits: DescriptorLimits,
+) -> Result<(), DescriptorError> {
+    validate_inner(input, limits, true)
+}
+
+fn validate_inner(
+    input: &DescriptorGraphInput,
+    limits: DescriptorLimits,
+    allow_duplicate_binders: bool,
+) -> Result<(), DescriptorError> {
     let count = input
         .types
         .len()
@@ -112,9 +127,9 @@ pub(super) fn validate(
                 }
             }
         }
-        if !binder_identities.insert((&binder.owner, binder.position))
-            || !binder_names.insert((&binder.owner, &binder.name))
-        {
+        let unique_identity = binder_identities.insert((&binder.owner, binder.position));
+        let unique_name = binder_names.insert((&binder.owner, &binder.name));
+        if (!unique_identity || !unique_name) && !allow_duplicate_binders {
             return Err(DescriptorError::Invalid {
                 node,
                 reason: "duplicate generic binder identity or name",
@@ -253,7 +268,13 @@ pub(super) fn validate(
                 if let CallableOutcomeInfo::Returned { ty, observation } = outcome {
                     validator.return_observation(node, *ty, observation)?;
                 }
-                &[][..]
+                match outcome {
+                    CallableOutcomeInfo::ParameterNonReturn(call)
+                    | CallableOutcomeInfo::ParameterNonReturnTemplate(call) => {
+                        std::slice::from_ref(call)
+                    }
+                    _ => &[][..],
+                }
             }
             TraceInfo::Event(effect) => {
                 validator.effect(node, effect)?;
@@ -300,6 +321,45 @@ pub(super) fn validate(
             });
         }
         for call in calls {
+            for handler in call.handlers.iter().flatten() {
+                let super::ParameterHandlerScopeInfo::Handle { arms } = handler;
+                validator.edge_count = validator.edge_count.saturating_add(arms.len());
+                if validator.edge_count > limits.max_edges {
+                    return Err(DescriptorError::Limit {
+                        resource: "edges",
+                        limit: limits.max_edges,
+                    });
+                }
+                for arm in arms {
+                    validator.edge_count = validator
+                        .edge_count
+                        .saturating_add(arm.action.arguments.len());
+                    if validator.edge_count > limits.max_edges {
+                        return Err(DescriptorError::Limit {
+                            resource: "edges",
+                            limit: limits.max_edges,
+                        });
+                    }
+                    if !matches!(arm.action.target, EffectTargetInfo::Action { .. })
+                        || !matches!(
+                            arm.completion.value(),
+                            ReturnObservationInfo::Unit | ReturnObservationInfo::Bool(_)
+                        )
+                    {
+                        return Err(DescriptorError::Invalid {
+                            node,
+                            reason: "parameter handler arm requires an action and a precise resume value",
+                        });
+                    }
+                    validator.effect(node, &arm.action)?;
+                    validator.return_observation(
+                        node,
+                        arm.completion.result_type(),
+                        arm.completion.value(),
+                    )?;
+                    validator.handler_trace(node, arm.trace)?;
+                }
+            }
             let signature = input.types.get(call.signature.0 as usize).ok_or(
                 DescriptorError::MissingReference {
                     from: node,
@@ -320,7 +380,7 @@ pub(super) fn validate(
             };
             let mut parameter_type = parameter.ty;
             let mut visited = BTreeSet::new();
-            loop {
+            let callback = loop {
                 validator.edge_count = validator.edge_count.saturating_add(1);
                 if validator.edge_count > limits.max_edges {
                     return Err(DescriptorError::Limit {
@@ -335,8 +395,12 @@ pub(super) fn validate(
                     });
                 }
                 match input.types.get(parameter_type.0 as usize) {
-                    Some(TypeInfo::Function(_)) => break,
+                    Some(TypeInfo::Function(callback)) => break callback,
                     Some(TypeInfo::Alias { target, .. }) => parameter_type = *target,
+                    Some(TypeInfo::Builtin {
+                        constructor: super::BuiltinTypeInfo::CallableDefinition,
+                        arguments,
+                    }) if arguments.len() == 1 => parameter_type = arguments[0],
                     Some(_) => {
                         return Err(DescriptorError::Invalid {
                             node,
@@ -350,8 +414,90 @@ pub(super) fn validate(
                         });
                     }
                 }
+            };
+            if let Some(arguments) = &call.arguments {
+                if arguments.len() != callback.parameters.len() {
+                    return Err(DescriptorError::Invalid {
+                        node,
+                        reason: "trace parameter call argument arity differs from callback signature",
+                    });
+                }
+                for (argument, parameter) in arguments.iter().zip(&callback.parameters) {
+                    let actual = validator.scalar_argument_type(node, parameter.ty)?;
+                    let expected = match argument {
+                        ParameterArgumentInfo::Bool(_) => PrimitiveInfo::Bool,
+                        ParameterArgumentInfo::Input { position } => {
+                            let source = owner.parameters.get(*position as usize).ok_or(
+                                DescriptorError::Invalid {
+                                    node,
+                                    reason: "trace parameter argument has no owning callable input",
+                                },
+                            )?;
+                            validator.scalar_argument_type(node, source.ty)?
+                        }
+                        ParameterArgumentInfo::Integer {
+                            negative,
+                            magnitude,
+                        } => {
+                            if !integer_argument_fits(actual, *negative, *magnitude) {
+                                return Err(DescriptorError::Invalid {
+                                    node,
+                                    reason: "trace integer argument is not canonical or representable",
+                                });
+                            }
+                            actual
+                        }
+                    };
+                    if actual != expected {
+                        return Err(DescriptorError::Invalid {
+                            node,
+                            reason: "trace parameter argument does not match callback parameter type",
+                        });
+                    }
+                }
             }
             validator.callable(node, &call.callable)?;
+            if matches!(
+                trace,
+                TraceInfo::Outcome(
+                    CallableOutcomeInfo::ParameterNonReturn(_)
+                        | CallableOutcomeInfo::ParameterNonReturnTemplate(_)
+                )
+            ) {
+                let template = matches!(
+                    trace,
+                    TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturnTemplate(_))
+                );
+                if template {
+                    validator.edge_count =
+                        validator.edge_count.saturating_add(owner.generics.len());
+                    if validator.edge_count > limits.max_edges {
+                        return Err(DescriptorError::Limit {
+                            resource: "edges",
+                            limit: limits.max_edges,
+                        });
+                    }
+                }
+                let action_row = callback
+                    .effects
+                    .and_then(|row| input.rows.get(row.0 as usize))
+                    .is_some_and(|row| {
+                        (if template {
+                            row.tail.is_some_and(|tail| owner.generics.contains(&tail))
+                        } else {
+                            row.tail.is_none()
+                        }) && row
+                            .effects
+                            .iter()
+                            .all(|effect| matches!(effect.target, EffectTargetInfo::Action { .. }))
+                    });
+                if call.arguments.is_none() || !callback.generics.is_empty() || !action_row {
+                    return Err(DescriptorError::Invalid {
+                        node,
+                        reason: "parameter termination requires checked arguments and an action-only row with the correct generic status",
+                    });
+                }
+            }
         }
     }
     let mut adjacency = vec![Vec::new(); count];
@@ -385,6 +531,37 @@ pub(super) fn validate(
     validate_expansion(input, &adjacency, limits.max_expansion_depth)
 }
 
+fn integer_argument_fits(primitive: PrimitiveInfo, negative: bool, magnitude: u128) -> bool {
+    let (signed, bits) = match primitive {
+        PrimitiveInfo::I8 => (true, 8),
+        PrimitiveInfo::I16 => (true, 16),
+        PrimitiveInfo::I32 => (true, 32),
+        PrimitiveInfo::I64 | PrimitiveInfo::Isize => (true, 64),
+        PrimitiveInfo::I128 => (true, 128),
+        PrimitiveInfo::U8 => (false, 8),
+        PrimitiveInfo::U16 => (false, 16),
+        PrimitiveInfo::U32 => (false, 32),
+        PrimitiveInfo::U64 | PrimitiveInfo::Usize => (false, 64),
+        PrimitiveInfo::U128 => (false, 128),
+        _ => return false,
+    };
+    if negative && (!signed || magnitude == 0) {
+        return false;
+    }
+    if signed {
+        let boundary = 1_u128 << (bits - 1);
+        if negative {
+            magnitude <= boundary
+        } else {
+            magnitude < boundary
+        }
+    } else if bits == 128 {
+        true
+    } else {
+        magnitude < (1_u128 << bits)
+    }
+}
+
 struct Validator<'a> {
     input: &'a DescriptorGraphInput,
     limits: DescriptorLimits,
@@ -393,6 +570,100 @@ struct Validator<'a> {
 }
 
 impl Validator<'_> {
+    fn handler_trace(
+        &mut self,
+        node: DescriptorNode,
+        root: TraceInfoRef,
+    ) -> Result<(), DescriptorError> {
+        let mut pending = vec![root];
+        let mut visited = BTreeSet::new();
+        while let Some(reference) = pending.pop() {
+            self.edge_count = self.edge_count.saturating_add(1);
+            if self.edge_count > self.limits.max_edges {
+                return Err(DescriptorError::Limit {
+                    resource: "edges",
+                    limit: self.limits.max_edges,
+                });
+            }
+            if !visited.insert(reference) {
+                continue;
+            }
+            match self.input.traces.get(reference.0 as usize) {
+                Some(TraceInfo::Empty | TraceInfo::Event(_) | TraceInfo::UnknownOrder(_)) => {}
+                Some(TraceInfo::Seq(parts) | TraceInfo::Choice(parts)) => {
+                    if parts.len() > self.limits.max_edges.saturating_sub(self.edge_count) {
+                        return Err(DescriptorError::Limit {
+                            resource: "edges",
+                            limit: self.limits.max_edges,
+                        });
+                    }
+                    pending.extend(parts.iter().copied());
+                }
+                Some(TraceInfo::Repeat(inner)) => pending.push(*inner),
+                Some(
+                    TraceInfo::Outcome(_) | TraceInfo::ParameterCall(_) | TraceInfo::Widened { .. },
+                ) => {
+                    return Err(DescriptorError::Invalid {
+                        node,
+                        reason: "handler arm trace must contain only checked concrete actions",
+                    });
+                }
+                None => {
+                    return Err(DescriptorError::MissingReference {
+                        from: node,
+                        target: DescriptorNode::Trace(reference),
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
+    fn scalar_argument_type(
+        &mut self,
+        node: DescriptorNode,
+        mut ty: TypeInfoRef,
+    ) -> Result<PrimitiveInfo, DescriptorError> {
+        let mut seen = BTreeSet::new();
+        loop {
+            self.edge_count = self.edge_count.saturating_add(1);
+            if self.edge_count > self.limits.max_edges {
+                return Err(DescriptorError::Limit {
+                    resource: "edges",
+                    limit: self.limits.max_edges,
+                });
+            }
+            if !seen.insert(ty) {
+                return Err(DescriptorError::Invalid {
+                    node,
+                    reason: "trace parameter argument has a cyclic type alias",
+                });
+            }
+            match self.input.types.get(ty.0 as usize) {
+                Some(TypeInfo::Alias { target, .. }) => ty = *target,
+                Some(TypeInfo::Primitive(primitive))
+                    if !matches!(
+                        primitive,
+                        PrimitiveInfo::Never | PrimitiveInfo::String | PrimitiveInfo::Bytes
+                    ) =>
+                {
+                    return Ok(*primitive);
+                }
+                None => {
+                    return Err(DescriptorError::MissingReference {
+                        from: node,
+                        target: DescriptorNode::Type(ty),
+                    });
+                }
+                _ => {
+                    return Err(DescriptorError::Invalid {
+                        node,
+                        reason: "trace parameter argument requires a checked scalar type",
+                    });
+                }
+            }
+        }
+    }
+
     fn return_observation(
         &mut self,
         node: DescriptorNode,

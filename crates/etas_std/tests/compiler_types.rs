@@ -15,7 +15,7 @@ fn compiler_descriptor_types_are_opaque_and_have_unique_registry_roles() {
     );
     for (name, role, arity) in [
         ("AgentDef", CodeTypeRole::AgentDefinition, 1),
-        ("CallableDef", CodeTypeRole::CallableDefinition, 0),
+        ("CallableDef", CodeTypeRole::CallableDefinition, 1),
         ("SyntaxBlock", CodeTypeRole::SyntaxBlock, 0),
     ] {
         let symbol = registry
@@ -45,7 +45,16 @@ fn compiler_descriptor_types_are_opaque_and_have_unique_registry_roles() {
                 "methods",
             ],
             CodeTypeRole::CallableDefinition => {
-                vec!["body", "id", "signature", "effects", "determinism", "trace"]
+                vec![
+                    "body",
+                    "id",
+                    "signature",
+                    "effects",
+                    "determinism",
+                    "trace",
+                    "revision",
+                    "dependencies",
+                ]
             }
             CodeTypeRole::SyntaxBlock => vec!["text"],
             _ => unreachable!(),
@@ -57,7 +66,10 @@ fn compiler_descriptor_types_are_opaque_and_have_unique_registry_roles() {
                 .collect::<std::collections::BTreeSet<_>>(),
             expected.into_iter().collect()
         );
-        if role == CodeTypeRole::AgentDefinition {
+        if matches!(
+            role,
+            CodeTypeRole::AgentDefinition | CodeTypeRole::CallableDefinition
+        ) {
             let revision = ty
                 .projected_fields
                 .iter()
@@ -109,6 +121,9 @@ fn registry_rejects_wrong_descriptor_arity_public_construction_and_duplicate_rol
     for invalid in [
         TypeDecl::generic("Broken", &[], TypeDeclKind::Struct)
             .code_role(CodeTypeRole::AgentDefinition)
+            .intrinsic_only(),
+        TypeDecl::generic("Broken", &[], TypeDeclKind::Struct)
+            .code_role(CodeTypeRole::CallableDefinition)
             .intrinsic_only(),
         TypeDecl::generic("Broken", &[], TypeDeclKind::Support)
             .code_role(CodeTypeRole::SyntaxBlock)

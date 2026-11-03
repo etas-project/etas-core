@@ -31,7 +31,7 @@ fn retained_body_envelopes_roundtrip_with_exact_source_and_syntax_identity() {
     let set = with_bodies();
     set.validate(limits()).unwrap();
     let wire = to_proto(&set);
-    assert_eq!(wire.version, 4);
+    assert_eq!(wire.version, 6);
     let decoded =
         from_proto(ProtoDescriptorGraph::decode(wire.encode_to_vec().as_slice()).unwrap()).unwrap();
     assert_eq!(decoded, set);
@@ -120,6 +120,29 @@ fn retained_body_records_use_the_shared_header_and_artifact_budgets() {
             })
             .is_err()
     );
+}
+
+#[test]
+fn retained_flow_body_must_match_its_published_revision_content() {
+    let mut set = with_bodies();
+    let headers = set.headers.as_mut().unwrap();
+    let snapshot = &mut headers.snapshots.as_mut().unwrap().flows[0];
+    let mut body = headers.bodies.as_ref().unwrap().entries[0].clone();
+    body.callable = snapshot.revision.definition.clone();
+    snapshot.revision.content = body.source.content;
+    headers.bodies.as_mut().unwrap().entries.push(body);
+    assert_eq!(from_proto(to_proto(&set)).unwrap(), set);
+
+    set.headers
+        .as_mut()
+        .unwrap()
+        .snapshots
+        .as_mut()
+        .unwrap()
+        .flows[0]
+        .revision
+        .content = CodeFingerprint::from_bytes([99; 32]);
+    assert!(from_proto(to_proto(&set)).is_err());
 }
 
 #[test]

@@ -270,6 +270,9 @@ pub enum EffectDiagnosticCode {
     RuntimeRequiredInPhase1,
     HandlerArmOutsideHandledRow,
     IncompleteEffectFacts,
+    /// A trace obligation has a verified residual plan, but the selected
+    /// target cannot enforce it. This is a blocking error.
+    TraceSpecResidualUnsupported,
 }
 
 #[derive(
@@ -287,6 +290,12 @@ pub enum AnalysisDiagnosticCode {
     UnhandledEffectAction,
     ExecutionAborted,
     ExecutionNotImplemented,
+    /// An installed residual trace monitor rejected a governed action before
+    /// dispatch, or its runtime evidence/state could not be validated.
+    TraceSpecResidualViolation,
+    /// A residual scope terminated without completing its obligations. The
+    /// cancellation or execution failure remains the primary terminal cause.
+    TraceSpecResidualIncomplete,
 }
 
 #[derive(

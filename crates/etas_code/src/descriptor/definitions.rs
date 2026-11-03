@@ -6,7 +6,7 @@ mod bodies;
 mod headers;
 pub use bodies::{BodyAccess, CallableBodyInfo, DefinitionBodies};
 mod snapshots;
-pub use snapshots::{AgentSnapshotInfo, DefinitionSnapshots};
+pub use snapshots::{DefinitionSnapshotInfo, DefinitionSnapshots};
 
 /// Portable descriptions. These records do not retain executable code or proofs.
 #[derive(
@@ -138,7 +138,7 @@ impl DefinitionDescriptorSet {
         if let Some(headers) = &self.headers {
             headers::validate(headers, &self.graph, &self.declarations)?;
             if let Some(snapshots) = &headers.snapshots {
-                snapshots::validate(snapshots, headers)?;
+                snapshots::validate(snapshots, headers, &self.graph)?;
             }
             if let Some(bodies) = &headers.bodies {
                 if headers.snapshots.is_none() {

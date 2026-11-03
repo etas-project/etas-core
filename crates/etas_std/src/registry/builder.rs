@@ -119,6 +119,58 @@ impl StdRegistryBuilder {
         self.registry.prelude_mut().insert(name, symbol);
     }
 
+    pub fn flow_overload(
+        &mut self,
+        symbol: StdSymbolId,
+        declaration: crate::FlowDecl,
+    ) -> Result<(), StdRegistryValidationError> {
+        let target = self
+            .registry
+            .symbol(symbol)
+            .ok_or_else(|| StdRegistryValidationError {
+                symbol: format!("symbol {}", symbol.0),
+                reason: "overload target is not registered".into(),
+            })?;
+        if !matches!(&target.decl, StdDecl::Flow(_)) || target.name != declaration.name {
+            return Err(StdRegistryValidationError {
+                symbol: target.qualified_path.join("."),
+                reason: "flow overload must preserve its resolved declaration identity".into(),
+            });
+        }
+        self.registry
+            .flow_overloads
+            .entry(symbol)
+            .or_default()
+            .push(declaration);
+        Ok(())
+    }
+
+    pub fn action_overload(
+        &mut self,
+        symbol: StdSymbolId,
+        declaration: crate::EffectActionDecl,
+    ) -> Result<(), StdRegistryValidationError> {
+        let target = self
+            .registry
+            .symbol(symbol)
+            .ok_or_else(|| StdRegistryValidationError {
+                symbol: format!("symbol {}", symbol.0),
+                reason: "overload target is not registered".into(),
+            })?;
+        if !matches!(&target.decl, StdDecl::EffectAction(_)) || target.name != declaration.name {
+            return Err(StdRegistryValidationError {
+                symbol: target.qualified_path.join("."),
+                reason: "action overload must preserve its resolved declaration identity".into(),
+            });
+        }
+        self.registry
+            .action_overloads
+            .entry(symbol)
+            .or_default()
+            .push(declaration);
+        Ok(())
+    }
+
     pub fn re_export(
         &mut self,
         module: StdModuleId,

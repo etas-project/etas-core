@@ -38,8 +38,10 @@ fn implementation() -> SpecImpl {
             callable: CallableValueGraph {
                 sources: vec![CallableValueSource::Value(0)],
                 values: vec![CallableValueNode {
+                    residual_checks: Default::default(),
                     handler_requests: None,
                     behavior: CallableValueBehavior {
+                        independent_determinism: Default::default(),
                         determinism: CallableValueDeterminism::Deterministic,
                         host_requirements: Vec::new(),
                         interpreter_features: Vec::new(),
@@ -166,6 +168,13 @@ fn method_contracts_round_trip_without_inventing_declaration_paths() {
     let trace = TraceSpecConformance {
         item: target,
         target: TraceSpecConformanceTarget::Named {
+            definition: DefinitionKey::new(
+                PackageKey::from_canonical_fingerprint(CodeFingerprint::from_bytes([3; 32])),
+                vec!["api".into()],
+                vec!["ReadOnly".into()],
+                DefinitionKind::Spec,
+            )
+            .unwrap(),
             spec: vec!["api".into(), "ReadOnly".into()],
             args: Vec::new(),
         },

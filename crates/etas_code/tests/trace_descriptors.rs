@@ -143,6 +143,140 @@ fn trace_fingerprint_does_not_depend_on_local_trace_indices() {
 }
 
 #[test]
+fn relocated_roots_preserve_shared_types_and_trace_order() {
+    let mut event = action();
+    event
+        .arguments
+        .push(StaticEffectArgInfo::Type(TypeInfoRef(0)));
+    let source = DescriptorGraph::new(
+        DescriptorGraphInput {
+            types: vec![TypeInfo::Primitive(PrimitiveInfo::Bool)],
+            traces: vec![
+                TraceInfo::Event(event),
+                TraceInfo::Seq(vec![TraceInfoRef(0), TraceInfoRef(0)]),
+            ],
+            ..Default::default()
+        },
+        Default::default(),
+    )
+    .unwrap();
+    let mut target = DescriptorGraphInput {
+        types: vec![TypeInfo::Primitive(PrimitiveInfo::Unit)],
+        traces: vec![TraceInfo::Empty],
+        ..Default::default()
+    };
+    let (segment, roots) = source
+        .relocate_roots(
+            &[
+                DescriptorNode::Trace(TraceInfoRef(1)),
+                DescriptorNode::Type(TypeInfoRef(0)),
+            ],
+            DescriptorGraphOffsets {
+                types: 1,
+                rows: 0,
+                binders: 0,
+                traces: 1,
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        roots,
+        [
+            DescriptorNode::Trace(TraceInfoRef(1)),
+            DescriptorNode::Type(TypeInfoRef(1))
+        ]
+    );
+    assert_eq!(segment.types.len(), 1);
+    target.types.extend(segment.types);
+    target.rows.extend(segment.rows);
+    target.binders.extend(segment.binders);
+    target.traces.extend(segment.traces);
+    let target = DescriptorGraph::new(target, Default::default()).unwrap();
+    assert_eq!(
+        source.trace_fingerprint(TraceInfoRef(1)).unwrap(),
+        target.trace_fingerprint(TraceInfoRef(1)).unwrap()
+    );
+    assert!(
+        matches!(target.trace(TraceInfoRef(1)), Some(TraceInfo::Seq(parts)) if parts == &[TraceInfoRef(2), TraceInfoRef(2)])
+    );
+    assert!(matches!(
+        source.relocate_roots(
+            &[DescriptorNode::Trace(TraceInfoRef(1))],
+            DescriptorGraphOffsets {
+                traces: u32::MAX,
+                ..Default::default()
+            }
+        ),
+        Err(DescriptorError::Limit {
+            resource: "descriptor arena indices",
+            ..
+        })
+    ));
+}
+
+#[test]
+fn relocation_charges_only_distinct_reachable_nodes() {
+    let source = DescriptorGraph::new(
+        DescriptorGraphInput {
+            types: vec![
+                TypeInfo::Primitive(PrimitiveInfo::Bool),
+                TypeInfo::Primitive(PrimitiveInfo::Unit),
+            ],
+            ..Default::default()
+        },
+        Default::default(),
+    )
+    .unwrap();
+    let offsets = DescriptorGraphOffsets {
+        types: u32::MAX - 1,
+        ..Default::default()
+    };
+    let (segment, roots) = source
+        .relocate_roots(
+            &[
+                DescriptorNode::Type(TypeInfoRef(0)),
+                DescriptorNode::Type(TypeInfoRef(0)),
+            ],
+            offsets,
+        )
+        .unwrap();
+    assert_eq!(segment.types.len(), 1);
+    assert_eq!(roots, [DescriptorNode::Type(TypeInfoRef(u32::MAX - 1)); 2]);
+    let (_, roots) = source
+        .relocate_roots(
+            &[
+                DescriptorNode::Type(TypeInfoRef(0)),
+                DescriptorNode::Type(TypeInfoRef(1)),
+            ],
+            offsets,
+        )
+        .unwrap();
+    assert_eq!(
+        roots,
+        [
+            DescriptorNode::Type(TypeInfoRef(u32::MAX - 1)),
+            DescriptorNode::Type(TypeInfoRef(u32::MAX))
+        ]
+    );
+    assert!(matches!(
+        source.relocate_roots(
+            &[
+                DescriptorNode::Type(TypeInfoRef(0)),
+                DescriptorNode::Type(TypeInfoRef(1))
+            ],
+            DescriptorGraphOffsets {
+                types: u32::MAX,
+                ..Default::default()
+            }
+        ),
+        Err(DescriptorError::Limit {
+            resource: "descriptor arena indices",
+            ..
+        })
+    ));
+}
+
+#[test]
 fn root_projection_preserves_trace_events_outcomes_and_callback_placeholders() {
     let mut event = action();
     event
@@ -159,9 +293,20 @@ fn root_projection_preserves_trace_events_outcomes_and_callback_placeholders() {
     )
     .unwrap();
     let parameter = ParameterCallInfo {
+        handlers: Some(vec![ParameterHandlerScopeInfo::Handle {
+            arms: vec![ParameterHandlerArmInfo {
+                action: event.clone(),
+                trace: TraceInfoRef(0),
+                completion: ParameterHandlerCompletionInfo::Resume {
+                    result_type: TypeInfoRef(0),
+                    value: ReturnObservationInfo::Unit,
+                },
+            }],
+        }]),
         callable,
         signature: TypeInfoRef(1),
         position: 0,
+        arguments: Some(vec![]),
     };
     let source = DescriptorGraph::new(
         DescriptorGraphInput {
@@ -249,9 +394,11 @@ fn parameter_trace_calls_require_a_real_signature_parameter() {
     )
     .unwrap();
     let call = ParameterCallInfo {
+        handlers: Some(vec![]),
         callable,
         signature: TypeInfoRef(0),
         position: 1,
+        arguments: None,
     };
     let mut input = DescriptorGraphInput {
         types: vec![
@@ -282,7 +429,7 @@ fn parameter_trace_calls_require_a_real_signature_parameter() {
 }
 
 #[test]
-fn parameter_trace_calls_require_a_callable_type_even_when_widened() {
+fn parameter_trace_calls_require_callable_types_including_widened_traces() {
     let package = PackageKey::from_canonical_fingerprint(CodeFingerprint::from_bytes([9; 32]));
     let callable = etas_code::CallableId::declaration(
         DefinitionKey::new(
@@ -295,9 +442,11 @@ fn parameter_trace_calls_require_a_callable_type_even_when_widened() {
     )
     .unwrap();
     let call = ParameterCallInfo {
+        handlers: Some(vec![]),
         callable,
         signature: TypeInfoRef(0),
         position: 0,
+        arguments: Some(vec![]),
     };
     let mut input = DescriptorGraphInput {
         types: vec![
@@ -344,7 +493,7 @@ fn parameter_trace_calls_require_a_callable_type_even_when_widened() {
     ));
     input.traces[0] = TraceInfo::Widened {
         actions: EffectRowInfoRef(0),
-        parameter_calls: vec![call],
+        parameter_calls: vec![call.clone()],
     };
     assert!(matches!(
         DescriptorGraph::new(input.clone(), DescriptorLimits::default()),
@@ -355,6 +504,47 @@ fn parameter_trace_calls_require_a_callable_type_even_when_widened() {
     };
     owner.parameters[0].ty = TypeInfoRef(3);
     assert!(DescriptorGraph::new(input.clone(), DescriptorLimits::default()).is_ok());
+    let TypeInfo::Function(callback) = &mut input.types[2] else {
+        unreachable!()
+    };
+    callback.effects = Some(EffectRowInfoRef(0));
+    input.traces[0] = TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(call));
+    assert!(DescriptorGraph::new(input.clone(), DescriptorLimits::default()).is_ok());
+
+    input.types.push(TypeInfo::Builtin {
+        constructor: BuiltinTypeInfo::CallableDefinition,
+        arguments: vec![TypeInfoRef(2)],
+    });
+    let TypeInfo::Function(owner) = &mut input.types[0] else {
+        unreachable!()
+    };
+    owner.parameters[0].ty = TypeInfoRef(4);
+    assert!(DescriptorGraph::new(input.clone(), DescriptorLimits::default()).is_ok());
+    let TypeInfo::Builtin { constructor, .. } = &mut input.types[4] else {
+        unreachable!()
+    };
+    *constructor = BuiltinTypeInfo::Option;
+    assert!(matches!(
+        DescriptorGraph::new(input.clone(), DescriptorLimits::default()),
+        Err(DescriptorError::Invalid { .. })
+    ));
+    let TypeInfo::Builtin {
+        constructor,
+        arguments,
+    } = &mut input.types[4]
+    else {
+        unreachable!()
+    };
+    *constructor = BuiltinTypeInfo::CallableDefinition;
+    arguments[0] = TypeInfoRef(1);
+    assert!(matches!(
+        DescriptorGraph::new(input.clone(), DescriptorLimits::default()),
+        Err(DescriptorError::Invalid { .. })
+    ));
+    let TypeInfo::Function(owner) = &mut input.types[0] else {
+        unreachable!()
+    };
+    owner.parameters[0].ty = TypeInfoRef(3);
     let TypeInfo::Alias { target, .. } = &mut input.types[3] else {
         unreachable!()
     };

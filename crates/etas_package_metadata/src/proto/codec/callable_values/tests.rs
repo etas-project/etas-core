@@ -14,9 +14,11 @@ fn unit() -> Type {
 
 fn node() -> CallableValueNode {
     CallableValueNode {
+        residual_checks: Vec::new(),
         handler_requests: Some(Default::default()),
         behavior: crate::CallableValueBehavior {
             determinism: crate::CallableValueDeterminism::Deterministic,
+            independent_determinism: Some(crate::CallableValueDeterminism::Deterministic),
             host_requirements: vec![],
             interpreter_features: vec![],
         },
@@ -41,6 +43,24 @@ fn graph() -> CallableValueGraph {
         sources: vec![CallableValueSource::Value(0)],
         values: vec![node()],
     }
+}
+
+#[test]
+fn frozen_contract_sources_remain_distinct_from_revision_analysis_across_binary_replay() {
+    let mut graph = graph();
+    graph.sources = vec![CallableValueSource::FrozenContract(0)];
+    graph.values[0].returned_sources = Some(vec![
+        CallableValueSource::Value(0),
+        CallableValueSource::FrozenContract(0),
+    ]);
+    graph.validate_references(None).unwrap();
+    let bytes = to_proto(&graph).encode_to_vec();
+    assert_eq!(
+        from_proto(ProtoCallableValueGraph::decode(bytes.as_slice()).unwrap()).unwrap(),
+        graph
+    );
+    graph.sources = vec![CallableValueSource::FrozenContract(1)];
+    assert!(graph.validate_references(None).is_err());
 }
 
 #[test]
@@ -116,11 +136,20 @@ fn callable_graph_round_trips_captures_scoped_generics_and_recursive_returns() {
         from_proto(ProtoCallableValueGraph::decode(bytes.as_slice()).unwrap()).unwrap(),
         graph
     );
+    let mut missing = graph.clone();
+    missing.values[0].behavior.independent_determinism = None;
+    assert!(missing.validate_references(Some((1, &root))).is_err());
+    assert!(from_proto(to_proto(&missing)).is_err());
+    let mut inconsistent = graph.clone();
+    inconsistent.values[0].behavior.independent_determinism =
+        Some(crate::CallableValueDeterminism::RuntimeMediated);
+    assert!(inconsistent.validate_references(Some((1, &root))).is_err());
+    assert!(from_proto(to_proto(&inconsistent)).is_err());
 }
 
 #[test]
 fn callable_graph_rejects_missing_node_artifacts_instead_of_fabricating_empty_facts() {
-    for field in 0..9 {
+    for field in 0..10 {
         let mut proto = to_proto(&graph());
         let node = &mut proto.values[0];
         match field {
@@ -133,11 +162,152 @@ fn callable_graph_rejects_missing_node_artifacts_instead_of_fabricating_empty_fa
             6 => node.parent_scope = None,
             7 => node.behavior = None,
             8 => node.behavior.as_mut().unwrap().determinism = None,
+            9 => node.residual_checks = None,
             _ => unreachable!(),
         }
         let error = from_proto(proto).unwrap_err();
         assert!(error.to_string().contains("missing"), "{field}: {error}");
     }
+}
+
+#[test]
+fn residual_references_round_trip_and_reject_malformed_binary() {
+    use etas_code::{
+        CodeFingerprint,
+        residual::identity::{
+            GenericArgumentIdentity, GenericParameterId, ObligationId, ResidualObligationRef,
+        },
+    };
+    let fp = |byte| CodeFingerprint::from_bytes([byte; 32]);
+    let parameter = GenericParameterId::from_canonical_fingerprint(fp(2));
+    let reference = ResidualObligationRef::new(
+        ObligationId::from_canonical_fingerprint(fp(1)),
+        std::collections::BTreeMap::from([(parameter, GenericArgumentIdentity::Type(fp(3)))]),
+    )
+    .unwrap();
+    let mut source = graph();
+    source.values[0].residual_checks.push(reference);
+    let bytes = to_proto(&source).encode_to_vec();
+    assert_eq!(
+        from_proto(ProtoCallableValueGraph::decode(bytes.as_slice()).unwrap()).unwrap(),
+        source
+    );
+    assert_ne!(
+        crate::callable_value_graph_fingerprint(&source).unwrap(),
+        crate::callable_value_graph_fingerprint(&graph()).unwrap()
+    );
+    for bad in 0..5 {
+        let mut wire = to_proto(&source);
+        let set = wire.values[0].residual_checks.as_mut().unwrap();
+        match bad {
+            0 => set.version = 0,
+            1 => set.references[0].obligation.clear(),
+            2 => set.references[0].substitutions[0].kind = 99,
+            3 => {
+                let binding = set.references[0].substitutions[0].clone();
+                set.references[0].substitutions.push(binding);
+            }
+            4 => set.references.push(set.references[0].clone()),
+            _ => unreachable!(),
+        }
+        let bytes = wire.encode_to_vec();
+        assert!(
+            from_proto(ProtoCallableValueGraph::decode(bytes.as_slice()).unwrap()).is_err(),
+            "case {bad}"
+        );
+    }
+}
+
+#[test]
+fn residual_reference_budget_is_shared_across_the_artifact() {
+    use etas_code::{
+        CodeFingerprint,
+        residual::identity::{
+            GenericArgumentIdentity, GenericParameterId, ObligationId, ResidualObligationRef,
+        },
+    };
+    let mut bindings = std::collections::BTreeMap::new();
+    for number in 0..18u8 {
+        let parameter = GenericParameterId::from_canonical_fingerprint(
+            CodeFingerprint::from_bytes([number; 32]),
+        );
+        bindings.insert(
+            parameter,
+            GenericArgumentIdentity::Type(CodeFingerprint::from_bytes([99; 32])),
+        );
+    }
+    let references = (0..2700u32)
+        .map(|number| {
+            let mut bytes = [0u8; 32];
+            bytes[..4].copy_from_slice(&number.to_be_bytes());
+            ResidualObligationRef::new(
+                ObligationId::from_canonical_fingerprint(CodeFingerprint::from_bytes(bytes)),
+                bindings.clone(),
+            )
+            .unwrap()
+        })
+        .collect::<Vec<_>>();
+    let mut value = node();
+    value.residual_checks = references;
+    let graph = CallableValueGraph {
+        sources: vec![CallableValueSource::Value(0)],
+        values: vec![value.clone(), value],
+    };
+    let mut package = PackageMetadata::default();
+    package
+        .public_metadata
+        .effect_summaries
+        .push(EffectSummary {
+            returned_callables: Some(graph),
+            ..Default::default()
+        });
+    assert!(validate_package_metadata_graph(&package).is_err());
+    assert!(validate_proto_package_metadata_graph(&package_metadata_to_proto(&package)).is_err());
+}
+
+#[test]
+fn root_and_latent_residuals_share_the_artifact_budget() {
+    use etas_code::{
+        CodeFingerprint,
+        residual::identity::{
+            GenericArgumentIdentity, GenericParameterId, ObligationId, ResidualObligationRef,
+        },
+    };
+    let bindings: std::collections::BTreeMap<_, _> = (0..18u8)
+        .map(|number| {
+            (
+                GenericParameterId::from_canonical_fingerprint(CodeFingerprint::from_bytes(
+                    [number; 32],
+                )),
+                GenericArgumentIdentity::Type(CodeFingerprint::from_bytes([99; 32])),
+            )
+        })
+        .collect();
+    let references = (0..2700u32)
+        .map(|number| {
+            let mut bytes = [0u8; 32];
+            bytes[..4].copy_from_slice(&number.to_be_bytes());
+            ResidualObligationRef::new(
+                ObligationId::from_canonical_fingerprint(CodeFingerprint::from_bytes(bytes)),
+                bindings.clone(),
+            )
+            .unwrap()
+        })
+        .collect::<Vec<_>>();
+    let mut package = PackageMetadata::default();
+    package
+        .public_metadata
+        .effect_summaries
+        .push(EffectSummary {
+            residual_checks: references.clone(),
+            latent_flows: vec![crate::LatentFlowSummary::default()],
+            ..Default::default()
+        });
+    assert!(validate_package_metadata_graph(&package).is_ok());
+    assert!(validate_proto_package_metadata_graph(&package_metadata_to_proto(&package)).is_ok());
+    package.public_metadata.effect_summaries[0].latent_flows[0].residual_checks = references;
+    assert!(validate_package_metadata_graph(&package).is_err());
+    assert!(validate_proto_package_metadata_graph(&package_metadata_to_proto(&package)).is_err());
 }
 
 #[test]

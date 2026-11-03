@@ -10,6 +10,254 @@ mod body_tests;
 mod header_tests;
 mod snapshot_tests;
 
+#[test]
+fn parameter_nonreturn_survives_binary_trace_codec() {
+    let call = ParameterCallInfo {
+        handlers: Some(vec![]),
+        callable: CallableId::declaration(key("visit", DefinitionKind::Flow)).unwrap(),
+        signature: TypeInfoRef(4),
+        position: 2,
+        arguments: Some(vec![
+            ParameterArgumentInfo::Bool(true),
+            ParameterArgumentInfo::Integer {
+                negative: true,
+                magnitude: 1_u128 << 127,
+            },
+        ]),
+    };
+    for original in [
+        TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(call.clone())),
+        TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturnTemplate(call)),
+    ] {
+        let bytes = traces::encode(&original).encode_to_vec();
+        let decoded = schema::Trace::decode(bytes.as_slice()).unwrap();
+        assert_eq!(traces::decode(decoded).unwrap(), original);
+    }
+}
+
+#[test]
+fn parameter_integer_codec_rejects_non_128_bit_magnitude() {
+    let original = TraceInfo::ParameterCall(ParameterCallInfo {
+        handlers: Some(vec![]),
+        callable: CallableId::declaration(key("visit", DefinitionKind::Flow)).unwrap(),
+        signature: TypeInfoRef(0),
+        position: 0,
+        arguments: Some(vec![ParameterArgumentInfo::Integer {
+            negative: false,
+            magnitude: 42,
+        }]),
+    });
+    let mut encoded = traces::encode(&original);
+    let Some(schema::trace::Kind::ParameterCall(call)) = &mut encoded.kind else {
+        unreachable!()
+    };
+    let Some(schema::parameter_argument::Kind::Integer(value)) =
+        &mut call.arguments.as_mut().unwrap().values[0].kind
+    else {
+        unreachable!()
+    };
+    assert!(value.magnitude.pop().is_some());
+    assert!(traces::decode(encoded).is_err());
+}
+
+#[test]
+fn parameter_handler_scope_codec_rejects_unknown_scope_kind() {
+    let original = TraceInfo::ParameterCall(ParameterCallInfo {
+        callable: CallableId::declaration(key("visit", DefinitionKind::Flow)).unwrap(),
+        signature: TypeInfoRef(0),
+        position: 0,
+        arguments: Some(vec![]),
+        handlers: Some(vec![ParameterHandlerScopeInfo::Handle {
+            arms: vec![ParameterHandlerArmInfo {
+                action: EffectInfo {
+                    target: EffectTargetInfo::Action {
+                        effect: key("Console", DefinitionKind::Effect),
+                        name: "write".into(),
+                    },
+                    arguments: vec![],
+                },
+                trace: TraceInfoRef(0),
+                completion: ParameterHandlerCompletionInfo::Resume {
+                    result_type: TypeInfoRef(0),
+                    value: ReturnObservationInfo::Bool(true),
+                },
+            }],
+        }]),
+    });
+    let mut encoded = traces::encode(&original);
+    let Some(schema::trace::Kind::ParameterCall(call)) = &mut encoded.kind else {
+        unreachable!()
+    };
+    call.handlers.as_mut().unwrap().scopes[0].kind = None;
+    assert!(traces::decode(encoded).is_err());
+    for control in [None, Some(9)] {
+        let mut encoded = traces::encode(&original);
+        let Some(schema::trace::Kind::ParameterCall(call)) = &mut encoded.kind else {
+            unreachable!()
+        };
+        let Some(schema::parameter_handler_scope::Kind::Handle(scope)) =
+            &mut call.handlers.as_mut().unwrap().scopes[0].kind
+        else {
+            unreachable!()
+        };
+        scope.arms[0].control = control;
+        assert!(traces::decode(encoded).is_err());
+    }
+    let mut encoded = traces::encode(&original);
+    let Some(schema::trace::Kind::ParameterCall(call)) = &mut encoded.kind else {
+        unreachable!()
+    };
+    let Some(schema::parameter_handler_scope::Kind::Handle(scope)) =
+        &mut call.handlers.as_mut().unwrap().scopes[0].kind
+    else {
+        unreachable!()
+    };
+    scope.arms[0].trace = None;
+    assert!(traces::decode(encoded).is_err());
+}
+
+#[test]
+fn parameter_nonreturn_survives_full_package_artifact_roundtrip() {
+    use crate::*;
+    let flow = key("visit", DefinitionKind::Flow);
+    let call = ParameterCallInfo {
+        handlers: Some(vec![ParameterHandlerScopeInfo::Handle {
+            arms: vec![
+                ParameterHandlerArmInfo {
+                    action: EffectInfo {
+                        target: EffectTargetInfo::Action {
+                            effect: key("Console", DefinitionKind::Effect),
+                            name: "write".into(),
+                        },
+                        arguments: vec![],
+                    },
+                    trace: TraceInfoRef(1),
+                    completion: ParameterHandlerCompletionInfo::Resume {
+                        result_type: TypeInfoRef(2),
+                        value: ReturnObservationInfo::Unit,
+                    },
+                },
+                ParameterHandlerArmInfo {
+                    action: EffectInfo {
+                        target: EffectTargetInfo::Action {
+                            effect: key("Choice", DefinitionKind::Effect),
+                            name: "decide".into(),
+                        },
+                        arguments: vec![],
+                    },
+                    trace: TraceInfoRef(1),
+                    completion: ParameterHandlerCompletionInfo::Finish {
+                        result_type: TypeInfoRef(3),
+                        value: ReturnObservationInfo::Bool(true),
+                    },
+                },
+            ],
+        }]),
+        callable: CallableId::declaration(flow).unwrap(),
+        signature: TypeInfoRef(0),
+        position: 0,
+        arguments: Some(vec![
+            ParameterArgumentInfo::Input { position: 1 },
+            ParameterArgumentInfo::Integer {
+                negative: true,
+                magnitude: 1_u128 << 127,
+            },
+        ]),
+    };
+    let graph = DefinitionDescriptorSet {
+        headers: None,
+        graph: DescriptorGraphInput {
+            types: vec![
+                TypeInfo::Function(SignatureInfo {
+                    generics: vec![],
+                    parameters: vec![
+                        ParameterInfo {
+                            name: Some("f".into()),
+                            ty: TypeInfoRef(1),
+                        },
+                        ParameterInfo {
+                            name: Some("value".into()),
+                            ty: TypeInfoRef(3),
+                        },
+                    ],
+                    output: TypeInfoRef(2),
+                    declared_output: None,
+                    effects: Some(EffectRowInfoRef(0)),
+                }),
+                TypeInfo::Function(SignatureInfo {
+                    generics: vec![],
+                    parameters: vec![
+                        ParameterInfo {
+                            name: Some("value".into()),
+                            ty: TypeInfoRef(3),
+                        },
+                        ParameterInfo {
+                            name: Some("boundary".into()),
+                            ty: TypeInfoRef(4),
+                        },
+                    ],
+                    output: TypeInfoRef(2),
+                    declared_output: None,
+                    effects: Some(EffectRowInfoRef(0)),
+                }),
+                TypeInfo::Primitive(PrimitiveInfo::Unit),
+                TypeInfo::Primitive(PrimitiveInfo::Bool),
+                TypeInfo::Primitive(PrimitiveInfo::I128),
+            ],
+            rows: vec![
+                EffectRowInfo {
+                    effects: vec![],
+                    tail: None,
+                },
+                EffectRowInfo {
+                    effects: vec![EffectInfo {
+                        target: EffectTargetInfo::Action {
+                            effect: key("Console", DefinitionKind::Effect),
+                            name: "write".into(),
+                        },
+                        arguments: vec![],
+                    }],
+                    tail: None,
+                },
+            ],
+            traces: vec![
+                TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(call)),
+                TraceInfo::Empty,
+            ],
+            ..Default::default()
+        },
+        declarations: vec![],
+    };
+    let mut metadata = PackageMetadata {
+        version: 1,
+        package: PackageIdentity {
+            name: "descriptor-test".into(),
+            version: "0.1.0".into(),
+            edition: "2026".into(),
+        },
+        ..Default::default()
+    };
+    metadata.public_metadata.definition_descriptors = Some(graph);
+    let header = MetadataArtifactHeader {
+        artifact_schema_version: ARTIFACT_SCHEMA_VERSION,
+        compiler_version: "test".into(),
+        package_id: "descriptor-test".into(),
+        package_version: "0.1.0".into(),
+        source_payload_hash: "source".into(),
+        manifest_hash: "manifest".into(),
+        dependency_lock_hash: "lock".into(),
+        created_target: "test".into(),
+    };
+    let bytes = encode_metadata_artifact(&header, package_metadata_to_sections(&metadata).unwrap())
+        .unwrap();
+    assert_eq!(
+        package_metadata_from_artifact(std::path::Path::new("descriptor.etasmeta"), &bytes)
+            .unwrap()
+            .1,
+        metadata
+    );
+}
+
 fn key(name: &str, kind: DefinitionKind) -> DefinitionKey {
     DefinitionKey::new(
         PackageKey::from_canonical_fingerprint(CodeFingerprint::from_bytes([9; 32])),
@@ -40,9 +288,11 @@ fn fixture() -> DefinitionDescriptorSet {
     )
     .unwrap();
     let call = ParameterCallInfo {
+        handlers: Some(vec![]),
         callable: CallableId::method(method.clone()),
         signature: TypeInfoRef(10),
         position: 0,
+        arguments: None,
     };
     let event = EffectInfo {
         target: EffectTargetInfo::Action {
@@ -202,9 +452,11 @@ fn fixture() -> DefinitionDescriptorSet {
                     parameter_calls: vec![
                         call,
                         ParameterCallInfo {
+                            handlers: Some(vec![]),
                             callable: CallableId::declaration(flow.clone()).unwrap(),
                             signature: TypeInfoRef(10),
                             position: 0,
+                            arguments: None,
                         },
                     ],
                 },
@@ -307,6 +559,7 @@ fn every_primitive_and_compiler_constructor_has_a_stable_wire_mapping() {
         B::Secret,
         B::Public,
         B::Sanitized,
+        B::CallableDefinition,
     ];
     let set = DefinitionDescriptorSet {
         headers: None,
@@ -327,7 +580,17 @@ fn every_primitive_and_compiler_constructor_has_a_stable_wire_mapping() {
         },
         declarations: vec![],
     };
-    assert_eq!(from_proto(to_proto(&set)).unwrap(), set);
+    let wire = to_proto(&set);
+    assert_eq!(wire.version, 8);
+    assert_eq!(from_proto(wire.clone()).unwrap(), set);
+    let mut downgraded = wire;
+    downgraded.version = 1;
+    assert!(from_proto(downgraded).is_err());
+    let mut old = set;
+    old.graph.types.pop();
+    let mut falsely_upgraded = to_proto(&old);
+    falsely_upgraded.version = 8;
+    assert!(from_proto(falsely_upgraded).is_err());
 }
 
 #[test]

@@ -99,6 +99,19 @@ struct ModelGraphValidator {
 }
 
 impl ModelGraphValidator {
+    fn trace_spec_definition(
+        &mut self,
+        definition: &etas_code::DefinitionKey,
+    ) -> Result<(), MetadataArtifactError> {
+        if definition.kind() != etas_code::DefinitionKind::Spec {
+            return Err(invalid("trace spec definition identity is not a spec"));
+        }
+        self.budget.charge(
+            1 + definition.module().len() + definition.declaration().len(),
+            "trace spec definition identity",
+        )
+    }
+
     fn callable_contract(
         &mut self,
         target: &crate::CallableContractTarget,
@@ -206,6 +219,20 @@ impl ModelGraphValidator {
             }
         }
         for signature in &metadata.spec_signatures {
+            if signature.param_names.len() != signature.generic_params.len()
+                || signature
+                    .param_names
+                    .iter()
+                    .zip(&signature.generic_params)
+                    .any(|(name, param)| name != &param.name)
+            {
+                return Err(invalid(
+                    "spec generic parameter facts are incomplete or inconsistent",
+                ));
+            }
+            for param in &signature.generic_params {
+                self.generic_param(param)?;
+            }
             if let Some(callable) = &signature.callable {
                 self.callable(callable)?;
             }
@@ -256,13 +283,18 @@ impl ModelGraphValidator {
         }
         for conformance in &metadata.trace_spec_conformances {
             self.callable_contract(&conformance.item, &methods)?;
-            if let TraceSpecConformanceTarget::Named { args, .. } = &conformance.target {
+            if let TraceSpecConformanceTarget::Named {
+                args, definition, ..
+            } = &conformance.target
+            {
+                self.trace_spec_definition(definition)?;
                 for arg in args {
                     self.ty(arg, 0)?;
                 }
             }
         }
         for summary in &metadata.effect_summaries {
+            self.residual_references(&summary.residual_checks)?;
             if let Some(requests) = &summary.handler_requests {
                 self.request_template(requests)?;
             }
@@ -281,23 +313,45 @@ impl ModelGraphValidator {
             self.effect_row(&summary.requested_actions, 0)?;
             self.effect_row(&summary.handled_requested_actions, 0)?;
             for latent in &summary.latent_flows {
+                self.residual_references(&latent.residual_checks)?;
                 self.effect_row(&latent.declared_bound, 0)?;
                 self.effect_row(&latent.inferred_effects, 0)?;
             }
             self.action_trace(&summary.action_trace, 0)?;
         }
         for summary in &metadata.trace_spec_summaries {
-            for clause in &summary.clauses {
-                for row in [
-                    clause.pattern.as_ref(),
-                    clause.guard.as_ref(),
-                    clause.target.as_ref(),
-                    clause.obligation.as_ref(),
-                ]
-                .into_iter()
-                .flatten()
-                {
-                    self.effect_row(row, 0)?;
+            self.trace_spec_definition(&summary.definition)?;
+            self.budget
+                .charge(summary.alternatives.len(), "trace spec alternatives")?;
+            if summary.alternatives.is_empty() {
+                return Err(invalid("trace spec requires an alternative"));
+            }
+            for alternative in &summary.alternatives {
+                self.budget
+                    .charge(alternative.len(), "trace spec clauses")?;
+                if alternative.is_empty() {
+                    return Err(invalid("trace spec alternative requires a clause"));
+                }
+                for clause in alternative {
+                    self.budget
+                        .charge(clause.selector_bounds.len(), "trace selector bounds")?;
+                    for bound in &clause.selector_bounds {
+                        validate_trace_selector_bound(clause, bound)?;
+                        for arg in &bound.spec_args {
+                            self.ty(arg, 0)?;
+                        }
+                    }
+                    for row in [
+                        clause.pattern.as_ref(),
+                        clause.guard.as_ref(),
+                        clause.target.as_ref(),
+                        clause.obligation.as_ref(),
+                    ]
+                    .into_iter()
+                    .flatten()
+                    {
+                        self.effect_row(row, 0)?;
+                    }
                 }
             }
         }
@@ -419,7 +473,15 @@ impl ModelGraphValidator {
         self.budget.enter(depth, "action trace")?;
         match trace {
             ActionTrace::Event(event) => self.effect_ref(&event.action, depth + 1)?,
-            ActionTrace::Seq(children) | ActionTrace::Choice(children) => {
+            ActionTrace::Seq(children) => {
+                for child in children {
+                    self.action_trace(child, depth + 1)?;
+                }
+            }
+            ActionTrace::Choice(children) => {
+                if children.is_empty() {
+                    return Err(invalid("action trace choice requires an alternative"));
+                }
                 for child in children {
                     self.action_trace(child, depth + 1)?;
                 }
@@ -469,6 +531,16 @@ struct ProtoGraphValidator {
 }
 
 impl ProtoGraphValidator {
+    fn trace_spec_definition(
+        &mut self,
+        definition: &proto::ProtoDefinitionKey,
+    ) -> Result<(), MetadataArtifactError> {
+        self.budget.charge(
+            1 + definition.module.len() + definition.declaration.len(),
+            "trace spec definition identity",
+        )
+    }
+
     fn callable_contract(
         &mut self,
         target: Option<&proto::ProtoCallableContractTarget>,
@@ -571,6 +643,20 @@ impl ProtoGraphValidator {
             }
         }
         for signature in &metadata.spec_signatures {
+            if signature.param_names.len() != signature.generic_params.len()
+                || signature
+                    .param_names
+                    .iter()
+                    .zip(&signature.generic_params)
+                    .any(|(name, param)| name != &param.name)
+            {
+                return Err(invalid(
+                    "spec generic parameter facts are incomplete or inconsistent",
+                ));
+            }
+            for param in &signature.generic_params {
+                self.generic_param(param)?;
+            }
             if let Some(callable) = signature.callable.as_ref() {
                 self.callable(callable)?;
             }
@@ -615,11 +701,17 @@ impl ProtoGraphValidator {
         }
         for conformance in &metadata.trace_spec_conformances {
             self.callable_contract(conformance.item.as_ref())?;
+            if let Some(definition) = &conformance.definition {
+                self.trace_spec_definition(definition)?;
+            }
             for arg in &conformance.args {
                 self.ty(arg, 0)?;
             }
         }
         for summary in &metadata.effect_summaries {
+            if let Some(references) = &summary.residual_checks {
+                self.residual_references(references)?;
+            }
             if let Some(requests) = &summary.handler_requests {
                 self.request_template(requests)?;
             }
@@ -653,6 +745,9 @@ impl ProtoGraphValidator {
                 self.effect_row(row, 0)?;
             }
             for latent in &summary.latent_flows {
+                if let Some(references) = &latent.residual_checks {
+                    self.residual_references(references)?;
+                }
                 if let Some(row) = latent.declared_bound.as_ref() {
                     self.effect_row(row, 0)?;
                 }
@@ -665,17 +760,39 @@ impl ProtoGraphValidator {
             }
         }
         for summary in &metadata.trace_spec_summaries {
-            for clause in &summary.clauses {
-                for row in [
-                    clause.pattern.as_ref(),
-                    clause.guard.as_ref(),
-                    clause.target.as_ref(),
-                    clause.obligation.as_ref(),
-                ]
-                .into_iter()
-                .flatten()
-                {
-                    self.effect_row(row, 0)?;
+            if let Some(definition) = &summary.definition {
+                self.trace_spec_definition(definition)?;
+            }
+            self.budget
+                .charge(summary.alternatives.len(), "trace spec alternatives")?;
+            if summary.alternatives.is_empty() {
+                return Err(invalid("trace spec requires an alternative"));
+            }
+            for alternative in &summary.alternatives {
+                self.budget
+                    .charge(alternative.clauses.len(), "trace spec clauses")?;
+                if alternative.clauses.is_empty() {
+                    return Err(invalid("trace spec alternative requires a clause"));
+                }
+                for clause in &alternative.clauses {
+                    self.budget
+                        .charge(clause.selector_bounds.len(), "trace selector bounds")?;
+                    for bound in &clause.selector_bounds {
+                        for arg in &bound.spec_args {
+                            self.ty(arg, 0)?;
+                        }
+                    }
+                    for row in [
+                        clause.pattern.as_ref(),
+                        clause.guard.as_ref(),
+                        clause.target.as_ref(),
+                        clause.obligation.as_ref(),
+                    ]
+                    .into_iter()
+                    .flatten()
+                    {
+                        self.effect_row(row, 0)?;
+                    }
                 }
             }
         }
@@ -804,6 +921,9 @@ impl ProtoGraphValidator {
         depth: usize,
     ) -> Result<(), MetadataArtifactError> {
         self.budget.enter(depth, "action trace")?;
+        validate_proto_action_trace_shape(trace)?;
+        self.budget
+            .charge(trace.parameter_calls.len(), "action trace parameter calls")?;
         if let Some(event) = trace.event.as_ref()
             && let Some(action) = event.action.as_ref()
         {
@@ -842,8 +962,113 @@ impl ProtoGraphValidator {
     }
 }
 
+pub(super) fn validate_proto_action_trace_shape(
+    trace: &proto::ProtoActionTrace,
+) -> Result<(), MetadataArtifactError> {
+    use proto::ProtoActionTraceKind as K;
+    let kind = K::try_from(trace.kind)
+        .map_err(|_| invalid("effect summary action trace has unknown kind"))?;
+    let (event, parameter, children, actions, parameter_calls) = (
+        trace.event.is_some(),
+        trace.parameter.is_some(),
+        !trace.children.is_empty(),
+        !trace.actions.is_empty(),
+        !trace.parameter_calls.is_empty(),
+    );
+    match kind {
+        K::Empty if !event && !parameter && !children && !actions && !parameter_calls => Ok(()),
+        K::Event if event && !parameter && !children && !actions && !parameter_calls => Ok(()),
+        K::ParameterCall if !event && parameter && !children && !actions && !parameter_calls => {
+            Ok(())
+        }
+        K::Seq if !event && !parameter && !actions && !parameter_calls => Ok(()),
+        K::Choice if !event && !parameter && !actions && !parameter_calls => {
+            if !children {
+                Err(invalid("action trace choice requires an alternative"))
+            } else {
+                Ok(())
+            }
+        }
+        K::Repeat if !event && !parameter && !actions && !parameter_calls => {
+            if trace.children.len() != 1 {
+                Err(invalid(
+                    "effect summary repeat trace must contain exactly one child",
+                ))
+            } else {
+                Ok(())
+            }
+        }
+        K::UnknownOrder if !event && !parameter && !children && !parameter_calls => Ok(()),
+        K::Widened if !event && !parameter && !children => Ok(()),
+        K::Event if !event => Err(invalid(
+            "effect summary action trace event is missing payload",
+        )),
+        K::ParameterCall if !parameter => Err(invalid(
+            "effect summary parameter-call trace has empty parameter",
+        )),
+        _ => Err(invalid(
+            "effect summary action trace contains fields invalid for its kind",
+        )),
+    }
+}
+
 fn invalid(message: impl Into<String>) -> MetadataArtifactError {
     MetadataArtifactError::invalid(crate::PACKAGE_METADATA_FILE, message)
+}
+
+fn validate_trace_selector_bound(
+    clause: &TraceSpecClause,
+    bound: &TraceSelectorBound,
+) -> Result<(), MetadataArtifactError> {
+    if bound.binding.is_empty()
+        || bound.binding == "_"
+        || bound.effect_path.is_empty()
+        || bound.effect_path.iter().any(String::is_empty)
+        || bound.spec_path.is_empty()
+        || bound.spec_path.iter().any(String::is_empty)
+    {
+        return Err(invalid(
+            "trace selector bound requires a binding and canonical effect/spec paths",
+        ));
+    }
+    let row = match (&clause.kind, bound.operand) {
+        (TraceSpecClauseKind::Allow | TraceSpecClauseKind::Deny, TraceSelectorOperand::Pattern) => {
+            &clause.pattern
+        }
+        (TraceSpecClauseKind::RequireBefore, TraceSelectorOperand::Guard) => &clause.guard,
+        (
+            TraceSpecClauseKind::RequireBefore | TraceSpecClauseKind::RequireAfter,
+            TraceSelectorOperand::Target,
+        ) => &clause.target,
+        (TraceSpecClauseKind::RequireAfter, TraceSelectorOperand::Obligation) => &clause.obligation,
+        _ => {
+            return Err(invalid(
+                "trace selector bound has an invalid clause operand",
+            ));
+        }
+    };
+    let mut effects = row
+        .as_ref()
+        .into_iter()
+        .flat_map(|row| &row.effects)
+        .filter(|effect| effect.path == bound.effect_path);
+    let effect = effects.next().ok_or_else(|| {
+        invalid("trace selector bound does not reference an effect in its operand")
+    })?;
+    if effects.next().is_some() {
+        return Err(invalid(
+            "trace selector bound references an ambiguous effect path",
+        ));
+    }
+    let selector = usize::try_from(bound.argument)
+        .ok()
+        .and_then(|index| effect.args.get(index));
+    if !matches!(selector.map(|arg| &arg.kind), Some(EffectArgKind::Wildcard)) {
+        return Err(invalid(
+            "trace selector bound requires a wildcard at its selector position",
+        ));
+    }
+    Ok(())
 }
 
 pub(super) fn validate_model_action(action: &ActionSignature) -> Result<(), MetadataArtifactError> {

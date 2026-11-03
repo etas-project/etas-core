@@ -21,6 +21,21 @@ use super::{CodeFingerprint, IDENTITY_SCHEMA_VERSION, canonical::CanonicalEncode
 pub struct PackageKey(CodeFingerprint);
 
 impl PackageKey {
+    pub fn from_name_and_version(name: &str, version: &str) -> Result<Self, IdentityError> {
+        for (index, part) in [name, version].into_iter().enumerate() {
+            if part.is_empty() || part.contains('\0') {
+                return Err(IdentityError::InvalidSegment {
+                    part: "package",
+                    index,
+                });
+            }
+        }
+        Ok(Self(CodeFingerprint::of_parts(
+            "etas.code.local-package-origin.v2",
+            [name.as_bytes(), version.as_bytes()],
+        )))
+    }
+
     pub const fn from_canonical_fingerprint(fingerprint: CodeFingerprint) -> Self {
         Self(fingerprint)
     }

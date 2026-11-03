@@ -194,7 +194,11 @@ impl Remapper<'_> {
             TraceInfo::Event(effect) => self.effect(effect)?,
             TraceInfo::Outcome(CallableOutcomeInfo::Returned { ty, .. })
             | TraceInfo::Outcome(CallableOutcomeInfo::Raised { error: ty }) => self.type_ref(ty)?,
-            TraceInfo::ParameterCall(call) => self.type_ref(&mut call.signature)?,
+            TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(call))
+            | TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturnTemplate(call)) => {
+                self.parameter_call(call)?
+            }
+            TraceInfo::ParameterCall(call) => self.parameter_call(call)?,
             TraceInfo::Seq(parts) | TraceInfo::Choice(parts) => {
                 for part in parts {
                     self.trace_ref(part)?;
@@ -208,7 +212,34 @@ impl Remapper<'_> {
             } => {
                 self.row_ref(actions)?;
                 for call in parameter_calls {
-                    self.type_ref(&mut call.signature)?;
+                    self.parameter_call(call)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn parameter_call(
+        &self,
+        call: &mut super::super::ParameterCallInfo,
+    ) -> Result<(), DescriptorError> {
+        self.type_ref(&mut call.signature)?;
+        for handler in call.handlers.iter_mut().flatten() {
+            match handler {
+                super::super::ParameterHandlerScopeInfo::Handle { arms } => {
+                    for arm in arms {
+                        self.effect(&mut arm.action)?;
+                        self.trace_ref(&mut arm.trace)?;
+                        let (super::super::ParameterHandlerCompletionInfo::Resume {
+                            result_type,
+                            ..
+                        }
+                        | super::super::ParameterHandlerCompletionInfo::Finish {
+                            result_type,
+                            ..
+                        }) = &mut arm.completion;
+                        self.type_ref(result_type)?;
+                    }
                 }
             }
         }

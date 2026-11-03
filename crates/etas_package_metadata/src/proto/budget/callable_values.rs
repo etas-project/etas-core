@@ -8,6 +8,19 @@ pub(crate) fn validate(graph: &CallableValueGraph) -> Result<usize, MetadataArti
 }
 
 impl ModelGraphValidator {
+    pub(super) fn residual_references(
+        &mut self,
+        references: &[etas_code::residual::identity::ResidualObligationRef],
+    ) -> Result<(), MetadataArtifactError> {
+        crate::callable_values::validate_residual_references(references)?;
+        self.budget
+            .charge(references.len(), "residual references")?;
+        for reference in references {
+            self.budget
+                .charge(reference.substitutions().len(), "residual substitutions")?;
+        }
+        Ok(())
+    }
     pub(super) fn callable_values(
         &mut self,
         graph: &CallableValueGraph,
@@ -25,6 +38,7 @@ impl ModelGraphValidator {
             .charge(graph.sources.len(), "callable return sources")?;
         for node in &graph.values {
             self.budget.enter(depth + 1, "callable value")?;
+            self.residual_references(&node.residual_checks)?;
             if let Some(requests) = &node.handler_requests {
                 self.request_template_at_depth(requests, depth + 1)?;
             }
@@ -68,6 +82,18 @@ impl ModelGraphValidator {
 }
 
 impl ProtoGraphValidator {
+    pub(super) fn residual_references(
+        &mut self,
+        references: &proto::ProtoResidualReferenceSet,
+    ) -> Result<(), MetadataArtifactError> {
+        self.budget
+            .charge(references.references.len(), "residual references")?;
+        for reference in &references.references {
+            self.budget
+                .charge(reference.substitutions.len(), "residual substitutions")?;
+        }
+        Ok(())
+    }
     pub(super) fn callable_values(
         &mut self,
         graph: &proto::ProtoCallableValueGraph,
@@ -85,6 +111,9 @@ impl ProtoGraphValidator {
             .charge(graph.sources.len(), "callable return sources")?;
         for node in &graph.values {
             self.budget.enter(depth + 1, "callable value")?;
+            if let Some(residuals) = &node.residual_checks {
+                self.residual_references(residuals)?;
+            }
             if let Some(requests) = &node.handler_requests {
                 self.request_template_at_depth(requests, depth + 1)?;
             }

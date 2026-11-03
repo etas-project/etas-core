@@ -6,6 +6,8 @@ pub mod behavior;
 pub mod callable;
 mod definitions;
 mod fingerprint;
+pub use fingerprint::DescriptorFingerprintBudget;
+pub(crate) use fingerprint::{builtin_tag, primitive_tag};
 mod graph;
 mod projection;
 mod spec;
@@ -19,19 +21,21 @@ pub use annotation::{
 };
 pub use behavior::{
     CallableAnalysisInfo, CallableOutcomeInfo, DeterminismInfo, EffectInfo, EffectRowInfo,
-    EffectRowInfoRef, EffectSummaryInfo, EffectTargetInfo, ParameterCallInfo,
-    ReturnObservationInfo, StaticEffectArgInfo, TraceInfo, TraceInfoRef,
+    EffectRowInfoRef, EffectSummaryInfo, EffectTargetInfo, ParameterArgumentInfo,
+    ParameterCallInfo, ParameterHandlerArmInfo, ParameterHandlerCompletionInfo,
+    ParameterHandlerScopeInfo, ReturnObservationInfo, StaticEffectArgInfo, TraceInfo, TraceInfoRef,
 };
 pub use callable::{
     GenericOwner, GenericParameterInfo, GenericParameterKind, GenericParameterRef, ParameterInfo,
     SignatureInfo, SpecInfo,
 };
 pub use definitions::{
-    AgentHeaderInfo, AgentMethodInfo, AgentSnapshotInfo, BodyAccess, CallableBodyInfo,
-    CallableHeaderInfo, DefinitionBodies, DefinitionDescriptorSet, DefinitionHeaders,
+    AgentHeaderInfo, AgentMethodInfo, BodyAccess, CallableBodyInfo, CallableHeaderInfo,
+    DefinitionBodies, DefinitionDescriptorSet, DefinitionHeaders, DefinitionSnapshotInfo,
     DefinitionSnapshots, DefinitionTypeBinding,
 };
 pub use graph::{DescriptorGraph, DescriptorGraphInput, DescriptorLimits};
+pub use projection::{DescriptorArgument, DescriptorGraphOffsets};
 pub use spec::{
     AttachedSpecInfo, TraceConstraintInfo, TracePatternInfo, TraceRuleInfo, TraceSelectorBoundInfo,
 };

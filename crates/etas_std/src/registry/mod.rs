@@ -32,6 +32,8 @@ pub struct StdRegistry {
     intrinsics: BTreeMap<StdIntrinsicId, IntrinsicDescriptor>,
     memory_place_results: BTreeMap<StdIntrinsicId, usize>,
     spec_impls: Vec<StdImplFact>,
+    flow_overloads: BTreeMap<StdSymbolId, Vec<crate::FlowDecl>>,
+    action_overloads: BTreeMap<StdSymbolId, Vec<crate::EffectActionDecl>>,
 }
 
 impl StdRegistry {
@@ -77,6 +79,30 @@ impl StdRegistry {
 
     pub fn symbol(&self, id: StdSymbolId) -> Option<&StdSymbol> {
         self.symbols.get(id.0 as usize)
+    }
+
+    /// All static signatures share one resolved symbol and intrinsic identity.
+    pub fn flow_declarations(&self, id: StdSymbolId) -> impl Iterator<Item = &crate::FlowDecl> {
+        let primary = self.symbol(id).and_then(|symbol| match &symbol.decl {
+            crate::StdDecl::Flow(flow) => Some(flow),
+            _ => None,
+        });
+        primary
+            .into_iter()
+            .chain(self.flow_overloads.get(&id).into_iter().flatten())
+    }
+
+    pub fn action_declarations(
+        &self,
+        id: StdSymbolId,
+    ) -> impl Iterator<Item = &crate::EffectActionDecl> {
+        let primary = self.symbol(id).and_then(|symbol| match &symbol.decl {
+            crate::StdDecl::EffectAction(action) => Some(action),
+            _ => None,
+        });
+        primary
+            .into_iter()
+            .chain(self.action_overloads.get(&id).into_iter().flatten())
     }
 
     pub fn enum_constructor(&self, owner: StdSymbolId, name: &str) -> Option<&StdSymbol> {

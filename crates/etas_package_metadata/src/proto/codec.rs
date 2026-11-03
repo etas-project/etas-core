@@ -9,7 +9,7 @@ pub(crate) fn callable_value_graph_fingerprint(
     graph: &crate::CallableValueGraph,
 ) -> etas_code::CodeFingerprint {
     etas_code::CodeFingerprint::of_bytes(
-        "etas.metadata.callable-values.v13",
+        "etas.metadata.callable-values.v14",
         &callable_values::to_proto(graph).encode_to_vec(),
     )
 }
@@ -23,7 +23,7 @@ use crate::{
 
 use super::budget::{
     MetadataGraphBudget, validate_model_action, validate_package_metadata_graph,
-    validate_proto_package_metadata_graph,
+    validate_proto_action_trace_shape, validate_proto_package_metadata_graph,
 };
 use super::schema::*;
 use crate::model::*;
@@ -1194,6 +1194,11 @@ fn spec_signature_to_proto(signature: &SpecSignature) -> ProtoSpecSignature {
         visibility: visibility_to_wire(signature.visibility).to_owned(),
         kind: spec_kind_to_wire(signature.kind).to_owned(),
         param_names: signature.param_names.clone(),
+        generic_params: signature
+            .generic_params
+            .iter()
+            .map(generic_param_to_proto)
+            .collect(),
         callable: signature.callable.as_ref().map(callable_signature_to_proto),
         methods: signature.methods.iter().map(spec_method_to_proto).collect(),
         super_specs: signature
@@ -1212,6 +1217,11 @@ fn spec_signature_from_proto(
         visibility: visibility_from_wire(&signature.visibility)?,
         kind: spec_kind_from_wire(&signature.kind)?,
         param_names: signature.param_names,
+        generic_params: signature
+            .generic_params
+            .into_iter()
+            .map(generic_param_from_proto)
+            .collect::<Result<Vec<_>, _>>()?,
         callable: signature
             .callable
             .map(callable_signature_from_proto)
@@ -1377,12 +1387,18 @@ fn trace_spec_conformance_to_proto(fact: &TraceSpecConformance) -> ProtoTraceSpe
             target_kind: "inline".to_owned(),
             spec: Vec::new(),
             args: Vec::new(),
+            definition: None,
         },
-        TraceSpecConformanceTarget::Named { spec, args } => ProtoTraceSpecConformance {
+        TraceSpecConformanceTarget::Named {
+            spec,
+            definition,
+            args,
+        } => ProtoTraceSpecConformance {
             item: Some(callable_contract_target_to_proto(&fact.item)),
             target_kind: "named".to_owned(),
             spec: spec.clone(),
             args: args.iter().map(type_to_proto).collect(),
+            definition: Some(super::descriptors::identities::encode_key(definition)),
         },
     }
 }
@@ -1392,9 +1408,12 @@ fn trace_spec_conformance_from_proto(
 ) -> Result<TraceSpecConformance, MetadataArtifactError> {
     let item = callable_contract_target_from_proto(fact.item)?;
     let target = match fact.target_kind.as_str() {
-        "inline" | "" if fact.spec.is_empty() => TraceSpecConformanceTarget::Inline,
+        "inline" if fact.spec.is_empty() && fact.args.is_empty() && fact.definition.is_none() => {
+            TraceSpecConformanceTarget::Inline
+        }
         "named" => TraceSpecConformanceTarget::Named {
             spec: required_path(fact.spec, "trace spec conformance spec path")?,
+            definition: trace_spec_definition_from_proto(fact.definition)?,
             args: fact
                 .args
                 .into_iter()
@@ -1830,6 +1849,11 @@ fn effect_metadata_from_proto(
 
 fn effect_summary_to_proto(summary: &EffectSummary) -> ProtoEffectSummary {
     ProtoEffectSummary {
+        residual_checks: Some(callable_values::residual_to_proto(&summary.residual_checks)),
+        behavior: summary
+            .behavior
+            .as_ref()
+            .map(callable_values::behavior_to_proto),
         handler_requests: summary
             .handler_requests
             .as_ref()
@@ -1859,6 +1883,15 @@ fn effect_summary_from_proto(
     summary: ProtoEffectSummary,
 ) -> Result<EffectSummary, MetadataArtifactError> {
     Ok(EffectSummary {
+        residual_checks: callable_values::residual_from_proto(
+            summary
+                .residual_checks
+                .ok_or_else(|| invalid("effect summary is missing residual references"))?,
+        )?,
+        behavior: summary
+            .behavior
+            .map(callable_values::behavior_from_proto)
+            .transpose()?,
         handler_requests: summary
             .handler_requests
             .map(request_template_from_proto)
@@ -2009,6 +2042,8 @@ fn action_trace_from_proto_with_budget(
     budget: &mut MetadataGraphBudget,
 ) -> Result<ActionTrace, MetadataArtifactError> {
     budget.enter(depth, "action trace")?;
+    validate_proto_action_trace_shape(&trace)?;
+    budget.charge(trace.parameter_calls.len(), "action trace parameter calls")?;
     let kind = ProtoActionTraceKind::try_from(trace.kind)
         .map_err(|_| invalid("effect summary action trace has unknown kind"))?;
     match kind {
@@ -2040,13 +2075,18 @@ fn action_trace_from_proto_with_budget(
                 .map(|child| action_trace_from_proto_with_budget(child, depth + 1, budget))
                 .collect::<Result<Vec<_>, _>>()?,
         )),
-        ProtoActionTraceKind::Choice => Ok(ActionTrace::Choice(
-            trace
-                .children
-                .into_iter()
-                .map(|child| action_trace_from_proto_with_budget(child, depth + 1, budget))
-                .collect::<Result<Vec<_>, _>>()?,
-        )),
+        ProtoActionTraceKind::Choice => {
+            if trace.children.is_empty() {
+                return Err(invalid("action trace choice requires an alternative"));
+            }
+            Ok(ActionTrace::Choice(
+                trace
+                    .children
+                    .into_iter()
+                    .map(|child| action_trace_from_proto_with_budget(child, depth + 1, budget))
+                    .collect::<Result<Vec<_>, _>>()?,
+            ))
+        }
         ProtoActionTraceKind::Repeat => {
             let [child] = trace.children.try_into().map_err(|_| {
                 invalid("effect summary repeat trace must contain exactly one child")
@@ -2113,6 +2153,7 @@ fn action_trace_source_from_proto(
 
 fn latent_flow_summary_to_proto(summary: &LatentFlowSummary) -> ProtoLatentFlowSummary {
     ProtoLatentFlowSummary {
+        residual_checks: Some(callable_values::residual_to_proto(&summary.residual_checks)),
         declared_bound: Some(effect_row_to_proto(&summary.declared_bound)),
         inferred_effects: Some(effect_row_to_proto(&summary.inferred_effects)),
     }
@@ -2132,6 +2173,11 @@ fn latent_flow_summary_from_proto(
             .ok_or_else(|| invalid("latent flow summary is missing inferred effects"))?,
     )?;
     Ok(LatentFlowSummary {
+        residual_checks: callable_values::residual_from_proto(
+            summary
+                .residual_checks
+                .ok_or_else(|| invalid("latent flow summary is missing residual references"))?,
+        )?,
         declared_bound,
         inferred_effects,
     })
@@ -2223,10 +2269,15 @@ fn tool_binding_from_proto(
 fn trace_spec_summary_to_proto(summary: &TraceSpecSummary) -> ProtoTraceSpecSummary {
     ProtoTraceSpecSummary {
         trace_spec: summary.trace_spec.clone(),
-        clauses: summary
-            .clauses
+        definition: Some(super::descriptors::identities::encode_key(
+            &summary.definition,
+        )),
+        alternatives: summary
+            .alternatives
             .iter()
-            .map(trace_spec_clause_to_proto)
+            .map(|clauses| ProtoTraceSpecAlternative {
+                clauses: clauses.iter().map(trace_spec_clause_to_proto).collect(),
+            })
             .collect(),
     }
 }
@@ -2236,12 +2287,31 @@ fn trace_spec_summary_from_proto(
 ) -> Result<TraceSpecSummary, MetadataArtifactError> {
     Ok(TraceSpecSummary {
         trace_spec: required_path(summary.trace_spec, "trace spec summary path")?,
-        clauses: summary
-            .clauses
+        definition: trace_spec_definition_from_proto(summary.definition)?,
+        alternatives: summary
+            .alternatives
             .into_iter()
-            .map(trace_spec_clause_from_proto)
+            .map(|alternative| {
+                alternative
+                    .clauses
+                    .into_iter()
+                    .map(trace_spec_clause_from_proto)
+                    .collect::<Result<Vec<_>, _>>()
+            })
             .collect::<Result<Vec<_>, _>>()?,
     })
+}
+
+fn trace_spec_definition_from_proto(
+    definition: Option<ProtoDefinitionKey>,
+) -> Result<etas_code::DefinitionKey, MetadataArtifactError> {
+    let definition =
+        definition.ok_or_else(|| invalid("trace spec definition identity is missing"))?;
+    let definition = super::descriptors::identities::decode_key(definition)?;
+    if definition.kind() != etas_code::DefinitionKind::Spec {
+        return Err(invalid("trace spec definition identity is not a spec"));
+    }
+    Ok(definition)
 }
 
 fn trace_spec_clause_to_proto(clause: &TraceSpecClause) -> ProtoTraceSpecClause {
@@ -2251,6 +2321,24 @@ fn trace_spec_clause_to_proto(clause: &TraceSpecClause) -> ProtoTraceSpecClause 
         guard: clause.guard.as_ref().map(effect_row_to_proto),
         target: clause.target.as_ref().map(effect_row_to_proto),
         obligation: clause.obligation.as_ref().map(effect_row_to_proto),
+        selector_bounds: clause
+            .selector_bounds
+            .iter()
+            .map(|bound| ProtoTraceSelectorBound {
+                operand: match bound.operand {
+                    TraceSelectorOperand::Pattern => "pattern",
+                    TraceSelectorOperand::Guard => "guard",
+                    TraceSelectorOperand::Target => "target",
+                    TraceSelectorOperand::Obligation => "obligation",
+                }
+                .to_owned(),
+                effect_path: bound.effect_path.clone(),
+                argument: bound.argument,
+                binding: bound.binding.clone(),
+                spec_path: bound.spec_path.clone(),
+                spec_args: bound.spec_args.iter().map(type_to_proto).collect(),
+            })
+            .collect(),
     }
 }
 
@@ -2263,6 +2351,35 @@ fn trace_spec_clause_from_proto(
         guard: clause.guard.map(effect_row_from_proto).transpose()?,
         target: clause.target.map(effect_row_from_proto).transpose()?,
         obligation: clause.obligation.map(effect_row_from_proto).transpose()?,
+        selector_bounds: clause
+            .selector_bounds
+            .into_iter()
+            .map(|bound| {
+                let operand = match bound.operand.as_str() {
+                    "pattern" => TraceSelectorOperand::Pattern,
+                    "guard" => TraceSelectorOperand::Guard,
+                    "target" => TraceSelectorOperand::Target,
+                    "obligation" => TraceSelectorOperand::Obligation,
+                    other => {
+                        return Err(invalid(format!(
+                            "trace selector operand `{other}` is not supported"
+                        )));
+                    }
+                };
+                Ok(TraceSelectorBound {
+                    operand,
+                    effect_path: required_path(bound.effect_path, "trace selector effect path")?,
+                    argument: bound.argument,
+                    binding: required(bound.binding, "trace selector binding")?,
+                    spec_path: required_path(bound.spec_path, "trace selector spec path")?,
+                    spec_args: bound
+                        .spec_args
+                        .into_iter()
+                        .map(type_from_proto)
+                        .collect::<Result<Vec<_>, _>>()?,
+                })
+            })
+            .collect::<Result<Vec<_>, MetadataArtifactError>>()?,
     })
 }
 
@@ -2442,6 +2559,146 @@ mod tests {
     use super::*;
 
     #[test]
+    fn decoder_rejects_empty_action_trace_choice_before_lowering() {
+        let mut graph = valid_graph();
+        graph.public_metadata = Some(ProtoPublicMetadataSection {
+            effect_summaries: vec![ProtoEffectSummary {
+                action_trace: Some(ProtoActionTrace {
+                    kind: ProtoActionTraceKind::Choice as i32,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }],
+            ..Default::default()
+        });
+        let error =
+            package_metadata_from_package_graph_payload(&graph.encode_to_vec()).unwrap_err();
+        assert!(
+            error.to_string().contains("choice requires an alternative"),
+            "{error}"
+        );
+        let error = action_trace_from_proto(ProtoActionTrace {
+            kind: ProtoActionTraceKind::Choice as i32,
+            ..Default::default()
+        })
+        .unwrap_err();
+        assert!(
+            error.to_string().contains("choice requires an alternative"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn decoder_rejects_fields_not_owned_by_action_trace_variant() {
+        for trace in [
+            ProtoActionTrace {
+                kind: ProtoActionTraceKind::Empty as i32,
+                event: Some(ProtoActionTraceEvent::default()),
+                ..Default::default()
+            },
+            ProtoActionTrace {
+                kind: ProtoActionTraceKind::Seq as i32,
+                parameter_calls: vec![crate::proto::codec::spec_invocations::to_proto(
+                    &crate::CallableRequestTarget::Parameter("callback".into()),
+                )],
+                ..Default::default()
+            },
+            ProtoActionTrace {
+                kind: ProtoActionTraceKind::Widened as i32,
+                children: vec![ProtoActionTrace::default()],
+                ..Default::default()
+            },
+        ] {
+            let error = action_trace_from_proto(trace).unwrap_err();
+            assert!(
+                error.to_string().contains("fields invalid for its kind"),
+                "{error}"
+            );
+        }
+    }
+
+    #[test]
+    fn trace_conformance_rejects_missing_or_non_spec_identity() {
+        let named = ProtoTraceSpecConformance {
+            item: Some(ProtoCallableContractTarget {
+                path: vec!["dep".into(), "f".into()],
+                method: None,
+            }),
+            target_kind: "named".into(),
+            spec: vec!["dep".into(), "Safe".into()],
+            args: vec![],
+            definition: None,
+        };
+        assert!(trace_spec_conformance_from_proto(named.clone()).is_err());
+        let mut wrong_kind = named;
+        wrong_kind.definition = Some(ProtoDefinitionKey {
+            package: vec![7; 32],
+            module: vec!["dep".into()],
+            declaration: vec!["Safe".into()],
+            kind: crate::proto::origins::kind_to_proto(etas_code::DefinitionKind::Flow),
+        });
+        assert!(trace_spec_conformance_from_proto(wrong_kind).is_err());
+    }
+
+    #[test]
+    fn decoder_rejects_malformed_trace_selector_bounds_before_consumption() {
+        let summary = TraceSpecSummary {
+            trace_spec: vec!["demo".into(), "Reports".into()],
+            definition: etas_code::DefinitionKey::new(
+                etas_code::PackageKey::from_canonical_fingerprint(
+                    etas_code::CodeFingerprint::from_bytes([7; 32]),
+                ),
+                vec!["demo".into()],
+                vec!["Reports".into()],
+                etas_code::DefinitionKind::Spec,
+            )
+            .unwrap(),
+            alternatives: vec![vec![TraceSpecClause {
+                pattern: Some(EffectRow {
+                    effects: vec![EffectRef {
+                        path: vec!["Fs".into(), "read".into()],
+                        args: vec![EffectArg::default()],
+                    }],
+                    ..Default::default()
+                }),
+                selector_bounds: vec![TraceSelectorBound {
+                    effect_path: vec!["Fs".into(), "read".into()],
+                    binding: "R".into(),
+                    spec_path: vec!["demo".into(), "Within".into()],
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }]],
+        };
+        let mut graph = valid_graph();
+        graph.public_metadata = Some(ProtoPublicMetadataSection {
+            trace_spec_summaries: vec![trace_spec_summary_to_proto(&summary)],
+            ..Default::default()
+        });
+        assert!(package_metadata_from_package_graph_payload(&graph.encode_to_vec()).is_ok());
+        let bound = &mut graph.public_metadata.as_mut().unwrap().trace_spec_summaries[0]
+            .alternatives[0]
+            .clauses[0]
+            .selector_bounds[0];
+        bound.argument = 1;
+        let error =
+            package_metadata_from_package_graph_payload(&graph.encode_to_vec()).unwrap_err();
+        assert!(
+            error.to_string().contains("wildcard at its selector"),
+            "{error}"
+        );
+        let bound = &mut graph.public_metadata.as_mut().unwrap().trace_spec_summaries[0]
+            .alternatives[0]
+            .clauses[0]
+            .selector_bounds[0];
+        bound.argument = 0;
+        bound.operand = "unknown".into();
+        let error =
+            package_metadata_from_package_graph_payload(&graph.encode_to_vec()).unwrap_err();
+        assert!(error.to_string().contains("operand"), "{error}");
+    }
+
+    #[test]
     fn solved_empty_or_open_latent_rows_round_trip_but_missing_rows_are_rejected() {
         for row in [
             EffectRow::default(),
@@ -2451,6 +2708,7 @@ mod tests {
             },
         ] {
             let summary = LatentFlowSummary {
+                residual_checks: vec![],
                 declared_bound: row.clone(),
                 inferred_effects: row,
             };
@@ -2716,6 +2974,47 @@ mod tests {
     }
 
     #[test]
+    fn binary_effect_summary_preserves_and_validates_behavior() {
+        use crate::{CallableValueBehavior, CallableValueDeterminism};
+        let summary = EffectSummary {
+            item: vec!["demo".into(), "relay".into()],
+            behavior: Some(CallableValueBehavior {
+                determinism: CallableValueDeterminism::RuntimeMediated,
+                independent_determinism: Some(CallableValueDeterminism::Deterministic),
+                host_requirements: vec![],
+                interpreter_features: vec![],
+            }),
+            ..Default::default()
+        };
+        let bytes = effect_summary_to_proto(&summary).encode_to_vec();
+        let decoded =
+            effect_summary_from_proto(ProtoEffectSummary::decode(bytes.as_slice()).unwrap())
+                .unwrap();
+        assert_eq!(decoded, summary);
+        let mut forged = effect_summary_to_proto(&summary);
+        forged.behavior.as_mut().unwrap().independent_determinism =
+            Some(CallableValueDeterminism::NonDeterministic as i32);
+        assert!(effect_summary_from_proto(forged).is_err());
+    }
+
+    #[test]
+    fn effect_and_latent_residual_reference_sets_are_required() {
+        let summary = EffectSummary {
+            item: vec!["demo".into(), "flow".into()],
+            latent_flows: vec![LatentFlowSummary::default()],
+            ..Default::default()
+        };
+        let wire = effect_summary_to_proto(&summary);
+        assert_eq!(effect_summary_from_proto(wire.clone()).unwrap(), summary);
+        let mut missing_root = wire.clone();
+        missing_root.residual_checks = None;
+        assert!(effect_summary_from_proto(missing_root).is_err());
+        let mut missing_latent = wire;
+        missing_latent.latent_flows[0].residual_checks = None;
+        assert!(effect_summary_from_proto(missing_latent).is_err());
+    }
+
+    #[test]
     fn binary_returned_callable_evidence_is_optional_bounded_and_unambiguous() {
         use crate::{
             CallableValueGraph, CallableValueParameter, CallableValueScope, CallableValueSource,
@@ -2745,6 +3044,7 @@ mod tests {
             let mut graph = valid_graph();
             graph.public_metadata = Some(ProtoPublicMetadataSection {
                 effect_summaries: vec![ProtoEffectSummary {
+                    residual_checks: Some(callable_values::residual_to_proto(&[])),
                     returned_callables: Some(callable_values::to_proto(&CallableValueGraph {
                         sources: sources.clone(),
                         values: vec![],

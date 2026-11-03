@@ -356,6 +356,21 @@ impl<C> PassManager<C> {
             );
         }
         result.produced = self.resolve_artifact_set(&result.produced);
+        if matches!(result.control, PassControl::Failed(_)) {
+            let invalidated = if result.changed {
+                self.invalidate_after_change(&result.preserved, &ArtifactSet::new())
+            } else {
+                ArtifactSet::new()
+            };
+            return self.finish_pass(
+                &descriptor,
+                &pass_context,
+                result,
+                invalidated,
+                started.map(|started| started.elapsed()),
+                context,
+            );
+        }
         let produced = self.resolve_artifact_set(&descriptor.produces);
         result.produced.extend(&produced);
         let duration = started.map(|started| started.elapsed());
@@ -381,11 +396,22 @@ impl<C> PassManager<C> {
         &mut self,
         descriptor: &PassDescriptor,
         pass_context: &PassContext<C>,
-        result: PassResult,
-        invalidated: ArtifactSet,
+        mut result: PassResult,
+        mut invalidated: ArtifactSet,
         duration: Option<std::time::Duration>,
         context: &C,
     ) -> PassControl {
+        if matches!(result.control, PassControl::Failed(_)) {
+            let mut rejected = self.resolve_artifact_set(&descriptor.produces);
+            rejected.extend(&result.produced);
+            for artifact in rejected.iter_refs() {
+                if self.artifacts.contains_ref(artifact) {
+                    invalidated.insert_ref(artifact);
+                }
+            }
+            self.artifacts = self.artifacts.difference(&rejected);
+            result.produced = ArtifactSet::new();
+        }
         for hook in &mut self.instrumentation {
             hook.after_pass(descriptor, pass_context, &result, context);
         }

@@ -5,6 +5,7 @@ mod header;
 mod method;
 mod origins;
 mod revision;
+mod source_revision;
 
 pub use definition::{DefinitionKey, DefinitionKind, IdentityError, PackageKey};
 pub use fingerprint::CodeFingerprint;
@@ -15,5 +16,8 @@ pub use origins::{
     PackageDefinitionOrigins,
 };
 pub use revision::{RevisionInfo, RevisionInputs, RevisionKey};
+pub use source_revision::{
+    SourceIdentityError, SourceRevisionKey, StableSourceKey, StableSourceOrigin,
+};
 
 pub const IDENTITY_SCHEMA_VERSION: u32 = 1;

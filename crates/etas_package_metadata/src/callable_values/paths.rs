@@ -32,6 +32,10 @@ fn remap_parts(
                     if let Some(requests) = &mut node.handler_requests {
                         for action in &mut requests.actions {
                             work.push(Part::Effect(&mut action.action));
+                            if let Some(signature) = &mut action.signature {
+                                work.extend(signature.params.iter_mut().map(Part::Type));
+                                work.push(Part::Type(&mut signature.output));
+                            }
                             for binding in action.type_bindings.iter_mut().flatten() {
                                 work.push(Part::Type(&mut binding.ty));
                             }
