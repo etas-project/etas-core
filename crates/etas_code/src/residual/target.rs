@@ -12,7 +12,7 @@ use crate::{CodeFingerprint, identity::canonical::CanonicalEncoder};
 
 use super::{
     identity::PlanHash,
-    monitor::TraceAlternativeClause,
+    monitor::{SymbolicTraceRule, TraceAlternativeClause, TraceComponentMonitor},
     plan::{
         PLAN_SCHEMA_VERSION, PLAN_SEMANTIC_VERSION, SemanticPlanComponent, SemanticResidualPlan,
     },
@@ -25,6 +25,7 @@ const TARGET_SCHEMA_VERSION: u32 = 1;
 pub enum ResidualComponentKind {
     ActionPredicate,
     TraceAlternatives,
+    GenericTraceAlternatives,
 }
 
 /// Normalized semantic event phases a governed action passes through.
@@ -231,41 +232,75 @@ impl ResidualPlanRequirements {
                         .components
                         .insert(ResidualComponentKind::ActionPredicate);
                 }
-                Some(SemanticPlanComponent::Trace(component)) => {
-                    requirements
-                        .components
-                        .insert(ResidualComponentKind::TraceAlternatives);
-                    let template = component.template();
-                    requirements
-                        .trace_template_versions
-                        .insert((template.schema_version(), template.semantic_version()));
-                    let alternatives = template.alternatives();
-                    requirements.max_alternatives =
-                        requirements.max_alternatives.max(alternatives.len());
-                    let mut patterns = BTreeSet::new();
-                    for group in alternatives {
-                        requirements.max_clauses = requirements.max_clauses.max(group.len());
-                        for clause in group {
-                            match clause {
-                                TraceAlternativeClause::Allow(pattern)
-                                | TraceAlternativeClause::Deny(pattern) => {
-                                    patterns.insert(*pattern);
-                                }
-                                TraceAlternativeClause::Before(prior) => {
-                                    patterns.insert(prior.guard());
-                                    patterns.insert(prior.target());
-                                    requirements
-                                        .phases
-                                        .insert(ResidualEventPhase::CorrelatedOutcome);
-                                    requirements
-                                        .evidence
-                                        .insert(ResidualEvidenceKind::AcceptedPriorOutcome);
+                Some(SemanticPlanComponent::Trace(component)) => match component.monitor() {
+                    TraceComponentMonitor::Symbolic(monitor) => {
+                        requirements
+                            .components
+                            .insert(ResidualComponentKind::GenericTraceAlternatives);
+                        requirements.trace_template_versions.insert((1, 1));
+                        requirements.max_alternatives = requirements
+                            .max_alternatives
+                            .max(monitor.alternatives().len());
+                        let mut patterns = BTreeSet::new();
+                        for group in monitor.alternatives() {
+                            requirements.max_clauses = requirements.max_clauses.max(group.len());
+                            for rule in group {
+                                match rule {
+                                    SymbolicTraceRule::Allow(pattern)
+                                    | SymbolicTraceRule::Deny(pattern) => {
+                                        patterns.insert(pattern.fingerprint());
+                                    }
+                                    SymbolicTraceRule::Before { guard, target } => {
+                                        patterns.insert(guard.fingerprint());
+                                        patterns.insert(target.fingerprint());
+                                        requirements
+                                            .phases
+                                            .insert(ResidualEventPhase::CorrelatedOutcome);
+                                        requirements
+                                            .evidence
+                                            .insert(ResidualEvidenceKind::AcceptedPriorOutcome);
+                                    }
                                 }
                             }
                         }
+                        requirements.max_patterns = requirements.max_patterns.max(patterns.len());
                     }
-                    requirements.max_patterns = requirements.max_patterns.max(patterns.len());
-                }
+                    TraceComponentMonitor::Concrete(monitor) => {
+                        requirements
+                            .components
+                            .insert(ResidualComponentKind::TraceAlternatives);
+                        let template = monitor.template();
+                        requirements
+                            .trace_template_versions
+                            .insert((template.schema_version(), template.semantic_version()));
+                        let alternatives = template.alternatives();
+                        requirements.max_alternatives =
+                            requirements.max_alternatives.max(alternatives.len());
+                        let mut patterns = BTreeSet::new();
+                        for group in alternatives {
+                            requirements.max_clauses = requirements.max_clauses.max(group.len());
+                            for clause in group {
+                                match clause {
+                                    TraceAlternativeClause::Allow(pattern)
+                                    | TraceAlternativeClause::Deny(pattern) => {
+                                        patterns.insert(*pattern);
+                                    }
+                                    TraceAlternativeClause::Before(prior) => {
+                                        patterns.insert(prior.guard());
+                                        patterns.insert(prior.target());
+                                        requirements
+                                            .phases
+                                            .insert(ResidualEventPhase::CorrelatedOutcome);
+                                        requirements
+                                            .evidence
+                                            .insert(ResidualEvidenceKind::AcceptedPriorOutcome);
+                                    }
+                                }
+                            }
+                        }
+                        requirements.max_patterns = requirements.max_patterns.max(patterns.len());
+                    }
+                },
                 // A plan built through `SemanticResidualPlan::build` maps every
                 // obligation; a missing component is an unsatisfiable need.
                 None => {

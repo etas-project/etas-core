@@ -28,8 +28,8 @@ pub(crate) const PLAN_SCHEMA_VERSION: u32 = 1;
 pub(crate) const PLAN_SEMANTIC_VERSION: u32 = 1;
 
 pub enum SemanticPlanComponent {
-    Action(CompiledActionPredicate),
-    Trace(CompiledTraceComponent),
+    Action(Box<CompiledActionPredicate>),
+    Trace(Box<CompiledTraceComponent>),
 }
 
 impl SemanticPlanComponent {

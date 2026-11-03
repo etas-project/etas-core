@@ -1,7 +1,7 @@
 //! A trace monitor bound to one checked obligation. It is not an installed
 //! plan, evidence provider, or permission to dispatch.
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 use crate::{
     SourceRevisionKey,
@@ -9,18 +9,20 @@ use crate::{
     residual::{
         binding::{BindingLayout, BindingLayoutError, BindingLayoutLimits},
         identity::{
-            ActionPatternId, BindingLayoutId, MonitorTemplateId, ObligationIdentityError,
-            ObligationIdentityLimits,
+            ActionPatternId, BindingLayoutId, GenericArgumentIdentity, GenericParameterId,
+            MonitorTemplateId, ObligationIdentityError, ObligationIdentityLimits,
         },
         model::{ResidualKind, ResidualObligation},
-        pattern::ActionPattern,
+        pattern::{ActionPattern, PatternTemplateLimits},
+        type_template::StaticTypeTemplate,
     },
 };
 
 use super::{
     AlternativeDecision, AlternativeDelta, AlternativeError, AlternativeLimits, AlternativeScope,
     AlternativeState, CompiledTraceAlternatives, ConcreteActionAttempt, ConcretePriorEvidence,
-    EvidenceRequirements, ScopeCheckResult, ScopeExit, TraceAlternativesTemplate,
+    EvidenceRequirements, ScopeCheckResult, ScopeExit, SymbolicTraceAlternatives,
+    SymbolicTraceError, TraceAlternativesTemplate,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -35,6 +37,7 @@ pub enum TraceComponentError {
     Identity(ObligationIdentityError),
     Layout(BindingLayoutError),
     Monitor(AlternativeError),
+    Symbolic(SymbolicTraceError),
     NotTraceContract,
     TemplateMismatch,
     LayoutMismatch,
@@ -52,13 +55,53 @@ pub struct CompiledTraceComponent {
     id: MonitorTemplateId,
     obligation: ResidualObligation,
     layout: BindingLayoutId,
-    monitor: CompiledTraceAlternatives,
+    monitor: TraceComponentMonitor,
     limits: TraceComponentLimits,
 }
 
 pub struct TraceComponentState {
     component: MonitorTemplateId,
+    monitor: Arc<CompiledTraceAlternatives>,
     inner: AlternativeState,
+}
+
+pub enum TraceComponentMonitor {
+    Concrete(Arc<CompiledTraceAlternatives>),
+    Symbolic(SymbolicTraceAlternatives),
+}
+
+impl TraceComponentMonitor {
+    pub fn template_id(&self) -> MonitorTemplateId {
+        match self {
+            Self::Concrete(monitor) => monitor.template_id(),
+            Self::Symbolic(monitor) => {
+                MonitorTemplateId::from_canonical_fingerprint(monitor.fingerprint())
+            }
+        }
+    }
+
+    pub fn compile_component(
+        &self,
+        obligation: ResidualObligation,
+        layout: &BindingLayout,
+        limits: TraceComponentLimits,
+    ) -> Result<CompiledTraceComponent, TraceComponentError> {
+        match self {
+            Self::Concrete(monitor) => CompiledTraceComponent::compile(
+                obligation,
+                monitor.template(),
+                monitor.patterns(),
+                layout,
+                limits,
+            ),
+            Self::Symbolic(monitor) => CompiledTraceComponent::compile_symbolic(
+                obligation,
+                monitor.clone(),
+                layout,
+                limits,
+            ),
+        }
+    }
 }
 
 pub struct TraceComponentDelta {
@@ -182,7 +225,65 @@ impl CompiledTraceComponent {
             id: MonitorTemplateId::from_canonical_fingerprint(encoder.finish()),
             obligation,
             layout: layout.id(),
-            monitor,
+            monitor: TraceComponentMonitor::Concrete(Arc::new(monitor)),
+            limits,
+        })
+    }
+
+    pub fn compile_symbolic(
+        obligation: ResidualObligation,
+        monitor: SymbolicTraceAlternatives,
+        layout: &BindingLayout,
+        limits: TraceComponentLimits,
+    ) -> Result<Self, TraceComponentError> {
+        obligation
+            .id()
+            .validate(obligation.identity(), limits.identity)
+            .map_err(TraceComponentError::Identity)?;
+        layout
+            .validate_with_limits(limits.layout)
+            .map_err(TraceComponentError::Layout)?;
+        if layout.id() != obligation.bindings() {
+            return Err(TraceComponentError::LayoutMismatch);
+        }
+        if layout.len() > limits.monitor.evidence.max_bindings {
+            return Err(TraceComponentError::BindingLimit);
+        }
+        let ResidualKind::TraceContract { monitor: expected } = obligation.kind() else {
+            return Err(TraceComponentError::NotTraceContract);
+        };
+        if expected.fingerprint() != monitor.fingerprint() {
+            return Err(TraceComponentError::TemplateMismatch);
+        }
+        let mut encoder = CanonicalEncoder::new("etas.code.residual.symbolic-trace-component.v1");
+        encoder.fingerprint(obligation.id().fingerprint());
+        encoder.fingerprint(monitor.fingerprint());
+        encoder.fingerprint(layout.id().fingerprint());
+        for limit in [
+            limits.identity.max_generic_arguments,
+            limits.identity.max_structural_site_depth,
+            limits.layout.max_bindings,
+            limits.layout.max_projections_per_binding,
+            limits.layout.max_total_projections,
+            limits.monitor.max_alternatives,
+            limits.monitor.max_clauses,
+            limits.monitor.max_patterns,
+            limits.monitor.max_checks_per_event,
+            limits.monitor.max_product_work_per_event,
+            limits.monitor.evidence.max_bindings,
+            limits.monitor.evidence.max_value_bytes,
+            limits.monitor.evidence.pattern.max_selectors,
+            limits.monitor.evidence.pattern.max_identity_segments,
+            limits.monitor.evidence.pattern.max_identity_bytes,
+            limits.monitor.evidence.pattern.max_literal_bytes,
+        ] {
+            encoder.number(u64::try_from(limit).map_err(|_| TraceComponentError::LimitEncoding)?);
+        }
+        Ok(Self {
+            id: MonitorTemplateId::from_canonical_fingerprint(encoder.finish()),
+            obligation,
+            layout: layout.id(),
+            monitor: TraceComponentMonitor::Symbolic(monitor),
             limits,
         })
     }
@@ -209,14 +310,8 @@ impl CompiledTraceComponent {
         &self.obligation
     }
 
-    /// The normalized alternatives this component executes.
-    pub fn template(&self) -> &TraceAlternativesTemplate {
-        self.monitor.template()
-    }
-
-    /// The validated action patterns referenced by the template.
-    pub fn patterns(&self) -> &BTreeMap<ActionPatternId, ActionPattern> {
-        self.monitor.patterns()
+    pub fn monitor(&self) -> &TraceComponentMonitor {
+        &self.monitor
     }
 
     pub fn limits(&self) -> TraceComponentLimits {
@@ -228,6 +323,41 @@ impl CompiledTraceComponent {
         scope: AlternativeScope,
         source: SourceRevisionKey,
     ) -> Result<TraceComponentState, TraceComponentError> {
+        self.initial_state_with_bindings(scope, source, &BTreeMap::new(), &BTreeMap::new())
+    }
+
+    fn bind_monitor(
+        &self,
+        bindings: &BTreeMap<GenericParameterId, GenericArgumentIdentity>,
+        structures: &BTreeMap<GenericParameterId, StaticTypeTemplate>,
+    ) -> Result<Arc<CompiledTraceAlternatives>, TraceComponentError> {
+        match &self.monitor {
+            TraceComponentMonitor::Concrete(monitor) => Ok(monitor.clone()),
+            TraceComponentMonitor::Symbolic(monitor) => monitor
+                .instantiate(
+                    bindings,
+                    structures,
+                    PatternTemplateLimits {
+                        pattern: self.limits.monitor.evidence.pattern,
+                        types: Default::default(),
+                        descriptor: Default::default(),
+                        max_binding_steps:
+                            super::super::type_template::TypeTemplateLimits::default().max_work,
+                    },
+                    self.limits.monitor,
+                )
+                .map(Arc::new)
+                .map_err(TraceComponentError::Symbolic),
+        }
+    }
+
+    pub fn initial_state_with_bindings(
+        &self,
+        scope: AlternativeScope,
+        source: SourceRevisionKey,
+        bindings: &BTreeMap<GenericParameterId, GenericArgumentIdentity>,
+        structures: &BTreeMap<GenericParameterId, StaticTypeTemplate>,
+    ) -> Result<TraceComponentState, TraceComponentError> {
         if scope.scope != self.obligation.identity().scope {
             return Err(TraceComponentError::ScopeMismatch);
         }
@@ -237,9 +367,11 @@ impl CompiledTraceComponent {
         if source != self.obligation.identity().origin.revision {
             return Err(TraceComponentError::SourceRevisionMismatch);
         }
+        let monitor = self.bind_monitor(bindings, structures)?;
         Ok(TraceComponentState {
             component: self.id,
-            inner: self.monitor.initial_state(scope),
+            inner: monitor.initial_state(scope),
+            monitor,
         })
     }
 
@@ -251,6 +383,17 @@ impl CompiledTraceComponent {
         source: SourceRevisionKey,
         data: &super::AlternativeStateData,
     ) -> Result<TraceComponentState, TraceComponentError> {
+        self.restore_state_with_bindings(scope, source, data, &BTreeMap::new(), &BTreeMap::new())
+    }
+
+    pub fn restore_state_with_bindings(
+        &self,
+        scope: AlternativeScope,
+        source: SourceRevisionKey,
+        data: &super::AlternativeStateData,
+        bindings: &BTreeMap<GenericParameterId, GenericArgumentIdentity>,
+        structures: &BTreeMap<GenericParameterId, StaticTypeTemplate>,
+    ) -> Result<TraceComponentState, TraceComponentError> {
         if scope.scope != self.obligation.identity().scope {
             return Err(TraceComponentError::ScopeMismatch);
         }
@@ -260,12 +403,13 @@ impl CompiledTraceComponent {
         if source != self.obligation.identity().origin.revision {
             return Err(TraceComponentError::SourceRevisionMismatch);
         }
+        let monitor = self.bind_monitor(bindings, structures)?;
         Ok(TraceComponentState {
             component: self.id,
-            inner: self
-                .monitor
+            inner: monitor
                 .restore_state(scope, data)
                 .map_err(TraceComponentError::Monitor)?,
+            monitor,
         })
     }
 
@@ -287,7 +431,7 @@ impl CompiledTraceComponent {
             });
         }
         Ok(
-            match self
+            match state
                 .monitor
                 .preview(&state.inner, attempt, evidence)
                 .map_err(TraceComponentError::Monitor)?
@@ -352,7 +496,8 @@ impl CompiledTraceComponent {
                 return Err(TraceComponentError::ComponentMismatch);
             }
         }
-        self.monitor
+        state
+            .monitor
             .finish_scope_refs(
                 &state.inner,
                 pending.iter().map(|request| &request.inner),

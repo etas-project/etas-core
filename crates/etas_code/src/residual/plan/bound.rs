@@ -12,7 +12,7 @@ use crate::{
     },
 };
 
-const SCHEMA_VERSION: u32 = 1;
+const SCHEMA_VERSION: u32 = 2;
 
 /// Untrusted transport representation. Decode through `BoundResidualPlan::from_data`.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -24,6 +24,7 @@ pub struct BoundResidualPlanData {
     pub contract: CodeFingerprint,
     pub environment: CodeFingerprint,
     pub compilation: CodeFingerprint,
+    pub references: Vec<CodeFingerprint>,
     pub fingerprint: CodeFingerprint,
 }
 
@@ -34,7 +35,7 @@ pub enum BoundResidualPlanError {
     MissingObligation(ObligationId),
     UnexpectedObligation(ObligationId),
     MissingComponent(ObligationId),
-    UnsupportedSubstitution(ObligationId),
+    InvalidSubstitution(ObligationId),
     PlanMismatch,
     RevisionMismatch,
     ContractMismatch,
@@ -64,13 +65,12 @@ impl BoundResidualPlan {
         let mut expected_ids = BTreeSet::new();
         for reference in expected {
             let obligation = reference.obligation();
-            // A semantic component currently has no checked specialization
-            // evidence. Never collapse distinct references to one bare ID.
-            if !reference.substitutions().is_empty() {
-                return Err(BoundResidualPlanError::UnsupportedSubstitution(obligation));
-            }
-            if plan.obligations().get(obligation).is_none() {
-                return Err(BoundResidualPlanError::MissingObligation(obligation));
+            let declaration = plan
+                .obligations()
+                .get(obligation)
+                .ok_or(BoundResidualPlanError::MissingObligation(obligation))?;
+            if !declaration.accepts_reference(reference) {
+                return Err(BoundResidualPlanError::InvalidSubstitution(obligation));
             }
             if plan.component_for(obligation).is_none() {
                 return Err(BoundResidualPlanError::MissingComponent(obligation));
@@ -85,6 +85,10 @@ impl BoundResidualPlan {
             }
         }
         let inputs = revision.inputs();
+        let references: Vec<_> = expected
+            .iter()
+            .map(ResidualObligationRef::fingerprint)
+            .collect();
         let data = BoundResidualPlanData {
             schema_version: SCHEMA_VERSION,
             plan: plan.hash(),
@@ -98,7 +102,9 @@ impl BoundResidualPlan {
                 inputs.contract,
                 inputs.environment,
                 inputs.compilation,
+                &references,
             ),
+            references,
         };
         Ok(Self { data })
     }
@@ -131,7 +137,9 @@ impl BoundResidualPlan {
         if data.compilation != checked.data.compilation {
             return Err(BoundResidualPlanError::CompilationMismatch);
         }
-        if data.fingerprint != checked.data.fingerprint {
+        if data.references != checked.data.references
+            || data.fingerprint != checked.data.fingerprint
+        {
             return Err(BoundResidualPlanError::FingerprintMismatch);
         }
         Ok(checked)
@@ -151,13 +159,18 @@ fn fingerprint(
     contract: CodeFingerprint,
     environment: CodeFingerprint,
     compilation: CodeFingerprint,
+    references: &[CodeFingerprint],
 ) -> CodeFingerprint {
-    let mut encoder = CanonicalEncoder::new("etas.code.residual.bound-plan.v1");
+    let mut encoder = CanonicalEncoder::new("etas.code.residual.bound-plan.v2");
     encoder.number(u64::from(SCHEMA_VERSION));
     encoder.fingerprint(plan.fingerprint());
     encoder.fingerprint(revision.fingerprint());
     encoder.fingerprint(contract);
     encoder.fingerprint(environment);
     encoder.fingerprint(compilation);
+    encoder.number(references.len() as u64);
+    for reference in references {
+        encoder.fingerprint(*reference);
+    }
     encoder.finish()
 }
