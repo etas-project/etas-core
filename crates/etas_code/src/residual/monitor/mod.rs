@@ -32,7 +32,8 @@ pub use template::{
     TraceAlternativeClause, TraceAlternativesTemplate,
 };
 pub use trace_component::{
-    CompiledTraceComponent, TraceBatchCommitError, TraceComponentDecision, TraceComponentDelta,
-    TraceComponentError, TraceComponentEvidenceRequirements, TraceComponentLimits,
-    TraceComponentMonitor, TraceComponentState, TraceComponentTransition, commit_trace_transitions,
+    BoundTraceComponent, CompiledTraceComponent, TraceBatchCommitError, TraceComponentDecision,
+    TraceComponentDelta, TraceComponentError, TraceComponentEvidenceRequirements,
+    TraceComponentLimits, TraceComponentMonitor, TraceComponentState, TraceComponentTransition,
+    commit_trace_transitions,
 };

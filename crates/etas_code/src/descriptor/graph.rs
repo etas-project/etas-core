@@ -48,7 +48,7 @@ impl DescriptorGraphInput {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, etas_core::RetainedSize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, etas_core::RetainedSize)]
 pub struct DescriptorGraph(Arc<DescriptorGraphInput>);
 
 impl DescriptorGraph {
