@@ -98,7 +98,8 @@ pub(in crate::proto) fn validate_model(
                     count.saturating_add(model_call_references(call))
                 }),
                 TraceInfo::ParameterCall(call)
-                | TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(call)) => {
+                | TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(call))
+                | TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturnTemplate(call)) => {
                     model_call_references(call)
                 }
                 TraceInfo::Outcome(_) | TraceInfo::Repeat(_) | TraceInfo::UnknownOrder(_) => 1,
@@ -190,7 +191,10 @@ pub(in crate::proto) fn validate_wire(
                 }
                 Some(K::ParameterCall(call)) => wire_call_references(call),
                 Some(K::Outcome(outcome)) => match &outcome.kind {
-                    Some(p::outcome::Kind::ParameterNonReturn(call)) => wire_call_references(call),
+                    Some(
+                        p::outcome::Kind::ParameterNonReturn(call)
+                        | p::outcome::Kind::ParameterNonReturnTemplate(call),
+                    ) => wire_call_references(call),
                     _ => 1,
                 },
                 Some(K::Repeat(_) | K::UnknownOrder(_)) => 1,

@@ -5,7 +5,9 @@ use crate::descriptor::{
 };
 use crate::{CallableId, CodeFingerprint, DefinitionKey};
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, etas_core::RetainedSize)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
 pub enum CanonicalSelector {
     Type(CodeFingerprint),
     Resource(DefinitionKey),
@@ -15,7 +17,10 @@ pub enum CanonicalSelector {
     Wildcard,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, etas_core::RetainedSize)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+#[serde(deny_unknown_fields)]
 pub struct CanonicalEffect {
     pub target: EffectTargetInfo,
     pub arguments: Vec<CanonicalSelector>,
@@ -234,6 +239,11 @@ pub(super) fn outcome_label(
             error: graph.type_fingerprint(*error)?,
         },
         CallableOutcomeInfo::NonReturn => TraceLabel::NonReturn,
+        CallableOutcomeInfo::ParameterNonReturnTemplate(_) => {
+            return Err(DescriptorError::InvalidDescription {
+                reason: "generic callback outcome is not instantiated",
+            });
+        }
         CallableOutcomeInfo::ParameterNonReturn(call) => TraceLabel::ParameterNonReturn {
             callable: call.callable.clone(),
             position: call.position,

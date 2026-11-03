@@ -10,6 +10,32 @@ use super::{
     traversal::{node_index, references},
 };
 
+/// Work shared by multiple fingerprint roots in one projection.
+pub struct DescriptorFingerprintBudget {
+    limit: usize,
+    remaining: usize,
+}
+
+impl DescriptorFingerprintBudget {
+    pub fn new(limit: usize) -> Self {
+        Self {
+            limit,
+            remaining: limit,
+        }
+    }
+
+    fn visit(&mut self) -> Result<(), DescriptorError> {
+        self.remaining = self
+            .remaining
+            .checked_sub(1)
+            .ok_or(DescriptorError::Limit {
+                resource: "fingerprint work",
+                limit: self.limit,
+            })?;
+        Ok(())
+    }
+}
+
 impl DescriptorGraph {
     /// Identifies the reachable descriptor graph, not semantic type equality.
     /// Encounter numbers are canonical traversal labels, never compiler/local IDs.
@@ -24,6 +50,18 @@ impl DescriptorGraph {
         self.node_fingerprint(DescriptorNode::Row(root), "etas.code.row-descriptor.v1")
     }
 
+    pub fn row_fingerprint_with_budget(
+        &self,
+        root: EffectRowInfoRef,
+        budget: &mut DescriptorFingerprintBudget,
+    ) -> Result<CodeFingerprint, DescriptorError> {
+        self.node_fingerprint_with_budget(
+            DescriptorNode::Row(root),
+            "etas.code.row-descriptor.v1",
+            budget,
+        )
+    }
+
     pub fn trace_fingerprint(
         &self,
         root: TraceInfoRef,
@@ -36,6 +74,19 @@ impl DescriptorGraph {
         root: DescriptorNode,
         domain: &'static str,
     ) -> Result<CodeFingerprint, DescriptorError> {
+        self.node_fingerprint_with_budget(
+            root,
+            domain,
+            &mut DescriptorFingerprintBudget::new(usize::MAX),
+        )
+    }
+
+    fn node_fingerprint_with_budget(
+        &self,
+        root: DescriptorNode,
+        domain: &'static str,
+        budget: &mut DescriptorFingerprintBudget,
+    ) -> Result<CodeFingerprint, DescriptorError> {
         if node_index(self.data(), root).is_none() {
             return Err(DescriptorError::MissingReference {
                 from: root,
@@ -46,6 +97,7 @@ impl DescriptorGraph {
         let mut visited = BTreeMap::new();
         let mut work = vec![root];
         while let Some(node) = work.pop() {
+            budget.visit()?;
             if let Some(label) = visited.get(&node) {
                 encoder.tag(0);
                 encoder.number(*label);
@@ -200,6 +252,10 @@ impl DescriptorGraph {
                             CallableOutcomeInfo::NonReturn => encoder.tag(0),
                             CallableOutcomeInfo::ParameterNonReturn(call) => {
                                 encoder.tag(3);
+                                encode_parameter_call(encoder, call);
+                            }
+                            CallableOutcomeInfo::ParameterNonReturnTemplate(call) => {
+                                encoder.tag(4);
                                 encode_parameter_call(encoder, call);
                             }
                             CallableOutcomeInfo::Raised { .. } => encoder.tag(1),
@@ -374,7 +430,7 @@ fn encode_signature(encoder: &mut CanonicalEncoder, signature: &SignatureInfo) {
     encoder.tag(u8::from(signature.effects.is_some()));
 }
 
-fn primitive_tag(primitive: PrimitiveInfo) -> u8 {
+pub(crate) fn primitive_tag(primitive: PrimitiveInfo) -> u8 {
     match primitive {
         PrimitiveInfo::Unit => 0,
         PrimitiveInfo::Never => 1,
@@ -399,7 +455,7 @@ fn primitive_tag(primitive: PrimitiveInfo) -> u8 {
     }
 }
 
-fn builtin_tag(constructor: BuiltinTypeInfo) -> u8 {
+pub(crate) fn builtin_tag(constructor: BuiltinTypeInfo) -> u8 {
     match constructor {
         BuiltinTypeInfo::Array => 0,
         BuiltinTypeInfo::List => 1,

@@ -15,6 +15,7 @@ pub(super) fn encode(snapshots: &DefinitionSnapshots) -> schema::Snapshots {
         let dependencies = &snapshot.dependencies;
         schema::DefinitionSnapshot {
             identity: Some(encode_key(&snapshot.identity)),
+            generic_environment_context: snapshot.generic_environment_context.map(bytes),
             revision: Some(schema::Revision {
                 definition: Some(encode_callable(&revision.definition)),
                 content: bytes(revision.content),
@@ -67,6 +68,10 @@ pub(super) fn decode(snapshots: schema::Snapshots) -> Result<DefinitionSnapshots
         let dependencies = required(snapshot.dependencies, "definition dependencies")?;
         Ok(DefinitionSnapshotInfo {
             identity: decode_key(required(snapshot.identity, "definition snapshot identity")?)?,
+            generic_environment_context: snapshot
+                .generic_environment_context
+                .map(fingerprint)
+                .transpose()?,
             revision: RevisionInputs {
                 definition: decode_callable(required(revision.definition, "revision definition")?)?,
                 content: fingerprint(revision.content)?,
@@ -161,6 +166,9 @@ pub(super) fn validate_wire(
         .chain(&snapshots.flows)
         .chain(&snapshots.methods)
     {
+        if snapshot.generic_environment_context.is_some() {
+            budget.charge(1, "generic environment context")?;
+        }
         super::header_budget::key(snapshot.identity.as_ref(), budget)?;
         if let Some(revision) = &snapshot.revision {
             if let Some(definition) = &revision.definition {

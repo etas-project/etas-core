@@ -4,7 +4,7 @@ mod budget;
 mod effects;
 mod header_budget;
 mod headers;
-mod identities;
+pub(super) mod identities;
 mod schema;
 mod snapshots;
 mod specs;

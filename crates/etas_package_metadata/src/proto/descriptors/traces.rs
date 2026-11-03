@@ -219,6 +219,9 @@ fn encode_outcome(outcome: &CallableOutcomeInfo) -> p::Outcome {
             CallableOutcomeInfo::ParameterNonReturn(call) => {
                 K::ParameterNonReturn(encode_call(call))
             }
+            CallableOutcomeInfo::ParameterNonReturnTemplate(call) => {
+                K::ParameterNonReturnTemplate(encode_call(call))
+            }
         }),
     }
 }
@@ -250,6 +253,9 @@ fn decode_outcome(outcome: p::Outcome) -> Result<CallableOutcomeInfo, Error> {
         K::NonReturn(true) => CallableOutcomeInfo::NonReturn,
         K::NonReturn(false) => return Err(invalid("invalid non-return marker")),
         K::ParameterNonReturn(call) => CallableOutcomeInfo::ParameterNonReturn(decode_call(call)?),
+        K::ParameterNonReturnTemplate(call) => {
+            CallableOutcomeInfo::ParameterNonReturnTemplate(decode_call(call)?)
+        }
     })
 }
 

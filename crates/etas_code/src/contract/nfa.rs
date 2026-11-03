@@ -72,6 +72,12 @@ impl Nfa {
             {
                 TraceInfo::Empty => result.edge(start, end, None, source, budget)?,
                 TraceInfo::Outcome(outcome) => {
+                    if matches!(
+                        outcome,
+                        crate::descriptor::CallableOutcomeInfo::ParameterNonReturnTemplate(_)
+                    ) {
+                        return Err(TraceProofError::UninstantiatedGenericOutcome);
+                    }
                     let key = LabelSource::Trace(source);
                     let label = if let Some(label) = result.labels.get(&key) {
                         label.clone()

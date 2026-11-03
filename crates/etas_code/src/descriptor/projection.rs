@@ -7,6 +7,8 @@ use super::{
 };
 
 mod remap;
+mod specialize;
+pub use specialize::DescriptorArgument;
 
 /// Arena offsets for a projected segment that will be appended to another graph.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

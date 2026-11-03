@@ -40,6 +40,7 @@ pub enum TraceProofError {
     MissingTrace(crate::descriptor::TraceInfoRef),
     MissingRow(crate::descriptor::EffectRowInfoRef),
     InvalidOutcomeTrace,
+    UninstantiatedGenericOutcome,
     Interrupted(etas_utils::PipelineInterruption),
     Limit {
         resource: &'static str,

@@ -24,9 +24,25 @@ pub struct DefinitionSnapshotInfo {
     pub identity: DefinitionKey,
     pub revision: RevisionInputs,
     pub dependencies: DependencyInfo,
+    /// Fingerprint of the immutable environment inputs before the applied
+    /// generic contract is incorporated. It is descriptive, not a permit.
+    pub generic_environment_context: Option<crate::CodeFingerprint>,
 }
 
 impl DefinitionSnapshotInfo {
+    pub fn generic_environment_fingerprint(
+        context: crate::CodeFingerprint,
+        contract: crate::CodeFingerprint,
+    ) -> crate::CodeFingerprint {
+        crate::CodeFingerprint::of_parts(
+            "etas.code.generic-definition-environment.v1",
+            [
+                context.as_bytes().as_slice(),
+                contract.as_bytes().as_slice(),
+            ],
+        )
+    }
+
     pub fn revision_info(&self) -> RevisionInfo {
         RevisionInfo::new(self.revision.clone())
     }
@@ -77,6 +93,7 @@ impl DefinitionSnapshotInfo {
                 parent: None,
             },
             dependencies,
+            generic_environment_context: None,
         })
     }
 }
@@ -84,6 +101,7 @@ impl DefinitionSnapshotInfo {
 pub(super) fn validate(
     snapshots: &DefinitionSnapshots,
     headers: &DefinitionHeaders,
+    graph: &super::super::DescriptorGraphInput,
 ) -> Result<(), DescriptorError> {
     let mut seen = BTreeSet::new();
     let agents = headers
@@ -113,6 +131,17 @@ pub(super) fn validate(
                 .map(|snapshot| (crate::DefinitionKind::Flow, snapshot)),
         )
     {
+        if let Some(context) = snapshot.generic_environment_context
+            && (kind != crate::DefinitionKind::Flow
+                || DefinitionSnapshotInfo::generic_environment_fingerprint(
+                    context,
+                    snapshot.revision.contract,
+                ) != snapshot.revision.environment)
+        {
+            return Err(invalid(
+                "generic environment context does not match the revision",
+            ));
+        }
         if snapshot.identity.kind() != kind {
             return Err(invalid("snapshot has the wrong definition kind"));
         }
@@ -131,6 +160,16 @@ pub(super) fn validate(
             let header = flows
                 .get(&snapshot.identity)
                 .ok_or(invalid("flow snapshot has no definition header"))?;
+            let Some(super::super::TypeInfo::Function(signature)) =
+                graph.types.get(header.signature.0 as usize)
+            else {
+                return Err(invalid("flow snapshot has no callable signature"));
+            };
+            if signature.generics.is_empty() != snapshot.generic_environment_context.is_none() {
+                return Err(invalid(
+                    "flow snapshot generic environment context is inconsistent",
+                ));
+            }
             snapshot.revision.definition == header.id
         };
         if !definition_matches
@@ -156,6 +195,11 @@ pub(super) fn validate(
         .map(|snapshot| (&snapshot.identity, snapshot))
         .collect::<BTreeMap<_, _>>();
     for snapshot in &snapshots.methods {
+        if snapshot.generic_environment_context.is_some() {
+            return Err(invalid(
+                "method snapshot cannot carry a generic flow environment context",
+            ));
+        }
         let callable = &snapshot.revision.definition;
         let method = callable
             .as_method()

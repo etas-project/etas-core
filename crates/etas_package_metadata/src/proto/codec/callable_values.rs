@@ -11,6 +11,7 @@ pub(super) fn to_proto(graph: &CallableValueGraph) -> ProtoCallableValueGraph {
             .values
             .iter()
             .map(|node| ProtoCallableValueNode {
+                residual_checks: Some(residual_to_proto(&node.residual_checks)),
                 handler_requests: node
                     .handler_requests
                     .as_ref()
@@ -75,6 +76,9 @@ pub(super) fn from_proto(
             .into_iter()
             .map(|node| {
                 Ok(CallableValueNode {
+                    residual_checks: residual_from_proto(node.residual_checks.ok_or_else(
+                        || invalid("callable value is missing residual references"),
+                    )?)?,
                     handler_requests: node
                         .handler_requests
                         .map(request_template_from_proto)
@@ -158,6 +162,98 @@ pub(super) fn from_proto(
     };
     graph.validate_references(None)?;
     Ok(graph)
+}
+
+pub(super) fn residual_to_proto(
+    references: &[etas_code::residual::identity::ResidualObligationRef],
+) -> ProtoResidualReferenceSet {
+    use etas_code::residual::identity::GenericArgumentIdentity as A;
+    ProtoResidualReferenceSet {
+        version: 1,
+        references: references
+            .iter()
+            .map(|reference| ProtoResidualReference {
+                obligation: reference.obligation().fingerprint().as_bytes().to_vec(),
+                substitutions: reference
+                    .substitutions()
+                    .iter()
+                    .map(|(parameter, value)| {
+                        let (kind, value) = match value {
+                            A::Type(value) => (1, *value),
+                            A::EffectRow(value) => (2, *value),
+                            A::TypeParameter(value) => (3, value.fingerprint()),
+                            A::EffectRowParameter(value) => (4, value.fingerprint()),
+                        };
+                        ProtoResidualSubstitution {
+                            parameter: parameter.fingerprint().as_bytes().to_vec(),
+                            kind,
+                            value: value.as_bytes().to_vec(),
+                        }
+                    })
+                    .collect(),
+            })
+            .collect(),
+    }
+}
+
+pub(super) fn residual_from_proto(
+    set: ProtoResidualReferenceSet,
+) -> Result<Vec<etas_code::residual::identity::ResidualObligationRef>, MetadataArtifactError> {
+    use etas_code::{
+        CodeFingerprint,
+        residual::identity::{
+            GenericArgumentIdentity as A, GenericParameterId, MAX_RESIDUAL_REFERENCE_SUBSTITUTIONS,
+            ObligationId, ResidualObligationRef,
+        },
+    };
+    use std::collections::{BTreeMap, BTreeSet};
+    if set.version != 1 || set.references.len() > 4096 {
+        return Err(invalid("invalid residual reference set version or count"));
+    }
+    let fingerprint = |bytes: Vec<u8>| -> Result<CodeFingerprint, MetadataArtifactError> {
+        let bytes: [u8; 32] = bytes
+            .try_into()
+            .map_err(|_| invalid("invalid residual fingerprint length"))?;
+        Ok(CodeFingerprint::from_bytes(bytes))
+    };
+    let mut total = 0usize;
+    let mut seen = BTreeSet::new();
+    let mut references = Vec::with_capacity(set.references.len());
+    for reference in set.references {
+        total = total
+            .checked_add(reference.substitutions.len())
+            .ok_or_else(|| invalid("residual substitution limit exceeded"))?;
+        if reference.substitutions.len() > MAX_RESIDUAL_REFERENCE_SUBSTITUTIONS || total > 65_536 {
+            return Err(invalid("residual substitution limit exceeded"));
+        }
+        let mut substitutions = BTreeMap::new();
+        for binding in reference.substitutions {
+            let parameter =
+                GenericParameterId::from_canonical_fingerprint(fingerprint(binding.parameter)?);
+            let value = fingerprint(binding.value)?;
+            let value = match binding.kind {
+                1 => A::Type(value),
+                2 => A::EffectRow(value),
+                3 => A::TypeParameter(GenericParameterId::from_canonical_fingerprint(value)),
+                4 => A::EffectRowParameter(GenericParameterId::from_canonical_fingerprint(value)),
+                _ => return Err(invalid("invalid residual argument kind")),
+            };
+            if substitutions.insert(parameter, value).is_some() {
+                return Err(invalid("duplicate residual binder"));
+            }
+        }
+        let reference = ResidualObligationRef::new(
+            ObligationId::from_canonical_fingerprint(fingerprint(reference.obligation)?),
+            substitutions,
+        )
+        .map_err(|_| invalid("invalid residual reference"))?;
+        if !seen.insert(reference.clone()) {
+            return Err(invalid("duplicate residual reference"));
+        }
+        references.push(reference);
+    }
+    crate::callable_values::validate_residual_references(&references)?;
+    Ok(references)
 }
 
 fn scope_to_proto(scope: CallableValueScope) -> ProtoCallableValueScope {

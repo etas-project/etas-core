@@ -15,6 +15,32 @@ fn graph(input: DescriptorGraphInput) -> DescriptorGraph {
     DescriptorGraph::new(input, DescriptorLimits::default()).unwrap()
 }
 
+#[test]
+fn multiple_row_fingerprints_share_one_work_budget() {
+    let graph = graph(DescriptorGraphInput {
+        rows: vec![EffectRowInfo {
+            effects: vec![],
+            tail: None,
+        }],
+        ..Default::default()
+    });
+    let root = EffectRowInfoRef(0);
+    let mut budget = DescriptorFingerprintBudget::new(1);
+    assert_eq!(
+        graph
+            .row_fingerprint_with_budget(root, &mut budget)
+            .unwrap(),
+        graph.row_fingerprint(root).unwrap()
+    );
+    assert!(matches!(
+        graph.row_fingerprint_with_budget(root, &mut budget),
+        Err(DescriptorError::Limit {
+            resource: "fingerprint work",
+            limit: 1
+        })
+    ));
+}
+
 fn tree() -> DescriptorGraphInput {
     let definition = key("Tree", DefinitionKind::Type);
     DescriptorGraphInput {

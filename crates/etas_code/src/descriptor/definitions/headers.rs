@@ -237,6 +237,9 @@ pub(super) fn measure(
             budget.key(&snapshot.identity)?;
             budget.callable(&snapshot.revision.definition)?;
             budget.nodes(6)?;
+            if snapshot.generic_environment_context.is_some() {
+                budget.nodes(1)?;
+            }
             budget.key(&snapshot.dependencies.lexical_owner)?;
             budget.nodes(snapshot.dependencies.modules.len())?;
             for module in &snapshot.dependencies.modules {

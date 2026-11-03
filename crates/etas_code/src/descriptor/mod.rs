@@ -6,6 +6,8 @@ pub mod behavior;
 pub mod callable;
 mod definitions;
 mod fingerprint;
+pub use fingerprint::DescriptorFingerprintBudget;
+pub(crate) use fingerprint::{builtin_tag, primitive_tag};
 mod graph;
 mod projection;
 mod spec;
@@ -33,7 +35,7 @@ pub use definitions::{
     DefinitionSnapshots, DefinitionTypeBinding,
 };
 pub use graph::{DescriptorGraph, DescriptorGraphInput, DescriptorLimits};
-pub use projection::DescriptorGraphOffsets;
+pub use projection::{DescriptorArgument, DescriptorGraphOffsets};
 pub use spec::{
     AttachedSpecInfo, TraceConstraintInfo, TracePatternInfo, TraceRuleInfo, TraceSelectorBoundInfo,
 };

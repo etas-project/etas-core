@@ -173,7 +173,8 @@ pub(super) fn references(
                 CallableOutcomeInfo::Returned { ty, .. } => visit(DescriptorNode::Type(*ty)),
                 CallableOutcomeInfo::Raised { error } => visit(DescriptorNode::Type(*error)),
                 CallableOutcomeInfo::NonReturn => {}
-                CallableOutcomeInfo::ParameterNonReturn(call) => {
+                CallableOutcomeInfo::ParameterNonReturn(call)
+                | CallableOutcomeInfo::ParameterNonReturnTemplate(call) => {
                     parameter_call_references(call, &mut visit)
                 }
             },

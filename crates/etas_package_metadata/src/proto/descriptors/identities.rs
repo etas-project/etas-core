@@ -6,7 +6,7 @@ use super::{
 };
 use crate::MetadataArtifactError as Error;
 
-pub(super) fn encode_key(key: &DefinitionKey) -> ProtoDefinitionKey {
+pub(in crate::proto) fn encode_key(key: &DefinitionKey) -> ProtoDefinitionKey {
     ProtoDefinitionKey {
         package: key.package().fingerprint().as_bytes().to_vec(),
         module: key.module().to_vec(),
@@ -15,7 +15,7 @@ pub(super) fn encode_key(key: &DefinitionKey) -> ProtoDefinitionKey {
     }
 }
 
-pub(super) fn decode_key(key: ProtoDefinitionKey) -> Result<DefinitionKey, Error> {
+pub(in crate::proto) fn decode_key(key: ProtoDefinitionKey) -> Result<DefinitionKey, Error> {
     DefinitionKey::new(
         origins::package_key(key.package)?,
         key.module,

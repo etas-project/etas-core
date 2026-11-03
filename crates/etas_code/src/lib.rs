@@ -5,10 +5,12 @@ pub mod descriptor;
 pub mod diagnostic;
 pub mod identity;
 pub mod report;
+pub mod residual;
 pub mod syntax;
 
 pub use identity::{
     CallableId, CodeFingerprint, DefinitionKey, DefinitionKind, IdentityError,
     ImplementationHeader, ImplementationKey, ImplementationSpecIdentity, MethodId, PackageKey,
-    RevisionInfo, RevisionInputs, RevisionKey,
+    RevisionInfo, RevisionInputs, RevisionKey, SourceIdentityError, SourceRevisionKey,
+    StableSourceKey, StableSourceOrigin,
 };

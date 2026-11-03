@@ -25,10 +25,14 @@ fn parameter_nonreturn_survives_binary_trace_codec() {
             },
         ]),
     };
-    let original = TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(call));
-    let bytes = traces::encode(&original).encode_to_vec();
-    let decoded = schema::Trace::decode(bytes.as_slice()).unwrap();
-    assert_eq!(traces::decode(decoded).unwrap(), original);
+    for original in [
+        TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(call.clone())),
+        TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturnTemplate(call)),
+    ] {
+        let bytes = traces::encode(&original).encode_to_vec();
+        let decoded = schema::Trace::decode(bytes.as_slice()).unwrap();
+        assert_eq!(traces::decode(decoded).unwrap(), original);
+    }
 }
 
 #[test]

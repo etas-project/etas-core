@@ -18,7 +18,7 @@ use super::{GenericParameterRef, TypeInfoRef};
 pub struct EffectRowInfoRef(pub u32);
 
 #[derive(
-    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+    Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
 )]
 pub enum EffectTargetInfo {
     Effect(DefinitionKey),
@@ -26,7 +26,7 @@ pub enum EffectTargetInfo {
 }
 
 #[derive(
-    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+    Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
 )]
 pub enum StaticEffectArgInfo {
     Type(TypeInfoRef),
@@ -38,7 +38,7 @@ pub enum StaticEffectArgInfo {
 }
 
 #[derive(
-    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+    Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
 )]
 pub struct EffectInfo {
     pub target: EffectTargetInfo,
@@ -193,6 +193,9 @@ pub enum CallableOutcomeInfo {
     NonReturn,
     /// A checked callback invocation that does not return to its caller.
     ParameterNonReturn(ParameterCallInfo),
+    /// Descriptive template whose callback effect row is still generic. It is
+    /// not a proved outcome until the row is instantiated and validated.
+    ParameterNonReturnTemplate(ParameterCallInfo),
 }
 
 /// The existing action-trace abstract domain, not an execution log or a proof.

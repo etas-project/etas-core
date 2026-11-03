@@ -19,6 +19,8 @@ pub struct DefinitionSnapshot {
     pub revision: Option<Revision>,
     #[prost(message, optional, tag = "3")]
     pub dependencies: Option<Dependencies>,
+    #[prost(bytes = "vec", optional, tag = "4")]
+    pub generic_environment_context: Option<Vec<u8>>,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]

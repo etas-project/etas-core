@@ -614,7 +614,7 @@ pub struct Returned {
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct Outcome {
-    #[prost(oneof = "outcome::Kind", tags = "1, 2, 3, 4")]
+    #[prost(oneof = "outcome::Kind", tags = "1, 2, 3, 4, 5")]
     pub kind: Option<outcome::Kind>,
 }
 pub mod outcome {
@@ -628,6 +628,8 @@ pub mod outcome {
         NonReturn(bool),
         #[prost(message, tag = "4")]
         ParameterNonReturn(super::ParameterCall),
+        #[prost(message, tag = "5")]
+        ParameterNonReturnTemplate(super::ParameterCall),
     }
 }
 

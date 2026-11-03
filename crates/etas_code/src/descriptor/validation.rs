@@ -269,7 +269,10 @@ fn validate_inner(
                     validator.return_observation(node, *ty, observation)?;
                 }
                 match outcome {
-                    CallableOutcomeInfo::ParameterNonReturn(call) => std::slice::from_ref(call),
+                    CallableOutcomeInfo::ParameterNonReturn(call)
+                    | CallableOutcomeInfo::ParameterNonReturnTemplate(call) => {
+                        std::slice::from_ref(call)
+                    }
                     _ => &[][..],
                 }
             }
@@ -456,21 +459,42 @@ fn validate_inner(
             validator.callable(node, &call.callable)?;
             if matches!(
                 trace,
-                TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(_))
+                TraceInfo::Outcome(
+                    CallableOutcomeInfo::ParameterNonReturn(_)
+                        | CallableOutcomeInfo::ParameterNonReturnTemplate(_)
+                )
             ) {
+                let template = matches!(
+                    trace,
+                    TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturnTemplate(_))
+                );
+                if template {
+                    validator.edge_count =
+                        validator.edge_count.saturating_add(owner.generics.len());
+                    if validator.edge_count > limits.max_edges {
+                        return Err(DescriptorError::Limit {
+                            resource: "edges",
+                            limit: limits.max_edges,
+                        });
+                    }
+                }
                 let action_row = callback
                     .effects
                     .and_then(|row| input.rows.get(row.0 as usize))
                     .is_some_and(|row| {
-                        row.tail.is_none()
-                            && row.effects.iter().all(|effect| {
-                                matches!(effect.target, EffectTargetInfo::Action { .. })
-                            })
+                        (if template {
+                            row.tail.is_some_and(|tail| owner.generics.contains(&tail))
+                        } else {
+                            row.tail.is_none()
+                        }) && row
+                            .effects
+                            .iter()
+                            .all(|effect| matches!(effect.target, EffectTargetInfo::Action { .. }))
                     });
                 if call.arguments.is_none() || !callback.generics.is_empty() || !action_row {
                     return Err(DescriptorError::Invalid {
                         node,
-                        reason: "parameter termination requires checked arguments and a callback with a closed action-only effect row",
+                        reason: "parameter termination requires checked arguments and an action-only row with the correct generic status",
                     });
                 }
             }

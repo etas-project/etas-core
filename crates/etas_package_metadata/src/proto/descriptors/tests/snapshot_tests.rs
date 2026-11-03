@@ -7,6 +7,11 @@ pub(super) fn with_snapshot() -> DefinitionDescriptorSet {
     let agent = &headers.agents[0];
     let flow = headers.callables[0].id.as_declaration().unwrap();
     let environment = CodeFingerprint::from_bytes([3; 32]);
+    let generic_context = CodeFingerprint::from_bytes([11; 32]);
+    let flow_environment = DefinitionSnapshotInfo::generic_environment_fingerprint(
+        generic_context,
+        CodeFingerprint::from_bytes([10; 32]),
+    );
     headers.snapshots = Some(DefinitionSnapshots {
         methods: vec![],
         flows: vec![DefinitionSnapshotInfo {
@@ -14,13 +19,13 @@ pub(super) fn with_snapshot() -> DefinitionDescriptorSet {
             revision: RevisionInputs {
                 definition: headers.callables[0].id.clone(),
                 content: CodeFingerprint::from_bytes([9; 32]),
-                environment,
+                environment: flow_environment,
                 contract: CodeFingerprint::from_bytes([10; 32]),
                 compilation: CodeFingerprint::from_bytes([6; 32]),
                 parent: None,
             },
             dependencies: DependencyInfo {
-                environment,
+                environment: flow_environment,
                 lexical_owner: flow.clone(),
                 standard_package: key("std", DefinitionKind::Type).package(),
                 modules: vec![ModuleOriginInfo {
@@ -30,6 +35,7 @@ pub(super) fn with_snapshot() -> DefinitionDescriptorSet {
                 bindings: vec![],
                 artifacts: vec![],
             },
+            generic_environment_context: Some(generic_context),
         }],
         agents: vec![DefinitionSnapshotInfo {
             identity: agent.identity.clone(),
@@ -60,6 +66,7 @@ pub(super) fn with_snapshot() -> DefinitionDescriptorSet {
                     fingerprint: "aa".repeat(32),
                 }],
             },
+            generic_environment_context: None,
         }],
     });
     set
@@ -100,6 +107,30 @@ fn snapshot_coordinates_roundtrip_without_serializing_execution_evidence() {
         flow.revision_info().key(),
         RevisionKey::from_inputs(&flow.revision)
     );
+}
+
+#[test]
+fn generic_snapshot_environment_context_is_required_and_bound_to_the_contract() {
+    for case in 0..5 {
+        let mut wire = to_proto(&with_snapshot());
+        let snapshots = wire.headers.as_mut().unwrap().snapshots.as_mut().unwrap();
+        match case {
+            0 => snapshots.flows[0].generic_environment_context = None,
+            1 => {
+                snapshots.flows[0]
+                    .generic_environment_context
+                    .as_mut()
+                    .unwrap()[0] ^= 1
+            }
+            2 => snapshots.flows[0].revision.as_mut().unwrap().contract[0] ^= 1,
+            3 => snapshots.flows[0].generic_environment_context = Some(vec![1; 31]),
+            4 => snapshots.agents[0].generic_environment_context = Some(vec![1; 32]),
+            _ => unreachable!(),
+        }
+        let bytes = wire.encode_to_vec();
+        let decoded = ProtoDescriptorGraph::decode(bytes.as_slice()).unwrap();
+        assert!(from_proto(decoded).is_err(), "case {case}");
+    }
 }
 
 #[test]

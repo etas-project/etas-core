@@ -194,7 +194,8 @@ impl Remapper<'_> {
             TraceInfo::Event(effect) => self.effect(effect)?,
             TraceInfo::Outcome(CallableOutcomeInfo::Returned { ty, .. })
             | TraceInfo::Outcome(CallableOutcomeInfo::Raised { error: ty }) => self.type_ref(ty)?,
-            TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(call)) => {
+            TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturn(call))
+            | TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturnTemplate(call)) => {
                 self.parameter_call(call)?
             }
             TraceInfo::ParameterCall(call) => self.parameter_call(call)?,

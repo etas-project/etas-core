@@ -80,6 +80,8 @@ pub struct ProtoCallableValueGenericBinding {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoCallableValueNode {
+    #[prost(message, optional, tag = "16")]
+    pub residual_checks: Option<ProtoResidualReferenceSet>,
     #[prost(message, optional, tag = "15")]
     pub handler_requests: Option<ProtoRequestInstantiationTemplate>,
     #[prost(message, optional, tag = "14")]
@@ -110,6 +112,32 @@ pub struct ProtoCallableValueNode {
     pub action_trace: Option<ProtoActionTrace>,
     #[prost(message, optional, tag = "12")]
     pub returned_sources: Option<ProtoCallableValueSources>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoResidualReferenceSet {
+    #[prost(uint32, tag = "1")]
+    pub version: u32,
+    #[prost(message, repeated, tag = "2")]
+    pub references: Vec<ProtoResidualReference>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoResidualReference {
+    #[prost(bytes = "vec", tag = "1")]
+    pub obligation: Vec<u8>,
+    #[prost(message, repeated, tag = "2")]
+    pub substitutions: Vec<ProtoResidualSubstitution>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoResidualSubstitution {
+    #[prost(bytes = "vec", tag = "1")]
+    pub parameter: Vec<u8>,
+    #[prost(uint32, tag = "2")]
+    pub kind: u32,
+    #[prost(bytes = "vec", tag = "3")]
+    pub value: Vec<u8>,
 }
 
 #[derive(Clone, PartialEq, Message)]

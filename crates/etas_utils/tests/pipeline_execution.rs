@@ -72,3 +72,43 @@ fn verify_interruption(limit: usize, expected_runs: usize) {
     assert!(!manager.available_artifacts().contains(OUTPUT));
     assert!(result.records[0].produced.is_empty());
 }
+
+struct Fail;
+impl Pass<usize> for Fail {
+    fn descriptor(&self) -> PassDescriptor {
+        PassDescriptor::new("fail", PassKind::Verify).produces(ArtifactSet::one(OUTPUT))
+    }
+    fn run(
+        &mut self,
+        _: &mut usize,
+        _: &PassContext<usize>,
+        _: &mut PassManager<usize>,
+    ) -> PassResult {
+        let mut result = PassResult::failed("verification failed");
+        result.produced = ArtifactSet::one(ArtifactKey::new("test", "dynamic_output"));
+        result
+    }
+}
+
+#[test]
+fn failed_pass_does_not_commit_declared_or_dynamic_outputs() {
+    let mut manager = PassManager::new();
+    let result =
+        manager.run_global_pipeline(&mut Pipeline::new("test").pass(Fail).pass(Produce), &mut 0);
+    assert!(matches!(result.control, PassControl::Failed(_)));
+    assert!(manager.available_artifacts().is_empty());
+    assert!(result.records[0].produced.is_empty());
+    assert_eq!(result.records.len(), 1);
+}
+
+#[test]
+fn failed_revalidation_revokes_a_previously_ready_output() {
+    let mut manager = PassManager::new();
+    manager.run_global_pipeline(&mut Pipeline::new("first").pass(Produce), &mut 0);
+    assert!(manager.available_artifacts().contains(OUTPUT));
+    let result = manager.run_global_pipeline(&mut Pipeline::new("revalidate").pass(Fail), &mut 0);
+    assert!(matches!(result.control, PassControl::Failed(_)));
+    assert!(!manager.available_artifacts().contains(OUTPUT));
+    assert!(result.records[0].produced.is_empty());
+    assert!(result.records[0].invalidated.contains(OUTPUT));
+}

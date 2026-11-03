@@ -1,9 +1,11 @@
 use crate::{ActionTrace, DefaultHandlerEffects, EffectRow, GenericParam, Type};
 
 mod behavior;
+mod fingerprint;
 mod paths;
 mod validation;
 pub use behavior::*;
+pub use fingerprint::callable_value_graph_input_fingerprint;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CallableValuePathKind {
@@ -109,6 +111,8 @@ pub struct CallableValueGenericBinding {
     Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
 )]
 pub struct CallableValueNode {
+    /// Descriptive references only; a separate validated plan is required to execute.
+    pub residual_checks: Vec<etas_code::residual::identity::ResidualObligationRef>,
     pub handler_requests: Option<crate::RequestInstantiationTemplate>,
     pub behavior: CallableValueBehavior,
     pub parent_scope: CallableValueScope,
@@ -126,6 +130,24 @@ pub struct CallableValueNode {
     pub returned_sources: Option<Vec<CallableValueSource>>,
 }
 
+pub(crate) fn validate_residual_references(
+    references: &[etas_code::residual::identity::ResidualObligationRef],
+) -> Result<(), crate::MetadataArtifactError> {
+    if references.len() > 4096 || references.windows(2).any(|pair| pair[0] >= pair[1]) {
+        return Err(invalid("duplicate or excessive residual references"));
+    }
+    let substitutions = references
+        .iter()
+        .try_fold(0usize, |total, reference| {
+            total.checked_add(reference.substitutions().len())
+        })
+        .ok_or_else(|| invalid("residual substitution limit exceeded"))?;
+    if substitutions > 65_536 {
+        return Err(invalid("residual substitution limit exceeded"));
+    }
+    Ok(())
+}
+
 impl CallableValueGraph {
     /// Validates identity references without recursively expanding the graph.
     /// The frontend supplies the checked root interface before using the graph.
@@ -139,6 +161,7 @@ impl CallableValueGraph {
             self.validate_source_scope(*source, &BTreeSet::from([CallableValueScope::Root]))?;
         }
         for (index, node) in self.values.iter().enumerate() {
+            validate_residual_references(&node.residual_checks)?;
             if node
                 .behavior
                 .host_requirements
