@@ -108,7 +108,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
                 )
             }
             "with_session" => (
-                decl.with_value_method("Message[T]", name),
+                decl.with_type_member_method("Message[T]", name),
                 intrinsic::runtime::MESSAGE_WITH_SESSION,
             ),
             _ => unreachable!("message API declaration"),
