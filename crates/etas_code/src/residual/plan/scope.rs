@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use crate::{
     contract::CanonicalEffect,
     residual::{
-        identity::{MonitorTemplateId, PlanHash},
+        identity::{GenericArgumentIdentity, GenericParameterId, MonitorTemplateId, PlanHash},
         model::{ActionPredicateDecision, ActionPredicateError},
         monitor::{
             ActionAttemptId, ActionComponentInput, AlternativeScope, ConcreteActionAttempt,
@@ -16,6 +16,7 @@ use crate::{
             TraceComponentState, TraceComponentTransition, commit_trace_transitions,
         },
         predicate::PredicateDecision,
+        type_template::StaticTypeTemplate,
     },
 };
 
@@ -155,6 +156,16 @@ impl SemanticResidualPlan {
         scope: AlternativeScope,
         max_components: usize,
     ) -> Result<ResidualScopeState, ResidualScopeError> {
+        self.initial_scope_with_bindings(scope, max_components, &BTreeMap::new(), &BTreeMap::new())
+    }
+
+    pub fn initial_scope_with_bindings(
+        &self,
+        scope: AlternativeScope,
+        max_components: usize,
+        bindings: &BTreeMap<GenericParameterId, GenericArgumentIdentity>,
+        structures: &BTreeMap<GenericParameterId, StaticTypeTemplate>,
+    ) -> Result<ResidualScopeState, ResidualScopeError> {
         let mut components = BTreeMap::new();
         for (id, component) in &self.components {
             let obligation = component.obligation();
@@ -170,7 +181,12 @@ impl SemanticResidualPlan {
                 SemanticPlanComponent::Action(_) => ComponentState::Action,
                 SemanticPlanComponent::Trace(trace) => ComponentState::Trace(Box::new(
                     trace
-                        .initial_state(scope, obligation.identity().origin.revision)
+                        .initial_state_with_bindings(
+                            scope,
+                            obligation.identity().origin.revision,
+                            bindings,
+                            structures,
+                        )
                         .map_err(|error| ResidualScopeError::Component { id: *id, error })?,
                 )),
             };
@@ -196,6 +212,23 @@ impl SemanticResidualPlan {
         scope: AlternativeScope,
         data: &ResidualScopeStateData,
         max_components: usize,
+    ) -> Result<ResidualScopeState, ResidualScopeError> {
+        self.restore_scope_with_bindings(
+            scope,
+            data,
+            max_components,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+        )
+    }
+
+    pub fn restore_scope_with_bindings(
+        &self,
+        scope: AlternativeScope,
+        data: &ResidualScopeStateData,
+        max_components: usize,
+        bindings: &BTreeMap<GenericParameterId, GenericArgumentIdentity>,
+        structures: &BTreeMap<GenericParameterId, StaticTypeTemplate>,
     ) -> Result<ResidualScopeState, ResidualScopeError> {
         if data.plan != self.hash {
             return Err(ResidualScopeError::PlanMismatch);
@@ -223,10 +256,12 @@ impl SemanticResidualPlan {
                 (SemanticPlanComponent::Trace(trace), Some(state)) => {
                     ComponentState::Trace(Box::new(
                         trace
-                            .restore_state(
+                            .restore_state_with_bindings(
                                 scope,
                                 component.obligation().identity().origin.revision,
                                 state,
+                                bindings,
+                                structures,
                             )
                             .map_err(|error| ResidualScopeError::Component {
                                 id: entry.component,
