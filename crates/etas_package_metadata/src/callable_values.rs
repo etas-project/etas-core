@@ -6,6 +6,7 @@ mod paths;
 mod validation;
 pub use behavior::*;
 pub use fingerprint::callable_value_graph_input_fingerprint;
+pub use fingerprint::published_method_input_fingerprint;
 
 fn validate_request_target(
     target: &crate::CallableRequestTarget,

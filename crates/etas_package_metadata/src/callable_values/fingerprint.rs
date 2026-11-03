@@ -342,6 +342,41 @@ pub fn callable_value_graph_input_fingerprint(
     etas_code::CodeFingerprint::from_bytes(*e.0.finalize().as_bytes())
 }
 
+pub fn published_method_input_fingerprint(
+    method: &crate::PublishedMethod,
+) -> etas_code::CodeFingerprint {
+    let mut e = Encoder::new();
+    e.text("published-method.v1");
+    e.0.update(method.identity.fingerprint().as_bytes());
+    e.encode(Task::Type(&method.self_type));
+    match method.receiver {
+        crate::MethodReceiver::Value { slot } => {
+            e.byte(0);
+            e.number(slot as usize);
+        }
+        crate::MethodReceiver::Associated => e.byte(1),
+        crate::MethodReceiver::Component => e.byte(2),
+    }
+    e.number(method.owner_params.len());
+    for param in &method.owner_params {
+        e.text(&param.name);
+        e.byte(match param.kind {
+            crate::GenericParamKind::Type => 0,
+            crate::GenericParamKind::Effect => 1,
+        });
+        e.number(param.bounds.len());
+        for bound in &param.bounds {
+            e.path(&bound.spec);
+            e.number(bound.args.len());
+            for ty in &bound.args {
+                e.encode(Task::Type(ty));
+            }
+        }
+    }
+    e.0.update(callable_value_graph_input_fingerprint(&method.callable).as_bytes());
+    etas_code::CodeFingerprint::from_bytes(*e.0.finalize().as_bytes())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
