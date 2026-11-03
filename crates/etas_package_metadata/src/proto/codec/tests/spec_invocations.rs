@@ -4,6 +4,10 @@ fn payload(target: ProtoCallableRequestTarget) -> Vec<u8> {
     let mut graph = valid_graph();
     graph.public_metadata = Some(ProtoPublicMetadataSection {
         effect_summaries: vec![ProtoEffectSummary {
+            residual_checks: Some(ProtoResidualReferenceSet {
+                version: 1,
+                references: Vec::new(),
+            }),
             item: vec!["demo".into(), "call".into()],
             public_effects: Some(ProtoEffectRow::default()),
             requested_actions: Some(ProtoEffectRow::default()),

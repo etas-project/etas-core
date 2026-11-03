@@ -5,7 +5,7 @@ use crate::{
     syntax::RetainedBodySource,
 };
 
-pub const AGENT_SOURCE_BUNDLE_SCHEMA: u32 = 1;
+pub const DEFINITION_SOURCE_BUNDLE_SCHEMA: u32 = 2;
 
 /// Restorable source data only. Neither the revision nor any stored fingerprint
 /// is evidence that the source has been checked, compiled, or authorized.
@@ -13,7 +13,7 @@ pub const AGENT_SOURCE_BUNDLE_SCHEMA: u32 = 1;
     Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
 )]
 #[serde(deny_unknown_fields)]
-pub struct AgentSourceBundle {
+pub struct DefinitionSourceBundle {
     pub schema: u32,
     pub target: DefinitionKey,
     pub revision_key: RevisionKey,
@@ -53,10 +53,10 @@ pub enum SourceBundleError {
     ResourceLimit { resource: &'static str, limit: u64 },
 }
 
-impl AgentSourceBundle {
+impl DefinitionSourceBundle {
     pub fn validate(&self, limits: SourceBundleLimits) -> Result<(), SourceBundleError> {
         use SourceBundleError as E;
-        if self.schema != AGENT_SOURCE_BUNDLE_SCHEMA {
+        if self.schema != DEFINITION_SOURCE_BUNDLE_SCHEMA {
             return Err(E::UnsupportedSchema(self.schema));
         }
         if self.source.text.len() > limits.max_source_bytes {
@@ -94,15 +94,16 @@ impl AgentSourceBundle {
         if RevisionKey::from_inputs(&self.revision) != self.revision_key {
             return Err(E::RevisionMismatch);
         }
-        let valid_target = self.revision.definition.as_method().is_some_and(|method| {
-            method.implementation().subject() == &self.target
-                && method.implementation().selected_spec().is_none()
-                && method.name() == "run"
-        });
-        if self.target.kind() != DefinitionKind::Agent
-            || !valid_target
-            || self.dependencies.lexical_owner != self.target
-        {
+        let valid_target = match self.target.kind() {
+            DefinitionKind::Agent => self.revision.definition.as_method().is_some_and(|method| {
+                method.implementation().subject() == &self.target
+                    && method.implementation().selected_spec().is_none()
+                    && method.name() == "run"
+            }),
+            DefinitionKind::Flow => self.revision.definition.as_declaration() == Some(&self.target),
+            _ => false,
+        };
+        if !valid_target || self.dependencies.lexical_owner != self.target {
             return Err(E::TargetMismatch);
         }
         if self.source.content != self.revision.content {
@@ -119,11 +120,11 @@ impl fmt::Display for SourceBundleError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UnsupportedSchema(schema) => {
-                write!(f, "unsupported agent source bundle schema {schema}")
+                write!(f, "unsupported definition source bundle schema {schema}")
             }
-            Self::InvalidSource(reason) => write!(f, "invalid saved agent source: {reason}"),
+            Self::InvalidSource(reason) => write!(f, "invalid saved definition source: {reason}"),
             Self::TargetMismatch => {
-                f.write_str("saved source targets a different agent or default method")
+                f.write_str("saved source targets a different definition or callable")
             }
             Self::ContentMismatch => {
                 f.write_str("saved body and revision content fingerprints differ")
@@ -135,7 +136,7 @@ impl fmt::Display for SourceBundleError {
                 f.write_str("saved source does not match the current locked source environment")
             }
             Self::ContractMismatch => {
-                f.write_str("saved source does not match the current agent contract")
+                f.write_str("saved source does not match the current definition contract")
             }
             Self::ConfigurationMismatch => {
                 f.write_str("saved source does not match the current compiler configuration")

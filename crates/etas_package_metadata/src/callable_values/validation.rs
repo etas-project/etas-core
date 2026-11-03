@@ -8,6 +8,15 @@ impl CallableValueGraph {
         node: &CallableValueNode,
         root: Option<(usize, &[crate::GenericParamKind])>,
     ) -> Result<(), crate::MetadataArtifactError> {
+        if node
+            .behavior
+            .independent_determinism
+            .is_some_and(|value| value > node.behavior.determinism)
+        {
+            return Err(invalid(
+                "callable independent determinism exceeds its summary",
+            ));
+        }
         let mut bindings = BTreeMap::new();
         for binding in &node.generic_bindings {
             let kind = match binding.scope {
@@ -42,6 +51,10 @@ impl CallableValueGraph {
             requests.validate_shape()?;
             for action in &requests.actions {
                 work.push(Part::Effect(&action.action));
+                if let Some(signature) = &action.signature {
+                    work.extend(signature.params.iter().map(Part::Type));
+                    work.push(Part::Type(&signature.output));
+                }
                 for binding in action.type_bindings.iter().flatten() {
                     work.push(Part::Type(&binding.ty));
                 }
@@ -73,6 +86,7 @@ impl CallableValueGraph {
             work.push(Part::Row(&handler.produced));
         }
         work.push(Part::Trace(&node.action_trace));
+        let mut has_parameter_calls = false;
         while let Some(part) = work.pop() {
             match part {
                 Part::Target(crate::CallableRequestTarget::Parameter(_)) => {}
@@ -155,12 +169,21 @@ impl CallableValueGraph {
                         parameter_calls,
                     } => {
                         work.extend(actions.iter().map(Part::Effect));
+                        has_parameter_calls |= !parameter_calls.is_empty();
                         work.extend(parameter_calls.iter().map(Part::Target));
                     }
-                    ActionTrace::ParameterCall { parameter } => work.push(Part::Target(parameter)),
+                    ActionTrace::ParameterCall { parameter } => {
+                        has_parameter_calls = true;
+                        work.push(Part::Target(parameter));
+                    }
                     ActionTrace::Empty => {}
                 },
             }
+        }
+        if has_parameter_calls && node.behavior.independent_determinism.is_none() {
+            return Err(invalid(
+                "callable parameter trace is missing independent determinism",
+            ));
         }
         Ok(())
     }

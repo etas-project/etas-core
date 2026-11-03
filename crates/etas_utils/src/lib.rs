@@ -7,8 +7,8 @@ pub mod profile;
 
 pub use automaton::{
     AcceptingState, AutomatonMonitor, InitialState, Matcher, NoTransitionPolicy, ProductAutomaton,
-    ProductState, ProductStepResult, ProductTraceStep, RejectingState, State, StateSet, StepError,
-    StepResult, SymbolicAutomaton, TraceStep, Transition,
+    ProductState, ProductStepLimits, ProductStepResult, ProductTraceStep, RejectingState, State,
+    StateSet, StepError, StepResult, SymbolicAutomaton, TraceStep, Transition,
 };
 pub use fixpoint::{
     Constraint, ConvergenceStatus, EdgeTransfer, FixpointEngine, FixpointResult, FixpointStats,

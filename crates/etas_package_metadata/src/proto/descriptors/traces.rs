@@ -8,6 +8,64 @@ fn encode_call(call: &ParameterCallInfo) -> p::ParameterCall {
         callable: Some(encode_callable(&call.callable)),
         signature: call.signature.0,
         position: call.position,
+        arguments: call
+            .arguments
+            .as_ref()
+            .map(|arguments| p::ParameterArguments {
+                values: arguments
+                    .iter()
+                    .map(|argument| p::ParameterArgument {
+                        kind: Some(match argument {
+                            ParameterArgumentInfo::Bool(value) => {
+                                p::parameter_argument::Kind::Bool(*value)
+                            }
+                            ParameterArgumentInfo::Input { position } => {
+                                p::parameter_argument::Kind::Input(*position)
+                            }
+                            ParameterArgumentInfo::Integer {
+                                negative,
+                                magnitude,
+                            } => p::parameter_argument::Kind::Integer(p::ParameterInteger {
+                                negative: *negative,
+                                magnitude: magnitude.to_le_bytes().to_vec(),
+                            }),
+                        }),
+                    })
+                    .collect(),
+            }),
+        handlers: call
+            .handlers
+            .as_ref()
+            .map(|handlers| p::ParameterHandlerScopes {
+                scopes: handlers
+                    .iter()
+                    .map(|handler| p::ParameterHandlerScope {
+                        kind: Some(match handler {
+                            ParameterHandlerScopeInfo::Handle { arms } => {
+                                p::parameter_handler_scope::Kind::Handle(p::ParameterHandlerBody {
+                                    arms: arms
+                                        .iter()
+                                        .map(|arm| p::ParameterHandlerArm {
+                                            action: Some(encode_effect(&arm.action)),
+                                            result_type: arm.completion.result_type().0,
+                                            value: Some(encode_observation(arm.completion.value())),
+                                            control: Some(match arm.completion {
+                                                ParameterHandlerCompletionInfo::Resume {
+                                                    ..
+                                                } => 0,
+                                                ParameterHandlerCompletionInfo::Finish {
+                                                    ..
+                                                } => 1,
+                                            }),
+                                            trace: Some(arm.trace.0),
+                                        })
+                                        .collect(),
+                                })
+                            }
+                        }),
+                    })
+                    .collect(),
+            }),
     }
 }
 fn decode_call(call: p::ParameterCall) -> Result<ParameterCallInfo, Error> {
@@ -15,7 +73,125 @@ fn decode_call(call: p::ParameterCall) -> Result<ParameterCallInfo, Error> {
         callable: decode_callable(required(call.callable, "parameter call identity")?)?,
         signature: TypeInfoRef(call.signature),
         position: call.position,
+        arguments: call
+            .arguments
+            .map(|arguments| {
+                arguments
+                    .values
+                    .into_iter()
+                    .map(|argument| {
+                        Ok(match required(argument.kind, "parameter argument kind")? {
+                            p::parameter_argument::Kind::Bool(value) => {
+                                ParameterArgumentInfo::Bool(value)
+                            }
+                            p::parameter_argument::Kind::Input(position) => {
+                                ParameterArgumentInfo::Input { position }
+                            }
+                            p::parameter_argument::Kind::Integer(value) => {
+                                let bytes: [u8; 16] = value
+                                    .magnitude
+                                    .try_into()
+                                    .map_err(|_| invalid("invalid parameter integer magnitude"))?;
+                                ParameterArgumentInfo::Integer {
+                                    negative: value.negative,
+                                    magnitude: u128::from_le_bytes(bytes),
+                                }
+                            }
+                        })
+                    })
+                    .collect()
+            })
+            .transpose()?,
+        handlers: call
+            .handlers
+            .map(|handlers| {
+                handlers
+                    .scopes
+                    .into_iter()
+                    .map(|handler| {
+                        Ok(match required(handler.kind, "parameter handler scope")? {
+                            p::parameter_handler_scope::Kind::Handle(scope) => {
+                                ParameterHandlerScopeInfo::Handle {
+                                    arms: scope
+                                        .arms
+                                        .into_iter()
+                                        .map(|arm| {
+                                            let value = decode_observation(required(
+                                                arm.value,
+                                                "handler arm value",
+                                            )?)?;
+                                            let result_type = TypeInfoRef(arm.result_type);
+                                            let completion =
+                                                match required(arm.control, "handler arm control")?
+                                                {
+                                                    0 => ParameterHandlerCompletionInfo::Resume {
+                                                        result_type,
+                                                        value,
+                                                    },
+                                                    1 => ParameterHandlerCompletionInfo::Finish {
+                                                        result_type,
+                                                        value,
+                                                    },
+                                                    _ => {
+                                                        return Err(invalid(
+                                                            "invalid handler arm control",
+                                                        ));
+                                                    }
+                                                };
+                                            Ok(ParameterHandlerArmInfo {
+                                                action: decode_effect(required(
+                                                    arm.action,
+                                                    "handler arm action",
+                                                )?)?,
+                                                trace: TraceInfoRef(required(
+                                                    arm.trace,
+                                                    "handler arm trace",
+                                                )?),
+                                                completion,
+                                            })
+                                        })
+                                        .collect::<Result<Vec<_>, Error>>()?,
+                                }
+                            }
+                        })
+                    })
+                    .collect()
+            })
+            .transpose()?,
     })
+}
+
+fn encode_observation(observation: &ReturnObservationInfo) -> p::Observation {
+    p::Observation {
+        kind: Some(match observation {
+            ReturnObservationInfo::Any => p::observation::Kind::Any(true),
+            ReturnObservationInfo::Unit => p::observation::Kind::Unit(true),
+            ReturnObservationInfo::Bool(value) => p::observation::Kind::Bool(*value),
+            ReturnObservationInfo::Variant { owner, name } => {
+                p::observation::Kind::Variant(p::VariantObservation {
+                    owner: Some(encode_key(owner)),
+                    name: name.clone(),
+                })
+            }
+        }),
+    }
+}
+
+fn decode_observation(observation: p::Observation) -> Result<ReturnObservationInfo, Error> {
+    Ok(
+        match required(observation.kind, "return observation kind")? {
+            p::observation::Kind::Any(true) => ReturnObservationInfo::Any,
+            p::observation::Kind::Unit(true) => ReturnObservationInfo::Unit,
+            p::observation::Kind::Bool(value) => ReturnObservationInfo::Bool(value),
+            p::observation::Kind::Variant(value) => ReturnObservationInfo::Variant {
+                owner: decode_key(required(value.owner, "return variant owner")?)?,
+                name: value.name,
+            },
+            p::observation::Kind::Any(false) | p::observation::Kind::Unit(false) => {
+                return Err(invalid("invalid return observation marker"));
+            }
+        },
+    )
 }
 
 fn encode_outcome(outcome: &CallableOutcomeInfo) -> p::Outcome {
@@ -40,6 +216,12 @@ fn encode_outcome(outcome: &CallableOutcomeInfo) -> p::Outcome {
             }),
             CallableOutcomeInfo::Raised { error } => K::Raised(error.0),
             CallableOutcomeInfo::NonReturn => K::NonReturn(true),
+            CallableOutcomeInfo::ParameterNonReturn(call) => {
+                K::ParameterNonReturn(encode_call(call))
+            }
+            CallableOutcomeInfo::ParameterNonReturnTemplate(call) => {
+                K::ParameterNonReturnTemplate(encode_call(call))
+            }
         }),
     }
 }
@@ -70,6 +252,10 @@ fn decode_outcome(outcome: p::Outcome) -> Result<CallableOutcomeInfo, Error> {
         },
         K::NonReturn(true) => CallableOutcomeInfo::NonReturn,
         K::NonReturn(false) => return Err(invalid("invalid non-return marker")),
+        K::ParameterNonReturn(call) => CallableOutcomeInfo::ParameterNonReturn(decode_call(call)?),
+        K::ParameterNonReturnTemplate(call) => {
+            CallableOutcomeInfo::ParameterNonReturnTemplate(decode_call(call)?)
+        }
     })
 }
 

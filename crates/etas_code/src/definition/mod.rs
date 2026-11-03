@@ -5,14 +5,14 @@ mod reference;
 mod snapshot;
 mod source;
 pub use reference::{
-    AgentDefinitionLease, AgentDefinitionRef, CodeDefinitionOperations, DefinitionOperationError,
+    CodeDefinitionOperations, DefinitionLease, DefinitionOperationError, DefinitionRef,
     DefinitionResource,
 };
 pub use source::{
-    AGENT_SOURCE_BUNDLE_SCHEMA, AgentSourceBundle, SourceBundleError, SourceBundleLimits,
+    DEFINITION_SOURCE_BUNDLE_SCHEMA, DefinitionSourceBundle, SourceBundleError, SourceBundleLimits,
 };
 
 pub use analysis::{AnalysisFingerprint, AnalysisUnavailableReason, DefinitionAnalysisState};
 pub use snapshot::{
-    AgentDefinition, BaseRevisionInput, DefinitionError, FrozenDefinition, FrozenDefinitionInput,
+    BaseRevisionInput, DefinitionError, DefinitionSnapshot, FrozenDefinition, FrozenDefinitionInput,
 };

@@ -123,6 +123,7 @@ pub(super) fn with_headers() -> DefinitionDescriptorSet {
             default_handled: Some(EffectRowInfoRef(1)),
         },
         determinism: Some(DeterminismInfo::RuntimeMediated),
+        independent_determinism: Some(DeterminismInfo::Deterministic),
         trace: Some(TraceInfoRef(8)),
         outcomes: Some(TraceInfoRef(2)),
     };
@@ -210,7 +211,7 @@ fn agent_and_method_headers_roundtrip_with_exact_analysis_and_static_metadata() 
     );
 }
 
-fn with_method_selection() -> DefinitionDescriptorSet {
+pub(super) fn with_method_selection() -> DefinitionDescriptorSet {
     let mut set = with_headers();
     let agent = &mut set.headers.as_mut().unwrap().agents[0];
     agent.method_info = Some(

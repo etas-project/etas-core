@@ -75,6 +75,17 @@ where
         &self.transitions
     }
 
+    /// A restored state must belong to this automaton's declared graph.
+    pub fn contains_state(&self, state: &State) -> bool {
+        &self.initial == state
+            || self.accepting.contains(state)
+            || self.rejecting.contains(state)
+            || self
+                .transitions
+                .iter()
+                .any(|transition| &transition.from == state || &transition.to == state)
+    }
+
     pub fn no_transition_policy(&self) -> NoTransitionPolicy {
         self.no_transition.clone()
     }

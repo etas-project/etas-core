@@ -1,6 +1,6 @@
 use crate::{CodeFingerprint, DefinitionKey, RevisionInfo, descriptor::DeterminismInfo};
 
-pub const CHANGE_REPORT_SCHEMA: &str = "etas.code.change-report.v1";
+pub const CHANGE_REPORT_SCHEMA: &str = "etas.code.change-report.v2";
 
 /// Canonical observations of one immutable definition. Missing current analysis
 /// remains unavailable; it is never replaced with baseline or empty behavior.
@@ -41,6 +41,26 @@ impl ChangeReport {
         new: DefinitionDiffSnapshot<'_>,
     ) -> Result<Self, super::DefinitionOperationError> {
         if old.identity != new.identity {
+            return Err(super::DefinitionOperationError::IncompatibleDefinitions);
+        }
+        let owns_entry = |snapshot: &DefinitionDiffSnapshot<'_>| match snapshot
+            .revision
+            .inputs()
+            .definition
+            .identity_ref()
+        {
+            crate::identity::CallableIdentityRef::Declaration(identity) => {
+                identity == snapshot.identity
+            }
+            crate::identity::CallableIdentityRef::Method(method) => {
+                snapshot.identity.kind() == crate::DefinitionKind::Agent
+                    && method.implementation().subject() == snapshot.identity
+            }
+        };
+        if !owns_entry(&old)
+            || !owns_entry(&new)
+            || old.revision.inputs().definition != new.revision.inputs().definition
+        {
             return Err(super::DefinitionOperationError::IncompatibleDefinitions);
         }
         Ok(Self {

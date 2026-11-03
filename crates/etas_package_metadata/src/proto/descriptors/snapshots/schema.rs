@@ -4,17 +4,23 @@ use super::super::schema::Callable;
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct Snapshots {
     #[prost(message, repeated, tag = "1")]
-    pub agents: Vec<AgentSnapshot>,
+    pub agents: Vec<DefinitionSnapshot>,
+    #[prost(message, repeated, tag = "2")]
+    pub flows: Vec<DefinitionSnapshot>,
+    #[prost(message, repeated, tag = "3")]
+    pub methods: Vec<DefinitionSnapshot>,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
-pub struct AgentSnapshot {
+pub struct DefinitionSnapshot {
     #[prost(message, optional, tag = "1")]
     pub identity: Option<ProtoDefinitionKey>,
     #[prost(message, optional, tag = "2")]
     pub revision: Option<Revision>,
     #[prost(message, optional, tag = "3")]
     pub dependencies: Option<Dependencies>,
+    #[prost(bytes = "vec", optional, tag = "4")]
+    pub generic_environment_context: Option<Vec<u8>>,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]

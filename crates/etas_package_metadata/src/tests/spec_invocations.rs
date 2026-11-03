@@ -161,8 +161,10 @@ fn nested_method_callback_graphs_do_not_reset_the_depth_budget() {
         method.callable_arguments[0].sources = CallableValueGraph {
             sources: vec![CallableValueSource::Value(0)],
             values: vec![CallableValueNode {
+                residual_checks: Default::default(),
                 handler_requests: None,
                 behavior: CallableValueBehavior {
+                    independent_determinism: Default::default(),
                     determinism: CallableValueDeterminism::Deterministic,
                     host_requirements: Vec::new(),
                     interpreter_features: Vec::new(),

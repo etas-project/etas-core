@@ -6,7 +6,10 @@ pub mod trace;
 pub mod transition;
 
 pub use monitor::AutomatonMonitor;
-pub use product::{ProductAutomaton, ProductState, ProductStepResult, StepError};
+pub use product::{
+    ProductAutomaton, ProductState, ProductStateClassification, ProductStepLimits,
+    ProductStepResult, StepError,
+};
 pub use state::{AcceptingState, InitialState, RejectingState, State, StateSet};
 pub use symbolic::{Matcher, NoTransitionPolicy, StepResult, SymbolicAutomaton};
 pub use trace::{ProductTraceStep, TraceStep};

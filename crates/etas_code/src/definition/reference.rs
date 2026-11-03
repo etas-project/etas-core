@@ -7,19 +7,19 @@ use crate::{
 
 /// An immutable backend definition object, not executable evidence. Consumers
 /// must resolve the exact lease through their own backend, never by digest alone.
-pub trait AgentDefinitionLease: fmt::Debug + etas_core::memory::RetainedSize + Send + Sync {
+pub trait DefinitionLease: fmt::Debug + etas_core::memory::RetainedSize + Send + Sync {
     fn identity(&self) -> &DefinitionKey;
     fn revision(&self) -> &RevisionInfo;
 }
 
 #[derive(Clone, Debug)]
-pub struct AgentDefinitionRef(Arc<dyn AgentDefinitionLease>);
+pub struct DefinitionRef(Arc<dyn DefinitionLease>);
 
-impl AgentDefinitionRef {
+impl DefinitionRef {
     pub fn is_same_object(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.0, &other.0)
     }
-    pub fn from_backend(lease: Arc<dyn AgentDefinitionLease>) -> Self {
+    pub fn from_backend(lease: Arc<dyn DefinitionLease>) -> Self {
         Self(lease)
     }
     pub fn identity(&self) -> &DefinitionKey {
@@ -29,13 +29,13 @@ impl AgentDefinitionRef {
         self.0.revision()
     }
 
-    pub fn is_backed_by<T: AgentDefinitionLease + 'static>(&self, backing: &Arc<T>) -> bool {
-        let backing: Arc<dyn AgentDefinitionLease> = backing.clone();
+    pub fn is_backed_by<T: DefinitionLease + 'static>(&self, backing: &Arc<T>) -> bool {
+        let backing: Arc<dyn DefinitionLease> = backing.clone();
         Arc::ptr_eq(&self.0, &backing)
     }
 }
 
-impl etas_core::memory::RetainedSize for AgentDefinitionRef {
+impl etas_core::memory::RetainedSize for DefinitionRef {
     fn visit_retained<'a>(&'a self, visitor: &mut etas_core::memory::MemoryVisitor<'a>) {
         visitor.visit_shared_arc(&self.0);
     }
@@ -66,7 +66,7 @@ impl fmt::Display for DefinitionOperationError {
         match self {
             Self::ForeignDefinition => f.write_str("definition belongs to another backend"),
             Self::IncompatibleDefinitions => {
-                f.write_str("diff requires two snapshots of the same agent")
+                f.write_str("diff requires two snapshots of the same definition")
             }
             Self::Syntax(error) => error.fmt(f),
             Self::ResourceLimit { resource, limit } => write!(
@@ -86,7 +86,7 @@ impl std::error::Error for DefinitionOperationError {}
 pub trait CodeDefinitionOperations: Send + Sync {
     fn with_body(
         &self,
-        definition: &AgentDefinitionRef,
+        definition: &DefinitionRef,
         body: SyntaxBlockRef,
-    ) -> Result<AgentDefinitionRef, DefinitionOperationError>;
+    ) -> Result<DefinitionRef, DefinitionOperationError>;
 }

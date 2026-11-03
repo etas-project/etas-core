@@ -296,6 +296,8 @@ pub struct ProtoSpecSignature {
     pub methods: Vec<ProtoSpecMethod>,
     #[prost(message, repeated, tag = "7")]
     pub super_specs: Vec<ProtoSpecBound>,
+    #[prost(message, repeated, tag = "8")]
+    pub generic_params: Vec<ProtoActionGenericParam>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -368,6 +370,8 @@ pub struct ProtoTraceSpecConformance {
     pub spec: Vec<String>,
     #[prost(message, repeated, tag = "4")]
     pub args: Vec<ProtoType>,
+    #[prost(message, optional, tag = "5")]
+    pub definition: Option<ProtoDefinitionKey>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -530,6 +534,10 @@ pub struct ProtoEffectMetadataSection {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoEffectSummary {
+    #[prost(message, optional, tag = "11")]
+    pub residual_checks: Option<ProtoResidualReferenceSet>,
+    #[prost(message, optional, tag = "10")]
+    pub behavior: Option<ProtoCallableValueBehavior>,
     #[prost(message, optional, tag = "9")]
     pub handler_requests: Option<ProtoRequestInstantiationTemplate>,
     #[prost(message, optional, tag = "8")]
@@ -564,6 +572,16 @@ pub struct ProtoActionRequestTemplate {
     pub action: Option<ProtoEffectRef>,
     #[prost(message, optional, tag = "2")]
     pub type_bindings: Option<ProtoActionTypeBindings>,
+    #[prost(message, optional, tag = "3")]
+    pub signature: Option<ProtoActionRequestSignature>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoActionRequestSignature {
+    #[prost(message, repeated, tag = "1")]
+    pub params: Vec<ProtoType>,
+    #[prost(message, optional, tag = "2")]
+    pub output: Option<ProtoType>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -706,6 +724,8 @@ pub enum ProtoActionTraceEventSource {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoLatentFlowSummary {
+    #[prost(message, optional, tag = "3")]
+    pub residual_checks: Option<ProtoResidualReferenceSet>,
     #[prost(message, optional, tag = "1")]
     pub declared_bound: Option<ProtoEffectRow>,
     #[prost(message, optional, tag = "2")]
@@ -787,7 +807,15 @@ pub struct ProtoTraceSpecContractsSection {
 pub struct ProtoTraceSpecSummary {
     #[prost(string, repeated, tag = "1")]
     pub trace_spec: Vec<String>,
-    #[prost(message, repeated, tag = "2")]
+    #[prost(message, repeated, tag = "3")]
+    pub alternatives: Vec<ProtoTraceSpecAlternative>,
+    #[prost(message, optional, tag = "4")]
+    pub definition: Option<ProtoDefinitionKey>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoTraceSpecAlternative {
+    #[prost(message, repeated, tag = "1")]
     pub clauses: Vec<ProtoTraceSpecClause>,
 }
 
@@ -803,6 +831,24 @@ pub struct ProtoTraceSpecClause {
     pub target: Option<ProtoEffectRow>,
     #[prost(message, optional, tag = "5")]
     pub obligation: Option<ProtoEffectRow>,
+    #[prost(message, repeated, tag = "6")]
+    pub selector_bounds: Vec<ProtoTraceSelectorBound>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoTraceSelectorBound {
+    #[prost(string, tag = "1")]
+    pub operand: String,
+    #[prost(string, repeated, tag = "2")]
+    pub effect_path: Vec<String>,
+    #[prost(uint32, tag = "3")]
+    pub argument: u32,
+    #[prost(string, tag = "4")]
+    pub binding: String,
+    #[prost(string, repeated, tag = "5")]
+    pub spec_path: Vec<String>,
+    #[prost(message, repeated, tag = "6")]
+    pub spec_args: Vec<ProtoType>,
 }
 
 #[derive(Clone, PartialEq, Message)]

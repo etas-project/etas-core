@@ -3,6 +3,8 @@
 )]
 pub struct CallableValueBehavior {
     pub determinism: CallableValueDeterminism,
+    #[serde(default)]
+    pub independent_determinism: Option<CallableValueDeterminism>,
     pub host_requirements: Vec<CallableValueHostRequirement>,
     pub interpreter_features: Vec<CallableValueInterpreterFeature>,
 }

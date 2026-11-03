@@ -64,6 +64,18 @@ mod tests {
 
     use super::*;
 
+    fn test_trace_spec_key(name: &str) -> etas_code::DefinitionKey {
+        etas_code::DefinitionKey::new(
+            etas_code::PackageKey::from_canonical_fingerprint(
+                etas_code::CodeFingerprint::from_bytes([7; 32]),
+            ),
+            vec!["demo".into()],
+            vec![name.into()],
+            etas_code::DefinitionKind::Spec,
+        )
+        .unwrap()
+    }
+
     #[test]
     fn metadata_artifact_round_trips_package_metadata() {
         let metadata = sample_metadata();
@@ -74,6 +86,261 @@ mod tests {
 
         assert_eq!(header.package_id, "demo");
         assert_eq!(decoded, metadata);
+    }
+
+    #[test]
+    fn spec_generic_bounds_round_trip_and_incomplete_facts_are_rejected() {
+        let mut metadata = sample_metadata();
+        metadata
+            .public_metadata
+            .spec_signatures
+            .push(SpecSignature {
+                path: vec!["demo".into(), "Within".into()],
+                param_names: vec!["R".into()],
+                generic_params: vec![GenericParam {
+                    name: "R".into(),
+                    kind: GenericParamKind::Type,
+                    bounds: vec![SpecBound {
+                        spec: vec!["demo".into(), "Region".into()],
+                        args: vec![],
+                    }],
+                }],
+                ..Default::default()
+            });
+        let encoded = encode_sample(&metadata);
+        let (_, decoded) =
+            package_metadata_from_artifact(Path::new("package.etasmeta"), &encoded).unwrap();
+        assert_eq!(decoded, metadata);
+        metadata
+            .public_metadata
+            .spec_signatures
+            .last_mut()
+            .unwrap()
+            .generic_params
+            .clear();
+        assert!(package_metadata_to_sections(&metadata).is_err());
+    }
+
+    #[test]
+    fn residual_callable_references_round_trip_through_artifact() {
+        use etas_code::{
+            CodeFingerprint,
+            residual::identity::{
+                GenericArgumentIdentity, GenericParameterId, ObligationId, ResidualObligationRef,
+            },
+        };
+        let parameter =
+            GenericParameterId::from_canonical_fingerprint(CodeFingerprint::from_bytes([5; 32]));
+        let reference = ResidualObligationRef::new(
+            ObligationId::from_canonical_fingerprint(CodeFingerprint::from_bytes([6; 32])),
+            std::collections::BTreeMap::from([(
+                parameter,
+                GenericArgumentIdentity::Type(CodeFingerprint::from_bytes([7; 32])),
+            )]),
+        )
+        .unwrap();
+        let mut metadata = sample_metadata();
+        metadata.public_metadata.effect_summaries[0].residual_checks = vec![reference.clone()];
+        metadata.public_metadata.effect_summaries[0].latent_flows[0].residual_checks =
+            vec![reference.clone()];
+        metadata.public_metadata.effect_summaries[0].returned_callables =
+            Some(CallableValueGraph {
+                sources: vec![CallableValueSource::Value(0)],
+                values: vec![CallableValueNode {
+                    residual_checks: vec![reference],
+                    handler_requests: Some(Default::default()),
+                    behavior: CallableValueBehavior {
+                        determinism: CallableValueDeterminism::Deterministic,
+                        independent_determinism: Some(CallableValueDeterminism::Deterministic),
+                        host_requirements: vec![],
+                        interpreter_features: vec![],
+                    },
+                    parent_scope: CallableValueScope::Root,
+                    generic_params: vec![],
+                    generic_bindings: vec![],
+                    param_names: vec![],
+                    params: vec![],
+                    output: Type {
+                        name: "unit".into(),
+                        ..Default::default()
+                    },
+                    public_effects: EffectRow::default(),
+                    requested_actions: EffectRow::default(),
+                    handled_requested_actions: EffectRow::default(),
+                    default_handler_effects: Default::default(),
+                    parameter_bindings: vec![],
+                    action_trace: ActionTrace::Empty,
+                    returned_sources: None,
+                }],
+            });
+        let bytes = encode_sample(&metadata);
+        let (_, decoded) =
+            package_metadata_from_artifact(Path::new("package.etasmeta"), &bytes).unwrap();
+        assert_eq!(decoded, metadata);
+    }
+
+    #[test]
+    fn trace_spec_alternatives_round_trip_and_enforce_graph_budget() {
+        let mut metadata = sample_metadata();
+        let clause = |kind| TraceSpecClause {
+            kind,
+            pattern: Some(EffectRow {
+                effects: vec![EffectRef {
+                    path: vec!["Console".into(), "stdout_write".into()],
+                    args: Vec::new(),
+                }],
+                tail: None,
+            }),
+            ..Default::default()
+        };
+        metadata.public_metadata.trace_spec_summaries = vec![TraceSpecSummary {
+            trace_spec: vec!["demo".into(), "Safe".into()],
+            definition: test_trace_spec_key("Safe"),
+            alternatives: vec![
+                vec![
+                    clause(TraceSpecClauseKind::Allow),
+                    clause(TraceSpecClauseKind::Deny),
+                ],
+                vec![clause(TraceSpecClauseKind::Allow)],
+            ],
+        }];
+        metadata.public_metadata.trace_spec_conformances = vec![TraceSpecConformance {
+            item: vec!["demo".into(), "run".into()].into(),
+            target: TraceSpecConformanceTarget::Named {
+                spec: vec!["demo".into(), "Safe".into()],
+                definition: test_trace_spec_key("Safe"),
+                args: Vec::new(),
+            },
+        }];
+        let bytes = encode_sample(&metadata);
+        let (_, decoded) =
+            package_metadata_from_artifact(Path::new("package.etasmeta"), &bytes).unwrap();
+        assert_eq!(decoded, metadata);
+
+        metadata.public_metadata.trace_spec_summaries[0]
+            .alternatives
+            .push(Vec::new());
+        let error = package_metadata_to_sections(&metadata).unwrap_err();
+        assert!(error.to_string().contains("requires a clause"), "{error}");
+        metadata.public_metadata.trace_spec_summaries[0].alternatives =
+            vec![vec![TraceSpecClause::default(); MAX_METADATA_GRAPH_NODES]];
+        let error = package_metadata_to_sections(&metadata).unwrap_err();
+        assert!(error.to_string().contains("node count"), "{error}");
+    }
+
+    #[test]
+    fn trace_selector_bounds_round_trip_and_reject_invalid_references() {
+        let mut metadata = sample_metadata();
+        metadata.public_metadata.trace_spec_summaries = vec![TraceSpecSummary {
+            trace_spec: vec!["demo".into(), "Reports".into()],
+            definition: test_trace_spec_key("Reports"),
+            alternatives: vec![vec![TraceSpecClause {
+                kind: TraceSpecClauseKind::Allow,
+                pattern: Some(EffectRow {
+                    effects: vec![EffectRef {
+                        path: vec!["std".into(), "Fs".into(), "read".into()],
+                        args: vec![EffectArg::default()],
+                    }],
+                    tail: None,
+                }),
+                selector_bounds: vec![TraceSelectorBound {
+                    operand: TraceSelectorOperand::Pattern,
+                    effect_path: vec!["std".into(), "Fs".into(), "read".into()],
+                    argument: 0,
+                    binding: "R".into(),
+                    spec_path: vec!["app".into(), "Within".into()],
+                    spec_args: vec![Type {
+                        kind: TypeKind::Primitive,
+                        name: "string".into(),
+                        ..Default::default()
+                    }],
+                }],
+                ..Default::default()
+            }]],
+        }];
+        let bytes = encode_sample(&metadata);
+        let (_, decoded) =
+            package_metadata_from_artifact(Path::new("package.etasmeta"), &bytes).unwrap();
+        assert_eq!(decoded, metadata);
+        let clause = &mut metadata.public_metadata.trace_spec_summaries[0].alternatives[0][0];
+        clause.selector_bounds[0].operand = TraceSelectorOperand::Guard;
+        assert!(package_metadata_to_sections(&metadata).is_err());
+        let clause = &mut metadata.public_metadata.trace_spec_summaries[0].alternatives[0][0];
+        clause.selector_bounds[0].operand = TraceSelectorOperand::Pattern;
+        clause.selector_bounds[0].argument = 1;
+        assert!(package_metadata_to_sections(&metadata).is_err());
+        let clause = &mut metadata.public_metadata.trace_spec_summaries[0].alternatives[0][0];
+        clause.selector_bounds[0].argument = 0;
+        let mut nested = Type {
+            kind: TypeKind::Primitive,
+            name: "string".into(),
+            ..Default::default()
+        };
+        for _ in 0..70 {
+            nested = Type {
+                kind: TypeKind::Array,
+                children: vec![nested],
+                ..Default::default()
+            };
+        }
+        clause.selector_bounds[0].spec_args = vec![nested];
+        assert!(
+            package_metadata_to_sections(&metadata)
+                .unwrap_err()
+                .to_string()
+                .contains("maximum depth")
+        );
+        let clause = &mut metadata.public_metadata.trace_spec_summaries[0].alternatives[0][0];
+        clause.selector_bounds[0].spec_args.clear();
+        let effect = clause.pattern.as_ref().unwrap().effects[0].clone();
+        clause.pattern.as_mut().unwrap().effects.push(effect);
+        assert!(
+            package_metadata_to_sections(&metadata)
+                .unwrap_err()
+                .to_string()
+                .contains("ambiguous")
+        );
+        let clause = &mut metadata.public_metadata.trace_spec_summaries[0].alternatives[0][0];
+        clause.pattern.as_mut().unwrap().effects.pop();
+        clause.selector_bounds[0].spec_path.clear();
+        assert!(package_metadata_to_sections(&metadata).is_err());
+    }
+
+    #[test]
+    fn empty_trace_choice_is_rejected_before_encoding() {
+        let mut metadata = sample_metadata();
+        metadata.public_metadata.effect_summaries[0].action_trace = ActionTrace::Choice(Vec::new());
+        let error = package_metadata_to_sections(&metadata).unwrap_err();
+        assert!(
+            error.to_string().contains("choice requires an alternative"),
+            "{error}"
+        );
+        metadata.public_metadata.effect_summaries[0].action_trace = ActionTrace::Seq(Vec::new());
+        let bytes = encode_sample(&metadata);
+        let (_, decoded) =
+            package_metadata_from_artifact(Path::new("package.etasmeta"), &bytes).unwrap();
+        assert_eq!(decoded, metadata);
+    }
+
+    #[test]
+    fn widened_parameter_calls_consume_the_artifact_graph_budget() {
+        let mut metadata = sample_metadata();
+        metadata.public_metadata.effect_summaries[0].action_trace = ActionTrace::Widened {
+            actions: Vec::new(),
+            parameter_calls: vec!["callback".into(); MAX_METADATA_GRAPH_NODES],
+        };
+        let error = package_metadata_to_sections(&metadata).unwrap_err();
+        assert!(error.to_string().contains("maximum node count"), "{error}");
+    }
+
+    #[test]
+    fn empty_parameter_call_is_rejected_before_encoding() {
+        let mut metadata = sample_metadata();
+        metadata.public_metadata.effect_summaries[0].action_trace = ActionTrace::ParameterCall {
+            parameter: String::new().into(),
+        };
+        let error = package_metadata_to_sections(&metadata).unwrap_err();
+        assert!(error.to_string().contains("parameter is empty"), "{error}");
     }
 
     #[test]
@@ -791,6 +1058,8 @@ mod tests {
                     ..Default::default()
                 }],
                 effect_summaries: vec![EffectSummary {
+                    residual_checks: vec![],
+                    behavior: None,
                     handler_requests: None,
                     returned_callables: None,
                     default_handler_effects: None,
@@ -826,6 +1095,7 @@ mod tests {
                         tail: None,
                     },
                     latent_flows: vec![LatentFlowSummary {
+                        residual_checks: vec![],
                         declared_bound: EffectRow {
                             effects: vec![EffectRef {
                                 path: vec!["Network".to_owned()],

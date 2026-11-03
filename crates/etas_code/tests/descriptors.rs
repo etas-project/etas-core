@@ -15,6 +15,32 @@ fn graph(input: DescriptorGraphInput) -> DescriptorGraph {
     DescriptorGraph::new(input, DescriptorLimits::default()).unwrap()
 }
 
+#[test]
+fn multiple_row_fingerprints_share_one_work_budget() {
+    let graph = graph(DescriptorGraphInput {
+        rows: vec![EffectRowInfo {
+            effects: vec![],
+            tail: None,
+        }],
+        ..Default::default()
+    });
+    let root = EffectRowInfoRef(0);
+    let mut budget = DescriptorFingerprintBudget::new(1);
+    assert_eq!(
+        graph
+            .row_fingerprint_with_budget(root, &mut budget)
+            .unwrap(),
+        graph.row_fingerprint(root).unwrap()
+    );
+    assert!(matches!(
+        graph.row_fingerprint_with_budget(root, &mut budget),
+        Err(DescriptorError::Limit {
+            resource: "fingerprint work",
+            limit: 1
+        })
+    ));
+}
+
 fn tree() -> DescriptorGraphInput {
     let definition = key("Tree", DefinitionKind::Type);
     DescriptorGraphInput {
@@ -57,6 +83,48 @@ fn tree() -> DescriptorGraphInput {
         rows: vec![],
         traces: vec![],
     }
+}
+
+#[test]
+fn merged_descriptor_binders_preserve_identity_and_reject_conflicts() {
+    let original = graph(tree());
+    let roots = [DescriptorNode::Type(TypeInfoRef(0))];
+    let (mut combined, first) = original
+        .relocate_roots(&roots, DescriptorGraphOffsets::default())
+        .unwrap();
+    let offsets = DescriptorGraphOffsets {
+        types: combined.types.len() as u32,
+        rows: combined.rows.len() as u32,
+        binders: combined.binders.len() as u32,
+        traces: combined.traces.len() as u32,
+    };
+    let (second, second_roots) = original.relocate_roots(&roots, offsets).unwrap();
+    combined.types.extend(second.types);
+    combined.rows.extend(second.rows);
+    combined.binders.extend(second.binders);
+    combined.traces.extend(second.traces);
+    assert!(DescriptorGraph::new(combined.clone(), Default::default()).is_err());
+    let merged =
+        DescriptorGraph::new_with_merged_binders(combined.clone(), Default::default()).unwrap();
+    assert_eq!(merged.data().binders.len(), 1);
+    let (DescriptorNode::Type(first), DescriptorNode::Type(second)) = (first[0], second_roots[0])
+    else {
+        panic!("type roots");
+    };
+    assert_eq!(
+        merged.type_fingerprint(first).unwrap(),
+        original.type_fingerprint(TypeInfoRef(0)).unwrap()
+    );
+    assert_eq!(
+        merged.type_fingerprint(second).unwrap(),
+        original.type_fingerprint(TypeInfoRef(0)).unwrap()
+    );
+    let mut conflict = combined.clone();
+    conflict.binders[1].bounds[0].definition = key("Different", DefinitionKind::Spec);
+    assert!(DescriptorGraph::new_with_merged_binders(conflict, Default::default()).is_err());
+    let mut malformed = combined;
+    malformed.binders[1].bounds[0].arguments[0] = TypeInfoRef(u32::MAX);
+    assert!(DescriptorGraph::new_with_merged_binders(malformed, Default::default()).is_err());
 }
 
 #[test]
