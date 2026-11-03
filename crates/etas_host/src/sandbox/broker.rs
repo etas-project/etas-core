@@ -81,6 +81,19 @@ impl SandboxBroker {
         self.filesystem.read_dir(root, path)
     }
 
+    pub(crate) fn read_dir_limited_controlled(
+        &self,
+        root: &WorkspaceRoot,
+        path: &Path,
+        max_entries: usize,
+        max_bytes: usize,
+        check: &mut impl FnMut() -> Result<(), HostError>,
+    ) -> Result<crate::BoundedDirectoryList<String>, HostError> {
+        self.ensure_not_deny_all()?;
+        self.filesystem
+            .read_dir_limited_controlled(root, path, max_entries, max_bytes, check)
+    }
+
     pub fn stat(
         &self,
         root: &WorkspaceRoot,

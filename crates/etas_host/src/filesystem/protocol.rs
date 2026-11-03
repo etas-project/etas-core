@@ -31,6 +31,11 @@ pub enum FilesystemOperation {
     ReadDir {
         path: WorkspacePathRef,
     },
+    ReadDirLimited {
+        path: WorkspacePathRef,
+        max_entries: usize,
+        max_bytes: usize,
+    },
     Stat {
         path: WorkspacePathRef,
     },
@@ -53,9 +58,19 @@ pub enum BoundedFileRead {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum BoundedDirectoryList<T = WorkspacePathRef> {
+    Complete(Vec<T>),
+    LimitExceeded {
+        max_entries: usize,
+        max_bytes: usize,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FilesystemEntry {
     Bytes(Vec<u8>),
     LimitedRead(crate::BoundedFileRead),
+    LimitedEntries(BoundedDirectoryList),
     Entries(Vec<WorkspacePathRef>),
     Stat(FilesystemStat),
     Unit,

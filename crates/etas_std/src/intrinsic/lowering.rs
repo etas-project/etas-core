@@ -23,6 +23,10 @@ pub enum LoweringHint {
 
 #[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum StdActionReducer {
+    BoundedDirectoryList {
+        entry_limit_parameter: usize,
+        byte_limit_parameter: usize,
+    },
     BoundedFileRead {
         limit_parameter: usize,
     },

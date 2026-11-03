@@ -5,6 +5,6 @@ mod protocol;
 pub use client::FilesystemClient;
 pub use local::LocalFilesystemClient;
 pub use protocol::{
-    BoundedFileRead, FilesystemEntry, FilesystemOperation, FilesystemRequest, FilesystemResponse,
-    FilesystemStat,
+    BoundedDirectoryList, BoundedFileRead, FilesystemEntry, FilesystemOperation, FilesystemRequest,
+    FilesystemResponse, FilesystemStat,
 };
