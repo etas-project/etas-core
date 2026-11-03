@@ -12,6 +12,25 @@ impl CallableValueGraph {
     }
 }
 
+impl crate::PublishedMethod {
+    pub fn remap_paths(
+        &mut self,
+        mut remap: impl FnMut(CallableValuePathKind, &[String]) -> Vec<String>,
+    ) {
+        let mut parts = vec![
+            Part::Type(&mut self.self_type),
+            Part::Graph(&mut self.callable),
+        ];
+        for param in &mut self.owner_params {
+            for bound in &mut param.bounds {
+                bound.spec = remap(CallableValuePathKind::Spec, &bound.spec);
+                parts.extend(bound.args.iter_mut().map(Part::Type));
+            }
+        }
+        remap_parts(parts, &mut remap);
+    }
+}
+
 impl CallableRequestTarget {
     pub fn remap_paths(
         &mut self,
