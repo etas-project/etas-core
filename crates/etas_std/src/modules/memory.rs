@@ -207,23 +207,31 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             intrinsic_id: intrinsic::runtime::MEMORY_RELATED_TO,
         },
     );
-    builder.symbol(
+    builder.symbol_with_intrinsic(
         module,
         "limit",
         StdSymbolKind::Flow,
-        StdDecl::Flow(FlowDecl {
-            name: "limit".to_owned(),
-            type_params: vec![crate::StdGenericParam::new("V")],
-            params: vec![
-                StdType::parse("MemorySelection[V]"),
-                StdType::parse("std.runtime.limits.Limit"),
-            ],
-            output: StdType::parse("MemorySelection[V]"),
-            public_effects: Vec::new(),
-            requested_actions: Vec::new(),
-            source_method: None,
-        }),
+        StdDecl::Flow(
+            FlowDecl {
+                name: "limit".to_owned(),
+                type_params: vec![crate::StdGenericParam::new("V")],
+                params: vec![
+                    StdType::parse("MemorySelection[V]"),
+                    StdType::parse("std.runtime.limits.Limit"),
+                ],
+                output: StdType::parse("MemorySelection[V]"),
+                public_effects: Vec::new(),
+                requested_actions: Vec::new(),
+                source_method: None,
+            }
+            .with_value_method("MemorySelection[V]", "limit"),
+        ),
         "Limit a typed persistent-memory selection without performing additional host actions.",
+        Some(IntrinsicDescriptor::runtime(
+            intrinsic::runtime::MEMORY_SELECTION_LIMIT,
+            &["std", "memory", "limit"],
+            IntrinsicPurity::Pure,
+        )),
     );
     register_store_flow(
         builder,
@@ -381,18 +389,21 @@ fn register_store_flow(
         module,
         name,
         StdSymbolKind::Flow,
-        StdDecl::Flow(FlowDecl {
-            name: name.to_owned(),
-            type_params: type_params
-                .iter()
-                .map(|name| crate::StdGenericParam::new(name))
-                .collect(),
-            params,
-            output,
-            public_effects: Vec::new(),
-            requested_actions: memory_effects(name),
-            source_method: None,
-        }),
+        StdDecl::Flow(
+            FlowDecl {
+                name: name.to_owned(),
+                type_params: type_params
+                    .iter()
+                    .map(|name| crate::StdGenericParam::new(name))
+                    .collect(),
+                params,
+                output,
+                public_effects: Vec::new(),
+                requested_actions: memory_effects(name),
+                source_method: None,
+            }
+            .with_value_method("Store[K, V]", name),
+        ),
         docs,
         Some(IntrinsicDescriptor {
             id: StdIntrinsicId(intrinsic_id),

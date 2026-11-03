@@ -76,15 +76,21 @@ pub fn register(builder: &mut StdRegistryBuilder) {
                 intrinsic::runtime::PROMPT_NEW,
             ),
             "system" => (
-                declaration.with_value_method("Prompt", name),
+                declaration
+                    .with_value_method("Prompt", name)
+                    .with_method_operation(FlowSourceMethodOperation::RejectSecretData),
                 intrinsic::runtime::PROMPT_SYSTEM,
             ),
             "user" => (
-                declaration.with_value_method("Prompt", name),
+                declaration
+                    .with_value_method("Prompt", name)
+                    .with_method_operation(FlowSourceMethodOperation::RejectSecretData),
                 intrinsic::runtime::PROMPT_USER,
             ),
             "assistant" => (
-                declaration.with_value_method("Prompt", name),
+                declaration
+                    .with_value_method("Prompt", name)
+                    .with_method_operation(FlowSourceMethodOperation::RejectSecretData),
                 intrinsic::runtime::PROMPT_ASSISTANT,
             ),
             "data" => (

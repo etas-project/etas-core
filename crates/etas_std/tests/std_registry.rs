@@ -826,10 +826,13 @@ fn registry_declares_memory_support_types_and_intrinsics() {
     );
     assert!(flow.public_effects.is_empty());
     assert!(flow.requested_actions.is_empty());
-    assert!(
-        limit.intrinsic.is_none(),
-        "memory selection limit is a pure support method, not a runtime intrinsic"
+    let descriptor = limit.intrinsic.as_ref().unwrap();
+    assert_eq!(
+        descriptor.id,
+        StdIntrinsicId(intrinsic::runtime::MEMORY_SELECTION_LIMIT)
     );
+    assert_eq!(descriptor.purity, etas_std::IntrinsicPurity::Pure);
+    assert_eq!(flow.source_method.as_ref().unwrap().name, "limit");
 }
 
 #[test]

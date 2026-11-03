@@ -65,6 +65,7 @@ pub const FS_READ_BYTES_LIMITED: u32 = 1_139;
 pub const FS_ROOT: u32 = 1_140;
 pub const FS_RELATIVE_NAME: u32 = 1_141;
 pub const FS_LIST_LIMITED: u32 = 1_142;
+pub const MEMORY_SELECTION_LIMIT: u32 = 1_143;
 pub const CODE_PARSE_BODY: u32 = 1_200;
 pub const CODE_FORMAT: u32 = 1_201;
 pub const CODE_WITH_BODY: u32 = 1_202;
