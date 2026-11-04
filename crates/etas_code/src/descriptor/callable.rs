@@ -38,6 +38,35 @@ pub enum GenericOwner {
 }
 
 impl GenericOwner {
+    pub fn is_portable_parameter_owner(&self) -> bool {
+        match self {
+            Self::Declaration(owner) => matches!(
+                owner.kind(),
+                crate::DefinitionKind::Type
+                    | crate::DefinitionKind::Spec
+                    | crate::DefinitionKind::Agent
+                    | crate::DefinitionKind::Flow
+                    | crate::DefinitionKind::Tool
+            ),
+            Self::Method(_) | Self::Implementation(_) => true,
+            Self::ImplementationPattern(_) => false,
+        }
+    }
+
+    pub fn fingerprint(&self) -> crate::CodeFingerprint {
+        let mut encoder =
+            crate::identity::canonical::CanonicalEncoder::new("etas.code.generic-owner.v1");
+        let (kind, identity) = match self {
+            Self::Declaration(owner) => (0, owner.fingerprint()),
+            Self::Method(owner) => (1, owner.fingerprint()),
+            Self::Implementation(owner) => (2, owner.fingerprint()),
+            Self::ImplementationPattern(owner) => (3, owner.fingerprint()),
+        };
+        encoder.tag(kind);
+        encoder.fingerprint(identity);
+        encoder.finish()
+    }
+
     pub(crate) fn alpha_scoped(&self) -> bool {
         matches!(
             self,

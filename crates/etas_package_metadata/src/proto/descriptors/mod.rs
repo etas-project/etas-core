@@ -19,8 +19,59 @@ use etas_code::descriptor::{
 use crate::{MAX_METADATA_UNCOMPRESSED_SECTION_SIZE, MetadataArtifactError, PACKAGE_METADATA_FILE};
 
 pub(super) use budget::{validate_model, validate_wire};
+pub(super) use schema::GenericOwner as ProtoGenericOwner;
 pub(super) use schema::Graph as ProtoDescriptorGraph;
 pub(super) use schema::Method as ProtoMethodIdentity;
+
+pub(super) fn encode_generic_owner(
+    owner: &etas_code::descriptor::GenericOwner,
+) -> ProtoGenericOwner {
+    effects::encode_owner(owner)
+}
+pub(super) fn decode_generic_owner(
+    owner: ProtoGenericOwner,
+) -> Result<etas_code::descriptor::GenericOwner, MetadataArtifactError> {
+    effects::decode_owner(owner)
+}
+
+pub(super) fn validate_generic_owner(
+    owner: &ProtoGenericOwner,
+    budget: &mut super::budget::MetadataGraphBudget,
+) -> Result<(), MetadataArtifactError> {
+    use schema::generic_owner::Kind;
+    match &owner.kind {
+        Some(Kind::Declaration(key) | Kind::ImplementationPattern(key)) => {
+            header_budget::key(Some(key), budget)
+        }
+        Some(Kind::Method(method)) => header_budget::method(method, budget),
+        Some(Kind::Implementation(owner)) => {
+            budget.charge(owner.module.len(), "generic implementation module")?;
+            header_budget::key(owner.subject.as_ref(), budget)?;
+            header_budget::key(owner.selected_spec.as_ref(), budget)
+        }
+        None => Err(invalid("type parameter has no generic owner")),
+    }
+}
+
+pub(super) fn validate_model_generic_owner(
+    owner: &etas_code::descriptor::GenericOwner,
+    budget: &mut super::budget::MetadataGraphBudget,
+) -> Result<(), MetadataArtifactError> {
+    use etas_code::descriptor::GenericOwner;
+    let units = |key: &etas_code::DefinitionKey| 1 + key.module().len() + key.declaration().len();
+    let count = match owner {
+        GenericOwner::Declaration(key) | GenericOwner::ImplementationPattern(key) => units(key),
+        GenericOwner::Method(method) => {
+            return validate_model_method_identity(method, budget);
+        }
+        GenericOwner::Implementation(owner) => {
+            1 + owner.module().len()
+                + units(owner.subject())
+                + owner.selected_spec().map_or(0, units)
+        }
+    };
+    budget.charge(count, "generic type parameter owner")
+}
 
 pub(super) fn encode_method_identity(method: &etas_code::MethodId) -> ProtoMethodIdentity {
     identities::encode_method(method)

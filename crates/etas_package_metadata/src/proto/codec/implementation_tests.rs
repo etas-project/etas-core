@@ -8,6 +8,57 @@ use etas_code::{
     MethodId, PackageKey,
 };
 
+#[test]
+fn structured_type_parameter_roundtrip_preserves_owner_and_position() {
+    use etas_code::{
+        CodeFingerprint, DefinitionKey, DefinitionKind, ImplementationKey, MethodId, PackageKey,
+        descriptor::GenericOwner,
+    };
+    let package = PackageKey::from_name_and_version("library", "1.0.0").unwrap();
+    let subject = DefinitionKey::new(
+        package,
+        vec!["api".into()],
+        vec!["Container".into()],
+        DefinitionKind::Type,
+    )
+    .unwrap();
+    let implementation = ImplementationKey::new(
+        package,
+        vec!["api".into()],
+        subject,
+        None,
+        CodeFingerprint::from_bytes([7; 32]),
+    )
+    .unwrap();
+    let method = MethodId::new(implementation.clone(), "replace".into()).unwrap();
+    let mut wires = Vec::new();
+    for owner in [
+        GenericOwner::Implementation(implementation),
+        GenericOwner::Method(method),
+    ] {
+        let ty = Type {
+            kind: TypeKind::Parameter,
+            parameter: Some(GenericTypeParameter { owner, position: 0 }),
+            ..Default::default()
+        };
+        let wire = type_to_proto(&ty);
+        let bytes = wire.encode_to_vec();
+        assert_eq!(
+            type_from_proto(ProtoType::decode(bytes.as_slice()).unwrap()).unwrap(),
+            ty
+        );
+        let mut missing = wire.clone();
+        missing.parameter = None;
+        assert!(type_from_proto(missing).is_err());
+        let mut wrong_kind = wire;
+        wrong_kind.kind = "primitive".into();
+        wrong_kind.name = "unit".into();
+        assert!(type_from_proto(wrong_kind).is_err());
+        wires.push(bytes);
+    }
+    assert_ne!(wires[0], wires[1]);
+}
+
 fn published_method() -> PublishedMethod {
     let package = PackageKey::from_canonical_fingerprint(CodeFingerprint::from_bytes([3; 32]));
     let subject = DefinitionKey::new(

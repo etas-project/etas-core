@@ -19,7 +19,7 @@ struct Encoder(blake3::Hasher);
 impl Encoder {
     fn new() -> Self {
         Self(blake3::Hasher::new_derive_key(
-            "etas.metadata.callable-value-input.v5",
+            "etas.metadata.callable-value-input.v6",
         ))
     }
     fn byte(&mut self, value: u8) {
@@ -129,7 +129,13 @@ impl Encoder {
                         TypeKind::MemoryRegion => 29,
                         TypeKind::ResourceHandle => 30,
                         TypeKind::Existential => 31,
+                        TypeKind::Parameter => 32,
                     });
+                    self.option(ty.parameter.is_some());
+                    if let Some(parameter) = &ty.parameter {
+                        self.0.update(parameter.owner.fingerprint().as_bytes());
+                        self.number(parameter.position as usize);
+                    }
                     self.text(&ty.name);
                     self.path(&ty.path);
                     self.number(ty.children.len());

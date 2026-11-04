@@ -291,6 +291,7 @@ pub enum ActionArgKind {
 )]
 pub struct Type {
     pub kind: TypeKind,
+    pub parameter: Option<GenericTypeParameter>,
     pub name: String,
     pub path: Vec<String>,
     pub children: Vec<Type>,
@@ -298,6 +299,14 @@ pub struct Type {
     pub effects: Option<EffectRow>,
     pub produced_effects: Option<EffectRow>,
     pub bounds: Vec<SpecBound>,
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub struct GenericTypeParameter {
+    pub owner: etas_code::descriptor::GenericOwner,
+    pub position: u32,
 }
 
 #[derive(
@@ -870,6 +879,7 @@ pub enum TypeKind {
     #[default]
     Primitive,
     Var,
+    Parameter,
     Named,
     Applied,
     Alias,

@@ -457,6 +457,9 @@ impl ModelGraphValidator {
     fn ty(&mut self, ty: &Type, depth: usize) -> Result<(), MetadataArtifactError> {
         self.budget.enter(depth, "type graph")?;
         crate::type_validation::validate_type_shape(ty)?;
+        if let Some(parameter) = &ty.parameter {
+            super::descriptors::validate_model_generic_owner(&parameter.owner, &mut self.budget)?;
+        }
         for bound in &ty.bounds {
             self.spec_bound_at_depth(bound, depth + 1)?;
         }
@@ -941,6 +944,13 @@ impl ProtoGraphValidator {
 
     fn ty(&mut self, ty: &proto::ProtoType, depth: usize) -> Result<(), MetadataArtifactError> {
         self.budget.enter(depth, "type graph")?;
+        if let Some(owner) = ty
+            .parameter
+            .as_ref()
+            .and_then(|parameter| parameter.owner.as_ref())
+        {
+            super::descriptors::validate_generic_owner(owner, &mut self.budget)?;
+        }
         for bound in &ty.bounds {
             self.spec_bound_at_depth(bound, depth + 1)?;
         }
