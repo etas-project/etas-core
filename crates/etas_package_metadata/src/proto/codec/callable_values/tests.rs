@@ -597,7 +597,7 @@ fn object_evidence_round_trips_bound_and_concrete_member_witnesses() {
             package,
             vec!["api".into()],
             declaration("Label", etas_code::DefinitionKind::Type),
-            Some(declaration("Named", etas_code::DefinitionKind::Spec)),
+            None,
             etas_code::CodeFingerprint::of_bytes("test.object-member.header", b"Label~Named"),
         )
         .unwrap(),

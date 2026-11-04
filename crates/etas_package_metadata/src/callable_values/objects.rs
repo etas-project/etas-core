@@ -72,9 +72,7 @@ impl CallableValueGraph {
                 }
                 if let ExistentialWitnessTarget::Implementation { method, value } = &witness.target
                 {
-                    if method.name() != witness.member
-                        || method.implementation().selected_spec().is_none()
-                    {
+                    if method.name() != witness.member {
                         return Err(invalid(
                             "object member target has a different checked method identity",
                         ));
