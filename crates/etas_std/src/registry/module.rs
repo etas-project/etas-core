@@ -1,4 +1,7 @@
-use crate::{CompletionMetadata, DocsMetadata, IntrinsicDescriptor, StdDecl};
+use crate::{
+    CompletionMetadata, DocsMetadata, IntrinsicDescriptor, StdDecl, StdImplementationRef,
+    TextCompatibilityDescriptor,
+};
 
 etas_core::id_type!(StdModuleId);
 etas_core::id_type!(StdSymbolId);
@@ -6,13 +9,19 @@ etas_core::id_type!(StdSymbolId);
 #[derive(Clone, Debug, Default, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct StdRegistryVersion {
     pub contract: String,
+    pub text: TextCompatibilityDescriptor,
 }
 
 impl StdRegistryVersion {
     pub fn phase1() -> Self {
         Self {
             contract: "phase1".to_owned(),
+            text: TextCompatibilityDescriptor::current(),
         }
+    }
+
+    pub fn compatibility_identity(&self) -> String {
+        format!("{}|{}", self.contract, self.text.identity())
     }
 }
 
@@ -33,6 +42,7 @@ pub struct StdSymbol {
     pub kind: StdSymbolKind,
     pub decl: StdDecl,
     pub intrinsic: Option<IntrinsicDescriptor>,
+    pub implementation: Option<StdImplementationRef>,
     pub docs: DocsMetadata,
     pub completion: CompletionMetadata,
 }

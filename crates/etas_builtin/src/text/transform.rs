@@ -4,12 +4,16 @@ use etas_std::{StdIntrinsicId, intrinsic::pure};
 
 use crate::{BuiltinError, BuiltinValue};
 
+use super::{
+    case::{CaseMapping, CaseOutput, map_case},
+    ranges::{TextTrimKind, trim_range_kind},
+};
+
 #[derive(Clone, Copy, Debug)]
 pub enum TextTransform {
     Trim,
     Lowercase,
     Uppercase,
-    Lines,
     Split,
 }
 
@@ -19,7 +23,6 @@ pub enum TextOutput<'a> {
 }
 
 pub enum TextParts<'a> {
-    Lines(std::str::Lines<'a>),
     Split(std::str::Split<'a, &'a str>),
 }
 
@@ -28,14 +31,12 @@ impl<'a> Iterator for TextParts<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
-            Self::Lines(parts) => parts.next(),
             Self::Split(parts) => parts.next(),
         }
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         match self {
-            Self::Lines(parts) => parts.size_hint(),
             Self::Split(parts) => parts.size_hint(),
         }
     }
@@ -60,7 +61,6 @@ impl TextTransform {
             pure::TEXT_TRIM => Some(Self::Trim),
             pure::TEXT_LOWERCASE => Some(Self::Lowercase),
             pure::TEXT_UPPERCASE => Some(Self::Uppercase),
-            pure::TEXT_LINES => Some(Self::Lines),
             pure::TEXT_SPLIT => Some(Self::Split),
             _ => None,
         }
@@ -81,10 +81,20 @@ impl TextTransform {
             });
         }
         Ok(match self {
-            Self::Trim => TextOutput::String(Cow::Borrowed(args[0].trim())),
-            Self::Lowercase => TextOutput::String(Cow::Owned(args[0].to_lowercase())),
-            Self::Uppercase => TextOutput::String(Cow::Owned(args[0].to_uppercase())),
-            Self::Lines => TextOutput::Array(TextParts::Lines(args[0].lines())),
+            Self::Trim => TextOutput::String(Cow::Borrowed(
+                &args[0][trim_range_kind(args[0], TextTrimKind::Both)],
+            )),
+            Self::Lowercase | Self::Uppercase => {
+                let mapping = if matches!(self, Self::Lowercase) {
+                    CaseMapping::Lowercase
+                } else {
+                    CaseMapping::Uppercase
+                };
+                match map_case(args[0], mapping)? {
+                    CaseOutput::Unchanged => TextOutput::String(Cow::Borrowed(args[0])),
+                    CaseOutput::Changed(output) => TextOutput::String(Cow::Owned(output)),
+                }
+            }
             Self::Split => TextOutput::Array(TextParts::Split(args[0].split(args[1]))),
         })
     }

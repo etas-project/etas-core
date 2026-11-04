@@ -22,10 +22,11 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         ("PriorityQueue", &["T", "P"][..]),
         ("OrderedMap", &["K", "V"][..]),
         ("OrderedSet", &["T"][..]),
+        ("Iter", &["T"][..]),
     ] {
         let declaration = TypeDecl::generic(name, params, TypeDeclKind::Support);
         let declaration = match name {
-            "Deque" | "Queue" | "Stack" | "OrderedSet" => declaration.iterable_elements(0),
+            "Deque" | "Queue" | "Stack" | "OrderedSet" | "Iter" => declaration.iterable_elements(0),
             "OrderedMap" => declaration.iterable_entries(0, 1),
             "PriorityQueue" => declaration.iterable_entries(1, 0),
             _ => declaration,
@@ -42,6 +43,11 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         let declaration = match role {
             Some(role) => declaration.runtime_role(role),
             None => declaration,
+        };
+        let declaration = if name == "Iter" {
+            declaration.intrinsic_only()
+        } else {
+            declaration
         };
         let symbol = builder.symbol(
             module,

@@ -46,7 +46,7 @@ fn invalid_receiver_bindings_fail_at_encode_and_decode() {
     for method in invalid {
         assert!(crate::spec_receivers::validate(&method).is_err());
         assert!(spec_method_from_proto(spec_method_to_proto(&method)).is_err());
-        let mut metadata = PackageMetadata::default();
+        let mut metadata = crate::test_package_metadata();
         metadata
             .public_metadata
             .spec_signatures

@@ -1,11 +1,16 @@
 use crate::{
-    CompletionMetadata, DocsMetadata, IntrinsicDescriptor, StdDecl, StdImplFact, StdModule,
-    StdModuleId, StdRegistry, StdRegistryValidationError, StdRegistryVersion, StdSymbol,
-    StdSymbolId, StdSymbolKind,
+    CompletionMetadata, DocsMetadata, IntrinsicDescriptor, StdDecl, StdImplFact,
+    StdImplementationRef, StdModule, StdModuleId, StdRegistry, StdRegistryValidationError,
+    StdRegistryVersion, StdSymbol, StdSymbolId, StdSymbolKind,
 };
 
 pub struct StdRegistryBuilder {
     registry: StdRegistry,
+}
+
+pub(crate) struct StdSymbolImplementation {
+    pub intrinsic: Option<IntrinsicDescriptor>,
+    pub implementation: StdImplementationRef,
 }
 
 impl StdRegistryBuilder {
@@ -45,6 +50,50 @@ impl StdRegistryBuilder {
         summary: &str,
         intrinsic: Option<IntrinsicDescriptor>,
     ) -> StdSymbolId {
+        let implementation = intrinsic
+            .as_ref()
+            .map(|descriptor| StdImplementationRef::Primitive {
+                intrinsic: descriptor.id,
+            });
+        self.symbol_with_implementation(
+            module,
+            name,
+            kind,
+            decl,
+            summary,
+            (intrinsic, implementation),
+        )
+    }
+
+    pub(crate) fn symbol_with_source_implementation(
+        &mut self,
+        module: StdModuleId,
+        name: &str,
+        kind: StdSymbolKind,
+        decl: StdDecl,
+        summary: &str,
+        source: StdSymbolImplementation,
+    ) -> StdSymbolId {
+        self.symbol_with_implementation(
+            module,
+            name,
+            kind,
+            decl,
+            summary,
+            (source.intrinsic, Some(source.implementation)),
+        )
+    }
+
+    fn symbol_with_implementation(
+        &mut self,
+        module: StdModuleId,
+        name: &str,
+        kind: StdSymbolKind,
+        decl: StdDecl,
+        summary: &str,
+        runtime: (Option<IntrinsicDescriptor>, Option<StdImplementationRef>),
+    ) -> StdSymbolId {
+        let (intrinsic, implementation) = runtime;
         let id = StdSymbolId(self.registry.symbols().count() as u32);
         let module_path = self
             .registry
@@ -70,6 +119,7 @@ impl StdRegistryBuilder {
             kind,
             decl,
             intrinsic,
+            implementation,
             docs: DocsMetadata::summary(summary),
             completion: CompletionMetadata::new(name, summary),
         });
@@ -110,6 +160,7 @@ impl StdRegistryBuilder {
             completion: CompletionMetadata::new(&declaration.name, summary),
             decl: StdDecl::Flow(declaration),
             intrinsic: None,
+            implementation: None,
             docs: DocsMetadata::summary(summary),
         });
         Ok(id)

@@ -32,16 +32,6 @@ fn dispatches_control_and_text_pure_intrinsics_by_std_id() {
     );
     assert_eq!(
         call_pure_intrinsic(
-            StdIntrinsicId(intrinsic::pure::TEXT_LINES),
-            &[BuiltinValue::String("a\nb".to_owned())],
-        ),
-        Ok(BuiltinValue::Array(vec![
-            BuiltinValue::String("a".to_owned()),
-            BuiltinValue::String("b".to_owned()),
-        ]))
-    );
-    assert_eq!(
-        call_pure_intrinsic(
             StdIntrinsicId(intrinsic::pure::TEXT_PARSE_I32),
             &[BuiltinValue::String("42".to_owned())],
         ),

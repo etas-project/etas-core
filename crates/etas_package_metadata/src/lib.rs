@@ -47,6 +47,14 @@ pub use proto::{
     package_metadata_from_package_graph_payload, package_metadata_to_sections,
 };
 
+#[cfg(test)]
+pub(crate) fn test_package_metadata() -> PackageMetadata {
+    PackageMetadata {
+        std_compatibility: "test-std".into(),
+        ..Default::default()
+    }
+}
+
 pub fn definition_descriptors_fingerprint(
     set: &etas_code::descriptor::DefinitionDescriptorSet,
 ) -> etas_code::CodeFingerprint {
@@ -882,6 +890,7 @@ mod tests {
     fn sample_metadata() -> PackageMetadata {
         PackageMetadata {
             version: 1,
+            std_compatibility: "test-std".to_owned(),
             package: PackageIdentity {
                 name: "demo".to_owned(),
                 version: "0.1.0".to_owned(),
@@ -893,6 +902,7 @@ mod tests {
                     version: "1.2.3".to_owned(),
                     edition: "2026".to_owned(),
                 },
+                std_compatibility: "test-std".to_owned(),
                 import_root: "dep".to_owned(),
                 source: ResolvedDependencySource::GitHubRelease {
                     repo: "owner/dep".to_owned(),

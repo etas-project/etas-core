@@ -70,6 +70,7 @@ impl MetadataGraphBudget {
 pub(crate) fn validate_package_metadata_graph(
     metadata: &PackageMetadata,
 ) -> Result<(), MetadataArtifactError> {
+    validate_std_compatibility(&metadata.std_compatibility)?;
     let mut validator = ModelGraphValidator::default();
     validator.budget.enter(0, "package graph")?;
     validator.public_metadata(&metadata.public_metadata)?;
@@ -82,6 +83,7 @@ pub(crate) fn validate_package_metadata_graph(
 pub(crate) fn validate_proto_package_metadata_graph(
     metadata: &proto::ProtoPackageGraphSection,
 ) -> Result<(), MetadataArtifactError> {
+    validate_std_compatibility(&metadata.std_compatibility)?;
     let mut validator = ProtoGraphValidator::default();
     validator.budget.enter(0, "package graph")?;
     if let Some(public_metadata) = metadata.public_metadata.as_ref() {
@@ -154,6 +156,7 @@ impl ModelGraphValidator {
         dependency: &ResolvedDependency,
         depth: usize,
     ) -> Result<(), MetadataArtifactError> {
+        validate_std_compatibility(&dependency.std_compatibility)?;
         self.budget.enter(depth, "dependency graph")?;
         self.public_metadata(&dependency.public_metadata)?;
         for child in &dependency.dependencies {
@@ -628,6 +631,7 @@ impl ProtoGraphValidator {
         dependency: &proto::ProtoResolvedDependency,
         depth: usize,
     ) -> Result<(), MetadataArtifactError> {
+        validate_std_compatibility(&dependency.std_compatibility)?;
         self.budget.enter(depth, "dependency graph")?;
         if let Some(public_metadata) = dependency.public_metadata.as_ref() {
             self.public_metadata(public_metadata)?;
@@ -1075,6 +1079,15 @@ impl ProtoGraphValidator {
         }
         Ok(())
     }
+}
+
+fn validate_std_compatibility(identity: &str) -> Result<(), MetadataArtifactError> {
+    if identity.is_empty() {
+        return Err(invalid(
+            "package metadata is missing the standard-library compatibility identity",
+        ));
+    }
+    Ok(())
 }
 
 pub(super) fn validate_proto_action_trace_shape(

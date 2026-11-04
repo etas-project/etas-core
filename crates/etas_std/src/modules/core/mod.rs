@@ -1,4 +1,5 @@
 pub mod bytes;
+pub mod char;
 pub mod collections;
 pub mod json;
 pub mod math;
@@ -17,6 +18,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
     collections::register(builder);
     option_result::register(builder);
     text::register(builder);
+    char::register(builder);
     bytes::register(builder);
     json::register(builder);
     math::register(builder);

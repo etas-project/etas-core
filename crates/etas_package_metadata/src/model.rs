@@ -1,6 +1,7 @@
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PackageMetadata {
     pub version: u32,
+    pub std_compatibility: String,
     pub package: PackageIdentity,
     pub dependencies: Vec<ResolvedDependency>,
     pub external_modules: Vec<ExternalModule>,
@@ -20,6 +21,7 @@ pub struct PackageIdentity {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ResolvedDependency {
     pub identity: PackageIdentity,
+    pub std_compatibility: String,
     pub import_root: String,
     pub source: ResolvedDependencySource,
     pub dependencies: Vec<ResolvedDependency>,

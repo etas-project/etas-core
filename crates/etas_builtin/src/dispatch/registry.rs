@@ -5,23 +5,13 @@ pub struct PureIntrinsicRegistry;
 
 impl PureIntrinsicRegistry {
     pub fn contains(&self, intrinsic: StdIntrinsicId) -> bool {
+        if crate::text::is_text_intrinsic(intrinsic) {
+            return true;
+        }
         matches!(
             intrinsic.0,
             intrinsic::pure::ASSERT
                 | intrinsic::pure::ABORT
-                | intrinsic::pure::TEXT_TRIM
-                | intrinsic::pure::TEXT_CONTAINS
-                | intrinsic::pure::TEXT_LOWERCASE
-                | intrinsic::pure::TEXT_UPPERCASE
-                | intrinsic::pure::TEXT_STARTS_WITH
-                | intrinsic::pure::TEXT_ENDS_WITH
-                | intrinsic::pure::TEXT_LEN
-                | intrinsic::pure::TEXT_LINES
-                | intrinsic::pure::TEXT_SPLIT
-                | intrinsic::pure::TEXT_JOIN
-                | intrinsic::pure::TEXT_TO_STRING_I32
-                | intrinsic::pure::TEXT_TO_STRING_USIZE
-                | intrinsic::pure::TEXT_PARSE_I32
                 | intrinsic::pure::BYTES_LEN
                 | intrinsic::pure::HTTP_ENCODE_REQUEST
                 | intrinsic::pure::HTTP_DECODE_RESPONSE_HEAD

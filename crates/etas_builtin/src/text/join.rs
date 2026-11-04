@@ -2,7 +2,8 @@
 #[derive(Debug, PartialEq)]
 pub enum JoinError<E> {
     Projection(E),
-    OutputTooLarge,
+    LengthOverflow,
+    AllocationFailed,
 }
 
 /// Joins a repeatable borrowed projection without a temporary parts array.
@@ -33,13 +34,13 @@ where
             part.byte_len(),
             if first { 0 } else { separator.byte_len() },
         )
-        .ok_or(JoinError::OutputTooLarge)?;
+        .ok_or(JoinError::LengthOverflow)?;
         first = false;
     }
     let mut output = String::new();
     output
         .try_reserve_exact(bytes)
-        .map_err(|_| JoinError::OutputTooLarge)?;
+        .map_err(|_| JoinError::AllocationFailed)?;
     let separator_chunks = if !separated || separator.contiguous().is_some() {
         Vec::new()
     } else {

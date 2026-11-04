@@ -20,6 +20,8 @@ pub struct ProtoPackageGraphSection {
     pub tool_bindings: Vec<ProtoToolBinding>,
     #[prost(message, repeated, tag = "8")]
     pub bins: Vec<ProtoBinTarget>,
+    #[prost(string, tag = "9")]
+    pub std_compatibility: String,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -48,6 +50,8 @@ pub struct ProtoResolvedDependency {
     pub effect_metadata: Option<ProtoEffectMetadataSection>,
     #[prost(message, repeated, tag = "7")]
     pub tool_bindings: Vec<ProtoToolBinding>,
+    #[prost(string, tag = "8")]
+    pub std_compatibility: String,
 }
 
 #[derive(Clone, PartialEq, Message)]
