@@ -9,7 +9,9 @@ mod proto;
 mod request_templates;
 mod spec_invocations;
 mod spec_receivers;
+mod type_parameters;
 mod type_validation;
+pub use type_parameters::MetadataTypeParameters;
 
 pub use callable_values::*;
 pub use container::{

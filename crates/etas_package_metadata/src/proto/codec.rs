@@ -1627,6 +1627,13 @@ fn reject_unexpected_action_arg_ty(kind: &ProtoActionArgKind) -> Result<(), Meta
 fn type_to_proto(ty: &Type) -> ProtoType {
     ProtoType {
         kind: type_kind_to_wire(ty.kind).to_owned(),
+        parameter: ty
+            .parameter
+            .as_ref()
+            .map(|parameter| ProtoGenericTypeParameter {
+                owner: Some(super::descriptors::encode_generic_owner(&parameter.owner)),
+                position: parameter.position,
+            }),
         name: ty.name.clone(),
         path: ty.path.clone(),
         children: ty.children.iter().map(type_to_proto).collect(),
@@ -1683,6 +1690,19 @@ fn type_from_proto_with_budget(
         .collect::<Result<Vec<_>, MetadataArtifactError>>()?;
     let ty = Type {
         kind,
+        parameter: ty
+            .parameter
+            .map(|parameter| {
+                Ok(GenericTypeParameter {
+                    owner: super::descriptors::decode_generic_owner(
+                        parameter
+                            .owner
+                            .ok_or_else(|| invalid("type parameter owner is missing"))?,
+                    )?,
+                    position: parameter.position,
+                })
+            })
+            .transpose()?,
         name: ty.name,
         path: ty.path,
         children,
@@ -2475,6 +2495,7 @@ fn type_kind_from_wire(value: &str) -> Result<TypeKind, MetadataArtifactError> {
         "existential" => Ok(TypeKind::Existential),
         "primitive" => Ok(TypeKind::Primitive),
         "var" => Ok(TypeKind::Var),
+        "parameter" => Ok(TypeKind::Parameter),
         "named" => Ok(TypeKind::Named),
         "applied" => Ok(TypeKind::Applied),
         "alias" => Ok(TypeKind::Alias),

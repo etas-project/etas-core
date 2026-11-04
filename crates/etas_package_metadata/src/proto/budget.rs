@@ -96,6 +96,19 @@ pub(crate) fn validate_proto_package_metadata_graph(
 #[derive(Default)]
 struct ModelGraphValidator {
     budget: MetadataGraphBudget,
+    // Graph-local validation has no declaring interface; package/import gates do.
+    parameter_bindings: Option<crate::MetadataTypeParameters>,
+}
+
+pub(crate) fn validate_method_type_parameters(
+    method: &PublishedMethod,
+    parameters: crate::MetadataTypeParameters,
+) -> Result<(), MetadataArtifactError> {
+    ModelGraphValidator {
+        parameter_bindings: Some(parameters),
+        ..Default::default()
+    }
+    .method(method)
 }
 
 impl ModelGraphValidator {
@@ -154,6 +167,9 @@ impl ModelGraphValidator {
             super::descriptors::validate_model(graph, &mut self.budget)?;
             super::descriptors::validate_public_bodies(metadata)?;
         }
+        self.parameter_bindings = Some(crate::MetadataTypeParameters::from_checked_descriptors(
+            metadata.definition_descriptors.as_ref(),
+        ));
         if let Some(origins) = &metadata.definition_origins {
             self.budget.enter(0, "definition origins")?;
             for module in &origins.modules {
@@ -251,49 +267,7 @@ impl ModelGraphValidator {
             if methods.insert(&method.identity, method).is_some() {
                 return Err(invalid("published method identity is duplicated"));
             }
-            super::descriptors::validate_model_method_identity(&method.identity, &mut self.budget)?;
-            self.ty(&method.self_type, 0)?;
-            self.budget
-                .charge(method.requirements.limits.len(), "method limits")?;
-            self.budget.charge(
-                method.requirements.trace_requirements.len()
-                    + method.requirements.trace_obligations.len(),
-                "method trace requirements",
-            )?;
-            for requirement in method
-                .requirements
-                .trace_requirements
-                .iter()
-                .chain(&method.requirements.trace_obligations)
-            {
-                let MethodTraceRequirement::Clause(clause) = requirement else {
-                    continue;
-                };
-                self.budget
-                    .charge(clause.selector_bounds.len(), "trace selector bounds")?;
-                for bound in &clause.selector_bounds {
-                    validate_trace_selector_bound(clause, bound)?;
-                    for arg in &bound.spec_args {
-                        self.ty(arg, 0)?;
-                    }
-                }
-                for row in [
-                    &clause.pattern,
-                    &clause.guard,
-                    &clause.target,
-                    &clause.obligation,
-                ]
-                .into_iter()
-                .flatten()
-                {
-                    self.effect_row(row, 0)?;
-                }
-            }
-            for param in &method.owner_params {
-                self.generic_param(param)?;
-            }
-            self.callable_values(&method.callable)?;
-            method.validate()?;
+            self.method(method)?;
         }
         for implementation in &metadata.spec_impls {
             self.ty(&implementation.self_type, 0)?;
@@ -454,9 +428,61 @@ impl ModelGraphValidator {
         Ok(())
     }
 
+    fn method(&mut self, method: &PublishedMethod) -> Result<(), MetadataArtifactError> {
+        super::descriptors::validate_model_method_identity(&method.identity, &mut self.budget)?;
+        self.ty(&method.self_type, 0)?;
+        self.budget
+            .charge(method.requirements.limits.len(), "method limits")?;
+        self.budget.charge(
+            method.requirements.trace_requirements.len()
+                + method.requirements.trace_obligations.len(),
+            "method trace requirements",
+        )?;
+        for requirement in method
+            .requirements
+            .trace_requirements
+            .iter()
+            .chain(&method.requirements.trace_obligations)
+        {
+            let MethodTraceRequirement::Clause(clause) = requirement else {
+                continue;
+            };
+            self.budget
+                .charge(clause.selector_bounds.len(), "trace selector bounds")?;
+            for bound in &clause.selector_bounds {
+                validate_trace_selector_bound(clause, bound)?;
+                for arg in &bound.spec_args {
+                    self.ty(arg, 0)?;
+                }
+            }
+            for row in [
+                &clause.pattern,
+                &clause.guard,
+                &clause.target,
+                &clause.obligation,
+            ]
+            .into_iter()
+            .flatten()
+            {
+                self.effect_row(row, 0)?;
+            }
+        }
+        for parameter in &method.owner_params {
+            self.generic_param(parameter)?;
+        }
+        self.callable_values(&method.callable)?;
+        method.validate()
+    }
+
     fn ty(&mut self, ty: &Type, depth: usize) -> Result<(), MetadataArtifactError> {
         self.budget.enter(depth, "type graph")?;
         crate::type_validation::validate_type_shape(ty)?;
+        if let Some(parameter) = &ty.parameter {
+            super::descriptors::validate_model_generic_owner(&parameter.owner, &mut self.budget)?;
+            if let Some(bindings) = &self.parameter_bindings {
+                bindings.validate_reference(parameter)?;
+            }
+        }
         for bound in &ty.bounds {
             self.spec_bound_at_depth(bound, depth + 1)?;
         }
@@ -941,6 +967,13 @@ impl ProtoGraphValidator {
 
     fn ty(&mut self, ty: &proto::ProtoType, depth: usize) -> Result<(), MetadataArtifactError> {
         self.budget.enter(depth, "type graph")?;
+        if let Some(owner) = ty
+            .parameter
+            .as_ref()
+            .and_then(|parameter| parameter.owner.as_ref())
+        {
+            super::descriptors::validate_generic_owner(owner, &mut self.budget)?;
+        }
         for bound in &ty.bounds {
             self.spec_bound_at_depth(bound, depth + 1)?;
         }

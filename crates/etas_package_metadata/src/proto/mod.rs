@@ -1,4 +1,5 @@
 mod budget;
+pub(crate) use budget::validate_method_type_parameters;
 mod codec;
 pub(crate) use budget::validate_callable_request_target;
 pub(crate) use codec::spec_invocations::fingerprint as callable_request_target_fingerprint;

@@ -467,6 +467,39 @@ pub struct Callable {
     #[prost(oneof = "callable::Kind", tags = "1, 2")]
     pub kind: Option<callable::Kind>,
 }
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct Implementation {
+    #[prost(bytes = "vec", tag = "1")]
+    pub package: Vec<u8>,
+    #[prost(string, repeated, tag = "2")]
+    pub module: Vec<String>,
+    #[prost(message, optional, tag = "3")]
+    pub subject: Option<ProtoDefinitionKey>,
+    #[prost(message, optional, tag = "4")]
+    pub selected_spec: Option<ProtoDefinitionKey>,
+    #[prost(bytes = "vec", tag = "5")]
+    pub header: Vec<u8>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct GenericOwner {
+    #[prost(oneof = "generic_owner::Kind", tags = "1, 2, 3, 4")]
+    pub kind: Option<generic_owner::Kind>,
+}
+pub mod generic_owner {
+    #[derive(Clone, PartialEq, prost::Oneof)]
+    pub enum Kind {
+        #[prost(message, tag = "1")]
+        Declaration(super::ProtoDefinitionKey),
+        #[prost(message, tag = "2")]
+        Method(super::Method),
+        #[prost(message, tag = "3")]
+        Implementation(super::Implementation),
+        #[prost(message, tag = "4")]
+        ImplementationPattern(super::ProtoDefinitionKey),
+    }
+}
 pub mod callable {
     #[derive(Clone, PartialEq, prost::Oneof)]
     pub enum Kind {
@@ -488,7 +521,7 @@ pub struct Spec {
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct Binder {
     #[prost(message, optional, tag = "1")]
-    pub owner: Option<Callable>,
+    pub owner: Option<GenericOwner>,
     #[prost(uint32, tag = "2")]
     pub position: u32,
     #[prost(string, tag = "3")]

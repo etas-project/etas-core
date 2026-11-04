@@ -8,6 +8,57 @@ use etas_code::{
     MethodId, PackageKey,
 };
 
+#[test]
+fn structured_type_parameter_roundtrip_preserves_owner_and_position() {
+    use etas_code::{
+        CodeFingerprint, DefinitionKey, DefinitionKind, ImplementationKey, MethodId, PackageKey,
+        descriptor::GenericOwner,
+    };
+    let package = PackageKey::from_name_and_version("library", "1.0.0").unwrap();
+    let subject = DefinitionKey::new(
+        package,
+        vec!["api".into()],
+        vec!["Container".into()],
+        DefinitionKind::Type,
+    )
+    .unwrap();
+    let implementation = ImplementationKey::new(
+        package,
+        vec!["api".into()],
+        subject,
+        None,
+        CodeFingerprint::from_bytes([7; 32]),
+    )
+    .unwrap();
+    let method = MethodId::new(implementation.clone(), "replace".into()).unwrap();
+    let mut wires = Vec::new();
+    for owner in [
+        GenericOwner::Implementation(implementation),
+        GenericOwner::Method(method),
+    ] {
+        let ty = Type {
+            kind: TypeKind::Parameter,
+            parameter: Some(GenericTypeParameter { owner, position: 0 }),
+            ..Default::default()
+        };
+        let wire = type_to_proto(&ty);
+        let bytes = wire.encode_to_vec();
+        assert_eq!(
+            type_from_proto(ProtoType::decode(bytes.as_slice()).unwrap()).unwrap(),
+            ty
+        );
+        let mut missing = wire.clone();
+        missing.parameter = None;
+        assert!(type_from_proto(missing).is_err());
+        let mut wrong_kind = wire;
+        wrong_kind.kind = "primitive".into();
+        wrong_kind.name = "unit".into();
+        assert!(type_from_proto(wrong_kind).is_err());
+        wires.push(bytes);
+    }
+    assert_ne!(wires[0], wires[1]);
+}
+
 fn published_method() -> PublishedMethod {
     let package = PackageKey::from_canonical_fingerprint(CodeFingerprint::from_bytes([3; 32]));
     let subject = DefinitionKey::new(
@@ -156,6 +207,108 @@ fn decoder_requires_both_method_identity_and_behavior_evidence() {
         }
         assert!(methods::from_proto(wire).is_err());
     }
+}
+
+#[test]
+fn package_parameter_references_require_the_declared_owner_position_and_kind() {
+    use etas_code::descriptor::{
+        DefinitionDescriptorSet, DescriptorGraphInput, GenericOwner, GenericParameterInfo,
+        GenericParameterKind,
+    };
+    let mut method = published_method();
+    let owner = GenericOwner::Implementation(method.identity.implementation().clone());
+    let parameter = Type {
+        kind: TypeKind::Parameter,
+        parameter: Some(GenericTypeParameter {
+            owner: owner.clone(),
+            position: 0,
+        }),
+        ..Default::default()
+    };
+    method.self_type = Type {
+        kind: TypeKind::Applied,
+        path: method.self_type.path.clone(),
+        children: vec![parameter],
+        ..Default::default()
+    };
+    method.owner_params = vec![GenericParam {
+        name: "T".into(),
+        kind: GenericParamKind::Type,
+        bounds: vec![],
+    }];
+    method.callable.values[0].params[0] = method.self_type.clone();
+    let descriptors = DefinitionDescriptorSet {
+        graph: DescriptorGraphInput {
+            types: vec![],
+            rows: vec![],
+            traces: vec![],
+            binders: vec![GenericParameterInfo {
+                owner,
+                position: 0,
+                name: "T".into(),
+                kind: GenericParameterKind::Type,
+                bounds: vec![],
+            }],
+        },
+        declarations: vec![],
+        headers: None,
+    };
+    let index = crate::MetadataTypeParameters::from_descriptors(&descriptors).unwrap();
+    index.validate_method(&method).unwrap();
+    assert!(
+        crate::MetadataTypeParameters::default()
+            .validate_method(&method)
+            .is_err()
+    );
+    let mut package = PackageMetadata {
+        version: 1,
+        package: PackageIdentity {
+            name: "library".into(),
+            version: "1.0.0".into(),
+            edition: "2026".into(),
+        },
+        ..Default::default()
+    };
+    package.public_metadata.methods.push(method.clone());
+    package.public_metadata.definition_descriptors = Some(descriptors.clone());
+    let wire = package_metadata_to_proto(&package);
+    package_metadata_from_package_graph_payload(&wire.encode_to_vec()).unwrap();
+    for foreign_owner in [false, true] {
+        let mut invalid = package.clone();
+        let parameter = invalid.public_metadata.methods[0].self_type.children[0]
+            .parameter
+            .as_mut()
+            .unwrap();
+        if foreign_owner {
+            parameter.owner = GenericOwner::Method(method.identity.clone());
+        } else {
+            parameter.position = 1;
+        }
+        invalid.public_metadata.methods[0].callable.values[0].params[0] =
+            invalid.public_metadata.methods[0].self_type.clone();
+        assert!(
+            crate::package_metadata_to_sections(&invalid)
+                .unwrap_err()
+                .to_string()
+                .contains("declared type binder")
+        );
+        // Bypass the encoder so this also exercises the untrusted decoder boundary.
+        let bytes = package_metadata_to_proto(&invalid).encode_to_vec();
+        assert!(
+            package_metadata_from_package_graph_payload(&bytes)
+                .unwrap_err()
+                .to_string()
+                .contains("declared type binder")
+        );
+    }
+    let mut effect_binder = descriptors;
+    effect_binder.graph.binders[0].kind = GenericParameterKind::EffectRow;
+    assert!(
+        crate::MetadataTypeParameters::from_descriptors(&effect_binder)
+            .unwrap()
+            .validate_method(&method)
+            .is_err()
+    );
 }
 
 #[test]

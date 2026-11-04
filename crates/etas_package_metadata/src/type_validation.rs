@@ -5,6 +5,7 @@ pub(crate) fn type_kind_to_wire(kind: TypeKind) -> &'static str {
         TypeKind::Existential => "existential",
         TypeKind::Primitive => "primitive",
         TypeKind::Var => "var",
+        TypeKind::Parameter => "parameter",
         TypeKind::Named => "named",
         TypeKind::Applied => "applied",
         TypeKind::Alias => "alias",
@@ -49,6 +50,25 @@ pub(crate) fn validate_type_shape(ty: &Type) -> Result<(), MetadataArtifactError
         bounds,
         ..
     } = ty;
+    if kind == TypeKind::Parameter {
+        let Some(parameter) = &ty.parameter else {
+            return Err(invalid(
+                "type parameter requires a checked owner and position",
+            ));
+        };
+        if !parameter.owner.is_portable_parameter_owner()
+            || !name.is_empty()
+            || !path.is_empty()
+            || !children.is_empty()
+            || !fields.is_empty()
+        {
+            return Err(invalid("invalid portable type parameter reference"));
+        }
+    } else if ty.parameter.is_some() {
+        return Err(invalid(
+            "only type parameter references carry a generic owner",
+        ));
+    }
     if kind == TypeKind::Existential {
         if bounds.is_empty()
             || !name.is_empty()

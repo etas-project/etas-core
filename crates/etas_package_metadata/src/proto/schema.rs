@@ -518,6 +518,16 @@ pub struct ProtoType {
     pub produced_effects: Option<ProtoEffectRow>,
     #[prost(message, repeated, tag = "8")]
     pub bounds: Vec<ProtoSpecBound>,
+    #[prost(message, optional, tag = "9")]
+    pub parameter: Option<ProtoGenericTypeParameter>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoGenericTypeParameter {
+    #[prost(message, optional, tag = "1")]
+    pub owner: Option<super::descriptors::ProtoGenericOwner>,
+    #[prost(uint32, tag = "2")]
+    pub position: u32,
 }
 
 #[derive(Clone, PartialEq, Message)]
