@@ -253,9 +253,19 @@ impl DescriptorGraph {
                         encoder.tag(1);
                         encoder.fingerprint(method.fingerprint());
                     }
+                    GenericOwner::Implementation(implementation) => {
+                        encoder.tag(2);
+                        encoder.fingerprint(implementation.fingerprint());
+                    }
+                    GenericOwner::ImplementationPattern(subject) => {
+                        encoder.tag(3);
+                        encoder.fingerprint(subject.fingerprint());
+                    }
                 }
                 encoder.number(u64::from(binder.position));
-                encoder.bytes(binder.name.as_bytes());
+                if !binder.owner.alpha_scoped() {
+                    encoder.bytes(binder.name.as_bytes());
+                }
                 encoder.tag(match binder.kind {
                     GenericParameterKind::Type => 0,
                     GenericParameterKind::EffectRow => 1,

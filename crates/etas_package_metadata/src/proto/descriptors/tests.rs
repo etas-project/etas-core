@@ -11,6 +11,54 @@ mod header_tests;
 mod snapshot_tests;
 
 #[test]
+fn implementation_binders_survive_binary_descriptor_roundtrip() {
+    let subject = key("Container", DefinitionKind::Type);
+    let implementation = ImplementationKey::new(
+        subject.package(),
+        vec!["app".into()],
+        subject.clone(),
+        None,
+        CodeFingerprint::from_bytes([9; 32]),
+    )
+    .unwrap();
+    let method = MethodId::new(implementation.clone(), "replace".into()).unwrap();
+    let set = DefinitionDescriptorSet {
+        graph: DescriptorGraphInput {
+            types: (0..3)
+                .map(|id| TypeInfo::Parameter(GenericParameterRef(id)))
+                .collect(),
+            binders: [
+                GenericOwner::Implementation(implementation),
+                GenericOwner::Method(method),
+                GenericOwner::ImplementationPattern(subject),
+            ]
+            .into_iter()
+            .map(|owner| GenericParameterInfo {
+                owner,
+                position: 0,
+                name: "T".into(),
+                kind: GenericParameterKind::Type,
+                bounds: vec![],
+            })
+            .collect(),
+            ..Default::default()
+        },
+        declarations: vec![],
+        headers: None,
+    };
+    let wire = to_proto(&set);
+    assert_eq!(wire.version, 10);
+    let bytes = wire.encode_to_vec();
+    assert_eq!(
+        from_proto(ProtoDescriptorGraph::decode(bytes.as_slice()).unwrap()).unwrap(),
+        set
+    );
+    let mut old = wire;
+    old.version = 1;
+    assert!(from_proto(old).is_err());
+}
+
+#[test]
 fn existential_descriptor_roundtrip_keeps_spec_identity_arguments_and_fingerprint_edges() {
     let set = DefinitionDescriptorSet {
         graph: DescriptorGraphInput {
@@ -686,7 +734,7 @@ fn malformed_graphs_are_rejected_without_replacing_missing_or_unknown_values() {
                 .kind
                 .as_mut()
                 .map(|kind| {
-                    if let schema::callable::Kind::Method(method) = kind {
+                    if let schema::generic_owner::Kind::Method(method) = kind {
                         method.header.clear();
                     }
                 })

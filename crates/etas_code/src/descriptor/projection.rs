@@ -47,7 +47,7 @@ impl DescriptorGraph {
         let mut names = std::collections::BTreeSet::new();
         let duplicates = input.binders.iter().any(|binder| {
             !identities.insert((&binder.owner, binder.position))
-                || !names.insert((&binder.owner, &binder.name))
+                || (!binder.owner.alpha_scoped() && !names.insert((&binder.owner, &binder.name)))
         });
         if !duplicates {
             return Self::new(input, limits);
@@ -62,9 +62,10 @@ impl DescriptorGraph {
         for (index, binder) in input.binders.iter().enumerate() {
             let source = GenericParameterRef(index as u32);
             let key = (binder.owner.clone(), binder.position);
-            if by_name
-                .insert((binder.owner.clone(), binder.name.clone()), binder.position)
-                .is_some_and(|position| position != binder.position)
+            if !binder.owner.alpha_scoped()
+                && by_name
+                    .insert((binder.owner.clone(), binder.name.clone()), binder.position)
+                    .is_some_and(|position| position != binder.position)
             {
                 return Err(DescriptorError::Invalid {
                     node: DescriptorNode::Binder(source),
@@ -73,7 +74,7 @@ impl DescriptorGraph {
             }
             let target = if let Some((target, original)) = by_identity.get(&key) {
                 let original: &super::GenericParameterInfo = original;
-                if original.name != binder.name
+                if (!binder.owner.alpha_scoped() && original.name != binder.name)
                     || original.kind != binder.kind
                     || original.bounds.len() != binder.bounds.len()
                 {

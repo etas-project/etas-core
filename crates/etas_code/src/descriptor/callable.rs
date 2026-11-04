@@ -1,4 +1,4 @@
-use crate::{DefinitionKey, MethodId};
+use crate::{DefinitionKey, ImplementationKey, MethodId};
 
 use super::{EffectRowInfoRef, TypeInfoRef};
 
@@ -32,6 +32,18 @@ pub struct GenericParameterRef(pub u32);
 pub enum GenericOwner {
     Declaration(DefinitionKey),
     Method(MethodId),
+    Implementation(ImplementationKey),
+    /// Header-local binders, before its implementation identity is computed.
+    ImplementationPattern(DefinitionKey),
+}
+
+impl GenericOwner {
+    pub(crate) fn alpha_scoped(&self) -> bool {
+        matches!(
+            self,
+            Self::Implementation(_) | Self::ImplementationPattern(_)
+        )
+    }
 }
 
 #[derive(

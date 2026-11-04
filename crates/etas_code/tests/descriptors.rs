@@ -1,6 +1,9 @@
 use etas_code::{CodeFingerprint, DefinitionKey, DefinitionKind, PackageKey, descriptor::*};
 use etas_core::memory::MemoryFootprint;
 
+#[path = "descriptors/implementation_binders.rs"]
+mod implementation_binders;
+
 fn key(name: &str, kind: DefinitionKind) -> DefinitionKey {
     DefinitionKey::new(
         PackageKey::from_canonical_fingerprint(CodeFingerprint::from_bytes([7; 32])),

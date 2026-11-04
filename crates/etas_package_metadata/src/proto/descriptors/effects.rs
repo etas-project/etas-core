@@ -111,11 +111,17 @@ pub(super) fn decode_row(row: p::Row) -> Result<EffectRowInfo, Error> {
 
 pub(super) fn encode_binder(binder: &GenericParameterInfo) -> p::Binder {
     let owner = match &binder.owner {
-        GenericOwner::Declaration(key) => p::callable::Kind::Declaration(encode_key(key)),
-        GenericOwner::Method(method) => p::callable::Kind::Method(encode_method(method)),
+        GenericOwner::Declaration(key) => p::generic_owner::Kind::Declaration(encode_key(key)),
+        GenericOwner::Method(method) => p::generic_owner::Kind::Method(encode_method(method)),
+        GenericOwner::Implementation(implementation) => {
+            p::generic_owner::Kind::Implementation(encode_implementation(implementation))
+        }
+        GenericOwner::ImplementationPattern(subject) => {
+            p::generic_owner::Kind::ImplementationPattern(encode_key(subject))
+        }
     };
     p::Binder {
-        owner: Some(p::Callable { kind: Some(owner) }),
+        owner: Some(p::GenericOwner { kind: Some(owner) }),
         position: binder.position,
         name: binder.name.clone(),
         kind: match binder.kind {
@@ -138,8 +144,14 @@ pub(super) fn decode_binder(binder: p::Binder) -> Result<GenericParameterInfo, E
         required(binder.owner, "generic owner")?.kind,
         "generic owner kind",
     )? {
-        p::callable::Kind::Declaration(key) => GenericOwner::Declaration(decode_key(key)?),
-        p::callable::Kind::Method(method) => GenericOwner::Method(decode_method(method)?),
+        p::generic_owner::Kind::Declaration(key) => GenericOwner::Declaration(decode_key(key)?),
+        p::generic_owner::Kind::Method(method) => GenericOwner::Method(decode_method(method)?),
+        p::generic_owner::Kind::Implementation(implementation) => {
+            GenericOwner::Implementation(decode_implementation(implementation)?)
+        }
+        p::generic_owner::Kind::ImplementationPattern(subject) => {
+            GenericOwner::ImplementationPattern(decode_key(subject)?)
+        }
     };
     Ok(GenericParameterInfo {
         owner,

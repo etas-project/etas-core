@@ -37,6 +37,33 @@ pub(super) fn encode_method(method: &MethodId) -> p::Method {
     }
 }
 
+pub(super) fn encode_implementation(implementation: &ImplementationKey) -> p::Implementation {
+    p::Implementation {
+        package: implementation.package().fingerprint().as_bytes().to_vec(),
+        module: implementation.module().to_vec(),
+        subject: Some(encode_key(implementation.subject())),
+        selected_spec: implementation.selected_spec().map(encode_key),
+        header: implementation.header().as_bytes().to_vec(),
+    }
+}
+
+pub(super) fn decode_implementation(
+    implementation: p::Implementation,
+) -> Result<ImplementationKey, Error> {
+    let header: [u8; 32] = implementation
+        .header
+        .try_into()
+        .map_err(|_| invalid("implementation header fingerprint must contain 32 bytes"))?;
+    ImplementationKey::new(
+        origins::package_key(implementation.package)?,
+        implementation.module,
+        decode_key(required(implementation.subject, "implementation subject")?)?,
+        implementation.selected_spec.map(decode_key).transpose()?,
+        CodeFingerprint::from_bytes(header),
+    )
+    .map_err(|error| invalid(error.to_string()))
+}
+
 pub(super) fn decode_method(method: p::Method) -> Result<MethodId, Error> {
     let header: [u8; 32] = method
         .header

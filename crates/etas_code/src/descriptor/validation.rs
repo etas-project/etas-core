@@ -114,21 +114,20 @@ fn validate_inner(
         let node = DescriptorNode::Binder(GenericParameterRef(index as u32));
         validator.name(node, &binder.name)?;
         match &binder.owner {
-            GenericOwner::Declaration(key) => validator.identity(key)?,
+            GenericOwner::Declaration(key) | GenericOwner::ImplementationPattern(key) => {
+                validator.identity(key)?
+            }
             GenericOwner::Method(method) => {
                 validator.text(method.name())?;
-                let implementation = method.implementation();
-                for segment in implementation.module() {
-                    validator.text(segment)?;
-                }
-                validator.identity(implementation.subject())?;
-                if let Some(spec) = implementation.selected_spec() {
-                    validator.identity(spec)?;
-                }
+                validator.implementation(method.implementation())?;
+            }
+            GenericOwner::Implementation(implementation) => {
+                validator.implementation(implementation)?
             }
         }
         let unique_identity = binder_identities.insert((&binder.owner, binder.position));
-        let unique_name = binder_names.insert((&binder.owner, &binder.name));
+        let unique_name =
+            binder.owner.alpha_scoped() || binder_names.insert((&binder.owner, &binder.name));
         if (!unique_identity || !unique_name) && !allow_duplicate_binders {
             return Err(DescriptorError::Invalid {
                 node,
@@ -813,6 +812,17 @@ impl Validator<'_> {
                 self.text(segment)?;
             }
             self.name(node, method.name())?;
+        }
+        Ok(())
+    }
+
+    fn implementation(&mut self, key: &crate::ImplementationKey) -> Result<(), DescriptorError> {
+        for segment in key.module() {
+            self.text(segment)?;
+        }
+        self.identity(key.subject())?;
+        if let Some(spec) = key.selected_spec() {
+            self.identity(spec)?;
         }
         Ok(())
     }
