@@ -267,6 +267,7 @@ fn package_parameter_references_require_the_declared_owner_position_and_kind() {
             version: "1.0.0".into(),
             edition: "2026".into(),
         },
+        std_compatibility: "test-std".into(),
         ..Default::default()
     };
     package.public_metadata.methods.push(method.clone());
@@ -368,6 +369,7 @@ fn inherent_and_associated_methods_preserve_distinct_owner_and_method_binders() 
         };
         method.validate().unwrap();
         let mut package = PackageMetadata {
+            std_compatibility: "test-std".into(),
             version: 1,
             package: PackageIdentity {
                 name: "library".into(),
@@ -416,7 +418,7 @@ fn encode_and_decode_reject_unowned_or_missing_implementation_roots() {
         }
         let wire = methods::to_proto(&model);
         assert!(methods::from_proto(wire).is_err(), "case {kind}");
-        let mut metadata = PackageMetadata::default();
+        let mut metadata = crate::test_package_metadata();
         metadata.public_metadata.methods.push(model);
         assert!(
             validate_package_metadata_graph(&metadata).is_err(),
@@ -440,7 +442,7 @@ fn implementation_graphs_share_the_whole_artifact_node_budget() {
     model.callable.values[0].param_names = (0..crate::MAX_METADATA_GRAPH_NODES / 2)
         .map(|index| format!("p{index}"))
         .collect();
-    let mut metadata = PackageMetadata::default();
+    let mut metadata = crate::test_package_metadata();
     let mut second = model.clone();
     second.identity =
         MethodId::new(model.identity.implementation().clone(), "second".into()).unwrap();
@@ -485,6 +487,7 @@ fn method_contracts_round_trip_without_inventing_declaration_paths() {
         trace
     );
     let mut package = PackageMetadata {
+        std_compatibility: "test-std".into(),
         version: 1,
         package: PackageIdentity {
             name: "library".into(),

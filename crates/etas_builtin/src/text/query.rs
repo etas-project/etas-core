@@ -4,31 +4,38 @@ use super::input::TextInput;
 use crate::{BuiltinError, BuiltinValue};
 
 mod projected;
+mod work;
+
+pub use work::TextQueryWork;
 
 #[derive(Clone, Copy, Debug)]
 pub enum TextQuery {
     Len,
+    CharCount,
+    IsEmpty,
+    IsAscii,
     Contains,
     StartsWith,
     EndsWith,
-    ParseI32,
 }
 
 impl TextQuery {
     pub fn for_intrinsic(id: StdIntrinsicId) -> Option<Self> {
         match id.0 {
             pure::TEXT_LEN => Some(Self::Len),
+            pure::TEXT_CHAR_COUNT => Some(Self::CharCount),
+            pure::TEXT_IS_EMPTY => Some(Self::IsEmpty),
+            pure::TEXT_IS_ASCII => Some(Self::IsAscii),
             pure::TEXT_CONTAINS => Some(Self::Contains),
             pure::TEXT_STARTS_WITH => Some(Self::StartsWith),
             pure::TEXT_ENDS_WITH => Some(Self::EndsWith),
-            pure::TEXT_PARSE_I32 => Some(Self::ParseI32),
             _ => None,
         }
     }
 
     pub fn arity(self) -> usize {
         match self {
-            Self::Len | Self::ParseI32 => 1,
+            Self::Len | Self::CharCount | Self::IsEmpty | Self::IsAscii => 1,
             Self::Contains | Self::StartsWith | Self::EndsWith => 2,
         }
     }
@@ -64,16 +71,13 @@ impl TextQuery {
 
     fn evaluate_flat(self, args: &[&str]) -> BuiltinValue {
         match self {
-            Self::Len => BuiltinValue::Usize(args[0].chars().count()),
+            Self::Len => BuiltinValue::Usize(args[0].len()),
+            Self::CharCount => BuiltinValue::Usize(args[0].chars().count()),
+            Self::IsEmpty => BuiltinValue::Bool(args[0].is_empty()),
+            Self::IsAscii => BuiltinValue::Bool(args[0].is_ascii()),
             Self::Contains => BuiltinValue::Bool(args[0].contains(args[1])),
             Self::StartsWith => BuiltinValue::Bool(args[0].starts_with(args[1])),
             Self::EndsWith => BuiltinValue::Bool(args[0].ends_with(args[1])),
-            Self::ParseI32 => match args[0].parse::<i32>() {
-                Ok(value) => BuiltinValue::ResultOk(Box::new(BuiltinValue::I32(value))),
-                Err(error) => {
-                    BuiltinValue::ResultErr(Box::new(BuiltinValue::String(error.to_string())))
-                }
-            },
         }
     }
 }

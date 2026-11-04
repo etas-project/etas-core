@@ -3,22 +3,36 @@ use etas_std::{
 };
 
 #[test]
-fn text_parse_error_has_checked_nominal_storage_without_a_source_constructor() {
+fn text_error_is_a_closed_checked_enum() {
     let registry = etas_std::standard_registry();
     let symbol = registry
-        .lookup_qualified(&["std", "text", "ParseError"])
+        .lookup_qualified(&["std", "text", "TextError"])
         .unwrap();
     let StdDecl::Type(declaration) = &symbol.decl else {
-        panic!("ParseError declaration")
+        panic!("TextError declaration")
     };
-    assert_eq!(
-        declaration.representation,
-        Some(StdType::Primitive(etas_std::StdPrimitiveType::String))
-    );
+    assert_eq!(declaration.kind, TypeDeclKind::Enum);
+    assert!(declaration.representation.is_none());
     assert!(declaration.canonical_type.is_none());
     assert_eq!(
-        declaration.construction,
-        etas_std::StdTypeConstruction::IntrinsicOnly
+        registry
+            .enum_constructors(symbol.id)
+            .map(|constructor| constructor.name.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "InvalidIndex",
+            "InvalidRange",
+            "NotCharBoundary",
+            "ParseFailure",
+            "NumericOverflow",
+            "LengthOverflow",
+            "InvalidFormat",
+        ]
+    );
+    assert!(
+        registry
+            .lookup_qualified(&["std", "text", "ParseError"])
+            .is_none()
     );
 }
 

@@ -9,22 +9,12 @@ pub fn call_pure_intrinsic(
     intrinsic: StdIntrinsicId,
     args: &[BuiltinValue],
 ) -> Result<BuiltinValue, BuiltinError> {
+    if text::is_text_intrinsic(intrinsic) {
+        return text::call_text_intrinsic(intrinsic, args);
+    }
     match intrinsic.0 {
         intrinsic::pure::ASSERT => control::assert::assert(args),
         intrinsic::pure::ABORT => control::abort::abort(args),
-        intrinsic::pure::TEXT_TRIM => text::string::trim(args),
-        intrinsic::pure::TEXT_LOWERCASE => text::string::lowercase(args),
-        intrinsic::pure::TEXT_UPPERCASE => text::string::uppercase(args),
-        intrinsic::pure::TEXT_CONTAINS => text::string::contains(args),
-        intrinsic::pure::TEXT_STARTS_WITH => text::string::starts_with(args),
-        intrinsic::pure::TEXT_ENDS_WITH => text::string::ends_with(args),
-        intrinsic::pure::TEXT_LEN => text::string::len(args),
-        intrinsic::pure::TEXT_LINES => text::string::lines(args),
-        intrinsic::pure::TEXT_SPLIT => text::string::split(args),
-        intrinsic::pure::TEXT_JOIN => text::string::join(args),
-        intrinsic::pure::TEXT_TO_STRING_I32 => text::string::to_string_i32(args),
-        intrinsic::pure::TEXT_TO_STRING_USIZE => text::string::to_string_usize(args),
-        intrinsic::pure::TEXT_PARSE_I32 => text::string::parse_i32(args),
         intrinsic::pure::BYTES_LEN => bytes::ops::len(args),
         intrinsic::pure::LIST_LEN => collections::list::len(args),
         intrinsic::pure::LIST_IS_EMPTY => collections::list::is_empty(args),

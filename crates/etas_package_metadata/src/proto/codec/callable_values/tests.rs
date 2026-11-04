@@ -255,7 +255,7 @@ fn residual_reference_budget_is_shared_across_the_artifact() {
         sources: vec![CallableValueSource::Value(0)],
         values: vec![value.clone(), value],
     };
-    let mut package = PackageMetadata::default();
+    let mut package = crate::test_package_metadata();
     package
         .public_metadata
         .effect_summaries
@@ -296,7 +296,7 @@ fn root_and_latent_residuals_share_the_artifact_budget() {
             .unwrap()
         })
         .collect::<Vec<_>>();
-    let mut package = PackageMetadata::default();
+    let mut package = crate::test_package_metadata();
     package
         .public_metadata
         .effect_summaries
@@ -437,6 +437,7 @@ fn root_parameter_positions_and_generic_kinds_are_rechecked_after_binary_decode(
     };
     let mut package = ProtoPackageGraphSection {
         version: 1,
+        std_compatibility: "test-std".into(),
         package: Some(ProtoPackageIdentity {
             name: "demo".into(),
             version: "1".into(),
@@ -514,6 +515,7 @@ fn node_types_and_traces_share_the_artifact_depth_budget() {
             }
         }
         let package = PackageMetadata {
+            std_compatibility: "test-std".into(),
             public_metadata: PublicMetadata {
                 effect_summaries: vec![EffectSummary {
                     returned_callables: Some(graph.clone()),
@@ -526,6 +528,7 @@ fn node_types_and_traces_share_the_artifact_depth_budget() {
         let error = package_metadata_to_sections(&package).unwrap_err();
         assert!(error.to_string().contains("maximum depth"), "{error}");
         let wire = ProtoPackageGraphSection {
+            std_compatibility: "test-std".into(),
             public_metadata: Some(ProtoPublicMetadataSection {
                 effect_summaries: vec![ProtoEffectSummary {
                     returned_callables: Some(to_proto(&graph)),
@@ -552,6 +555,7 @@ fn multiple_return_graphs_consume_one_whole_artifact_node_budget() {
         objects: vec![],
     };
     let package = PackageMetadata {
+        std_compatibility: "test-std".into(),
         public_metadata: PublicMetadata {
             effect_summaries: vec![
                 EffectSummary {
@@ -570,6 +574,7 @@ fn multiple_return_graphs_consume_one_whole_artifact_node_budget() {
     let error = package_metadata_to_sections(&package).unwrap_err();
     assert!(error.to_string().contains("maximum node count"), "{error}");
     let wire = ProtoPackageGraphSection {
+        std_compatibility: "test-std".into(),
         public_metadata: Some(ProtoPublicMetadataSection {
             effect_summaries: package
                 .public_metadata
@@ -678,6 +683,7 @@ fn object_evidence_round_trips_bound_and_concrete_member_witnesses() {
     assert_eq!(decoded, graph);
     let fingerprint = crate::callable_value_graph_input_fingerprint(&graph);
     let metadata = PackageMetadata {
+        std_compatibility: "test-std".into(),
         package: crate::PackageIdentity {
             name: "objects".into(),
             version: "1.0.0".into(),

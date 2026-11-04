@@ -1,9 +1,20 @@
+pub mod bounds;
 pub mod case;
 pub mod char;
+pub mod format;
 pub mod input;
+pub mod iteration;
 pub mod join;
+pub mod ops;
+pub mod output;
+pub mod parse;
 pub mod query;
 pub mod ranges;
-mod search;
-pub mod string;
+pub mod reverse;
+pub mod search;
+pub mod slice;
+pub mod split;
 pub mod transform;
+pub mod unicode;
+
+pub use ops::{call_text_intrinsic, is_text_intrinsic};

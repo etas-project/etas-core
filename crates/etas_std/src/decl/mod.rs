@@ -2,6 +2,7 @@ pub mod effect_decl;
 pub mod effect_ref;
 pub mod flow_decl;
 pub mod impl_decl;
+pub mod implementation;
 pub mod requirement;
 pub mod runtime_type;
 pub mod std_type;
@@ -15,6 +16,9 @@ pub use effect_decl::{
 pub use effect_ref::{StdEffectRef, StdStaticArg};
 pub use flow_decl::{FlowDecl, FlowSourceMethod, FlowSourceMethodKind, FlowSourceMethodOperation};
 pub use impl_decl::StdImplFact;
+pub use implementation::{
+    StdImplementationDeterminism, StdImplementationRef, StdLibrarySourceId, StdSourceImplementation,
+};
 pub use requirement::{RequirementDecl, RequirementKind, RequirementSemantics, StdLimitKind};
 pub use runtime_type::{RuntimeField, RuntimeFieldRole, RuntimeTypeRole};
 pub use std_type::{

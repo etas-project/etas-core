@@ -11,6 +11,29 @@ pub enum IntrinsicCompletionSemantics {
 }
 
 pub fn intrinsic_completion_semantics(id: StdIntrinsicId) -> Option<IntrinsicCompletionSemantics> {
+    if matches!(
+        id.0,
+        pure::TEXT_FIND_FROM
+            | pure::TEXT_BYTE_SLICE
+            | pure::TEXT_CHAR_SLICE
+            | pure::TEXT_REPLACE_RANGE
+            | pure::TEXT_REPEAT
+            | pure::TEXT_GRAPHEME_SLICE
+    ) {
+        return Some(IntrinsicCompletionSemantics::ReturnsOrRaisesDeclaredErrors);
+    }
+    if matches!(
+        id.0,
+        pure::TEXT_TRIM..=pure::TEXT_ENDS_WITH
+            | pure::TEXT_LEN
+            | pure::TEXT_SPLIT..=pure::TEXT_JOIN
+            | pure::TEXT_CHAR_COUNT..=pure::TEXT_REVERSE_CHARS
+            | pure::TEXT_PARSE_I8..=pure::TEXT_FORMAT
+            | pure::TEXT_GRAPHEMES..=pure::TEXT_CASEFOLD
+            | pure::CHAR_IS_WHITESPACE..=pure::CHAR_FROM_U32
+    ) {
+        return Some(IntrinsicCompletionSemantics::Returns);
+    }
     match id.0 {
         runtime::IO_READ_ALL
         | runtime::IO_READ_LINE
@@ -33,9 +56,6 @@ pub fn intrinsic_completion_semantics(id: StdIntrinsicId) -> Option<IntrinsicCom
         | runtime::CODE_WITH_BODY
         | runtime::CODE_DIFF
         | runtime::CHECKPOINT
-        | pure::TEXT_TRIM
-        | pure::TEXT_LOWERCASE
-        | pure::TEXT_UPPERCASE
         | pure::LIST_LEN
         | pure::LIST_IS_EMPTY
         | pure::LIMIT_ITERATIONS

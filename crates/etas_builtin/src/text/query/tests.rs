@@ -5,7 +5,11 @@ use crate::{BuiltinTypeTag, call_pure_intrinsic};
 fn borrowed_text_queries_keep_kernel_values_and_failures() {
     for (id, args, expected) in [
         (pure::TEXT_LEN, vec![""], BuiltinValue::Usize(0)),
-        (pure::TEXT_LEN, vec!["中😀e\u{301}"], BuiltinValue::Usize(4)),
+        (
+            pure::TEXT_LEN,
+            vec!["中😀e\u{301}"],
+            BuiltinValue::Usize(10),
+        ),
         (
             pure::TEXT_CONTAINS,
             vec!["中😀e\u{301}", "😀"],
@@ -36,11 +40,6 @@ fn borrowed_text_queries_keep_kernel_values_and_failures() {
             vec!["", "x"],
             BuiltinValue::Bool(false),
         ),
-        (
-            pure::TEXT_PARSE_I32,
-            vec!["-2147483648"],
-            BuiltinValue::ResultOk(Box::new(BuiltinValue::I32(i32::MIN))),
-        ),
     ] {
         let id = StdIntrinsicId(id);
         let query = TextQuery::for_intrinsic(id).unwrap();
@@ -62,13 +61,6 @@ fn borrowed_text_queries_keep_kernel_values_and_failures() {
                 expected: BuiltinTypeTag::String,
                 actual: BuiltinTypeTag::Bool
             })
-        );
-    }
-    for text in ["", "2147483648", " 1", "1x"] {
-        let expected = text.parse::<i32>().unwrap_err().to_string();
-        assert_eq!(
-            TextQuery::ParseI32.evaluate(&[text]).unwrap(),
-            BuiltinValue::ResultErr(Box::new(BuiltinValue::String(expected)))
         );
     }
     assert!(TextQuery::for_intrinsic(StdIntrinsicId(pure::HTTP_DECODE_RESPONSE)).is_none());

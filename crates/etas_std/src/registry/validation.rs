@@ -5,8 +5,8 @@ use std::{
 
 use crate::{
     EffectActionArgKind, RequirementKind, RequirementSemantics, StdDecl, StdEffectRef,
-    StdGenericParam, StdImplFact, StdRegistry, StdSpecRef, StdStaticArg, StdSymbolKind, StdType,
-    TypeDeclKind,
+    StdGenericParam, StdImplFact, StdImplementationRef, StdRegistry, StdSpecRef, StdStaticArg,
+    StdSymbolKind, StdType, TypeDeclKind,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -37,6 +37,7 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
     let mut value_roles = BTreeSet::new();
     let mut action_roles = BTreeSet::new();
     for symbol in registry.symbols() {
+        validate_implementation(symbol)?;
         super::enum_constructor::validate(registry, symbol)?;
         super::value_role::validate(registry, symbol, &mut value_roles)?;
         if let Some(argument) = registry.memory_place_result_argument(symbol.id)
@@ -295,6 +296,42 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
     }
     validate_spec_impls(registry)?;
     validate_effect_extension_cycles(&logical_effects)?;
+    Ok(())
+}
+
+fn validate_implementation(symbol: &crate::StdSymbol) -> Result<(), StdRegistryValidationError> {
+    let Some(implementation) = symbol.implementation else {
+        return Ok(());
+    };
+    let invalid = |reason: &str| StdRegistryValidationError {
+        symbol: symbol.qualified_path.join("."),
+        reason: reason.into(),
+    };
+    match implementation {
+        StdImplementationRef::Primitive { intrinsic } => {
+            if symbol.intrinsic.as_ref().map(|descriptor| descriptor.id) != Some(intrinsic) {
+                return Err(invalid(
+                    "primitive implementation must reference the symbol's intrinsic identity",
+                ));
+            }
+        }
+        StdImplementationRef::Source {
+            target,
+            optimized_intrinsic,
+        } => {
+            let source = crate::standard_library_source(target.source);
+            if !source.implementations.contains(&target.item) {
+                return Err(invalid(
+                    "source implementation item is not exported by its bundled source asset",
+                ));
+            }
+            if symbol.intrinsic.as_ref().map(|descriptor| descriptor.id) != optimized_intrinsic {
+                return Err(invalid(
+                    "source implementation optimization must share the symbol's intrinsic identity",
+                ));
+            }
+        }
+    }
     Ok(())
 }
 

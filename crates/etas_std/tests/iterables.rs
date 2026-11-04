@@ -6,7 +6,7 @@ use etas_std::{
 #[test]
 fn sequential_support_collections_declare_their_element_parameter() {
     let registry = standard_registry();
-    for name in ["Deque", "Queue", "Stack", "OrderedSet"] {
+    for name in ["Deque", "Queue", "Stack", "OrderedSet", "Iter"] {
         let symbol = registry
             .lookup_qualified(&["std", "collections", name])
             .unwrap();
@@ -18,6 +18,12 @@ fn sequential_support_collections_declare_their_element_parameter() {
             Some(StdIterableItem::Element { parameter: 0 })
         );
         assert_eq!(declaration.params[0].name, "T");
+        if name == "Iter" {
+            assert_eq!(
+                declaration.construction,
+                etas_std::StdTypeConstruction::IntrinsicOnly
+            );
+        }
     }
 }
 

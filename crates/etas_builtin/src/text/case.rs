@@ -1,15 +1,17 @@
-use icu_properties::{
-    CodePointSetData,
-    props::{CaseIgnorable, Cased},
-};
-
 use super::input::TextInput;
-use crate::BuiltinError;
+use super::output::TextOutputWork;
+use super::unicode;
+use crate::{
+    BuiltinError,
+    work::{WorkControl, WorkPoll},
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CaseMapping {
     Lowercase,
     Uppercase,
+    AsciiLowercase,
+    AsciiUppercase,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -20,8 +22,8 @@ pub enum CaseOutput {
 
 #[derive(Clone)]
 enum MappedChars {
-    Lower(std::char::ToLowercase),
-    Upper(std::char::ToUppercase),
+    Mapped(std::slice::Iter<'static, u32>),
+    One(std::option::IntoIter<char>),
 }
 
 impl Iterator for MappedChars {
@@ -29,8 +31,11 @@ impl Iterator for MappedChars {
 
     fn next(&mut self) -> Option<char> {
         match self {
-            Self::Lower(chars) => chars.next(),
-            Self::Upper(chars) => chars.next(),
+            Self::Mapped(chars) => chars
+                .next()
+                .copied()
+                .map(|scalar| char::from_u32(scalar).expect("generated Unicode scalar")),
+            Self::One(chars) => chars.next(),
         }
     }
 }
@@ -38,10 +43,18 @@ impl Iterator for MappedChars {
 impl CaseMapping {
     fn scalar(self, ch: char) -> MappedChars {
         match self {
-            Self::Lowercase => MappedChars::Lower(ch.to_lowercase()),
-            Self::Uppercase => MappedChars::Upper(ch.to_uppercase()),
+            Self::Lowercase => unicode::lowercase_mapping(ch)
+                .map_or_else(|| MappedChars::One(Some(ch).into_iter()), mapped),
+            Self::Uppercase => unicode::uppercase_mapping(ch)
+                .map_or_else(|| MappedChars::One(Some(ch).into_iter()), mapped),
+            Self::AsciiLowercase => MappedChars::One(Some(ch.to_ascii_lowercase()).into_iter()),
+            Self::AsciiUppercase => MappedChars::One(Some(ch.to_ascii_uppercase()).into_iter()),
         }
     }
+}
+
+fn mapped(values: &'static [u32]) -> MappedChars {
+    MappedChars::Mapped(values.iter())
 }
 
 /// Sizes the complete output before writing. Unchanged results let the caller
@@ -67,12 +80,6 @@ pub fn map_case(
     if !changed {
         return Ok(CaseOutput::Unchanged);
     }
-    if let Some(flat) = input.contiguous() {
-        return Ok(CaseOutput::Changed(match mapping {
-            CaseMapping::Lowercase => flat.to_lowercase(),
-            CaseMapping::Uppercase => flat.to_uppercase(),
-        }));
-    }
     let mut output = String::new();
     output
         .try_reserve_exact(bytes)
@@ -80,27 +87,100 @@ pub fn map_case(
     let chars = input.chunks().flat_map(str::chars);
     match mapping {
         CaseMapping::Lowercase if has_sigma => lowercase(chars, &mut output),
-        CaseMapping::Lowercase => output.extend(chars.flat_map(char::to_lowercase)),
-        CaseMapping::Uppercase => output.extend(chars.flat_map(char::to_uppercase)),
+        CaseMapping::Lowercase | CaseMapping::Uppercase => {
+            output.extend(chars.flat_map(|ch| mapping.scalar(ch)))
+        }
+        CaseMapping::AsciiLowercase | CaseMapping::AsciiUppercase => {
+            output.extend(chars.flat_map(|ch| mapping.scalar(ch)))
+        }
     }
     Ok(CaseOutput::Changed(output))
 }
 
+#[derive(Clone, Debug)]
+pub struct TextCaseWork {
+    mapping: CaseMapping,
+    output: TextOutputWork,
+    pending: Vec<char>,
+    pending_index: usize,
+    preceded_by_cased: bool,
+    pending_sigma: Option<usize>,
+}
+
+impl TextCaseWork {
+    pub fn new(mapping: CaseMapping) -> Self {
+        Self {
+            mapping,
+            output: TextOutputWork::default(),
+            pending: Vec::new(),
+            pending_index: 0,
+            preceded_by_cased: false,
+            pending_sigma: None,
+        }
+    }
+
+    pub fn reserved_bytes(&self) -> usize {
+        self.output.reserved_bytes()
+    }
+
+    pub fn step(
+        &mut self,
+        input: &str,
+        end_of_input: bool,
+        control: &mut WorkControl,
+    ) -> Result<(usize, WorkPoll<String>), BuiltinError> {
+        let mut consumed = 0usize;
+        loop {
+            while let Some(ch) = self.pending.get(self.pending_index).copied() {
+                if !self.output.append_char(ch, control)? {
+                    return Ok((consumed, WorkPoll::Pending));
+                }
+                self.pending_index += 1;
+            }
+            self.pending.clear();
+            self.pending_index = 0;
+            let Some(ch) = input[consumed..].chars().next() else {
+                if end_of_input {
+                    self.resolve_sigma(false);
+                    return Ok((consumed, WorkPoll::Ready(self.output.take())));
+                }
+                return Ok((consumed, WorkPoll::Pending));
+            };
+            if self.mapping == CaseMapping::Lowercase && !unicode::is_case_ignorable(ch) {
+                let following_is_cased = unicode::is_cased(ch);
+                self.resolve_sigma(following_is_cased);
+                if ch == 'Σ' && self.preceded_by_cased {
+                    self.pending_sigma = Some(self.output.len());
+                }
+                self.preceded_by_cased = following_is_cased;
+            }
+            self.pending.extend(self.mapping.scalar(ch));
+            consumed += ch.len_utf8();
+        }
+    }
+
+    fn resolve_sigma(&mut self, followed_by_cased: bool) {
+        if let Some(offset) = self.pending_sigma.take()
+            && !followed_by_cased
+        {
+            self.output.replace_same_width(offset, "σ", "ς");
+        }
+    }
+}
+
 fn lowercase(chars: impl Iterator<Item = char>, output: &mut String) {
-    let cased = CodePointSetData::new::<Cased>();
-    let ignorable = CodePointSetData::new::<CaseIgnorable>();
     let mut preceded_by_cased = false;
     let mut pending_sigma = None;
     for ch in chars {
-        if !ignorable.contains(ch) {
-            let following_is_cased = cased.contains(ch);
+        if !unicode::is_case_ignorable(ch) {
+            let following_is_cased = unicode::is_cased(ch);
             resolve_sigma(output, &mut pending_sigma, following_is_cased);
             if ch == 'Σ' && preceded_by_cased {
                 pending_sigma = Some(output.len());
             }
             preceded_by_cased = following_is_cased;
         }
-        output.extend(ch.to_lowercase());
+        output.extend(CaseMapping::Lowercase.scalar(ch));
     }
     resolve_sigma(output, &mut pending_sigma, false);
 }

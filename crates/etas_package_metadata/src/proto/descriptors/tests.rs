@@ -322,6 +322,7 @@ fn parameter_nonreturn_survives_full_package_artifact_roundtrip() {
         declarations: vec![],
     };
     let mut metadata = PackageMetadata {
+        std_compatibility: "test-std".into(),
         version: 1,
         package: PackageIdentity {
             name: "descriptor-test".into(),
@@ -754,6 +755,7 @@ fn binary_artifact_decoder_validates_flat_graph_references_before_accepting_meta
     use crate::*;
     let metadata = PackageMetadata {
         version: 1,
+        std_compatibility: "test-std".into(),
         package: PackageIdentity {
             name: "descriptors".into(),
             version: "0.1.0".into(),
@@ -806,6 +808,7 @@ fn package_graph_roundtrip_and_shared_descriptor_budget_use_the_production_codec
     use crate::*;
     let mut metadata = PackageMetadata {
         version: 1,
+        std_compatibility: "test-std".into(),
         package: PackageIdentity {
             name: "descriptors".into(),
             version: "0.1.0".into(),
@@ -847,6 +850,7 @@ fn package_graph_roundtrip_and_shared_descriptor_budget_use_the_production_codec
             version: "0.1.0".into(),
             edition: "2026".into(),
         },
+        std_compatibility: "test-std".into(),
         import_root: "dep".into(),
         source: ResolvedDependencySource::Path {
             path: "dep".into(),

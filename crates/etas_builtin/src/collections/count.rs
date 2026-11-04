@@ -33,9 +33,7 @@ impl CountQuery {
         text: &T,
     ) -> BuiltinValue {
         match self {
-            Self::Len => {
-                BuiltinValue::Usize(text.chunks().map(|chunk| chunk.chars().count()).sum())
-            }
+            Self::Len => BuiltinValue::Usize(text.byte_len()),
             Self::IsEmpty => BuiltinValue::Bool(text.byte_len() == 0),
         }
     }
@@ -64,7 +62,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn queries_preserve_container_and_unicode_scalar_semantics() {
+    fn queries_preserve_container_and_utf8_byte_length_semantics() {
         for (input, length) in [
             (BuiltinValue::Array(vec![BuiltinValue::Unit; 3]), 3),
             (BuiltinValue::List(vec![BuiltinValue::Unit; 2]), 2),
@@ -73,7 +71,7 @@ mod tests {
                 BuiltinValue::Map(vec![(BuiltinValue::Unit, BuiltinValue::Unit)]),
                 1,
             ),
-            (BuiltinValue::String("中😀e\u{301}".into()), 4),
+            (BuiltinValue::String("中😀e\u{301}".into()), 10),
             (BuiltinValue::String(String::new()), 0),
             (BuiltinValue::Array(vec![]), 0),
         ] {

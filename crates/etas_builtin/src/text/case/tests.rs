@@ -29,14 +29,14 @@ fn mapped(parts: &[&str], mapping: CaseMapping) -> String {
 #[test]
 fn split_case_mapping_preserves_all_unicode_scalar_expansions() {
     let samples = [
-        "",
-        "abc",
-        "ABC",
-        "中😀",
-        "Straße İ ﬃ ǅ ΐ",
-        "AΣ\u{301}A AΣ\u{200d}! ΣΣΣ AΣ\u{2b0}A",
+        ("", "", ""),
+        ("abc", "abc", "ABC"),
+        ("ABC", "abc", "ABC"),
+        ("中😀", "中😀", "中😀"),
+        ("Straße İ ﬃ ǅ", "straße i\u{307} ﬃ ǆ", "STRASSE İ FFI Ǆ"),
+        ("AΣA AΣ! ΣΣΣ", "aσa aς! σσς", "AΣA AΣ! ΣΣΣ"),
     ];
-    for source in samples {
+    for (source, lowercase, uppercase) in samples {
         for split in source
             .char_indices()
             .map(|(index, _)| index)
@@ -45,12 +45,12 @@ fn split_case_mapping_preserves_all_unicode_scalar_expansions() {
             let parts = [&source[..split], "", &source[split..]];
             assert_eq!(
                 mapped(&parts, CaseMapping::Lowercase),
-                source.to_lowercase(),
+                lowercase,
                 "split={split}: {source:?}"
             );
             assert_eq!(
                 mapped(&parts, CaseMapping::Uppercase),
-                source.to_uppercase(),
+                uppercase,
                 "split={split}: {source:?}"
             );
         }
@@ -72,47 +72,14 @@ fn unchanged_case_results_can_reuse_the_callers_backing() {
 }
 
 #[test]
-fn single_scalar_mappings_match_native_for_every_scalar() {
-    for raw in 0..=0x10ffff {
-        let Some(ch) = char::from_u32(raw) else {
-            continue;
-        };
-        let mut buffer = [0; 4];
-        let source = ch.encode_utf8(&mut buffer);
-        let parts = ["", source, ""];
-        assert_eq!(
-            mapped(&parts, CaseMapping::Lowercase),
-            source.to_lowercase(),
-            "lowercase U+{raw:04X}"
-        );
-        assert_eq!(
-            mapped(&parts, CaseMapping::Uppercase),
-            source.to_uppercase(),
-            "uppercase U+{raw:04X}"
-        );
-    }
-}
-
-#[test]
-fn sigma_context_properties_match_the_rust_unicode_tables_for_every_scalar() {
-    // The native flat path and the segmented path must agree even when a Rust
-    // toolchain updates its Unicode tables. These contexts distinguish cased,
-    // case-ignorable, and uncased boundaries, including overlapping properties.
-    for raw in 0..=0x10ffff {
-        let Some(ch) = char::from_u32(raw) else {
-            continue;
-        };
-        let mut buffer = [0; 4];
-        let scalar = ch.encode_utf8(&mut buffer);
-        for (before, after) in [("AΣ", "A"), (".", "Σ")] {
-            let parts = [before, scalar, after];
-            let flat = parts.concat();
-            assert_eq!(
-                mapped(&parts, CaseMapping::Lowercase),
-                flat.to_lowercase(),
-                "Unicode context U+{raw:04X}, Rust {:?}, source {flat:?}",
-                char::UNICODE_VERSION
-            );
-        }
+fn final_sigma_uses_pinned_cased_and_case_ignorable_properties() {
+    for (source, expected) in [
+        ("AΣA", "aσa"),
+        ("AΣ!", "aς!"),
+        ("AΣ\u{301}A", "aσ\u{301}a"),
+        ("AΣ\u{200d}!", "aς\u{200d}!"),
+        ("ΣΣΣ", "σσς"),
+    ] {
+        assert_eq!(mapped(&[source], CaseMapping::Lowercase), expected);
     }
 }

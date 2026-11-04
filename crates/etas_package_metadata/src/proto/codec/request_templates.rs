@@ -231,7 +231,7 @@ mod tests {
                 ..Default::default()
             };
         }
-        let mut metadata = PackageMetadata::default();
+        let mut metadata = crate::test_package_metadata();
         metadata
             .public_metadata
             .effect_summaries

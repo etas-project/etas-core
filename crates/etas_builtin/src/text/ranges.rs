@@ -1,34 +1,97 @@
 use std::ops::Range;
 
-use super::{input::TextInput, search::PatternIndex};
-use crate::BuiltinError;
+use super::{input::TextInput, search::PatternIndex, unicode};
+use crate::{
+    BuiltinError,
+    work::{WorkControl, WorkPoll},
+};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TextTrimKind {
+    Both,
+    Start,
+    End,
+}
+
+#[derive(Clone, Debug)]
+pub struct TextTrimWork {
+    kind: TextTrimKind,
+    position: usize,
+    first_non_whitespace: Option<usize>,
+    last_non_whitespace_end: Option<usize>,
+}
+
+impl TextTrimWork {
+    pub fn new(kind: TextTrimKind) -> Self {
+        Self {
+            kind,
+            position: 0,
+            first_non_whitespace: None,
+            last_non_whitespace_end: None,
+        }
+    }
+
+    pub fn step(
+        &mut self,
+        input: &str,
+        end_of_input: bool,
+        control: &mut WorkControl,
+    ) -> (usize, WorkPoll<Range<usize>>) {
+        let mut consumed = 0usize;
+        while let Some(ch) = input[consumed..].chars().next() {
+            let width = ch.len_utf8();
+            if control.consume(width).is_err() {
+                return (consumed, WorkPoll::Pending);
+            }
+            if !unicode::is_whitespace(ch) {
+                self.first_non_whitespace.get_or_insert(self.position);
+                self.last_non_whitespace_end = Some(self.position + width);
+            }
+            self.position += width;
+            consumed += width;
+        }
+        if !end_of_input {
+            return (consumed, WorkPoll::Pending);
+        }
+        let range = match self.kind {
+            TextTrimKind::Both => {
+                let start = self.first_non_whitespace.unwrap_or(self.position);
+                start..self.last_non_whitespace_end.unwrap_or(start)
+            }
+            TextTrimKind::Start => {
+                self.first_non_whitespace.unwrap_or(self.position)..self.position
+            }
+            TextTrimKind::End => 0..self.last_non_whitespace_end.unwrap_or(0),
+        };
+        (consumed, WorkPoll::Ready(range))
+    }
+}
 
 /// Byte ranges always delimit complete UTF-8 scalar values in the input.
 pub fn trim_range<T: TextInput + ?Sized>(text: &T) -> Range<usize> {
-    if let Some(text) = text.contiguous() {
-        let remaining = text.trim_start();
-        let start = text.len() - remaining.len();
-        return start..start + remaining.trim_end().len();
-    }
-    let mut chars = text.chunks().flat_map(str::chars);
-    let mut start = 0;
-    for ch in chars.by_ref() {
-        if !ch.is_whitespace() {
-            break;
+    trim_range_kind(text, TextTrimKind::Both)
+}
+
+pub fn trim_range_kind<T: TextInput + ?Sized>(text: &T, kind: TextTrimKind) -> Range<usize> {
+    let mut position = 0usize;
+    let mut first_non_whitespace = None;
+    let mut last_non_whitespace_end = None;
+    for scalar in text.chunks().flat_map(str::chars) {
+        let width = scalar.len_utf8();
+        if !unicode::is_whitespace(scalar) {
+            first_non_whitespace.get_or_insert(position);
+            last_non_whitespace_end = Some(position + width);
         }
-        start += ch.len_utf8();
+        position += width;
     }
-    if start == text.byte_len() {
-        return start..start;
-    }
-    let mut end = text.byte_len();
-    for ch in chars.rev() {
-        if !ch.is_whitespace() {
-            break;
+    match kind {
+        TextTrimKind::Both => {
+            let start = first_non_whitespace.unwrap_or(position);
+            start..last_non_whitespace_end.unwrap_or(start)
         }
-        end -= ch.len_utf8();
+        TextTrimKind::Start => first_non_whitespace.unwrap_or(position)..position,
+        TextTrimKind::End => 0..last_non_whitespace_end.unwrap_or(0),
     }
-    start..end
 }
 
 struct Bytes<'a, C> {

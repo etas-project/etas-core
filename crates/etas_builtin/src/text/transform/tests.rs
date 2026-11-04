@@ -26,12 +26,6 @@ fn borrowed_transforms_match_unicode_empty_and_separator_kernel_semantics() {
             BuiltinValue::String("SS中".into()),
         ),
         (
-            pure::TEXT_LINES,
-            vec!["a\r\nb\n\n"],
-            strings(&["a", "b", ""]),
-        ),
-        (pure::TEXT_LINES, vec![""], strings(&[])),
-        (
             pure::TEXT_SPLIT,
             vec!["中😀", ""],
             strings(&["", "中", "😀", ""]),

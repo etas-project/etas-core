@@ -2,6 +2,31 @@ use etas_std::StdIntrinsicId;
 
 use crate::BuiltinTypeTag;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TextFailure {
+    InvalidIndex,
+    InvalidRange,
+    NotCharBoundary,
+    ParseFailure,
+    NumericOverflow,
+    LengthOverflow,
+    InvalidFormat,
+}
+
+impl TextFailure {
+    pub const fn variant_name(self) -> &'static str {
+        match self {
+            Self::InvalidIndex => "InvalidIndex",
+            Self::InvalidRange => "InvalidRange",
+            Self::NotCharBoundary => "NotCharBoundary",
+            Self::ParseFailure => "ParseFailure",
+            Self::NumericOverflow => "NumericOverflow",
+            Self::LengthOverflow => "LengthOverflow",
+            Self::InvalidFormat => "InvalidFormat",
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum BuiltinError {
     UnsupportedIntrinsic {
@@ -21,6 +46,8 @@ pub enum BuiltinError {
     InvalidSlice,
     InvalidUtf8,
     InvalidJson,
+    Text(TextFailure),
+    ResourceExhausted,
     AssertionFailed,
     Abort {
         message: String,

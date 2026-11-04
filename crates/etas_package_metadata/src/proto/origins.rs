@@ -191,10 +191,14 @@ mod tests {
     #[test]
     fn origin_budget_is_shared_with_the_entire_package_graph_before_encoding() {
         let origins = fixture(9_000);
-        let mut metadata = crate::PackageMetadata::default();
+        let mut metadata = crate::PackageMetadata {
+            std_compatibility: "test-std".into(),
+            ..crate::PackageMetadata::default()
+        };
         metadata.public_metadata.definition_origins = Some(origins.clone());
         metadata.dependencies.push(crate::ResolvedDependency {
             identity: Default::default(),
+            std_compatibility: "test-std".into(),
             import_root: "dep".into(),
             source: crate::ResolvedDependencySource::Path {
                 path: "dep".into(),

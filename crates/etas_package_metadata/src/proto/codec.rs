@@ -40,6 +40,7 @@ mod selector_tests;
 pub(crate) fn package_metadata_to_proto(metadata: &PackageMetadata) -> ProtoPackageGraphSection {
     ProtoPackageGraphSection {
         version: metadata.version,
+        std_compatibility: metadata.std_compatibility.clone(),
         package: Some(package_identity_to_proto(&metadata.package)),
         dependencies: metadata
             .dependencies
@@ -67,6 +68,7 @@ pub(crate) fn package_metadata_from_proto(
 ) -> Result<PackageMetadata, MetadataArtifactError> {
     Ok(PackageMetadata {
         version: section.version,
+        std_compatibility: section.std_compatibility,
         package: section
             .package
             .map(package_identity_from_proto)
@@ -449,6 +451,7 @@ fn package_identity_from_proto(
 fn resolved_dependency_to_proto(dependency: &ResolvedDependency) -> ProtoResolvedDependency {
     ProtoResolvedDependency {
         identity: Some(package_identity_to_proto(&dependency.identity)),
+        std_compatibility: dependency.std_compatibility.clone(),
         import_root: dependency.import_root.clone(),
         source: Some(resolved_source_to_proto(&dependency.source)),
         dependencies: dependency
@@ -480,6 +483,7 @@ fn resolved_dependency_from_proto(
                     "resolved dependency is missing identity",
                 )
             })?,
+        std_compatibility: dependency.std_compatibility,
         import_root: required(dependency.import_root, "resolved dependency import root")?,
         source: dependency
             .source
@@ -2900,7 +2904,7 @@ mod tests {
 
     #[test]
     fn encoder_and_decoder_share_the_artifact_wide_graph_budget() {
-        let mut metadata = PackageMetadata::default();
+        let mut metadata = crate::test_package_metadata();
         metadata.public_metadata.types = (0..MAX_METADATA_GRAPH_NODES)
             .map(|_| NamedSignature {
                 ty: Some(Type {
@@ -2941,6 +2945,7 @@ mod tests {
             };
         }
         let graph = ProtoPackageGraphSection {
+            std_compatibility: "test-std".into(),
             public_metadata: Some(ProtoPublicMetadataSection {
                 types: vec![ProtoNamedSignature {
                     ty: Some(ty),
@@ -3102,6 +3107,7 @@ mod tests {
                 package_metadata_from_package_graph_payload(&graph.encode_to_vec()).unwrap_err();
             assert!(error.to_string().contains("returned callable"), "{error}");
             let metadata = PackageMetadata {
+                std_compatibility: "test-std".into(),
                 public_metadata: PublicMetadata {
                     effect_summaries: vec![EffectSummary {
                         returned_callables: Some(CallableValueGraph {
@@ -3145,9 +3151,11 @@ mod tests {
     fn valid_graph() -> ProtoPackageGraphSection {
         ProtoPackageGraphSection {
             version: 1,
+            std_compatibility: "test-std".into(),
             package: Some(identity("demo", "0.1.0")),
             dependencies: vec![ProtoResolvedDependency {
                 identity: Some(identity("dep", "1.2.3")),
+                std_compatibility: "test-std".into(),
                 import_root: "dep".to_owned(),
                 source: Some(ProtoResolvedSource {
                     kind: "github_release".to_owned(),
