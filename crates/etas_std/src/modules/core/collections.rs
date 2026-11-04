@@ -84,7 +84,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             FlowDecl::pure("len", &["LengthInput"], "usize")
                 .with_intrinsic_value_method(StdType::parse("LengthInput"), "len"),
         ),
-        "Return the length of an Array, List, Slice, Map, or string value.",
+        "Return the length of an Array, List, Slice, Map, string, or bytes value.",
         Some(IntrinsicDescriptor {
             id: StdIntrinsicId(intrinsic::pure::LIST_LEN),
             qualified_path: vec!["std".into(), "collections".into(), "len".into()],
@@ -104,7 +104,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             FlowDecl::pure("is_empty", &["EmptinessInput"], "bool")
                 .with_intrinsic_value_method(StdType::parse("EmptinessInput"), "is_empty"),
         ),
-        "Return whether an Array, List, Slice, Map, or string value is empty.",
+        "Return whether an Array, List, Slice, Map, string, or bytes value is empty.",
         Some(IntrinsicDescriptor {
             id: StdIntrinsicId(intrinsic::pure::LIST_IS_EMPTY),
             qualified_path: vec!["std".into(), "collections".into(), "is_empty".into()],

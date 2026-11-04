@@ -45,6 +45,7 @@ impl CountQuery {
                 value.len()
             }
             BuiltinValue::Map(value) => value.len(),
+            BuiltinValue::Bytes(value) => value.len(),
             BuiltinValue::String(value) => return Ok(self.evaluate_text(value)),
             other => {
                 return Err(BuiltinError::TypeMismatch {
@@ -73,6 +74,8 @@ mod tests {
             ),
             (BuiltinValue::String("中😀e\u{301}".into()), 10),
             (BuiltinValue::String(String::new()), 0),
+            (BuiltinValue::Bytes(vec![0, 128, 255]), 3),
+            (BuiltinValue::Bytes(vec![]), 0),
             (BuiltinValue::Array(vec![]), 0),
         ] {
             let args = [input];
@@ -104,11 +107,7 @@ mod tests {
                     actual: 2
                 })
             );
-            for input in [
-                BuiltinValue::Bool(false),
-                BuiltinValue::Bytes(vec![]),
-                BuiltinValue::Set(vec![]),
-            ] {
+            for input in [BuiltinValue::Bool(false), BuiltinValue::Set(vec![])] {
                 let tag = input.type_tag();
                 assert_eq!(
                     query.evaluate(&[input]),
