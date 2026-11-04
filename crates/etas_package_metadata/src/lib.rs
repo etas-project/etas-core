@@ -146,6 +146,7 @@ mod tests {
             vec![reference.clone()];
         metadata.public_metadata.effect_summaries[0].returned_callables =
             Some(CallableValueGraph {
+                objects: Vec::new(),
                 sources: vec![CallableValueSource::Value(0)],
                 values: vec![CallableValueNode {
                     residual_checks: vec![reference],

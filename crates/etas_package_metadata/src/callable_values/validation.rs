@@ -17,35 +17,7 @@ impl CallableValueGraph {
                 "callable independent determinism exceeds its summary",
             ));
         }
-        let mut bindings = BTreeMap::new();
-        for binding in &node.generic_bindings {
-            let kind = match binding.scope {
-                CallableValueScope::Root => root
-                    .map(|(_, kinds)| {
-                        kinds
-                            .get(binding.position as usize)
-                            .copied()
-                            .ok_or_else(|| {
-                                invalid("callable generic binding position is out of range")
-                            })
-                    })
-                    .transpose()?,
-                CallableValueScope::Value(index) => Some(
-                    self.value(index)?
-                        .generic_params
-                        .get(binding.position as usize)
-                        .ok_or_else(|| {
-                            invalid("callable generic binding position is out of range")
-                        })?
-                        .kind,
-                ),
-            };
-            if binding.label.is_empty() || bindings.insert(binding.label.as_str(), kind).is_some() {
-                return Err(invalid(
-                    "callable generic binding label is empty or duplicated",
-                ));
-            }
-        }
+        let bindings = self.descriptor_bindings(&node.generic_bindings, root)?;
         let mut work = Vec::new();
         if let Some(requests) = &node.handler_requests {
             requests.validate_shape()?;
@@ -86,96 +58,7 @@ impl CallableValueGraph {
             work.push(Part::Row(&handler.produced));
         }
         work.push(Part::Trace(&node.action_trace));
-        let mut has_parameter_calls = false;
-        while let Some(part) = work.pop() {
-            match part {
-                Part::Target(crate::CallableRequestTarget::Parameter(_)) => {}
-                Part::Target(crate::CallableRequestTarget::SpecMethod(method)) => {
-                    valid_path(&method.spec)?;
-                    work.push(Part::Type(&method.receiver));
-                    work.extend(method.spec_args.iter().map(Part::Type));
-                    for argument in &method.generic_arguments {
-                        work.push(match argument {
-                            crate::SpecMethodGenericArgument::Type(ty) => Part::Type(ty),
-                            crate::SpecMethodGenericArgument::EffectRow(row) => Part::Row(row),
-                        });
-                    }
-                }
-                Part::Type(ty) => {
-                    match ty.kind {
-                        TypeKind::Var => {
-                            require_binding(&bindings, &ty.name, GenericParamKind::Type)?
-                        }
-                        TypeKind::Named
-                        | TypeKind::Applied
-                        | TypeKind::Alias
-                        | TypeKind::Nominal
-                        | TypeKind::Enum => valid_path(&ty.path)?,
-                        _ => {}
-                    }
-                    crate::type_validation::validate_type_shape(ty)?;
-                    for bound in &ty.bounds {
-                        valid_path(&bound.spec)?;
-                        work.extend(bound.args.iter().map(Part::Type));
-                    }
-                    let mut fields = BTreeSet::new();
-                    for field in &ty.fields {
-                        if field.name.is_empty() || !fields.insert(&field.name) {
-                            return Err(invalid(
-                                "callable value record field is empty or duplicated",
-                            ));
-                        }
-                        work.push(Part::Type(&field.ty));
-                    }
-                    work.extend(ty.children.iter().map(Part::Type));
-                    work.extend(ty.effects.iter().chain(&ty.produced_effects).map(Part::Row));
-                }
-                Part::Row(row) => {
-                    if let Some(tail) = &row.tail {
-                        require_binding(&bindings, tail, GenericParamKind::Effect)?;
-                    }
-                    work.extend(row.effects.iter().map(Part::Effect));
-                }
-                Part::Effect(effect) => {
-                    valid_path(&effect.path)?;
-                    for arg in &effect.args {
-                        match arg.kind {
-                            EffectArgKind::Type if arg.ty.is_none() => {
-                                return Err(invalid(
-                                    "callable value effect type argument is missing",
-                                ));
-                            }
-                            EffectArgKind::Path => valid_path(&arg.path)?,
-                            _ => {}
-                        }
-                        work.extend(arg.ty.iter().map(Part::Type));
-                    }
-                }
-                Part::Trace(trace) => match trace {
-                    ActionTrace::Event(event) => work.push(Part::Effect(&event.action)),
-                    ActionTrace::Seq(parts) | ActionTrace::Choice(parts) => {
-                        work.extend(parts.iter().map(Part::Trace))
-                    }
-                    ActionTrace::Repeat(part) => work.push(Part::Trace(part)),
-                    ActionTrace::UnknownOrder(actions) => {
-                        work.extend(actions.iter().map(Part::Effect))
-                    }
-                    ActionTrace::Widened {
-                        actions,
-                        parameter_calls,
-                    } => {
-                        work.extend(actions.iter().map(Part::Effect));
-                        has_parameter_calls |= !parameter_calls.is_empty();
-                        work.extend(parameter_calls.iter().map(Part::Target));
-                    }
-                    ActionTrace::ParameterCall { parameter } => {
-                        has_parameter_calls = true;
-                        work.push(Part::Target(parameter));
-                    }
-                    ActionTrace::Empty => {}
-                },
-            }
-        }
+        let has_parameter_calls = validate_parts(&bindings, work)?;
         if has_parameter_calls && node.behavior.independent_determinism.is_none() {
             return Err(invalid(
                 "callable parameter trace is missing independent determinism",
@@ -183,6 +66,150 @@ impl CallableValueGraph {
         }
         Ok(())
     }
+
+    pub(super) fn validate_object_descriptors(
+        &self,
+        object: &ExistentialValueNode,
+        root: Option<(usize, &[GenericParamKind])>,
+    ) -> Result<(), crate::MetadataArtifactError> {
+        let bindings = self.descriptor_bindings(&object.generic_bindings, root)?;
+        let mut work = vec![
+            Part::Type(&object.object_type),
+            Part::Type(&object.source_type),
+        ];
+        for witness in &object.witnesses {
+            valid_path(&witness.bound.spec)?;
+            work.extend(witness.bound.args.iter().map(Part::Type));
+        }
+        validate_parts(&bindings, work)?;
+        Ok(())
+    }
+
+    fn descriptor_bindings<'a>(
+        &self,
+        values: &'a [CallableValueGenericBinding],
+        root: Option<(usize, &[GenericParamKind])>,
+    ) -> Result<BTreeMap<&'a str, Option<GenericParamKind>>, crate::MetadataArtifactError> {
+        let mut bindings = BTreeMap::new();
+        for binding in values {
+            let kind = match binding.scope {
+                CallableValueScope::Root => root
+                    .map(|(_, kinds)| {
+                        kinds
+                            .get(binding.position as usize)
+                            .copied()
+                            .ok_or_else(|| {
+                                invalid("value generic binding position is out of range")
+                            })
+                    })
+                    .transpose()?,
+                CallableValueScope::Value(index) => Some(
+                    self.value(index)?
+                        .generic_params
+                        .get(binding.position as usize)
+                        .ok_or_else(|| invalid("value generic binding position is out of range"))?
+                        .kind,
+                ),
+            };
+            if binding.label.is_empty() || bindings.insert(binding.label.as_str(), kind).is_some() {
+                return Err(invalid(
+                    "value generic binding label is empty or duplicated",
+                ));
+            }
+        }
+        Ok(bindings)
+    }
+}
+
+fn validate_parts(
+    bindings: &BTreeMap<&str, Option<GenericParamKind>>,
+    mut work: Vec<Part<'_>>,
+) -> Result<bool, crate::MetadataArtifactError> {
+    let mut has_parameter_calls = false;
+    while let Some(part) = work.pop() {
+        match part {
+            Part::Target(crate::CallableRequestTarget::Parameter(_)) => {}
+            Part::Target(crate::CallableRequestTarget::SpecMethod(method)) => {
+                valid_path(&method.spec)?;
+                work.push(Part::Type(&method.receiver));
+                work.extend(method.spec_args.iter().map(Part::Type));
+                for argument in &method.generic_arguments {
+                    work.push(match argument {
+                        crate::SpecMethodGenericArgument::Type(ty) => Part::Type(ty),
+                        crate::SpecMethodGenericArgument::EffectRow(row) => Part::Row(row),
+                    });
+                }
+            }
+            Part::Type(ty) => {
+                match ty.kind {
+                    TypeKind::Var => require_binding(bindings, &ty.name, GenericParamKind::Type)?,
+                    TypeKind::Named
+                    | TypeKind::Applied
+                    | TypeKind::Alias
+                    | TypeKind::Nominal
+                    | TypeKind::Enum => valid_path(&ty.path)?,
+                    _ => {}
+                }
+                crate::type_validation::validate_type_shape(ty)?;
+                for bound in &ty.bounds {
+                    valid_path(&bound.spec)?;
+                    work.extend(bound.args.iter().map(Part::Type));
+                }
+                let mut fields = BTreeSet::new();
+                for field in &ty.fields {
+                    if field.name.is_empty() || !fields.insert(&field.name) {
+                        return Err(invalid(
+                            "callable value record field is empty or duplicated",
+                        ));
+                    }
+                    work.push(Part::Type(&field.ty));
+                }
+                work.extend(ty.children.iter().map(Part::Type));
+                work.extend(ty.effects.iter().chain(&ty.produced_effects).map(Part::Row));
+            }
+            Part::Row(row) => {
+                if let Some(tail) = &row.tail {
+                    require_binding(bindings, tail, GenericParamKind::Effect)?;
+                }
+                work.extend(row.effects.iter().map(Part::Effect));
+            }
+            Part::Effect(effect) => {
+                valid_path(&effect.path)?;
+                for arg in &effect.args {
+                    match arg.kind {
+                        EffectArgKind::Type if arg.ty.is_none() => {
+                            return Err(invalid("callable value effect type argument is missing"));
+                        }
+                        EffectArgKind::Path => valid_path(&arg.path)?,
+                        _ => {}
+                    }
+                    work.extend(arg.ty.iter().map(Part::Type));
+                }
+            }
+            Part::Trace(trace) => match trace {
+                ActionTrace::Event(event) => work.push(Part::Effect(&event.action)),
+                ActionTrace::Seq(parts) | ActionTrace::Choice(parts) => {
+                    work.extend(parts.iter().map(Part::Trace))
+                }
+                ActionTrace::Repeat(part) => work.push(Part::Trace(part)),
+                ActionTrace::UnknownOrder(actions) => work.extend(actions.iter().map(Part::Effect)),
+                ActionTrace::Widened {
+                    actions,
+                    parameter_calls,
+                } => {
+                    work.extend(actions.iter().map(Part::Effect));
+                    has_parameter_calls |= !parameter_calls.is_empty();
+                    work.extend(parameter_calls.iter().map(Part::Target));
+                }
+                ActionTrace::ParameterCall { parameter } => {
+                    has_parameter_calls = true;
+                    work.push(Part::Target(parameter));
+                }
+                ActionTrace::Empty => {}
+            },
+        }
+    }
+    Ok(has_parameter_calls)
 }
 
 enum Part<'a> {

@@ -19,7 +19,7 @@ struct Encoder(blake3::Hasher);
 impl Encoder {
     fn new() -> Self {
         Self(blake3::Hasher::new_derive_key(
-            "etas.metadata.callable-value-input.v4",
+            "etas.metadata.callable-value-input.v5",
         ))
     }
     fn byte(&mut self, value: u8) {
@@ -76,6 +76,10 @@ impl Encoder {
             }
             CallableValueSource::FrozenContract(value) => {
                 self.byte(2);
+                self.number(value as usize);
+            }
+            CallableValueSource::Existential(value) => {
+                self.byte(3);
                 self.number(value as usize);
             }
         }
@@ -349,7 +353,42 @@ pub fn callable_value_graph_input_fingerprint(
             }
         }
     }
+    e.number(graph.objects.len());
+    for object in &graph.objects {
+        e.scope(object.parent_scope);
+        e.number(object.generic_bindings.len());
+        for binding in &object.generic_bindings {
+            e.text(&binding.label);
+            e.scope(binding.scope);
+            e.number(binding.position as usize);
+        }
+        e.encode(Task::Type(&object.object_type));
+        e.encode(Task::Type(&object.source_type));
+        e.number(object.payload_sources.len());
+        for source in &object.payload_sources {
+            e.source(*source);
+        }
+        e.number(object.witnesses.len());
+        for witness in &object.witnesses {
+            e.encode(Task::Bound(&witness.bound));
+            e.text(&witness.member);
+            match &witness.target {
+                ExistentialWitnessTarget::Implementation { method, value } => {
+                    e.byte(0);
+                    e.0.update(method.fingerprint().as_bytes());
+                    e.number(*value as usize);
+                }
+                ExistentialWitnessTarget::Bound => e.byte(1),
+            }
+        }
+    }
     etas_code::CodeFingerprint::from_bytes(*e.0.finalize().as_bytes())
+}
+
+pub(super) fn bound_input_fingerprint(bound: &crate::SpecBound) -> etas_code::CodeFingerprint {
+    let mut encoder = Encoder::new();
+    encoder.encode(Task::Bound(bound));
+    etas_code::CodeFingerprint::from_bytes(*encoder.0.finalize().as_bytes())
 }
 
 pub fn published_method_input_fingerprint(
@@ -463,6 +502,7 @@ mod tests {
 
     fn graph() -> CallableValueGraph {
         CallableValueGraph {
+            objects: Vec::new(),
             sources: vec![CallableValueSource::Value(0)],
             values: vec![CallableValueNode {
                 residual_checks: Vec::new(),

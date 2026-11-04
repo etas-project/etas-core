@@ -2,10 +2,12 @@ use super::*;
 use crate::{
     CallableValueGenericBinding, CallableValueGraph, CallableValueNode, CallableValueParameter,
     CallableValueParameterBinding, CallableValueScope, CallableValueSource,
+    ExistentialMemberWitness, ExistentialValueNode, ExistentialWitnessTarget,
 };
 
 pub(super) fn to_proto(graph: &CallableValueGraph) -> ProtoCallableValueGraph {
     ProtoCallableValueGraph {
+        objects: graph.objects.iter().map(object_to_proto).collect(),
         sources: graph.sources.iter().copied().map(source_to_proto).collect(),
         values: graph
             .values
@@ -66,6 +68,11 @@ pub(super) fn from_proto(
     graph: ProtoCallableValueGraph,
 ) -> Result<CallableValueGraph, MetadataArtifactError> {
     let graph = CallableValueGraph {
+        objects: graph
+            .objects
+            .into_iter()
+            .map(object_from_proto)
+            .collect::<Result<_, _>>()?,
         sources: graph
             .sources
             .into_iter()
@@ -362,6 +369,9 @@ fn parameter_from_proto(
 fn source_to_proto(source: CallableValueSource) -> ProtoCallableValueSource {
     ProtoCallableValueSource {
         kind: Some(match source {
+            CallableValueSource::Existential(index) => {
+                super::super::schema::source::Kind::Existential(index)
+            }
             CallableValueSource::Parameter(parameter) => {
                 super::super::schema::source::Kind::Parameter(parameter_to_proto(parameter))
             }
@@ -377,6 +387,9 @@ fn source_from_proto(
     source: ProtoCallableValueSource,
 ) -> Result<CallableValueSource, MetadataArtifactError> {
     match source.kind {
+        Some(super::super::schema::source::Kind::Existential(index)) => {
+            Ok(CallableValueSource::Existential(index))
+        }
         Some(super::super::schema::source::Kind::Parameter(parameter)) => Ok(
             CallableValueSource::Parameter(parameter_from_proto(parameter)?),
         ),
@@ -388,6 +401,124 @@ fn source_from_proto(
         }
         None => Err(invalid("callable return source is missing identity")),
     }
+}
+
+fn object_to_proto(object: &ExistentialValueNode) -> ProtoExistentialValueNode {
+    use super::super::schema::object_witness::Target;
+    ProtoExistentialValueNode {
+        parent_scope: Some(scope_to_proto(object.parent_scope)),
+        generic_bindings: object
+            .generic_bindings
+            .iter()
+            .map(|binding| ProtoCallableValueGenericBinding {
+                label: binding.label.clone(),
+                scope: Some(scope_to_proto(binding.scope)),
+                position: binding.position,
+            })
+            .collect(),
+        object_type: Some(type_to_proto(&object.object_type)),
+        source_type: Some(type_to_proto(&object.source_type)),
+        payload_sources: object
+            .payload_sources
+            .iter()
+            .copied()
+            .map(source_to_proto)
+            .collect(),
+        witnesses: object
+            .witnesses
+            .iter()
+            .map(|witness| ProtoExistentialMemberWitness {
+                bound: Some(spec_bound_to_proto(&witness.bound)),
+                member: witness.member.clone(),
+                target: Some(match &witness.target {
+                    ExistentialWitnessTarget::Implementation { method, value } => {
+                        Target::Implementation(Box::new(ProtoExistentialMethodImplementation {
+                            method: Some(super::super::descriptors::encode_method_identity(method)),
+                            value: *value,
+                        }))
+                    }
+                    ExistentialWitnessTarget::Bound => Target::Bound(true),
+                }),
+            })
+            .collect(),
+    }
+}
+
+fn object_from_proto(
+    object: ProtoExistentialValueNode,
+) -> Result<ExistentialValueNode, MetadataArtifactError> {
+    use super::super::schema::object_witness::Target;
+    Ok(ExistentialValueNode {
+        parent_scope: scope_from_proto(
+            object
+                .parent_scope
+                .ok_or_else(|| invalid("object evidence is missing parent scope"))?,
+        )?,
+        generic_bindings: object
+            .generic_bindings
+            .into_iter()
+            .map(|binding| {
+                Ok(CallableValueGenericBinding {
+                    label: binding.label,
+                    scope: scope_from_proto(
+                        binding
+                            .scope
+                            .ok_or_else(|| invalid("object generic binding is missing scope"))?,
+                    )?,
+                    position: binding.position,
+                })
+            })
+            .collect::<Result<_, MetadataArtifactError>>()?,
+        object_type: type_from_proto(
+            object
+                .object_type
+                .ok_or_else(|| invalid("object evidence is missing interface type"))?,
+        )?,
+        source_type: type_from_proto(
+            object
+                .source_type
+                .ok_or_else(|| invalid("object evidence is missing producer type"))?,
+        )?,
+        payload_sources: object
+            .payload_sources
+            .into_iter()
+            .map(source_from_proto)
+            .collect::<Result<_, _>>()?,
+        witnesses: object
+            .witnesses
+            .into_iter()
+            .map(|witness| {
+                Ok(ExistentialMemberWitness {
+                    bound: spec_bound_from_proto(
+                        witness.bound.ok_or_else(|| {
+                            invalid("object member evidence is missing its bound")
+                        })?,
+                    )?,
+                    member: witness.member,
+                    target: match witness.target {
+                        Some(Target::Implementation(implementation)) => {
+                            ExistentialWitnessTarget::Implementation {
+                                method: super::super::descriptors::decode_method_identity(
+                                    implementation.method.ok_or_else(|| {
+                                        invalid(
+                                            "object member is missing canonical method identity",
+                                        )
+                                    })?,
+                                )?,
+                                value: implementation.value,
+                            }
+                        }
+                        Some(Target::Bound(true)) => ExistentialWitnessTarget::Bound,
+                        _ => {
+                            return Err(invalid(
+                                "object member evidence is missing its checked target",
+                            ));
+                        }
+                    },
+                })
+            })
+            .collect::<Result<_, MetadataArtifactError>>()?,
+    })
 }
 
 #[cfg(test)]

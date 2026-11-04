@@ -73,6 +73,15 @@ fn remap_parts(
     while let Some(part) = work.pop() {
         match part {
             Part::Graph(graph) => {
+                for object in &mut graph.objects {
+                    work.push(Part::Type(&mut object.object_type));
+                    work.push(Part::Type(&mut object.source_type));
+                    for witness in &mut object.witnesses {
+                        witness.bound.spec =
+                            remap(CallableValuePathKind::Spec, &witness.bound.spec);
+                        work.extend(witness.bound.args.iter_mut().map(Part::Type));
+                    }
+                }
                 for node in &mut graph.values {
                     if let Some(requests) = &mut node.handler_requests {
                         for action in &mut requests.actions {

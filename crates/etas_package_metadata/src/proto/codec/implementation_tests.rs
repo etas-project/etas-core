@@ -36,6 +36,7 @@ fn published_method() -> PublishedMethod {
         owner_params: Vec::new(),
         identity: MethodId::new(owner, "encode".into()).unwrap(),
         callable: CallableValueGraph {
+            objects: Vec::new(),
             sources: vec![CallableValueSource::Value(0)],
             values: vec![CallableValueNode {
                 residual_checks: Default::default(),

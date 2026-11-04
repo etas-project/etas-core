@@ -3046,6 +3046,7 @@ mod tests {
             position: 0,
         });
         let valid = CallableValueGraph {
+            objects: Vec::new(),
             sources: vec![source],
             values: vec![],
         };
@@ -3068,6 +3069,7 @@ mod tests {
                 effect_summaries: vec![ProtoEffectSummary {
                     residual_checks: Some(callable_values::residual_to_proto(&[])),
                     returned_callables: Some(callable_values::to_proto(&CallableValueGraph {
+                        objects: Vec::new(),
                         sources: sources.clone(),
                         values: vec![],
                     })),
@@ -3084,6 +3086,7 @@ mod tests {
                         returned_callables: Some(CallableValueGraph {
                             sources,
                             values: vec![],
+                            objects: vec![],
                         }),
                         ..Default::default()
                     }],
@@ -3098,6 +3101,7 @@ mod tests {
         graph.public_metadata = Some(ProtoPublicMetadataSection {
             effect_summaries: vec![ProtoEffectSummary {
                 returned_callables: Some(callable_values::to_proto(&CallableValueGraph {
+                    objects: Vec::new(),
                     sources: (0..=super::super::budget::MAX_METADATA_GRAPH_NODES)
                         .map(|position| {
                             CallableValueSource::Parameter(CallableValueParameter {

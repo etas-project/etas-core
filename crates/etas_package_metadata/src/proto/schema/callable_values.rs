@@ -1,6 +1,6 @@
 use super::{
     ProtoActionGenericParam, ProtoActionTrace, ProtoDefaultHandlerEffects, ProtoEffectRow,
-    ProtoRequestInstantiationTemplate, ProtoType,
+    ProtoRequestInstantiationTemplate, ProtoSpecBound, ProtoType,
 };
 use prost::Message;
 
@@ -10,6 +10,52 @@ pub struct ProtoCallableValueGraph {
     pub sources: Vec<ProtoCallableValueSource>,
     #[prost(message, repeated, tag = "2")]
     pub values: Vec<ProtoCallableValueNode>,
+    #[prost(message, repeated, tag = "3")]
+    pub objects: Vec<ProtoExistentialValueNode>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoExistentialValueNode {
+    #[prost(message, optional, tag = "1")]
+    pub parent_scope: Option<ProtoCallableValueScope>,
+    #[prost(message, repeated, tag = "2")]
+    pub generic_bindings: Vec<ProtoCallableValueGenericBinding>,
+    #[prost(message, optional, tag = "3")]
+    pub object_type: Option<ProtoType>,
+    #[prost(message, optional, tag = "4")]
+    pub source_type: Option<ProtoType>,
+    #[prost(message, repeated, tag = "5")]
+    pub payload_sources: Vec<ProtoCallableValueSource>,
+    #[prost(message, repeated, tag = "6")]
+    pub witnesses: Vec<ProtoExistentialMemberWitness>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoExistentialMemberWitness {
+    #[prost(message, optional, tag = "1")]
+    pub bound: Option<ProtoSpecBound>,
+    #[prost(string, tag = "2")]
+    pub member: String,
+    #[prost(oneof = "object_witness::Target", tags = "3, 4")]
+    pub target: Option<object_witness::Target>,
+}
+
+pub mod object_witness {
+    #[derive(Clone, PartialEq, prost::Oneof)]
+    pub enum Target {
+        #[prost(message, tag = "3")]
+        Implementation(Box<super::ProtoExistentialMethodImplementation>),
+        #[prost(bool, tag = "4")]
+        Bound(bool),
+    }
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoExistentialMethodImplementation {
+    #[prost(message, optional, tag = "1")]
+    pub method: Option<super::super::descriptors::ProtoMethodIdentity>,
+    #[prost(uint32, tag = "2")]
+    pub value: u32,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -38,7 +84,7 @@ pub struct ProtoCallableValueParameter {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoCallableValueSource {
-    #[prost(oneof = "source::Kind", tags = "1, 2, 3")]
+    #[prost(oneof = "source::Kind", tags = "1, 2, 3, 4")]
     pub kind: Option<source::Kind>,
 }
 
@@ -51,6 +97,8 @@ pub mod source {
         Value(u32),
         #[prost(uint32, tag = "3")]
         FrozenContract(u32),
+        #[prost(uint32, tag = "4")]
+        Existential(u32),
     }
 }
 
