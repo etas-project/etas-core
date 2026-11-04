@@ -25,6 +25,15 @@ pub(in crate::proto) fn validate_model(
     budget.charge(graph.traces.len(), "descriptor traces")?;
     for ty in &graph.types {
         let count = match ty {
+            TypeInfo::Existential { bounds } => {
+                for bound in bounds {
+                    budget.charge(
+                        1usize.saturating_add(bound.arguments.len()),
+                        "existential spec bound",
+                    )?;
+                }
+                0
+            }
             TypeInfo::Primitive(_) | TypeInfo::Parameter(_) => 0,
             TypeInfo::Builtin { arguments, .. } | TypeInfo::Tuple(arguments) => arguments.len(),
             TypeInfo::Record(fields) => fields.len(),
@@ -127,6 +136,15 @@ pub(in crate::proto) fn validate_wire(
     for ty in &graph.types {
         use p::ty::Kind as K;
         let count = match &ty.kind {
+            Some(K::Existential(value)) => {
+                for bound in &value.bounds {
+                    budget.charge(
+                        1usize.saturating_add(bound.arguments.len()),
+                        "existential spec bound",
+                    )?;
+                }
+                0
+            }
             None | Some(K::Primitive(_) | K::Parameter(_)) => 0,
             Some(K::Builtin(value)) => value.arguments.len(),
             Some(K::Tuple(value)) => value.values.len(),

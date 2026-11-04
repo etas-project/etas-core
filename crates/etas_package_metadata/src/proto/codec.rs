@@ -1,6 +1,7 @@
 use crate::type_validation::{type_kind_to_wire, validate_type_shape};
 use prost::Message;
 mod callable_values;
+mod methods;
 mod request_templates;
 pub(super) mod spec_invocations;
 use request_templates::{request_template_from_proto, request_template_to_proto};
@@ -136,6 +137,7 @@ pub fn package_metadata_to_sections(
         || !type_contracts.actions.is_empty()
         || !type_contracts.trace_specs.is_empty()
         || !type_contracts.protocols.is_empty()
+        || !type_contracts.methods.is_empty()
     {
         sections.push(section_from_message(
             MetadataSectionKind::TypeContracts,
@@ -277,6 +279,7 @@ fn type_contracts_section(metadata: &PublicMetadata) -> ProtoTypeContractsSectio
             .iter()
             .map(spec_signature_to_proto)
             .collect(),
+        methods: metadata.methods.iter().map(methods::to_proto).collect(),
         spec_impls: metadata.spec_impls.iter().map(spec_impl_to_proto).collect(),
         type_spec_satisfactions: metadata
             .type_spec_satisfactions
@@ -798,6 +801,7 @@ fn public_metadata_to_proto(metadata: &PublicMetadata) -> ProtoPublicMetadataSec
             .iter()
             .map(spec_signature_to_proto)
             .collect(),
+        methods: metadata.methods.iter().map(methods::to_proto).collect(),
         spec_impls: metadata.spec_impls.iter().map(spec_impl_to_proto).collect(),
         type_spec_satisfactions: metadata
             .type_spec_satisfactions
@@ -920,6 +924,11 @@ fn public_metadata_from_proto(
             .spec_impls
             .into_iter()
             .map(spec_impl_from_proto)
+            .collect::<Result<Vec<_>, _>>()?,
+        methods: metadata
+            .methods
+            .into_iter()
+            .map(methods::from_proto)
             .collect::<Result<Vec<_>, _>>()?,
         type_spec_satisfactions: metadata
             .type_spec_satisfactions
@@ -1289,10 +1298,7 @@ fn spec_impl_to_proto(implementation: &SpecImpl) -> ProtoSpecImpl {
         methods: implementation
             .methods
             .iter()
-            .map(|method| ProtoSpecImplMethod {
-                identity: Some(super::descriptors::encode_method_identity(&method.identity)),
-                callable: Some(callable_values::to_proto(&method.callable)),
-            })
+            .map(super::descriptors::encode_method_identity)
             .collect(),
     }
 }
@@ -1312,21 +1318,7 @@ fn spec_impl_from_proto(implementation: ProtoSpecImpl) -> Result<SpecImpl, Metad
         methods: implementation
             .methods
             .into_iter()
-            .map(|method| {
-                let method = SpecImplMethod {
-                    identity: super::descriptors::decode_method_identity(required_message(
-                        method.identity,
-                        "spec implementation method identity",
-                    )?)?,
-                    callable: callable_values::from_proto(required_message(
-                        method.callable,
-                        "spec implementation method callable graph",
-                    )?)?,
-                };
-                method.root()?;
-                method.callable.validate_references(Some((0, &[])))?;
-                Ok(method)
-            })
+            .map(super::descriptors::decode_method_identity)
             .collect::<Result<_, MetadataArtifactError>>()?,
     })
 }
@@ -1641,6 +1633,7 @@ fn type_to_proto(ty: &Type) -> ProtoType {
         fields: ty.fields.iter().map(type_field_to_proto).collect(),
         effects: ty.effects.as_ref().map(effect_row_to_proto),
         produced_effects: ty.produced_effects.as_ref().map(effect_row_to_proto),
+        bounds: ty.bounds.iter().map(spec_bound_to_proto).collect(),
     }
 }
 
@@ -1673,16 +1666,22 @@ fn type_from_proto_with_budget(
         .produced_effects
         .map(|row| effect_row_from_proto_with_budget(row, depth + 1, budget))
         .transpose()?;
-    validate_type_shape(
-        kind,
-        &ty.name,
-        &ty.path,
-        &children,
-        &fields,
-        &effects,
-        &produced_effects,
-    )?;
-    Ok(Type {
+    let bounds = ty
+        .bounds
+        .into_iter()
+        .map(|bound| {
+            budget.enter(depth + 1, "existential spec bound")?;
+            Ok(SpecBound {
+                spec: required_path(bound.spec, "existential spec bound")?,
+                args: bound
+                    .args
+                    .into_iter()
+                    .map(|arg| type_from_proto_with_budget(arg, depth + 2, budget))
+                    .collect::<Result<_, _>>()?,
+            })
+        })
+        .collect::<Result<Vec<_>, MetadataArtifactError>>()?;
+    let ty = Type {
         kind,
         name: ty.name,
         path: ty.path,
@@ -1690,7 +1689,10 @@ fn type_from_proto_with_budget(
         fields,
         effects,
         produced_effects,
-    })
+        bounds,
+    };
+    validate_type_shape(&ty)?;
+    Ok(ty)
 }
 
 fn type_field_to_proto(field: &TypeField) -> ProtoTypeField {
@@ -2470,6 +2472,7 @@ fn spec_kind_from_wire(value: &str) -> Result<SpecKind, MetadataArtifactError> {
 
 fn type_kind_from_wire(value: &str) -> Result<TypeKind, MetadataArtifactError> {
     match value {
+        "existential" => Ok(TypeKind::Existential),
         "primitive" => Ok(TypeKind::Primitive),
         "var" => Ok(TypeKind::Var),
         "named" => Ok(TypeKind::Named),
@@ -2816,6 +2819,25 @@ mod tests {
     }
 
     #[test]
+    fn existential_type_binary_roundtrip_preserves_bound_paths_and_arguments() {
+        let ty = Type {
+            kind: TypeKind::Existential,
+            bounds: vec![SpecBound {
+                spec: vec!["library".into(), "Within".into()],
+                args: vec![Type {
+                    kind: TypeKind::Primitive,
+                    name: "i32".into(),
+                    ..Default::default()
+                }],
+            }],
+            ..Default::default()
+        };
+        let bytes = type_to_proto(&ty).encode_to_vec();
+        let restored = type_from_proto(ProtoType::decode(bytes.as_slice()).unwrap()).unwrap();
+        assert_eq!(restored, ty);
+    }
+
+    #[test]
     fn decode_rejects_record_field_without_type() {
         let mut graph = valid_graph();
         graph.public_metadata = Some(ProtoPublicMetadataSection {
@@ -3024,6 +3046,7 @@ mod tests {
             position: 0,
         });
         let valid = CallableValueGraph {
+            objects: Vec::new(),
             sources: vec![source],
             values: vec![],
         };
@@ -3046,6 +3069,7 @@ mod tests {
                 effect_summaries: vec![ProtoEffectSummary {
                     residual_checks: Some(callable_values::residual_to_proto(&[])),
                     returned_callables: Some(callable_values::to_proto(&CallableValueGraph {
+                        objects: Vec::new(),
                         sources: sources.clone(),
                         values: vec![],
                     })),
@@ -3062,6 +3086,7 @@ mod tests {
                         returned_callables: Some(CallableValueGraph {
                             sources,
                             values: vec![],
+                            objects: vec![],
                         }),
                         ..Default::default()
                     }],
@@ -3076,6 +3101,7 @@ mod tests {
         graph.public_metadata = Some(ProtoPublicMetadataSection {
             effect_summaries: vec![ProtoEffectSummary {
                 returned_callables: Some(callable_values::to_proto(&CallableValueGraph {
+                    objects: Vec::new(),
                     sources: (0..=super::super::budget::MAX_METADATA_GRAPH_NODES)
                         .map(|position| {
                             CallableValueSource::Parameter(CallableValueParameter {

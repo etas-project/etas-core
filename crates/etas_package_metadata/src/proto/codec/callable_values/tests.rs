@@ -40,6 +40,7 @@ fn node() -> CallableValueNode {
 
 fn graph() -> CallableValueGraph {
     CallableValueGraph {
+        objects: Vec::new(),
         sources: vec![CallableValueSource::Value(0)],
         values: vec![node()],
     }
@@ -250,6 +251,7 @@ fn residual_reference_budget_is_shared_across_the_artifact() {
     let mut value = node();
     value.residual_checks = references;
     let graph = CallableValueGraph {
+        objects: Vec::new(),
         sources: vec![CallableValueSource::Value(0)],
         values: vec![value.clone(), value],
     };
@@ -429,6 +431,7 @@ fn root_parameter_positions_and_generic_kinds_are_rechecked_after_binary_decode(
     let error = decoded.validate_references(Some((1, &root))).unwrap_err();
     assert!(error.to_string().contains("wrong kind"), "{error}");
     let bad = CallableValueGraph {
+        objects: Vec::new(),
         sources: vec![parameter(CallableValueScope::Root, 1)],
         values: vec![],
     };
@@ -469,6 +472,7 @@ fn root_parameter_positions_and_generic_kinds_are_rechecked_after_binary_decode(
     );
     package.public_metadata.as_mut().unwrap().effect_summaries[0].returned_callables =
         Some(to_proto(&CallableValueGraph {
+            objects: Vec::new(),
             sources: vec![parameter(CallableValueScope::Root, 0)],
             values: vec![],
         }));
@@ -479,6 +483,7 @@ fn root_parameter_positions_and_generic_kinds_are_rechecked_after_binary_decode(
 fn long_callable_reference_cycles_are_flat_not_recursive_wire_graphs() {
     let count = 2000;
     let graph = CallableValueGraph {
+        objects: Vec::new(),
         sources: vec![CallableValueSource::Value(0)],
         values: (0..count)
             .map(|index| {
@@ -544,6 +549,7 @@ fn multiple_return_graphs_consume_one_whole_artifact_node_budget() {
     let graph = CallableValueGraph {
         sources,
         values: vec![],
+        objects: vec![],
     };
     let package = PackageMetadata {
         public_metadata: PublicMetadata {
@@ -578,6 +584,181 @@ fn multiple_return_graphs_consume_one_whole_artifact_node_budget() {
     let error =
         super::super::super::budget::validate_proto_package_metadata_graph(&wire).unwrap_err();
     assert!(error.to_string().contains("maximum node count"), "{error}");
+}
+
+#[test]
+fn object_evidence_round_trips_bound_and_concrete_member_witnesses() {
+    let package = etas_code::PackageKey::from_name_and_version("objects", "1.0.0").unwrap();
+    let declaration = |name: &str, kind| {
+        etas_code::DefinitionKey::new(package, vec!["api".into()], vec![name.into()], kind).unwrap()
+    };
+    let method_identity = etas_code::MethodId::new(
+        etas_code::ImplementationKey::new(
+            package,
+            vec!["api".into()],
+            declaration("Label", etas_code::DefinitionKind::Type),
+            None,
+            etas_code::CodeFingerprint::of_bytes("test.object-member.header", b"Label~Named"),
+        )
+        .unwrap(),
+        "name".into(),
+    )
+    .unwrap();
+    let bound = crate::SpecBound {
+        spec: vec!["api".into(), "Named".into()],
+        args: vec![],
+    };
+    let interface = Type {
+        kind: TypeKind::Existential,
+        bounds: vec![bound.clone()],
+        ..Default::default()
+    };
+    let producer = Type {
+        kind: TypeKind::Nominal,
+        path: vec!["api".into(), "Label".into()],
+        ..Default::default()
+    };
+    let mut member = node();
+    member.param_names = vec!["self".into()];
+    member.params = vec![producer.clone()];
+    member.output = Type {
+        name: "string".into(),
+        ..Default::default()
+    };
+    let mut graph = CallableValueGraph {
+        sources: vec![
+            CallableValueSource::Existential(0),
+            CallableValueSource::Existential(1),
+        ],
+        values: vec![member],
+        objects: vec![
+            ExistentialValueNode {
+                parent_scope: CallableValueScope::Root,
+                generic_bindings: vec![CallableValueGenericBinding {
+                    label: "T".into(),
+                    scope: CallableValueScope::Root,
+                    position: 0,
+                }],
+                object_type: interface.clone(),
+                source_type: Type {
+                    kind: TypeKind::Var,
+                    name: "T".into(),
+                    ..Default::default()
+                },
+                payload_sources: vec![parameter(CallableValueScope::Root, 0)],
+                witnesses: vec![ExistentialMemberWitness {
+                    bound: bound.clone(),
+                    member: "name".into(),
+                    target: ExistentialWitnessTarget::Bound,
+                }],
+            },
+            ExistentialValueNode {
+                parent_scope: CallableValueScope::Root,
+                generic_bindings: vec![],
+                object_type: interface,
+                source_type: producer,
+                payload_sources: vec![],
+                witnesses: vec![ExistentialMemberWitness {
+                    bound,
+                    member: "name".into(),
+                    target: ExistentialWitnessTarget::Implementation {
+                        method: method_identity.clone(),
+                        value: 0,
+                    },
+                }],
+            },
+        ],
+    };
+    graph
+        .validate_references(Some((1, &[GenericParamKind::Type])))
+        .unwrap();
+    crate::validate_callable_value_graph(&graph).unwrap();
+    let bytes = to_proto(&graph).encode_to_vec();
+    let decoded = from_proto(ProtoCallableValueGraph::decode(bytes.as_slice()).unwrap()).unwrap();
+    assert_eq!(decoded, graph);
+    let fingerprint = crate::callable_value_graph_input_fingerprint(&graph);
+    let metadata = PackageMetadata {
+        package: crate::PackageIdentity {
+            name: "objects".into(),
+            version: "1.0.0".into(),
+            edition: "2026".into(),
+        },
+        public_metadata: PublicMetadata {
+            effect_summaries: vec![EffectSummary {
+                item: vec!["api".into(), "make".into()],
+                returned_callables: Some(graph.clone()),
+                ..Default::default()
+            }],
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let header = crate::MetadataArtifactHeader {
+        artifact_schema_version: crate::ARTIFACT_SCHEMA_VERSION,
+        compiler_version: "test-compiler".into(),
+        package_id: "objects".into(),
+        package_version: "1.0.0".into(),
+        source_payload_hash: "source".into(),
+        manifest_hash: "manifest".into(),
+        dependency_lock_hash: "lock".into(),
+        created_target: "test".into(),
+    };
+    let artifact = crate::encode_metadata_artifact(
+        &header,
+        crate::package_metadata_to_sections(&metadata).unwrap(),
+    )
+    .unwrap();
+    let (_, decoded) =
+        crate::package_metadata_from_artifact(std::path::Path::new("objects.etasmeta"), &artifact)
+            .unwrap();
+    assert_eq!(decoded, metadata);
+    let mut oversized = metadata.clone();
+    let source = &mut oversized.public_metadata.effect_summaries[0]
+        .returned_callables
+        .as_mut()
+        .unwrap()
+        .objects[0]
+        .source_type;
+    for _ in 0..crate::MAX_METADATA_GRAPH_DEPTH + 1 {
+        *source = Type {
+            kind: TypeKind::Array,
+            children: vec![std::mem::take(source)],
+            ..Default::default()
+        };
+    }
+    assert!(crate::package_metadata_to_sections(&oversized).is_err());
+    graph.objects[0].witnesses[0].target = ExistentialWitnessTarget::Implementation {
+        method: method_identity.clone(),
+        value: 0,
+    };
+    assert_ne!(
+        fingerprint,
+        crate::callable_value_graph_input_fingerprint(&graph)
+    );
+    graph.remap_paths(|_, path| {
+        path.iter()
+            .map(|part| {
+                if part == "api" {
+                    "consumer".into()
+                } else {
+                    part.clone()
+                }
+            })
+            .collect()
+    });
+    assert_eq!(
+        graph.objects[0].witnesses[0].bound.spec,
+        ["consumer", "Named"]
+    );
+    assert_eq!(
+        graph.objects[1].object_type.bounds[0].spec,
+        ["consumer", "Named"]
+    );
+    graph.objects[1].witnesses[0].target = ExistentialWitnessTarget::Implementation {
+        method: method_identity,
+        value: 99,
+    };
+    assert!(from_proto(to_proto(&graph)).is_err());
 }
 
 #[test]

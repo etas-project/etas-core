@@ -137,6 +137,14 @@ impl DescriptorGraph {
             DescriptorNode::Type(reference) => {
                 encoder.tag(1);
                 match &self.data().types[reference.0 as usize] {
+                    TypeInfo::Existential { bounds } => {
+                        encoder.tag(12);
+                        encoder.number(bounds.len() as u64);
+                        for bound in bounds {
+                            encoder.fingerprint(bound.definition.fingerprint());
+                            encoder.number(bound.arguments.len() as u64);
+                        }
+                    }
                     TypeInfo::Primitive(primitive) => {
                         encoder.tag(1);
                         encoder.tag(primitive_tag(*primitive));

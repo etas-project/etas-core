@@ -114,14 +114,17 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         module,
         "contains_key",
         StdSymbolKind::Flow,
-        StdDecl::Flow(FlowDecl::with_type_params_actions(
-            "contains_key",
-            &[StdGenericParam::new("K"), StdGenericParam::new("V")],
-            &["Map[K, V]", "K"],
-            "bool",
-            &[],
-            &[],
-        )),
+        StdDecl::Flow(
+            FlowDecl::with_type_params_actions(
+                "contains_key",
+                &[StdGenericParam::new("K"), StdGenericParam::new("V")],
+                &["Map[K, V]", "K"],
+                "bool",
+                &[],
+                &[],
+            )
+            .with_intrinsic_value_method(StdType::parse("Map[K, V]"), "contains_key"),
+        ),
         "Return whether a map contains the requested key.",
         Some(IntrinsicDescriptor {
             id: StdIntrinsicId(intrinsic::pure::MAP_CONTAINS_KEY),

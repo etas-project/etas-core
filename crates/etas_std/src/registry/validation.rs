@@ -159,6 +159,18 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                         validate_type_expr(registry, &owner, ty, &generics)?;
                     }
                     if let Some(method) = &flow.source_method {
+                        let owner_params = method
+                            .owner_type_params
+                            .iter()
+                            .collect::<std::collections::BTreeSet<_>>();
+                        if owner_params.len() != method.owner_type_params.len()
+                            || method.owner_type_params.iter().any(|name| {
+                                !flow.type_params.iter().any(|param| param.name == *name)
+                            })
+                        {
+                            return Err(StdRegistryValidationError { symbol: owner.clone(),
+                                reason: "method owner parameters must name distinct declared type binders".into() });
+                        }
                         if method.operation == crate::FlowSourceMethodOperation::CheckedIntrinsic
                             && (symbol.intrinsic.is_none()
                                 || method.kind != crate::FlowSourceMethodKind::ValueMethod

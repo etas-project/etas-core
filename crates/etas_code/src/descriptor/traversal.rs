@@ -44,6 +44,13 @@ pub(super) fn references(
 ) {
     match node {
         DescriptorNode::Type(reference) => match &input.types[reference.0 as usize] {
+            TypeInfo::Existential { bounds } => {
+                for bound in bounds {
+                    for argument in &bound.arguments {
+                        visit(DescriptorNode::Type(*argument));
+                    }
+                }
+            }
             TypeInfo::Primitive(_) => {}
             TypeInfo::Builtin { arguments, .. } => {
                 for argument in arguments {

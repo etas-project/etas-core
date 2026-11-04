@@ -360,7 +360,7 @@ pub struct Handler {
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct Type {
-    #[prost(oneof = "ty::Kind", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11")]
+    #[prost(oneof = "ty::Kind", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12")]
     pub kind: Option<ty::Kind>,
 }
 pub mod ty {
@@ -388,7 +388,15 @@ pub mod ty {
         Function(super::Signature),
         #[prost(message, tag = "11")]
         Handler(super::Handler),
+        #[prost(message, tag = "12")]
+        Existential(super::Existential),
     }
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct Existential {
+    #[prost(message, repeated, tag = "1")]
+    pub bounds: Vec<Spec>,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]

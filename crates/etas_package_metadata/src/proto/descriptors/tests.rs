@@ -11,6 +11,51 @@ mod header_tests;
 mod snapshot_tests;
 
 #[test]
+fn existential_descriptor_roundtrip_keeps_spec_identity_arguments_and_fingerprint_edges() {
+    let set = DefinitionDescriptorSet {
+        graph: DescriptorGraphInput {
+            types: vec![
+                TypeInfo::Primitive(PrimitiveInfo::I32),
+                TypeInfo::Primitive(PrimitiveInfo::String),
+                TypeInfo::Existential {
+                    bounds: vec![SpecInfo {
+                        definition: key("Within", DefinitionKind::Spec),
+                        arguments: vec![TypeInfoRef(0)],
+                    }],
+                },
+            ],
+            ..Default::default()
+        },
+        declarations: Vec::new(),
+        headers: None,
+    };
+    let wire = to_proto(&set);
+    assert_eq!(wire.version, 9);
+    let bytes = wire.encode_to_vec();
+    let restored = from_proto(ProtoDescriptorGraph::decode(bytes.as_slice()).unwrap()).unwrap();
+    assert_eq!(restored, set);
+    let fingerprint = |set: DefinitionDescriptorSet| {
+        DescriptorGraph::new(set.graph, limits())
+            .unwrap()
+            .type_fingerprint(TypeInfoRef(2))
+            .unwrap()
+    };
+    let original = fingerprint(set.clone());
+    let mut changed = set.clone();
+    let TypeInfo::Existential { bounds } = &mut changed.graph.types[2] else {
+        unreachable!();
+    };
+    bounds[0].definition = key("Other", DefinitionKind::Spec);
+    assert_ne!(fingerprint(changed), original);
+    let mut changed = set;
+    let TypeInfo::Existential { bounds } = &mut changed.graph.types[2] else {
+        unreachable!();
+    };
+    bounds[0].arguments[0] = TypeInfoRef(1);
+    assert_ne!(fingerprint(changed), original);
+}
+
+#[test]
 fn parameter_nonreturn_survives_binary_trace_codec() {
     let call = ParameterCallInfo {
         handlers: Some(vec![]),

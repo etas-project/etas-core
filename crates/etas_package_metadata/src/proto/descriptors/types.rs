@@ -95,6 +95,9 @@ fn decode_fields(fields: p::Fields) -> Vec<FieldInfo> {
 pub(super) fn encode(ty: &TypeInfo) -> p::Type {
     use p::ty::Kind as K;
     let kind = match ty {
+        TypeInfo::Existential { bounds } => K::Existential(p::Existential {
+            bounds: bounds.iter().map(super::effects::encode_spec).collect(),
+        }),
         TypeInfo::Primitive(value) => K::Primitive(encode_primitive(*value)),
         TypeInfo::Builtin {
             constructor,
@@ -205,6 +208,13 @@ fn declaration(
 pub(super) fn decode(ty: p::Type) -> Result<TypeInfo, Error> {
     use p::ty::Kind as K;
     Ok(match required(ty.kind, "type kind")? {
+        K::Existential(value) => TypeInfo::Existential {
+            bounds: value
+                .bounds
+                .into_iter()
+                .map(super::effects::decode_spec)
+                .collect::<Result<_, _>>()?,
+        },
         K::Primitive(value) => TypeInfo::Primitive(decode_primitive(value)?),
         K::Builtin(value) => TypeInfo::Builtin {
             constructor: decode_builtin(value.constructor)?,

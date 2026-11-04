@@ -36,6 +36,22 @@ impl ModelGraphValidator {
         self.budget.enter(depth, "callable value graph")?;
         self.budget
             .charge(graph.sources.len(), "callable return sources")?;
+        for object in &graph.objects {
+            self.budget.enter(depth + 1, "object value evidence")?;
+            self.budget.charge(
+                object.generic_bindings.len()
+                    + object.payload_sources.len()
+                    + object.witnesses.len(),
+                "object value evidence",
+            )?;
+            self.ty(&object.object_type, depth + 1)?;
+            self.ty(&object.source_type, depth + 1)?;
+            for witness in &object.witnesses {
+                for arg in &witness.bound.args {
+                    self.ty(arg, depth + 1)?;
+                }
+            }
+        }
         for node in &graph.values {
             self.budget.enter(depth + 1, "callable value")?;
             self.residual_references(&node.residual_checks)?;
@@ -109,6 +125,25 @@ impl ProtoGraphValidator {
         self.budget.enter(depth, "callable value graph")?;
         self.budget
             .charge(graph.sources.len(), "callable return sources")?;
+        for object in &graph.objects {
+            self.budget.enter(depth + 1, "object value evidence")?;
+            self.budget.charge(
+                object.generic_bindings.len()
+                    + object.payload_sources.len()
+                    + object.witnesses.len(),
+                "object value evidence",
+            )?;
+            for ty in object.object_type.iter().chain(&object.source_type) {
+                self.ty(ty, depth + 1)?;
+            }
+            for witness in &object.witnesses {
+                if let Some(bound) = &witness.bound {
+                    for arg in &bound.args {
+                        self.ty(arg, depth + 1)?;
+                    }
+                }
+            }
+        }
         for node in &graph.values {
             self.budget.enter(depth + 1, "callable value")?;
             if let Some(residuals) = &node.residual_checks {

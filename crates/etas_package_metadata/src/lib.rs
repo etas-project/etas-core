@@ -3,6 +3,7 @@ mod callable_values;
 pub use callable_contracts::CallableContractTarget;
 pub mod container;
 pub mod error;
+mod method;
 pub mod model;
 mod proto;
 mod request_templates;
@@ -145,6 +146,7 @@ mod tests {
             vec![reference.clone()];
         metadata.public_metadata.effect_summaries[0].returned_callables =
             Some(CallableValueGraph {
+                objects: Vec::new(),
                 sources: vec![CallableValueSource::Value(0)],
                 values: vec![CallableValueNode {
                     residual_checks: vec![reference],

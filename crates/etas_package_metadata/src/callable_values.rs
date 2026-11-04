@@ -2,10 +2,13 @@ use crate::{ActionTrace, DefaultHandlerEffects, EffectRow, GenericParam, Type};
 
 mod behavior;
 mod fingerprint;
+mod objects;
 mod paths;
 mod validation;
 pub use behavior::*;
 pub use fingerprint::callable_value_graph_input_fingerprint;
+pub use fingerprint::published_method_input_fingerprint;
+pub use objects::*;
 
 fn validate_request_target(
     target: &crate::CallableRequestTarget,
@@ -93,6 +96,7 @@ pub enum CallableValueSource {
     Parameter(CallableValueParameter),
     Value(u32),
     FrozenContract(u32),
+    Existential(u32),
 }
 
 /// Finite analysis data. References may be cyclic; nodes do not embed other nodes.
@@ -110,6 +114,7 @@ pub enum CallableValueSource {
 pub struct CallableValueGraph {
     pub sources: Vec<CallableValueSource>,
     pub values: Vec<CallableValueNode>,
+    pub objects: Vec<ExistentialValueNode>,
 }
 
 #[derive(
@@ -216,21 +221,9 @@ impl CallableValueGraph {
             {
                 return Err(invalid("callable behavior contains duplicate requirements"));
             }
-            let mut scopes = BTreeSet::from([CallableValueScope::Root]);
-            let mut scope = CallableValueScope::Value(
+            let scopes = self.lexical_scopes(CallableValueScope::Value(
                 u32::try_from(index).map_err(|_| invalid("callable graph index exceeds u32"))?,
-            );
-            while let CallableValueScope::Value(index) = scope {
-                if !scopes.insert(scope) {
-                    return Err(invalid("callable value lexical scopes contain a cycle"));
-                }
-                if scopes.len() > crate::MAX_METADATA_GRAPH_DEPTH + 1 {
-                    return Err(invalid(
-                        "callable value lexical scopes exceed the maximum depth",
-                    ));
-                }
-                scope = self.value(index)?.parent_scope;
-            }
+            ))?;
             self.validate_descriptor_bindings(node, root)?;
             if node.param_names.len() != node.params.len()
                 || node.param_names.iter().any(String::is_empty)
@@ -304,6 +297,7 @@ impl CallableValueGraph {
                 }
             }
         }
+        self.validate_objects(root)?;
         Ok(())
     }
 
@@ -313,6 +307,7 @@ impl CallableValueGraph {
         scopes: &std::collections::BTreeSet<CallableValueScope>,
     ) -> Result<(), crate::MetadataArtifactError> {
         let scope = match source {
+            CallableValueSource::Existential(index) => self.object(index)?.parent_scope,
             CallableValueSource::Parameter(parameter) => parameter.scope,
             CallableValueSource::Value(index) | CallableValueSource::FrozenContract(index) => {
                 self.value(index)?.parent_scope
@@ -340,6 +335,9 @@ impl CallableValueGraph {
                 return Err(invalid("returned callable source evidence is duplicated"));
             }
             match source {
+                CallableValueSource::Existential(index) => {
+                    self.object(*index)?;
+                }
                 CallableValueSource::Parameter(parameter) => self.parameter(*parameter, root)?,
                 CallableValueSource::Value(index) | CallableValueSource::FrozenContract(index) => {
                     self.value(*index)?;

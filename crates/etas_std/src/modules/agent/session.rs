@@ -138,6 +138,11 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             _ => FlowDecl::pure(name, params, output),
         };
         let descriptor = session_policy_intrinsic(name);
+        let decl = match name {
+            "continue_or_new" => decl.with_type_member_method("SessionConfig", name),
+            "load" => decl.with_type_member_method("Conversation", name),
+            _ => decl,
+        };
         let symbol = builder.symbol_with_intrinsic(
             module,
             name,
@@ -196,6 +201,8 @@ fn session_policy_intrinsic(name: &str) -> Option<IntrinsicDescriptor> {
         "LastTurns" => intrinsic::pure::SESSION_LAST_TURNS,
         "SummaryPlusRecent" => intrinsic::pure::SESSION_SUMMARY_PLUS_RECENT,
         "Days" => intrinsic::pure::SESSION_DAYS,
+        "continue_or_new" => intrinsic::runtime::SESSION_CONTINUE_OR_NEW,
+        "load" => intrinsic::runtime::SESSION_LOAD,
         _ => return None,
     };
     Some(IntrinsicDescriptor {
@@ -206,7 +213,11 @@ fn session_policy_intrinsic(name: &str) -> Option<IntrinsicDescriptor> {
             "session".into(),
             name.to_owned(),
         ],
-        purity: IntrinsicPurity::Pure,
+        purity: match name {
+            "load" => IntrinsicPurity::Host,
+            "continue_or_new" => IntrinsicPurity::Runtime,
+            _ => IntrinsicPurity::Pure,
+        },
         dispatch: IntrinsicDispatch::Runtime,
         lowering: LoweringHint::RuntimeCall,
         latent_effect: crate::IntrinsicLatentEffect::None,

@@ -709,13 +709,23 @@ fn registry_covers_phase1_standard_surface_vocabulary() {
     };
     assert_eq!(
         cast.params,
-        vec![StdType::Message(Box::new(StdType::Var("T".to_owned())))]
+        vec![StdType::Message(Box::new(StdType::Var(
+            "Source".to_owned()
+        )))]
     );
     assert_eq!(
         cast.output,
         StdType::Option(Box::new(StdType::Message(Box::new(StdType::Var(
-            "T".to_owned()
+            "Target".to_owned()
         )))))
+    );
+
+    let method = cast.source_method.as_ref().unwrap();
+    assert_eq!(method.owner_type_params, ["Source"]);
+    assert_eq!(method.kind, etas_std::FlowSourceMethodKind::ValueMethod);
+    assert_eq!(
+        method.operation,
+        etas_std::FlowSourceMethodOperation::CheckedMessageCast
     );
 
     let continue_or_new = registry
@@ -816,10 +826,13 @@ fn registry_declares_memory_support_types_and_intrinsics() {
     );
     assert!(flow.public_effects.is_empty());
     assert!(flow.requested_actions.is_empty());
-    assert!(
-        limit.intrinsic.is_none(),
-        "memory selection limit is a pure support method, not a runtime intrinsic"
+    let descriptor = limit.intrinsic.as_ref().unwrap();
+    assert_eq!(
+        descriptor.id,
+        StdIntrinsicId(intrinsic::runtime::MEMORY_SELECTION_LIMIT)
     );
+    assert_eq!(descriptor.purity, etas_std::IntrinsicPurity::Pure);
+    assert_eq!(flow.source_method.as_ref().unwrap().name, "limit");
 }
 
 #[test]

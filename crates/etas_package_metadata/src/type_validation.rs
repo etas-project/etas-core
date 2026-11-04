@@ -1,7 +1,8 @@
-use crate::{EffectRow, MetadataArtifactError, Type, TypeField, TypeKind};
+use crate::{MetadataArtifactError, Type, TypeKind};
 
 pub(crate) fn type_kind_to_wire(kind: TypeKind) -> &'static str {
     match kind {
+        TypeKind::Existential => "existential",
         TypeKind::Primitive => "primitive",
         TypeKind::Var => "var",
         TypeKind::Named => "named",
@@ -36,15 +37,38 @@ pub(crate) fn type_kind_to_wire(kind: TypeKind) -> &'static str {
     }
 }
 
-pub(crate) fn validate_type_shape(
-    kind: TypeKind,
-    name: &str,
-    path: &[String],
-    children: &[Type],
-    fields: &[TypeField],
-    effects: &Option<EffectRow>,
-    produced_effects: &Option<EffectRow>,
-) -> Result<(), MetadataArtifactError> {
+pub(crate) fn validate_type_shape(ty: &Type) -> Result<(), MetadataArtifactError> {
+    let kind = ty.kind;
+    let Type {
+        name,
+        path,
+        children,
+        fields,
+        effects,
+        produced_effects,
+        bounds,
+        ..
+    } = ty;
+    if kind == TypeKind::Existential {
+        if bounds.is_empty()
+            || !name.is_empty()
+            || !path.is_empty()
+            || !children.is_empty()
+            || !fields.is_empty()
+        {
+            return Err(invalid(
+                "existential type requires spec bounds and no value-type payload",
+            ));
+        }
+        if bounds
+            .iter()
+            .any(|bound| bound.spec.is_empty() || bound.spec.iter().any(String::is_empty))
+        {
+            return Err(invalid("existential bound requires a nonempty spec path"));
+        }
+    } else if !bounds.is_empty() {
+        return Err(invalid("only existential types carry spec bounds"));
+    }
     if matches!(kind, TypeKind::Record | TypeKind::Enum) {
         let mut names = std::collections::BTreeSet::new();
         for field in fields {

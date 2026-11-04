@@ -6,6 +6,7 @@ use crate::{
 };
 
 enum Task<'a> {
+    Bound(&'a crate::SpecBound),
     Type(&'a Type),
     Field(&'a TypeField),
     Row(&'a EffectRow),
@@ -18,7 +19,7 @@ struct Encoder(blake3::Hasher);
 impl Encoder {
     fn new() -> Self {
         Self(blake3::Hasher::new_derive_key(
-            "etas.metadata.callable-value-input.v3",
+            "etas.metadata.callable-value-input.v5",
         ))
     }
     fn byte(&mut self, value: u8) {
@@ -77,12 +78,22 @@ impl Encoder {
                 self.byte(2);
                 self.number(value as usize);
             }
+            CallableValueSource::Existential(value) => {
+                self.byte(3);
+                self.number(value as usize);
+            }
         }
     }
     fn encode(&mut self, root: Task<'_>) {
         let mut pending = vec![root];
         while let Some(task) = pending.pop() {
             match task {
+                Task::Bound(bound) => {
+                    self.byte(6);
+                    self.path(&bound.spec);
+                    self.number(bound.args.len());
+                    pending.extend(bound.args.iter().rev().map(Task::Type));
+                }
                 Task::Type(ty) => {
                     self.byte(0);
                     self.byte(match ty.kind {
@@ -117,11 +128,13 @@ impl Encoder {
                         TypeKind::Store => 28,
                         TypeKind::MemoryRegion => 29,
                         TypeKind::ResourceHandle => 30,
+                        TypeKind::Existential => 31,
                     });
                     self.text(&ty.name);
                     self.path(&ty.path);
                     self.number(ty.children.len());
                     self.number(ty.fields.len());
+                    self.number(ty.bounds.len());
                     self.option(ty.effects.is_some());
                     self.option(ty.produced_effects.is_some());
                     if let Some(row) = &ty.produced_effects {
@@ -132,6 +145,7 @@ impl Encoder {
                     }
                     pending.extend(ty.fields.iter().rev().map(Task::Field));
                     pending.extend(ty.children.iter().rev().map(Task::Type));
+                    pending.extend(ty.bounds.iter().rev().map(Task::Bound));
                 }
                 Task::Field(field) => {
                     self.byte(1);
@@ -339,6 +353,146 @@ pub fn callable_value_graph_input_fingerprint(
             }
         }
     }
+    e.number(graph.objects.len());
+    for object in &graph.objects {
+        e.scope(object.parent_scope);
+        e.number(object.generic_bindings.len());
+        for binding in &object.generic_bindings {
+            e.text(&binding.label);
+            e.scope(binding.scope);
+            e.number(binding.position as usize);
+        }
+        e.encode(Task::Type(&object.object_type));
+        e.encode(Task::Type(&object.source_type));
+        e.number(object.payload_sources.len());
+        for source in &object.payload_sources {
+            e.source(*source);
+        }
+        e.number(object.witnesses.len());
+        for witness in &object.witnesses {
+            e.encode(Task::Bound(&witness.bound));
+            e.text(&witness.member);
+            match &witness.target {
+                ExistentialWitnessTarget::Implementation { method, value } => {
+                    e.byte(0);
+                    e.0.update(method.fingerprint().as_bytes());
+                    e.number(*value as usize);
+                }
+                ExistentialWitnessTarget::Bound => e.byte(1),
+            }
+        }
+    }
+    etas_code::CodeFingerprint::from_bytes(*e.0.finalize().as_bytes())
+}
+
+pub(super) fn bound_input_fingerprint(bound: &crate::SpecBound) -> etas_code::CodeFingerprint {
+    let mut encoder = Encoder::new();
+    encoder.encode(Task::Bound(bound));
+    etas_code::CodeFingerprint::from_bytes(*encoder.0.finalize().as_bytes())
+}
+
+pub fn published_method_input_fingerprint(
+    method: &crate::PublishedMethod,
+) -> etas_code::CodeFingerprint {
+    let mut e = Encoder::new();
+    e.text("published-method.v2");
+    e.0.update(method.identity.fingerprint().as_bytes());
+    e.encode(Task::Type(&method.self_type));
+    match method.receiver {
+        crate::MethodReceiver::Value { slot } => {
+            e.byte(0);
+            e.number(slot as usize);
+        }
+        crate::MethodReceiver::Associated => e.byte(1),
+        crate::MethodReceiver::Component => e.byte(2),
+    }
+    e.number(method.owner_params.len());
+    for param in &method.owner_params {
+        e.text(&param.name);
+        e.byte(match param.kind {
+            crate::GenericParamKind::Type => 0,
+            crate::GenericParamKind::Effect => 1,
+        });
+        e.number(param.bounds.len());
+        for bound in &param.bounds {
+            e.path(&bound.spec);
+            e.number(bound.args.len());
+            for ty in &bound.args {
+                e.encode(Task::Type(ty));
+            }
+        }
+    }
+    e.number(method.requirements.limits.len());
+    for limit in &method.requirements.limits {
+        e.byte(limit.kind as u8);
+        e.option(limit.value.is_some());
+        if let Some(value) = &limit.value {
+            match value {
+                crate::MethodLimitValue::Count(value) => {
+                    e.byte(0);
+                    e.0.update(&value.to_le_bytes());
+                }
+                crate::MethodLimitValue::DurationMillis(value) => {
+                    e.byte(1);
+                    e.0.update(&value.to_le_bytes());
+                }
+                crate::MethodLimitValue::MoneyMicros { amount, currency } => {
+                    e.byte(2);
+                    e.0.update(&amount.to_le_bytes());
+                    e.text(currency);
+                }
+            }
+        }
+    }
+    for clauses in [
+        &method.requirements.trace_requirements,
+        &method.requirements.trace_obligations,
+    ] {
+        e.number(clauses.len());
+        for requirement in clauses {
+            let clause = match requirement {
+                crate::MethodTraceRequirement::Clause(clause) => {
+                    e.byte(0);
+                    clause
+                }
+                crate::MethodTraceRequirement::Reference(name) => {
+                    e.byte(1);
+                    e.text(name);
+                    continue;
+                }
+                crate::MethodTraceRequirement::Limit(count) => {
+                    e.byte(2);
+                    e.0.update(&count.to_le_bytes());
+                    continue;
+                }
+            };
+            e.byte(clause.kind.clone() as u8);
+            for row in [
+                &clause.pattern,
+                &clause.guard,
+                &clause.target,
+                &clause.obligation,
+            ] {
+                e.option(row.is_some());
+                if let Some(row) = row {
+                    e.encode(Task::Row(row));
+                }
+            }
+            e.number(clause.selector_bounds.len());
+            for bound in &clause.selector_bounds {
+                e.byte(bound.operand as u8);
+                e.path(&bound.effect_path);
+                e.number(bound.argument as usize);
+                e.text(&bound.binding);
+                e.path(&bound.spec_path);
+                e.number(bound.spec_args.len());
+                for ty in &bound.spec_args {
+                    e.encode(Task::Type(ty));
+                }
+            }
+        }
+    }
+    e.0.update(callable_value_graph_input_fingerprint(&method.callable).as_bytes());
     etas_code::CodeFingerprint::from_bytes(*e.0.finalize().as_bytes())
 }
 
@@ -348,6 +502,7 @@ mod tests {
 
     fn graph() -> CallableValueGraph {
         CallableValueGraph {
+            objects: Vec::new(),
             sources: vec![CallableValueSource::Value(0)],
             values: vec![CallableValueNode {
                 residual_checks: Vec::new(),
