@@ -37,14 +37,11 @@ pub(super) fn register(builder: &mut StdRegistryBuilder, module: crate::StdModul
         FlowDecl {
             name: "start".into(),
             type_params: task_generics(),
-            params: vec![
-                scheduler_type(),
-                StdType::Function {
-                    input: vec![],
-                    output: Box::new(StdType::Var("T".into())),
-                    effects: StdEffectRowExpr::param("E"),
-                },
-            ],
+            params: vec![StdType::Function {
+                input: vec![],
+                output: Box::new(StdType::Var("T".into())),
+                effects: StdEffectRowExpr::param("E"),
+            }],
             output: task_type(),
             public_effects: vec![],
             public_effect_tail: Some("E".into()),
@@ -91,15 +88,20 @@ pub(super) fn register(builder: &mut StdRegistryBuilder, module: crate::StdModul
         scheduler,
         FlowDecl {
             name: "requeue".into(),
-            type_params: vec![],
-            params: vec![scheduler_type(), continuation_type(StdType::parse("unit"))],
+            type_params: vec![StdGenericParam::new("T")],
+            params: vec![
+                scheduler_type(),
+                continuation_type(StdType::Var("T".into())),
+                StdType::Var("T".into()),
+            ],
             output: StdType::parse("never"),
             public_effects: vec![],
             public_effect_tail: None,
             requested_actions: vec![],
             requested_action_tail: None,
             source_method: None,
-        },
+        }
+        .with_value_method("std.task.Scheduler", "requeue"),
         intrinsic::task::REQUEUE,
         StdTaskIntrinsic::Requeue,
         IntrinsicDispatch::LoweringOnly,
@@ -123,7 +125,8 @@ pub(super) fn register(builder: &mut StdRegistryBuilder, module: crate::StdModul
             requested_actions: vec![],
             requested_action_tail: None,
             source_method: None,
-        },
+        }
+        .with_value_method("std.task.Scheduler", "park"),
         intrinsic::task::PARK,
         StdTaskIntrinsic::Park,
         IntrinsicDispatch::LoweringOnly,

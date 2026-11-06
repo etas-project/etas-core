@@ -135,6 +135,10 @@ fn method_behavior_requirements_round_trip_and_invalidate_the_input_fingerprint(
                 value: Some(MethodLimitValue::Count(128)),
             },
             MethodLimitRequirement {
+                kind: MethodLimitKind::Concurrency,
+                value: Some(MethodLimitValue::Count(8)),
+            },
+            MethodLimitRequirement {
                 kind: MethodLimitKind::WallTime,
                 value: Some(MethodLimitValue::DurationMillis(2500)),
             },

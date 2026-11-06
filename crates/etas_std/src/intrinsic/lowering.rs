@@ -35,6 +35,7 @@ pub enum StdTaskIntrinsic {
     Collect,
     Race,
     MapConcurrent,
+    MapConcurrentCollect,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]

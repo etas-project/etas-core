@@ -11,7 +11,7 @@ impl PublishedMethod {
                     | (K::Cost, Some(V::MoneyMicros { .. }))
                     | (K::WallTime, Some(V::DurationMillis(_)))
                     | (
-                        K::Iterations | K::Tokens | K::ContextTokens | K::Attempts,
+                        K::Iterations | K::Tokens | K::ContextTokens | K::Attempts | K::Concurrency,
                         Some(V::Count(_))
                     )
             ) {

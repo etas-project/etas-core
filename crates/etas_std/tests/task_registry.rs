@@ -74,6 +74,48 @@ fn task_abi_keeps_effect_rows_actions_and_scheduler_authority_explicit() {
         ["std", "task", "actions", "Async", "await"]
     );
 
+    let start = registry
+        .lookup_qualified(&["std", "task", "start"])
+        .unwrap();
+    let StdDecl::Flow(start) = &start.decl else {
+        panic!("task start flow");
+    };
+    assert_eq!(start.params.len(), 1);
+    assert!(matches!(
+        &start.params[0],
+        StdType::Function { input, effects, .. }
+            if input.is_empty() && effects.tail.as_deref() == Some("E")
+    ));
+
+    let requeue = registry
+        .lookup_qualified(&["std", "task", "scheduler", "requeue"])
+        .unwrap();
+    let StdDecl::Flow(requeue) = &requeue.decl else {
+        panic!("scheduler requeue flow");
+    };
+    assert_eq!(requeue.params.len(), 3);
+    assert_eq!(requeue.type_params.len(), 1);
+    assert_eq!(
+        requeue
+            .source_method
+            .as_ref()
+            .map(|method| method.name.as_str()),
+        Some("requeue")
+    );
+
+    let park = registry
+        .lookup_qualified(&["std", "task", "scheduler", "park"])
+        .unwrap();
+    let StdDecl::Flow(park) = &park.decl else {
+        panic!("scheduler park flow");
+    };
+    assert_eq!(
+        park.source_method
+            .as_ref()
+            .map(|method| method.name.as_str()),
+        Some("park")
+    );
+
     let concurrency = registry
         .lookup_qualified(&["std", "runtime", "limits", "Concurrency"])
         .unwrap();

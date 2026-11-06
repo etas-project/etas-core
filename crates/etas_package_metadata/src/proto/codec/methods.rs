@@ -152,6 +152,7 @@ fn limit_from_proto(
         "Cost" => MethodLimitKind::Cost,
         "WallTime" => MethodLimitKind::WallTime,
         "Attempts" => MethodLimitKind::Attempts,
+        "Concurrency" => MethodLimitKind::Concurrency,
         _ => return Err(invalid_method("unknown method limit kind")),
     };
     let value = match (limit.value_kind.as_str(), limit.currency.as_str()) {

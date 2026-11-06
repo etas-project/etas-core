@@ -11,3 +11,4 @@ pub const TRY_JOIN: u32 = 1_407;
 pub const COLLECT: u32 = 1_408;
 pub const RACE: u32 = 1_409;
 pub const MAP_CONCURRENT: u32 = 1_410;
+pub const MAP_CONCURRENT_COLLECT: u32 = 1_411;

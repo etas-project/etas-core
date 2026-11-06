@@ -655,6 +655,7 @@ pub enum MethodLimitKind {
     Cost,
     WallTime,
     Attempts,
+    Concurrency,
 }
 
 #[derive(
