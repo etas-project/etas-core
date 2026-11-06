@@ -1,9 +1,22 @@
 use crate::{
-    CompilerActionRole, EffectActionDecl, StdDecl, StdEffectRowExpr, StdGenericParam,
+    CompilerActionRole, EffectActionDecl, EffectDecl, StdDecl, StdEffectRowExpr, StdGenericParam,
     StdRegistryBuilder, StdRuntimeRequirement, StdSymbolKind, StdType,
 };
 
-pub(super) fn register(builder: &mut StdRegistryBuilder) {
+pub(super) fn register(builder: &mut StdRegistryBuilder, task_module: crate::StdModuleId) {
+    let effect = builder.symbol(
+        task_module,
+        "Async",
+        StdSymbolKind::Effect,
+        StdDecl::Effect(
+            EffectDecl::core("Async")
+                .with_stable_id(28)
+                .with_runtime_requirement(StdRuntimeRequirement::TaskScheduler),
+        ),
+        "Structured task suspension handled by a task scheduler.",
+    );
+    builder.prelude("Async", effect);
+
     let module = builder.module(
         &["std", "task", "actions", "Async"],
         "Scheduler-intercepted task suspension actions.",

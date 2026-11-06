@@ -136,16 +136,6 @@ struct StandardActionSpec {
 
 const STANDARD_EFFECTS: &[StandardEffectSpec] = &[
     StandardEffectSpec {
-        name: "Async",
-        extends: &[],
-        core: true,
-        prelude: true,
-        stable_id: 28,
-        runtime_requirement: StdRuntimeRequirement::TaskScheduler,
-        high_impact_ack: false,
-        description: "Structured task suspension handled by a task scheduler.",
-    },
-    StandardEffectSpec {
         name: "Code",
         extends: &[],
         core: false,

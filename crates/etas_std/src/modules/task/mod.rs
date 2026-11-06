@@ -8,6 +8,6 @@ pub fn register(builder: &mut crate::StdRegistryBuilder) {
         "Structured concurrency tasks and scheduler-scoped operations.",
     );
     types::register(builder, module);
-    effects::register(builder);
+    effects::register(builder, module);
     flows::register(builder, module);
 }

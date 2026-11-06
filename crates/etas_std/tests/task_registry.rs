@@ -19,7 +19,7 @@ fn task_abi_keeps_effect_rows_actions_and_scheduler_authority_explicit() {
     assert_eq!(task.params[1].kind, StdGenericParamKind::EffectRow);
 
     let async_effect = registry
-        .lookup_qualified(&["std", "effects", "Async"])
+        .lookup_qualified(&["std", "task", "Async"])
         .unwrap();
     let StdDecl::Effect(async_effect) = &async_effect.decl else {
         panic!("Async effect");
