@@ -133,6 +133,222 @@ pub(super) fn register(builder: &mut StdRegistryBuilder, module: crate::StdModul
         &["std", "task", "scheduler", "park"],
         "Atomically register a continuation as a task waiter or resume it from terminal state.",
     );
+
+    register_combinators(builder, module);
+}
+
+fn register_combinators(builder: &mut StdRegistryBuilder, module: crate::StdModuleId) {
+    let join = register_flow(
+        builder,
+        module,
+        join_tuple_decl(&["A", "B"]),
+        intrinsic::task::JOIN_TUPLE,
+        StdTaskIntrinsic::JoinTuple,
+        IntrinsicDispatch::Runtime,
+        &["std", "task", "join"],
+        "Run fixed or homogeneous jobs concurrently and preserve source result order.",
+    );
+    for declaration in [
+        join_tuple_decl(&["A", "B", "C"]),
+        join_tuple_decl(&["A", "B", "C", "D"]),
+        join_array_decl(),
+    ] {
+        builder
+            .flow_overload(join, declaration)
+            .expect("task join overload preserves its registered identity");
+    }
+
+    register_flow(
+        builder,
+        module,
+        error_array_decl(
+            "try_join",
+            StdType::Result {
+                ok: Box::new(StdType::Array(Box::new(StdType::Var("T".into())))),
+                err: Box::new(StdType::Var("X".into())),
+            },
+        ),
+        intrinsic::task::TRY_JOIN,
+        StdTaskIntrinsic::TryJoin,
+        IntrinsicDispatch::Runtime,
+        &["std", "task", "try_join"],
+        "Run homogeneous jobs fail-fast and return the primary typed error as Result.",
+    );
+    register_flow(
+        builder,
+        module,
+        error_array_decl(
+            "collect",
+            StdType::Array(Box::new(StdType::Result {
+                ok: Box::new(StdType::Var("T".into())),
+                err: Box::new(StdType::Var("X".into())),
+            })),
+        ),
+        intrinsic::task::COLLECT,
+        StdTaskIntrinsic::Collect,
+        IntrinsicDispatch::Runtime,
+        &["std", "task", "collect"],
+        "Run every homogeneous job and retain an input-ordered Result for each branch.",
+    );
+
+    let mut race = error_array_decl("race", StdType::Var("T".into()));
+    race.public_effects = vec![error_effect()];
+    register_flow(
+        builder,
+        module,
+        race,
+        intrinsic::task::RACE,
+        StdTaskIntrinsic::Race,
+        IntrinsicDispatch::Runtime,
+        &["std", "task", "race"],
+        "Return the first successful branch and propagate a deterministic error if all fail.",
+    );
+
+    register_flow(
+        builder,
+        module,
+        map_decl(false),
+        intrinsic::task::MAP_CONCURRENT,
+        StdTaskIntrinsic::MapConcurrent,
+        IntrinsicDispatch::Runtime,
+        &["std", "task", "map_concurrent"],
+        "Map an array concurrently with stable input-to-output ordering.",
+    );
+    register_flow(
+        builder,
+        module,
+        map_decl(true),
+        intrinsic::task::MAP_CONCURRENT_COLLECT,
+        StdTaskIntrinsic::MapConcurrentCollect,
+        IntrinsicDispatch::Runtime,
+        &["std", "task", "map_concurrent_collect"],
+        "Map an array concurrently and retain an input-ordered Result for every item.",
+    );
+}
+
+fn join_tuple_decl(outputs: &[&str]) -> FlowDecl {
+    let mut type_params = outputs
+        .iter()
+        .map(|name| StdGenericParam::new(name))
+        .collect::<Vec<_>>();
+    type_params.push(StdGenericParam::effect_row("E"));
+    let branches = outputs
+        .iter()
+        .map(|name| job_type(StdType::Var((*name).into()), StdEffectRowExpr::param("E")))
+        .collect::<Vec<_>>();
+    FlowDecl {
+        name: "join".into(),
+        type_params,
+        params: vec![StdType::Tuple(branches)],
+        output: StdType::Tuple(
+            outputs
+                .iter()
+                .map(|name| StdType::Var((*name).into()))
+                .collect(),
+        ),
+        public_effects: vec![],
+        public_effect_tail: Some("E".into()),
+        requested_actions: vec![],
+        requested_action_tail: None,
+        source_method: None,
+    }
+}
+
+fn join_array_decl() -> FlowDecl {
+    FlowDecl {
+        name: "join".into(),
+        type_params: task_generics(),
+        params: vec![StdType::Array(Box::new(job_type(
+            StdType::Var("T".into()),
+            StdEffectRowExpr::param("E"),
+        )))],
+        output: StdType::Array(Box::new(StdType::Var("T".into()))),
+        public_effects: vec![],
+        public_effect_tail: Some("E".into()),
+        requested_actions: vec![],
+        requested_action_tail: None,
+        source_method: None,
+    }
+}
+
+fn error_array_decl(name: &str, output: StdType) -> FlowDecl {
+    FlowDecl {
+        name: name.into(),
+        type_params: vec![
+            StdGenericParam::new("T"),
+            StdGenericParam::new("X"),
+            StdGenericParam::effect_row("E"),
+        ],
+        params: vec![StdType::Array(Box::new(job_type(
+            StdType::Var("T".into()),
+            StdEffectRowExpr::with_tail(vec![error_effect()], "E"),
+        )))],
+        output,
+        public_effects: vec![],
+        public_effect_tail: Some("E".into()),
+        requested_actions: vec![],
+        requested_action_tail: None,
+        source_method: None,
+    }
+}
+
+fn map_decl(collect: bool) -> FlowDecl {
+    let mut type_params = vec![StdGenericParam::new("A"), StdGenericParam::new("B")];
+    if collect {
+        type_params.push(StdGenericParam::new("X"));
+    }
+    type_params.push(StdGenericParam::effect_row("E"));
+    let effects = if collect {
+        StdEffectRowExpr::with_tail(vec![error_effect()], "E")
+    } else {
+        StdEffectRowExpr::param("E")
+    };
+    let output = if collect {
+        StdType::Result {
+            ok: Box::new(StdType::Var("B".into())),
+            err: Box::new(StdType::Var("X".into())),
+        }
+    } else {
+        StdType::Var("B".into())
+    };
+    FlowDecl {
+        name: if collect {
+            "map_concurrent_collect".into()
+        } else {
+            "map_concurrent".into()
+        },
+        type_params,
+        params: vec![
+            StdType::Array(Box::new(StdType::Var("A".into()))),
+            job_type_with_input(StdType::Var("A".into()), StdType::Var("B".into()), effects),
+        ],
+        output: StdType::Array(Box::new(output)),
+        public_effects: vec![],
+        public_effect_tail: Some("E".into()),
+        requested_actions: vec![],
+        requested_action_tail: None,
+        source_method: None,
+    }
+}
+
+fn job_type(output: StdType, effects: StdEffectRowExpr) -> StdType {
+    StdType::Function {
+        input: vec![],
+        output: Box::new(output),
+        effects,
+    }
+}
+
+fn job_type_with_input(input: StdType, output: StdType, effects: StdEffectRowExpr) -> StdType {
+    StdType::Function {
+        input: vec![input],
+        output: Box::new(output),
+        effects,
+    }
+}
+
+fn error_effect() -> StdEffectRef {
+    StdEffectRef::typed(&["Error"], StdType::Var("X".into()))
 }
 
 fn register_flow(
@@ -144,7 +360,7 @@ fn register_flow(
     dispatch: IntrinsicDispatch,
     path: &[&str],
     docs: &str,
-) {
+) -> crate::StdSymbolId {
     let name = declaration.name.clone();
     builder.symbol_with_intrinsic(
         module,
@@ -162,7 +378,7 @@ fn register_flow(
             memory_access: IntrinsicMemoryAccess::None,
             runtime_requirement: IntrinsicRuntimeRequirement::TaskScheduler,
         }),
-    );
+    )
 }
 
 fn task_generics() -> Vec<StdGenericParam> {
