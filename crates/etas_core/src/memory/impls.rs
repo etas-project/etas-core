@@ -243,9 +243,14 @@ pub fn hash_table_bytes<T>(capacity: usize) -> usize {
 }
 
 fn tree_bytes<T>(len: usize) -> usize {
+    if len == 0 {
+        return 0;
+    }
     // B-tree nodes may retain spare slots after removals; at most one minimally
     // occupied node per entry, each with room for keys/values and child links.
-    // An emptied tree can retain its root, so reserve one extra node as well.
+    // Reserve an extra node for internal/root storage once the tree is non-empty.
+    // A zero-length BTreeMap/BTreeSet owns no observable entries or capacity and
+    // must not charge a hypothetical allocation for every empty value.
     len.saturating_add(1).saturating_mul(
         16_usize
             .saturating_mul(size_of::<T>().saturating_add(size_of::<usize>()))
