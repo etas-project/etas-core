@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap},
+    sync::Arc,
+};
 
 use super::*;
 
@@ -38,6 +41,20 @@ fn reserved_empty_containers_are_not_free() {
         MemoryFootprint::of(&Vec::<String>::new()).estimated_bytes(),
         0
     );
+}
+
+#[test]
+fn empty_tree_containers_do_not_claim_hypothetical_nodes() {
+    let map = BTreeMap::<String, String>::new();
+    let set = BTreeSet::<String>::new();
+    let json = serde_json::Map::<String, serde_json::Value>::new();
+
+    assert_eq!(MemoryFootprint::of(&map).estimated_bytes(), 0);
+    assert_eq!(MemoryFootprint::of(&set).estimated_bytes(), 0);
+    assert_eq!(MemoryFootprint::of(&json).estimated_bytes(), 0);
+
+    let populated = BTreeMap::from([("key".to_owned(), "value".to_owned())]);
+    assert!(MemoryFootprint::of(&populated).estimated_bytes() > 0);
 }
 
 #[derive(crate::RetainedSize)]
