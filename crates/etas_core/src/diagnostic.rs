@@ -235,6 +235,8 @@ pub enum TypeDiagnosticCode {
     FinishTypeMismatch,
     HandlerResultRequired,
     HandlerCompletionRequired,
+    InvalidContinuationUse,
+    InvalidTaskScope,
     ReturnInsideHandlerArm,
     IncompleteTypeFacts,
     InvalidReflectionConfiguration,
