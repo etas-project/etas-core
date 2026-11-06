@@ -130,6 +130,7 @@ impl Encoder {
                         TypeKind::ResourceHandle => 30,
                         TypeKind::Existential => 31,
                         TypeKind::Parameter => 32,
+                        TypeKind::Task => 33,
                     });
                     self.option(ty.parameter.is_some());
                     if let Some(parameter) = &ty.parameter {

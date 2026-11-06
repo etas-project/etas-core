@@ -900,6 +900,7 @@ pub enum TypeKind {
     Tuple,
     Function,
     Handler,
+    Task,
     Trusted,
     Untrusted,
     Secret,

@@ -2517,6 +2517,7 @@ fn type_kind_from_wire(value: &str) -> Result<TypeKind, MetadataArtifactError> {
         "tuple" => Ok(TypeKind::Tuple),
         "function" => Ok(TypeKind::Function),
         "handler" => Ok(TypeKind::Handler),
+        "task" => Ok(TypeKind::Task),
         "trusted" => Ok(TypeKind::Trusted),
         "untrusted" => Ok(TypeKind::Untrusted),
         "secret" => Ok(TypeKind::Secret),

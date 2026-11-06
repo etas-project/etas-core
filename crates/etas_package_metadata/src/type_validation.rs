@@ -23,6 +23,7 @@ pub(crate) fn type_kind_to_wire(kind: TypeKind) -> &'static str {
         TypeKind::Tuple => "tuple",
         TypeKind::Function => "function",
         TypeKind::Handler => "handler",
+        TypeKind::Task => "task",
         TypeKind::Trusted => "trusted",
         TypeKind::Untrusted => "untrusted",
         TypeKind::Secret => "secret",
@@ -167,6 +168,10 @@ pub(crate) fn validate_type_shape(ty: &Type) -> Result<(), MetadataArtifactError
         TypeKind::Function if children.is_empty() => {
             Err(invalid("function type requires an output child"))
         }
+        TypeKind::Task if children.len() != 1 => {
+            Err(invalid("task type requires exactly one output child"))
+        }
+        TypeKind::Task if effects.is_none() => Err(invalid("task type requires latent effects")),
         TypeKind::Handler if effects.is_none() => {
             Err(invalid("handler type requires handled effects"))
         }
@@ -180,7 +185,11 @@ pub(crate) fn validate_type_shape(ty: &Type) -> Result<(), MetadataArtifactError
                 type_kind_to_wire(kind)
             )))
         }
-        kind if !matches!(kind, TypeKind::Function | TypeKind::Handler) && effects.is_some() => {
+        kind if !matches!(
+            kind,
+            TypeKind::Function | TypeKind::Handler | TypeKind::Task
+        ) && effects.is_some() =>
+        {
             Err(invalid(format!(
                 "type kind `{}` cannot use effects",
                 type_kind_to_wire(kind)
