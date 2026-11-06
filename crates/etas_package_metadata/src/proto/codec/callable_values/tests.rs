@@ -326,6 +326,10 @@ fn callable_behavior_has_typed_closed_enums_and_affects_content_identity() {
         .behavior
         .interpreter_features
         .push(crate::CallableValueInterpreterFeature::Retry);
+    changed.values[0]
+        .behavior
+        .interpreter_features
+        .push(crate::CallableValueInterpreterFeature::TaskScheduler);
     assert_eq!(from_proto(to_proto(&changed)).unwrap(), changed);
     assert_ne!(
         crate::callable_value_graph_fingerprint(&changed).unwrap(),

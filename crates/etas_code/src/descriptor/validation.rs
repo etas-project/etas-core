@@ -256,7 +256,7 @@ fn validate_inner(
                 }
             }
             TypeInfo::Function(signature) => validator.signature(node, signature)?,
-            TypeInfo::Handler { .. } => {}
+            TypeInfo::Handler { .. } | TypeInfo::Task { .. } => {}
         }
     }
     for (index, row) in input.rows.iter().enumerate() {

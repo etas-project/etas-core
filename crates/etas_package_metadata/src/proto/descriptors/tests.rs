@@ -482,6 +482,10 @@ fn fixture() -> DefinitionDescriptorSet {
                     declared_output: None,
                     effects: None,
                 }),
+                TypeInfo::Task {
+                    output: TypeInfoRef(0),
+                    effects: EffectRowInfoRef(0),
+                },
             ],
             rows: vec![
                 EffectRowInfo {

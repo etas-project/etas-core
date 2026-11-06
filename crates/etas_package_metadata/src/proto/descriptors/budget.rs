@@ -75,6 +75,7 @@ pub(in crate::proto) fn validate_model(
             TypeInfo::Handler {
                 produced, result, ..
             } => 1 + usize::from(produced.is_some()) + usize::from(result.is_some()),
+            TypeInfo::Task { .. } => 2,
         };
         budget.charge(count, "descriptor type references")?;
     }
@@ -175,6 +176,7 @@ pub(in crate::proto) fn validate_wire(
             Some(K::Handler(value)) => {
                 1 + usize::from(value.produced.is_some()) + usize::from(value.result.is_some())
             }
+            Some(K::Task(_)) => 2,
         };
         budget.charge(count, "descriptor type references")?;
     }

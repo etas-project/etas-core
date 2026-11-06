@@ -230,6 +230,7 @@ impl DescriptorGraph {
                         encoder.tag(u8::from(produced.is_some()));
                         encoder.tag(u8::from(result.is_some()));
                     }
+                    TypeInfo::Task { .. } => encoder.tag(13),
                 }
             }
             DescriptorNode::Row(reference) => {

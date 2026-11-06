@@ -83,4 +83,5 @@ pub enum CallableValueInterpreterFeature {
     Retry = 2,
     Checkpoint = 3,
     WorkflowOrchestration = 4,
+    TaskScheduler = 5,
 }

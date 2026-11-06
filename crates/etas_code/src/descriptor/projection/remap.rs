@@ -146,6 +146,10 @@ impl Remapper<'_> {
                     self.type_ref(ty)?;
                 }
             }
+            TypeInfo::Task { output, effects } => {
+                self.type_ref(output)?;
+                self.row_ref(effects)?;
+            }
         }
         Ok(())
     }

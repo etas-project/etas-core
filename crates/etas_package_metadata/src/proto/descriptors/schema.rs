@@ -359,8 +359,16 @@ pub struct Handler {
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
+pub struct Task {
+    #[prost(uint32, tag = "1")]
+    pub output: u32,
+    #[prost(uint32, tag = "2")]
+    pub effects: u32,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
 pub struct Type {
-    #[prost(oneof = "ty::Kind", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12")]
+    #[prost(oneof = "ty::Kind", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13")]
     pub kind: Option<ty::Kind>,
 }
 pub mod ty {
@@ -390,6 +398,8 @@ pub mod ty {
         Handler(super::Handler),
         #[prost(message, tag = "12")]
         Existential(super::Existential),
+        #[prost(message, tag = "13")]
+        Task(super::Task),
     }
 }
 

@@ -187,6 +187,10 @@ pub(super) fn encode(ty: &TypeInfo) -> p::Type {
             produced: produced.map(|r| r.0),
             result: result.map(|r| r.0),
         }),
+        TypeInfo::Task { output, effects } => K::Task(p::Task {
+            output: output.0,
+            effects: effects.0,
+        }),
     };
     p::Type { kind: Some(kind) }
 }
@@ -313,6 +317,10 @@ pub(super) fn decode(ty: p::Type) -> Result<TypeInfo, Error> {
             handled: EffectRowInfoRef(value.handled),
             produced: value.produced.map(EffectRowInfoRef),
             result: value.result.map(TypeInfoRef),
+        },
+        K::Task(value) => TypeInfo::Task {
+            output: TypeInfoRef(value.output),
+            effects: EffectRowInfoRef(value.effects),
         },
     })
 }

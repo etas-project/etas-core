@@ -151,6 +151,10 @@ pub(super) fn references(
                     visit(DescriptorNode::Type(*result));
                 }
             }
+            TypeInfo::Task { output, effects } => {
+                visit(DescriptorNode::Type(*output));
+                visit(DescriptorNode::Row(*effects));
+            }
         },
         DescriptorNode::Row(reference) => {
             let row = &input.rows[reference.0 as usize];

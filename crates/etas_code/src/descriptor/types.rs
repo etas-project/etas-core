@@ -157,4 +157,8 @@ pub enum TypeInfo {
         produced: Option<EffectRowInfoRef>,
         result: Option<TypeInfoRef>,
     },
+    Task {
+        output: TypeInfoRef,
+        effects: EffectRowInfoRef,
+    },
 }
