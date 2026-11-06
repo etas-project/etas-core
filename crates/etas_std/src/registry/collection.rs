@@ -132,7 +132,7 @@ fn signature_matches(flow: &FlowDecl, kind: K, operation: O) -> bool {
                 vec![StdType::Function {
                     input: vec![key.clone(), key.clone()],
                     output: Box::new(StdType::parse("i32")),
-                    effects: vec![],
+                    effects: crate::StdEffectRowExpr::closed(vec![]),
                 }],
                 r,
             )

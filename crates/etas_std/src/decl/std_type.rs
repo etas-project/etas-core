@@ -21,7 +21,11 @@ pub enum StdType {
     Function {
         input: Vec<StdType>,
         output: Box<StdType>,
-        effects: Vec<super::StdEffectRef>,
+        effects: super::StdEffectRowExpr,
+    },
+    Task {
+        output: Box<StdType>,
+        effects: super::StdEffectRowExpr,
     },
     Schema(Box<StdType>),
     Trust {

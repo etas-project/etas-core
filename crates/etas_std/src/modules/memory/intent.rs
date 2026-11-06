@@ -121,6 +121,8 @@ pub(super) fn register(builder: &mut StdRegistryBuilder, module: crate::StdModul
                 } else {
                     Vec::new()
                 },
+                public_effect_tail: None,
+                requested_action_tail: None,
                 requested_actions: Vec::new(),
                 source_method: None,
             }),

@@ -13,7 +13,7 @@ pub mod value_decl;
 pub use effect_decl::{
     CompilerActionRole, EffectActionArgKind, EffectActionDecl, EffectDecl, StdRuntimeRequirement,
 };
-pub use effect_ref::{StdEffectRef, StdStaticArg};
+pub use effect_ref::{StdEffectRef, StdEffectRowExpr, StdStaticArg};
 pub use flow_decl::{FlowDecl, FlowSourceMethod, FlowSourceMethodKind, FlowSourceMethodOperation};
 pub use impl_decl::StdImplFact;
 pub use implementation::{
@@ -26,8 +26,8 @@ pub use std_type::{
 };
 pub use tool_decl::ToolDecl;
 pub use type_decl::{
-    CodeTypeRole, StdGenericParam, StdIterableItem, StdSpecRef, StdTypeConstruction, TypeDecl,
-    TypeDeclKind,
+    CodeTypeRole, StdGenericParam, StdGenericParamKind, StdIterableItem, StdSpecRef,
+    StdTypeConstruction, TypeDecl, TypeDeclKind,
 };
 pub use value_decl::{StdValueRole, ValueDecl};
 

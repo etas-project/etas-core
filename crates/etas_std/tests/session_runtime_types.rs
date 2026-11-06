@@ -37,6 +37,7 @@ fn session_and_limit_values_have_explicit_checked_representations() {
                 "Cost",
                 "WallTime",
                 "Attempts",
+                "Concurrency",
             ][..],
         ),
     ] {

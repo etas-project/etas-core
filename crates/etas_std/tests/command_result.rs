@@ -36,12 +36,15 @@ fn native_runtime_roles_cover_the_declared_value_abis_without_name_inference() {
         (RuntimeTypeRole::ContextPolicy, 0),
         (RuntimeTypeRole::RetentionPolicy, 0),
         (RuntimeTypeRole::Limit, 0),
+        (RuntimeTypeRole::Task, 2),
+        (RuntimeTypeRole::Scheduler, 0),
+        (RuntimeTypeRole::Continuation, 1),
     ] {
         let declaration = roles.get(&role).expect("registered native ABI role");
         assert_eq!(role.type_parameter_count(), arity);
         assert_eq!(declaration.params.len(), arity);
     }
-    assert_eq!(roles.len(), 19);
+    assert_eq!(roles.len(), 22);
     assert!(
         roles[&RuntimeTypeRole::Conversation]
             .representation

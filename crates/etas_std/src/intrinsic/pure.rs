@@ -145,3 +145,4 @@ pub const CHAR_IS_CONTROL: u32 = 153;
 pub const CHAR_IS_ASCII_DIGIT: u32 = 154;
 pub const CHAR_TO_U32: u32 = 155;
 pub const CHAR_FROM_U32: u32 = 156;
+pub const LIMIT_CONCURRENCY: u32 = 157;

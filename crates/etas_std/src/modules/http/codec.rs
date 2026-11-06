@@ -219,6 +219,8 @@ fn decode_step_constructor(
             args: vec![StdType::Var("T".into())],
         },
         public_effects: Vec::new(),
+        public_effect_tail: None,
+        requested_action_tail: None,
         requested_actions: Vec::new(),
         source_method: None,
     };

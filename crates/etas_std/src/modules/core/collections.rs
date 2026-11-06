@@ -533,7 +533,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
     compared.params.push(StdType::Function {
         input: vec![StdType::parse("P"), StdType::parse("P")],
         output: Box::new(StdType::parse("i32")),
-        effects: Vec::new(),
+        effects: crate::StdEffectRowExpr::closed(Vec::new()),
     });
     register_operation(
         builder,
@@ -562,7 +562,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         compared.params.push(StdType::Function {
             input: vec![StdType::parse(key), StdType::parse(key)],
             output: Box::new(StdType::parse("i32")),
-            effects: Vec::new(),
+            effects: crate::StdEffectRowExpr::closed(Vec::new()),
         });
         register_operation(
             builder,

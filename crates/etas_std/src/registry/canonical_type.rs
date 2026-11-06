@@ -39,7 +39,16 @@ pub(super) fn validate(owner: &str, root: &StdType) -> Result<(), StdRegistryVal
             } => {
                 pending.extend(input);
                 pending.push(output);
-                for effect in effects {
+                for effect in &effects.effects {
+                    pending.extend(effect.args.iter().filter_map(|arg| match arg {
+                        crate::StdStaticArg::Type(ty) => Some(ty),
+                        _ => None,
+                    }));
+                }
+            }
+            StdType::Task { output, effects } => {
+                pending.push(output);
+                for effect in &effects.effects {
                     pending.extend(effect.args.iter().filter_map(|arg| match arg {
                         crate::StdStaticArg::Type(ty) => Some(ty),
                         _ => None,

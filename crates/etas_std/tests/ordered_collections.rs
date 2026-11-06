@@ -41,7 +41,7 @@ fn ordered_constructor_overloads_use_structured_pure_key_comparison() {
             StdType::Function {
                 input: vec![StdType::parse(key), StdType::parse(key)],
                 output: Box::new(StdType::parse("i32")),
-                effects: vec![],
+                effects: etas_std::StdEffectRowExpr::closed(vec![]),
             }
         );
         assert!(compared.public_effects.is_empty());

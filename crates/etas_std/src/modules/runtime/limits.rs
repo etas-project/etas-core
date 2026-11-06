@@ -58,6 +58,12 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             StdLimitKind::Attempts,
             "Limit retry attempts.",
         ),
+        (
+            "Concurrency",
+            &["usize"][..],
+            StdLimitKind::Concurrency,
+            "Limit the number of actively running tasks.",
+        ),
     ] {
         builder
             .enum_constructor(
@@ -100,5 +106,6 @@ fn limit_intrinsic_id(kind: StdLimitKind) -> u32 {
         StdLimitKind::Cost => intrinsic::pure::LIMIT_COST,
         StdLimitKind::WallTime => intrinsic::pure::LIMIT_WALL_TIME,
         StdLimitKind::Attempts => intrinsic::pure::LIMIT_ATTEMPTS,
+        StdLimitKind::Concurrency => intrinsic::pure::LIMIT_CONCURRENCY,
     }
 }

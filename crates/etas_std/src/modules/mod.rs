@@ -15,6 +15,7 @@ pub mod runtime;
 pub mod secret;
 pub mod security;
 pub mod stream;
+pub mod task;
 pub mod tls;
 
 mod registration;
@@ -26,6 +27,7 @@ pub fn standard_registry() -> StdRegistry {
     core::register(&mut builder);
     compiler::register(&mut builder);
     effects::register(&mut builder);
+    task::register(&mut builder);
     io::register(&mut builder);
     memory::register(&mut builder);
     net::register(&mut builder);

@@ -33,6 +33,9 @@ pub enum RuntimeTypeRole {
     ContextPolicy,
     RetentionPolicy,
     Limit,
+    Task,
+    Scheduler,
+    Continuation,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
@@ -53,7 +56,8 @@ impl RuntimeTypeRole {
     pub fn type_parameter_count(self) -> usize {
         match self {
             Self::Deque | Self::Queue | Self::Stack | Self::OrderedSet | Self::WorkspacePath => 1,
-            Self::PriorityQueue | Self::OrderedMap | Self::MemoryWriteIntent => 2,
+            Self::PriorityQueue | Self::OrderedMap | Self::MemoryWriteIntent | Self::Task => 2,
+            Self::Continuation => 1,
             _ => 0,
         }
     }
@@ -72,15 +76,41 @@ impl RuntimeTypeRole {
             }
             _ => declaration.representation.is_none(),
         };
+        let generic_shape = declaration.params.len() == self.type_parameter_count()
+            && match self {
+                Self::Task => matches!(
+                    declaration.params.as_slice(),
+                    [
+                        super::StdGenericParam {
+                            kind: super::StdGenericParamKind::Type,
+                            ..
+                        },
+                        super::StdGenericParam {
+                            kind: super::StdGenericParamKind::EffectRow,
+                            ..
+                        }
+                    ]
+                ),
+                Self::Continuation => declaration
+                    .params
+                    .iter()
+                    .all(|parameter| parameter.kind == super::StdGenericParamKind::Type),
+                _ => declaration
+                    .params
+                    .iter()
+                    .all(|parameter| parameter.kind == super::StdGenericParamKind::Type),
+            };
         declaration.kind == kind
-            && declaration.params.len() == self.type_parameter_count()
+            && generic_shape
             && declaration.canonical_type.is_none()
             && declaration.code_role.is_none()
             && !declaration.derivable
             && declaration.projected_fields == self.projected_fields()
             && representation
-            && (self != Self::CommandResult
-                || declaration.construction == super::StdTypeConstruction::IntrinsicOnly)
+            && (!matches!(
+                self,
+                Self::CommandResult | Self::Task | Self::Scheduler | Self::Continuation
+            ) || declaration.construction == super::StdTypeConstruction::IntrinsicOnly)
     }
 
     pub fn fields(self) -> &'static [RuntimeField] {

@@ -52,4 +52,5 @@ pub enum StdLimitKind {
     Cost,
     WallTime,
     Attempts,
+    Concurrency,
 }

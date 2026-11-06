@@ -7,7 +7,11 @@ pub struct FlowDecl {
     pub params: Vec<StdType>,
     pub output: StdType,
     pub public_effects: Vec<StdEffectRef>,
+    /// Open public effect-row tail, naming an `effect` generic parameter.
+    pub public_effect_tail: Option<String>,
     pub requested_actions: Vec<StdEffectRef>,
+    /// Open requested-action row tail. Task APIs use this to retain job behavior.
+    pub requested_action_tail: Option<String>,
     pub source_method: Option<FlowSourceMethod>,
 }
 
@@ -54,7 +58,9 @@ impl FlowDecl {
             params: params.iter().map(|param| StdType::parse(param)).collect(),
             output: StdType::parse(output),
             public_effects: Vec::new(),
+            public_effect_tail: None,
             requested_actions: Vec::new(),
+            requested_action_tail: None,
             source_method: None,
         }
     }
@@ -92,9 +98,17 @@ impl FlowDecl {
             params: params.iter().map(|param| StdType::parse(param)).collect(),
             output: StdType::parse(output),
             public_effects: public_effects.to_vec(),
+            public_effect_tail: None,
             requested_actions: requested_actions.to_vec(),
+            requested_action_tail: None,
             source_method: None,
         }
+    }
+
+    pub fn with_effect_tail(mut self, name: &str) -> Self {
+        self.public_effect_tail = Some(name.to_owned());
+        self.requested_action_tail = Some(name.to_owned());
+        self
     }
 
     pub fn with_type_member_method(mut self, receiver: &str, name: &str) -> Self {

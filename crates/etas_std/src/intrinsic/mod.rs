@@ -8,9 +8,10 @@ pub mod pure;
 pub mod runtime;
 pub mod signature;
 pub mod static_string;
+pub mod task;
 
 pub use id::StdIntrinsicId;
-pub use lowering::{LoweringHint, StdActionReducer};
+pub use lowering::{LoweringHint, StdActionReducer, StdTaskIntrinsic};
 pub use signature::{
     IntrinsicDescriptor, IntrinsicDispatch, IntrinsicLatentEffect, IntrinsicMemoryAccess,
     IntrinsicPurity, IntrinsicRuntimeRequirement,

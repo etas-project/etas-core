@@ -64,4 +64,5 @@ pub enum IntrinsicRuntimeRequirement {
     #[default]
     None,
     Checkpoint,
+    TaskScheduler,
 }

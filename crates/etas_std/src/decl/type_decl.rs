@@ -35,12 +35,20 @@ impl TypeDecl {
     }
 
     pub fn generic(name: &str, params: &[&str], kind: TypeDeclKind) -> Self {
-        Self {
-            name: name.to_owned(),
-            params: params
+        Self::generic_params(
+            name,
+            params
                 .iter()
                 .map(|name| StdGenericParam::new(name))
                 .collect(),
+            kind,
+        )
+    }
+
+    pub fn generic_params(name: &str, params: Vec<StdGenericParam>, kind: TypeDeclKind) -> Self {
+        Self {
+            name: name.to_owned(),
+            params,
             kind,
             representation: None,
             canonical_type: None,
@@ -160,13 +168,30 @@ impl CodeTypeRole {
 #[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct StdGenericParam {
     pub name: String,
+    pub kind: StdGenericParamKind,
     pub bounds: Vec<StdSpecRef>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, etas_core::RetainedSize)]
+pub enum StdGenericParamKind {
+    #[default]
+    Type,
+    EffectRow,
 }
 
 impl StdGenericParam {
     pub fn new(name: &str) -> Self {
         Self {
             name: name.to_owned(),
+            kind: StdGenericParamKind::Type,
+            bounds: Vec::new(),
+        }
+    }
+
+    pub fn effect_row(name: &str) -> Self {
+        Self {
+            name: name.to_owned(),
+            kind: StdGenericParamKind::EffectRow,
             bounds: Vec::new(),
         }
     }
@@ -174,6 +199,7 @@ impl StdGenericParam {
     pub fn bounded(name: &str, bounds: &[StdSpecRef]) -> Self {
         Self {
             name: name.to_owned(),
+            kind: StdGenericParamKind::Type,
             bounds: bounds.to_vec(),
         }
     }

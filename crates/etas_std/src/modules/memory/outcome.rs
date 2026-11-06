@@ -41,6 +41,8 @@ pub(super) fn register(builder: &mut StdRegistryBuilder, module: crate::StdModul
                         params,
                         output: applied(name),
                         public_effects: vec![],
+                        public_effect_tail: None,
+                        requested_action_tail: None,
                         requested_actions: vec![],
                         source_method: None,
                     },

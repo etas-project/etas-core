@@ -39,7 +39,7 @@ fn priority_queue_constructor_overloads_have_structured_comparison_signatures() 
         StdType::Function {
             input: vec![StdType::parse("P"), StdType::parse("P")],
             output: Box::new(StdType::parse("i32")),
-            effects: vec![],
+            effects: etas_std::StdEffectRowExpr::closed(vec![]),
         }
     );
     assert!(comparison.public_effects.is_empty());
@@ -87,7 +87,7 @@ fn callable_descriptors_validate_parameter_result_and_effect_graphs() {
         flow.params.push(StdType::Function {
             input,
             output: Box::new(output),
-            effects,
+            effects: etas_std::StdEffectRowExpr::closed(effects),
         });
         builder.symbol(
             module,

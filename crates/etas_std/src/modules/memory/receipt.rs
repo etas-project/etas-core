@@ -115,6 +115,8 @@ fn enumeration(
                     params,
                     output: named(name),
                     public_effects: vec![],
+                    public_effect_tail: None,
+                    requested_action_tail: None,
                     requested_actions: vec![],
                     source_method: None,
                 },

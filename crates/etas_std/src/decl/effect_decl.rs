@@ -3,7 +3,7 @@ use super::{StdGenericParam, StdType};
 #[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct EffectDecl {
     pub name: String,
-    pub params: Vec<String>,
+    pub params: Vec<StdGenericParam>,
     pub extends: Vec<String>,
     pub core: bool,
     pub stable_id: Option<u32>,
@@ -27,7 +27,10 @@ impl EffectDecl {
     pub fn generic_core(name: &str, params: &[&str]) -> Self {
         Self {
             name: name.to_owned(),
-            params: params.iter().map(|param| (*param).to_owned()).collect(),
+            params: params
+                .iter()
+                .map(|param| StdGenericParam::new(param))
+                .collect(),
             extends: Vec::new(),
             core: true,
             stable_id: None,
@@ -80,11 +83,15 @@ pub struct EffectActionDecl {
     /// None means no standard handler. An explicit empty row means a handler
     /// exists and produces no escaping effects.
     pub default_handler_effects: Option<Vec<super::StdEffectRef>>,
+    /// Open tail produced by the default handler, naming an `effect` binder.
+    pub default_handler_effect_tail: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, etas_core::RetainedSize)]
 pub enum CompilerActionRole {
     AgentInference,
+    TaskYield,
+    TaskAwait,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
@@ -115,6 +122,7 @@ pub enum StdRuntimeRequirement {
     SecretAccess,
     Compiler,
     RuntimeHandler,
+    TaskScheduler,
 }
 
 impl EffectActionDecl {
@@ -141,6 +149,7 @@ impl EffectActionDecl {
             high_impact_ack: false,
             compiler_role: None,
             default_handler_effects: None,
+            default_handler_effect_tail: None,
         }
     }
 
@@ -155,6 +164,12 @@ impl EffectActionDecl {
 
     pub fn with_default_handler_effects(mut self, effects: Vec<super::StdEffectRef>) -> Self {
         self.default_handler_effects = Some(effects);
+        self
+    }
+
+    pub fn with_default_handler_effect_tail(mut self, name: &str) -> Self {
+        self.default_handler_effects.get_or_insert_with(Vec::new);
+        self.default_handler_effect_tail = Some(name.to_owned());
         self
     }
 

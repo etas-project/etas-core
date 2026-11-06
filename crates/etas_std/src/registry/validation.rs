@@ -5,8 +5,8 @@ use std::{
 
 use crate::{
     EffectActionArgKind, RequirementKind, RequirementSemantics, StdDecl, StdEffectRef,
-    StdGenericParam, StdImplFact, StdImplementationRef, StdRegistry, StdSpecRef, StdStaticArg,
-    StdSymbolKind, StdType, TypeDeclKind,
+    StdGenericParam, StdGenericParamKind, StdImplFact, StdImplementationRef, StdRegistry,
+    StdSpecRef, StdStaticArg, StdSymbolKind, StdType, TypeDeclKind,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -88,6 +88,7 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                     });
                 }
                 let generics = generic_names(&declaration.params);
+                let effect_generics = effect_generic_names(&declaration.params);
                 if let Some(ty) = &declaration.canonical_type {
                     if declaration.kind != TypeDeclKind::Support
                         || declaration.representation.is_some()
@@ -100,7 +101,13 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                         });
                     }
                     super::canonical_type::validate(&symbol.qualified_path.join("."), ty)?;
-                    validate_type_expr(registry, &symbol.qualified_path.join("."), ty, &generics)?;
+                    validate_type_expr(
+                        registry,
+                        &symbol.qualified_path.join("."),
+                        ty,
+                        &generics,
+                        &effect_generics,
+                    )?;
                 }
                 let mut projected_names = BTreeSet::new();
                 for field in &declaration.projected_fields {
@@ -115,6 +122,7 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                         &symbol.qualified_path.join("."),
                         &field.ty,
                         &generics,
+                        &effect_generics,
                     )?;
                 }
                 if let Some(representation) = &declaration.representation {
@@ -123,11 +131,22 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                         &symbol.qualified_path.join("."),
                         representation,
                         &generics,
+                        &effect_generics,
                     )?;
                 }
             }
             StdDecl::Effect(effect) => {
-                validate_unique_names(&symbol.qualified_path, "effect parameter", &effect.params)?;
+                validate_generic_params(registry, &symbol.qualified_path, &effect.params)?;
+                if effect
+                    .params
+                    .iter()
+                    .any(|param| param.kind != StdGenericParamKind::Type)
+                {
+                    return invalid(
+                        symbol.qualified_path.join("."),
+                        "effect declaration static parameters must be type parameters",
+                    );
+                }
                 validate_effect_extensions(&logical_effects, &symbol.qualified_path, effect)?;
             }
             StdDecl::Flow(primary) => {
@@ -155,9 +174,10 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                     }
                     validate_generic_params(registry, &symbol.qualified_path, &flow.type_params)?;
                     let generics = generic_names(&flow.type_params);
+                    let effect_generics = effect_generic_names(&flow.type_params);
                     let owner = symbol.qualified_path.join(".");
                     for ty in flow.params.iter().chain(std::iter::once(&flow.output)) {
-                        validate_type_expr(registry, &owner, ty, &generics)?;
+                        validate_type_expr(registry, &owner, ty, &generics, &effect_generics)?;
                     }
                     if let Some(method) = &flow.source_method {
                         let owner_params = method
@@ -189,7 +209,13 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                             reason: "checked intrinsic method requires a pure executable descriptor, an effect-free contract and a matching first receiver parameter".into(),
                         });
                         }
-                        validate_type_expr(registry, &owner, &method.receiver, &generics)?;
+                        validate_type_expr(
+                            registry,
+                            &owner,
+                            &method.receiver,
+                            &generics,
+                            &effect_generics,
+                        )?;
                         super::checked_index::validate(&owner, flow, method)?;
                     }
                     validate_effect_row(
@@ -197,16 +223,20 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                         &logical_effects,
                         &symbol.qualified_path,
                         &flow.public_effects,
+                        flow.public_effect_tail.as_deref(),
                         EffectReferenceKind::Effect,
                         &generics,
+                        &effect_generics,
                     )?;
                     validate_effect_row(
                         registry,
                         &logical_effects,
                         &symbol.qualified_path,
                         &flow.requested_actions,
+                        flow.requested_action_tail.as_deref(),
                         EffectReferenceKind::Action,
                         &generics,
+                        &effect_generics,
                     )?;
                 }
             }
@@ -214,15 +244,17 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                 let generics = BTreeSet::new();
                 let owner = symbol.qualified_path.join(".");
                 for ty in tool.params.iter().chain(std::iter::once(&tool.output)) {
-                    validate_type_expr(registry, &owner, ty, &generics)?;
+                    validate_type_expr(registry, &owner, ty, &generics, &BTreeSet::new())?;
                 }
                 validate_effect_row(
                     registry,
                     &logical_effects,
                     &symbol.qualified_path,
                     &tool.effects,
+                    None,
                     EffectReferenceKind::Effect,
                     &generics,
+                    &BTreeSet::new(),
                 )?;
                 validate_tool_requirements(registry, &symbol.qualified_path, &tool.requirements)?;
             }
@@ -238,6 +270,7 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                         || action.high_impact_ack != primary.high_impact_ack
                         || action.compiler_role != primary.compiler_role
                         || action.default_handler_effects != primary.default_handler_effects
+                        || action.default_handler_effect_tail != primary.default_handler_effect_tail
                         || signatures.contains(&(&action.type_params, &action.params))
                     {
                         return invalid(
@@ -247,26 +280,75 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                     }
                     signatures.push((&action.type_params, &action.params));
                     if let Some(role) = action.compiler_role {
-                        let valid_shape = action.type_params.len() == 1
-                            && action.params.len() == 2
-                            && action.params[0] == StdType::Prompt
-                            && action.params[1] == StdType::Schema(Box::new(action.output.clone()))
-                            && matches!(&action.output, StdType::Var(name) if *name == action.type_params[0].name)
-                            && matches!(
-                                action.effect_args.as_slice(),
-                                [
-                                    EffectActionArgKind::StaticResourcePath { ty: "Agent" },
-                                    EffectActionArgKind::Type
-                                ]
-                            )
-                            && action.runtime_requirement
-                                == Some(crate::StdRuntimeRequirement::Agentic)
-                            && action.stable_id.is_some();
+                        let valid_shape = match role {
+                            crate::CompilerActionRole::AgentInference => {
+                                action.type_params.len() == 1
+                                    && action.type_params[0].kind == StdGenericParamKind::Type
+                                    && action.params.len() == 2
+                                    && action.params[0] == StdType::Prompt
+                                    && action.params[1]
+                                        == StdType::Schema(Box::new(action.output.clone()))
+                                    && matches!(&action.output, StdType::Var(name) if *name == action.type_params[0].name)
+                                    && matches!(
+                                        action.effect_args.as_slice(),
+                                        [
+                                            EffectActionArgKind::StaticResourcePath { ty: "Agent" },
+                                            EffectActionArgKind::Type
+                                        ]
+                                    )
+                                    && action.runtime_requirement
+                                        == Some(crate::StdRuntimeRequirement::Agentic)
+                            }
+                            crate::CompilerActionRole::TaskYield => {
+                                action.type_params.is_empty()
+                                    && action.params.is_empty()
+                                    && action.output == StdType::parse("unit")
+                                    && action.effect_args.is_empty()
+                                    && action.default_handler_effects.as_deref() == Some(&[])
+                                    && action.default_handler_effect_tail.is_none()
+                                    && action.runtime_requirement
+                                        == Some(crate::StdRuntimeRequirement::TaskScheduler)
+                            }
+                            crate::CompilerActionRole::TaskAwait => {
+                                matches!(
+                                    action.type_params.as_slice(),
+                                    [
+                                        StdGenericParam {
+                                            name: output,
+                                            kind: StdGenericParamKind::Type,
+                                            ..
+                                        },
+                                        StdGenericParam {
+                                            name: effects,
+                                            kind: StdGenericParamKind::EffectRow,
+                                            ..
+                                        }
+                                    ] if action.params.as_slice() == [StdType::Task {
+                                        output: Box::new(StdType::Var(output.clone())),
+                                        effects: crate::StdEffectRowExpr::param(effects),
+                                    }]
+                                        && action.output == StdType::Var(output.clone())
+                                        && action.default_handler_effects.as_deref() == Some(&[])
+                                        && action.default_handler_effect_tail.as_deref() == Some(effects.as_str())
+                                ) && action.effect_args.is_empty()
+                                    && action.runtime_requirement
+                                        == Some(crate::StdRuntimeRequirement::TaskScheduler)
+                            }
+                        } && action.stable_id.is_some();
                         if !action_roles.insert(role) || !valid_shape {
+                            let reason = match role {
+                                crate::CompilerActionRole::AgentInference => {
+                                    "agent inference role requires a unique action with Prompt/Schema<O> ABI and callable/output selectors"
+                                }
+                                crate::CompilerActionRole::TaskYield
+                                | crate::CompilerActionRole::TaskAwait => {
+                                    "task action role requires a unique scheduler action with its declared continuation ABI"
+                                }
+                            };
                             return Err(StdRegistryValidationError {
-                            symbol: symbol.qualified_path.join("."),
-                            reason: "agent inference role requires a unique action with Prompt/Schema<O> ABI and callable/output selectors".into(),
-                        });
+                                symbol: symbol.qualified_path.join("."),
+                                reason: reason.into(),
+                            });
                         }
                     }
                     validate_action_declaration(registry, &symbol.qualified_path, action)?;
@@ -276,8 +358,10 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                             &logical_effects,
                             &symbol.qualified_path,
                             effects,
+                            action.default_handler_effect_tail.as_deref(),
                             EffectReferenceKind::Effect,
                             &generic_names(&action.type_params),
+                            &effect_generic_names(&action.type_params),
                         )?;
                     }
                     validate_action_owner(&logical_effects, &symbol.qualified_path, action)?;
@@ -287,6 +371,7 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                 registry,
                 &symbol.qualified_path.join("."),
                 &value.ty,
+                &BTreeSet::new(),
                 &BTreeSet::new(),
             )?,
             StdDecl::Requirement(requirement) => {
@@ -554,7 +639,13 @@ fn validate_requirement(
         return invalid(path.join("."), "requirement name must not be empty");
     }
     for ty in &requirement.params {
-        validate_type_expr(registry, &path.join("."), ty, &BTreeSet::new())?;
+        validate_type_expr(
+            registry,
+            &path.join("."),
+            ty,
+            &BTreeSet::new(),
+            &BTreeSet::new(),
+        )?;
     }
     match (requirement.kind, requirement.semantics) {
         (RequirementKind::Limit, RequirementSemantics::Limit(_))
@@ -577,7 +668,19 @@ fn validate_requirement(
 }
 
 fn generic_names(params: &[StdGenericParam]) -> BTreeSet<&str> {
-    params.iter().map(|param| param.name.as_str()).collect()
+    params
+        .iter()
+        .filter(|param| param.kind == StdGenericParamKind::Type)
+        .map(|param| param.name.as_str())
+        .collect()
+}
+
+fn effect_generic_names(params: &[StdGenericParam]) -> BTreeSet<&str> {
+    params
+        .iter()
+        .filter(|param| param.kind == StdGenericParamKind::EffectRow)
+        .map(|param| param.name.as_str())
+        .collect()
 }
 
 fn validate_prelude(registry: &StdRegistry) -> Result<(), StdRegistryValidationError> {
@@ -651,6 +754,15 @@ fn validate_generic_params(
     validate_unique_names(owner, "generic parameter", &names)?;
     let generics = generic_names(params);
     for param in params {
+        if param.kind == StdGenericParamKind::EffectRow && !param.bounds.is_empty() {
+            return invalid(
+                owner.join("."),
+                format!(
+                    "effect-row parameter `{}` cannot declare type-spec bounds",
+                    param.name
+                ),
+            );
+        }
         for bound in &param.bounds {
             validate_spec_ref(registry, &owner.join("."), bound, &generics)?;
         }
@@ -676,6 +788,7 @@ fn validate_action_declaration(
     }
     validate_generic_params(registry, path, &action.type_params)?;
     let generics = generic_names(&action.type_params);
+    let effect_generics = effect_generic_names(&action.type_params);
     for (kind, selector_name) in action.effect_args.iter().zip(&action.selector_param_names) {
         if matches!(kind, EffectActionArgKind::Type)
             && (selector_name.is_empty() || !generics.contains(selector_name.as_str()))
@@ -689,7 +802,7 @@ fn validate_action_declaration(
         }
     }
     for ty in action.params.iter().chain(std::iter::once(&action.output)) {
-        validate_type_expr(registry, &owner, ty, &generics)?;
+        validate_type_expr(registry, &owner, ty, &generics, &effect_generics)?;
     }
     Ok(())
 }
@@ -717,7 +830,13 @@ fn validate_impl_type(
     owner: &str,
     implementation: &StdImplFact,
 ) -> Result<(), StdRegistryValidationError> {
-    validate_type_expr(registry, owner, &implementation.self_type, &BTreeSet::new())
+    validate_type_expr(
+        registry,
+        owner,
+        &implementation.self_type,
+        &BTreeSet::new(),
+        &BTreeSet::new(),
+    )
 }
 
 fn validate_spec_ref(
@@ -756,7 +875,7 @@ fn validate_spec_ref(
         );
     }
     for arg in &spec.args {
-        validate_type_expr(registry, owner, arg, generics)?;
+        validate_type_expr(registry, owner, arg, generics, &BTreeSet::new())?;
     }
     Ok(())
 }
@@ -766,13 +885,14 @@ fn validate_type_expr(
     owner: &str,
     ty: &StdType,
     generics: &BTreeSet<&str>,
+    effect_generics: &BTreeSet<&str>,
 ) -> Result<(), StdRegistryValidationError> {
     match ty {
         StdType::Named(name) => validate_named_type(registry, owner, name, 0),
         StdType::NamedApplied { name, args } => {
             validate_named_type(registry, owner, name, args.len())?;
             for arg in args {
-                validate_type_expr(registry, owner, arg, generics)?;
+                validate_type_expr(registry, owner, arg, generics, effect_generics)?;
             }
             Ok(())
         }
@@ -787,18 +907,20 @@ fn validate_type_expr(
         | StdType::MemorySelection(inner)
         | StdType::MemoryRegion(inner)
         | StdType::ResourceHandleMemoryRegion(inner)
-        | StdType::Trust { inner, .. } => validate_type_expr(registry, owner, inner, generics),
+        | StdType::Trust { inner, .. } => {
+            validate_type_expr(registry, owner, inner, generics, effect_generics)
+        }
         StdType::Map { key, value } | StdType::Store { key, value } => {
-            validate_type_expr(registry, owner, key, generics)?;
-            validate_type_expr(registry, owner, value, generics)
+            validate_type_expr(registry, owner, key, generics, effect_generics)?;
+            validate_type_expr(registry, owner, value, generics, effect_generics)
         }
         StdType::Result { ok, err } => {
-            validate_type_expr(registry, owner, ok, generics)?;
-            validate_type_expr(registry, owner, err, generics)
+            validate_type_expr(registry, owner, ok, generics, effect_generics)?;
+            validate_type_expr(registry, owner, err, generics, effect_generics)
         }
         StdType::Tuple(elements) => {
             for element in elements {
-                validate_type_expr(registry, owner, element, generics)?;
+                validate_type_expr(registry, owner, element, generics, effect_generics)?;
             }
             Ok(())
         }
@@ -808,20 +930,36 @@ fn validate_type_expr(
             effects,
         } => {
             for ty in input.iter().chain(std::iter::once(output.as_ref())) {
-                validate_type_expr(registry, owner, ty, generics)?;
+                validate_type_expr(registry, owner, ty, generics, effect_generics)?;
             }
             validate_effect_row(
                 registry,
                 &LogicalEffectIndex::build(registry)?,
                 &owner.split('.').map(str::to_owned).collect::<Vec<_>>(),
-                effects,
+                &effects.effects,
+                effects.tail.as_deref(),
                 EffectReferenceKind::Effect,
                 generics,
+                effect_generics,
+            )
+        }
+        StdType::Task { output, effects } => {
+            validate_named_type(registry, owner, "std.task.Task", 2)?;
+            validate_type_expr(registry, owner, output, generics, effect_generics)?;
+            validate_effect_row(
+                registry,
+                &LogicalEffectIndex::build(registry)?,
+                &owner.split('.').map(str::to_owned).collect::<Vec<_>>(),
+                &effects.effects,
+                effects.tail.as_deref(),
+                EffectReferenceKind::Effect,
+                generics,
+                effect_generics,
             )
         }
         StdType::Record(fields) => {
             for field in fields {
-                validate_type_expr(registry, owner, &field.ty, generics)?;
+                validate_type_expr(registry, owner, &field.ty, generics, effect_generics)?;
             }
             Ok(())
         }
@@ -899,11 +1037,29 @@ fn validate_effect_row(
     logical_effects: &LogicalEffectIndex<'_>,
     owner: &[String],
     effects: &[StdEffectRef],
+    tail: Option<&str>,
     kind: EffectReferenceKind,
     generics: &BTreeSet<&str>,
+    effect_generics: &BTreeSet<&str>,
 ) -> Result<(), StdRegistryValidationError> {
+    if let Some(tail) = tail
+        && !effect_generics.contains(tail)
+    {
+        return invalid(
+            owner.join("."),
+            format!("effect row references undeclared effect parameter `{tail}`"),
+        );
+    }
     for effect in effects {
-        validate_effect_ref(registry, logical_effects, owner, effect, kind, generics)?;
+        validate_effect_ref(
+            registry,
+            logical_effects,
+            owner,
+            effect,
+            kind,
+            generics,
+            effect_generics,
+        )?;
     }
     Ok(())
 }
@@ -915,6 +1071,7 @@ fn validate_effect_ref(
     effect: &StdEffectRef,
     kind: EffectReferenceKind,
     generics: &BTreeSet<&str>,
+    effect_generics: &BTreeSet<&str>,
 ) -> Result<(), StdRegistryValidationError> {
     let owner_name = owner.join(".");
     if effect.path.is_empty() || effect.path.iter().any(String::is_empty) {
@@ -953,7 +1110,7 @@ fn validate_effect_ref(
                     );
                 }
                 if let StdStaticArg::Type(ty) = arg {
-                    validate_type_expr(registry, &owner_name, ty, generics)?;
+                    validate_type_expr(registry, &owner_name, ty, generics, effect_generics)?;
                 }
             }
         }
@@ -1006,7 +1163,7 @@ fn validate_effect_ref(
                     );
                 }
                 if let StdStaticArg::Type(ty) = arg {
-                    validate_type_expr(registry, &owner_name, ty, generics)?;
+                    validate_type_expr(registry, &owner_name, ty, generics, effect_generics)?;
                 }
             }
         }

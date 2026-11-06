@@ -77,6 +77,8 @@ pub(super) fn register(builder: &mut StdRegistryBuilder, module: crate::StdModul
                 &["Error"],
                 vec![StdStaticArg::Type(named("std.memory.StorageError"))],
             )],
+            public_effect_tail: None,
+            requested_action_tail: None,
             requested_actions: vec![session_memory_action("read")],
             source_method: None,
         }),

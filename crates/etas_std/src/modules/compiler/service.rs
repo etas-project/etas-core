@@ -35,6 +35,8 @@ pub(super) fn register(builder: &mut StdRegistryBuilder, module: crate::StdModul
                     &["Error"],
                     compiler_type("CompileError"),
                 )],
+                public_effect_tail: None,
+                requested_action_tail: None,
                 requested_actions: vec![StdEffectRef::new(&[
                     "std", "effects", "actions", "Code", name,
                 ])],
@@ -73,6 +75,8 @@ pub(super) fn register(builder: &mut StdRegistryBuilder, module: crate::StdModul
                         &["Error"],
                         compiler_type("CompileError"),
                     )],
+                    public_effect_tail: None,
+                    requested_action_tail: None,
                     requested_actions: vec![StdEffectRef::new(&[
                         "std", "effects", "actions", "Code", name,
                     ])],

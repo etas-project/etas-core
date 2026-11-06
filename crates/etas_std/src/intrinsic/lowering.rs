@@ -3,6 +3,7 @@ pub enum LoweringHint {
     None,
     PureBuiltin,
     RuntimeCall,
+    Task(StdTaskIntrinsic),
     Collection(super::StdCollectionIntrinsic),
     HostBoundary,
     ApprovalBoundary,
@@ -19,6 +20,21 @@ pub enum LoweringHint {
         payload: Vec<usize>,
         reducer: StdActionReducer,
     },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+pub enum StdTaskIntrinsic {
+    Run,
+    Start,
+    Await,
+    Requeue,
+    Park,
+    JoinTuple,
+    JoinArray,
+    TryJoin,
+    Collect,
+    Race,
+    MapConcurrent,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]

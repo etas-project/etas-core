@@ -90,6 +90,8 @@ pub fn register(builder: &mut StdRegistryBuilder) {
             ],
             output: StdType::ResourceHandleMemoryRegion(Box::new(StdType::Var("S".to_owned()))),
             public_effects: Vec::new(),
+            public_effect_tail: None,
+            requested_action_tail: None,
             requested_actions: Vec::new(),
             source_method: None,
         }),
@@ -221,6 +223,8 @@ pub fn register(builder: &mut StdRegistryBuilder) {
                 ],
                 output: StdType::parse("MemorySelection[V]"),
                 public_effects: Vec::new(),
+                public_effect_tail: None,
+                requested_action_tail: None,
                 requested_actions: Vec::new(),
                 source_method: None,
             }
@@ -399,6 +403,8 @@ fn register_store_flow(
                 params,
                 output,
                 public_effects: Vec::new(),
+                public_effect_tail: None,
+                requested_action_tail: None,
                 requested_actions: memory_effects(name),
                 source_method: None,
             }
