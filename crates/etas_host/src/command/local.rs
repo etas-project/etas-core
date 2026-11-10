@@ -133,7 +133,7 @@ impl LocalCommandClient {
         let cwd = request
             .cwd
             .as_ref()
-            .map(|path| self.regions.bind(path))
+            .map(|path| self.regions.bind_directory(path))
             .transpose()?;
         if let Some(cwd) = &cwd {
             cwd::configure(&mut command, cwd)?;
