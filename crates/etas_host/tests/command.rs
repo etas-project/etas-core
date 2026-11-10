@@ -13,6 +13,9 @@ use etas_host::{
     TimeBudget, TraceContext, TraceId,
 };
 
+#[cfg(unix)]
+use etas_host::{TestWorkspace, WorkspacePathRef, WorkspaceRegionId, WorkspaceRegionRegistry};
+
 #[tokio::test]
 async fn local_command_rejects_missing_command_grant() {
     let program = "/bin/echo";
@@ -66,6 +69,33 @@ async fn local_command_executes_allowlisted_program_with_grant() {
     assert_eq!(isolation.backend(), None);
     assert_eq!(stdout, b"etas\n");
     assert!(stderr.is_empty());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn local_command_executes_at_workspace_region_root() {
+    let workspace = TestWorkspace::create("command-region-root-cwd").unwrap();
+    let region = WorkspaceRegionId::new("app.main.ProjectRoot").unwrap();
+    let mut regions = WorkspaceRegionRegistry::default();
+    regions
+        .insert(region.clone(), workspace.root().unwrap())
+        .unwrap();
+    let mut request =
+        authorized_command_request(vec!["/bin/pwd".to_owned()], ExecutionBudget::default());
+    request.cwd = Some(WorkspacePathRef::new(region, ".").unwrap());
+
+    let output = LocalCommandClient::with_regions(regions)
+        .execute(request)
+        .await
+        .expect("region-root cwd should bind as a directory")
+        .result
+        .expect("pwd should execute at the region root");
+    let cwd = PathBuf::from(String::from_utf8(output.stdout).unwrap().trim());
+
+    assert_eq!(
+        std::fs::canonicalize(cwd).unwrap(),
+        std::fs::canonicalize(workspace.path()).unwrap()
+    );
 }
 
 #[tokio::test]
