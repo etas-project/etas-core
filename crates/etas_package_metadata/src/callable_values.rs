@@ -18,6 +18,7 @@ fn validate_request_target(
 ) -> Result<(), crate::MetadataArtifactError> {
     target.validate_shape().map_err(|reason| invalid(&reason))?;
     match target {
+        crate::CallableRequestTarget::AgentTools(_) => {}
         crate::CallableRequestTarget::Parameter(label) => {
             if !labels.contains(label.as_str()) {
                 return Err(invalid("callable request has an unbound parameter"));
@@ -286,7 +287,9 @@ impl CallableValueGraph {
                         }
                     }
                     ActionTrace::Seq(parts) | ActionTrace::Choice(parts) => trace.extend(parts),
-                    ActionTrace::Repeat(part) => trace.push(part),
+                    ActionTrace::Repeat(part) | ActionTrace::DefaultHandler { body: part, .. } => {
+                        trace.push(part)
+                    }
                     _ => {}
                 }
             }

@@ -121,6 +121,7 @@ pub struct VariantInfo {
     Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
 )]
 pub enum TypeInfo {
+    AgentContext(crate::MethodId),
     Existential {
         bounds: Vec<super::SpecInfo>,
     },

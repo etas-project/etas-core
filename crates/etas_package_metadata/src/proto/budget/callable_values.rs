@@ -53,6 +53,9 @@ impl ModelGraphValidator {
             }
         }
         for node in &graph.values {
+            if let Some(behavior) = &node.default_handler_effects.behavior {
+                self.default_behavior(behavior, depth + 1)?;
+            }
             self.budget.enter(depth + 1, "callable value")?;
             self.residual_references(&node.residual_checks)?;
             if let Some(requests) = &node.handler_requests {
@@ -187,6 +190,9 @@ impl ProtoGraphValidator {
                 self.effect_row(row, depth + 1)?;
             }
             if let Some(defaults) = &node.default_handler_effects {
+                if let Some(behavior) = &defaults.behavior {
+                    self.default_behavior(behavior, depth + 1)?;
+                }
                 for row in [&defaults.direct_effects, &defaults.default_actions]
                     .into_iter()
                     .flatten()

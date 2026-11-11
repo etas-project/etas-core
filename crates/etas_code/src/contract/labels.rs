@@ -11,6 +11,10 @@ use crate::{CallableId, CodeFingerprint, DefinitionKey};
 pub enum CanonicalSelector {
     Type(CodeFingerprint),
     Resource(DefinitionKey),
+    ResourceProjection {
+        root: DefinitionKey,
+        fields: Vec<String>,
+    },
     Callable(CallableId),
     String(String),
     Integer(String),
@@ -131,6 +135,11 @@ impl TraceLabel {
             effect.arguments.iter().fold(target, |work, arg| {
                 work.saturating_add(match arg {
                     CanonicalSelector::Resource(key) => key_work(key),
+                    CanonicalSelector::ResourceProjection { root, fields } => {
+                        fields.iter().fold(key_work(root), |work, field| {
+                            work.saturating_add(field.len()).saturating_add(1)
+                        })
+                    }
                     CanonicalSelector::Callable(id) => callable_work(id),
                     CanonicalSelector::String(value) | CanonicalSelector::Integer(value) => {
                         value.len().saturating_add(1)
@@ -304,6 +313,12 @@ pub fn canonical_effect(
                     CanonicalSelector::Type(graph.type_fingerprint(*ty)?)
                 }
                 StaticEffectArgInfo::Resource(key) => CanonicalSelector::Resource(key.clone()),
+                StaticEffectArgInfo::ResourceProjection { root, fields } => {
+                    CanonicalSelector::ResourceProjection {
+                        root: root.clone(),
+                        fields: fields.clone(),
+                    }
+                }
                 StaticEffectArgInfo::Callable(id) => CanonicalSelector::Callable(id.clone()),
                 StaticEffectArgInfo::String(value) => CanonicalSelector::String(value.clone()),
                 StaticEffectArgInfo::Integer(value) => CanonicalSelector::Integer(value.clone()),

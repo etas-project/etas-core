@@ -147,6 +147,13 @@ fn validate_inner(
     for (index, ty) in input.types.iter().enumerate() {
         let node = DescriptorNode::Type(TypeInfoRef(index as u32));
         match ty {
+            TypeInfo::AgentContext(method) => {
+                validator.kind(
+                    node,
+                    method.implementation().subject(),
+                    DefinitionKind::Agent,
+                )?;
+            }
             TypeInfo::Existential { bounds } => {
                 if bounds.is_empty() {
                     return Err(DescriptorError::Invalid {
@@ -743,6 +750,17 @@ impl Validator<'_> {
         for argument in &effect.arguments {
             match argument {
                 StaticEffectArgInfo::Resource(key) => self.identity(key)?,
+                StaticEffectArgInfo::ResourceProjection { root, fields } => {
+                    self.identity(root)?;
+                    if fields.is_empty() {
+                        return Err(DescriptorError::InvalidDescription {
+                            reason: "empty resource projection",
+                        });
+                    }
+                    for field in fields {
+                        self.name(node, field)?;
+                    }
+                }
                 StaticEffectArgInfo::Callable(id) => self.callable(node, id)?,
                 StaticEffectArgInfo::String(value) | StaticEffectArgInfo::Integer(value) => {
                     self.text(value)?

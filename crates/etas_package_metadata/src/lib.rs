@@ -409,6 +409,7 @@ mod tests {
             tail: None,
         };
         summary.default_handler_effects = Some(DefaultHandlerEffects {
+            behavior: None,
             direct_effects: EffectRow {
                 effects: Vec::new(),
                 tail: Some("E".into()),

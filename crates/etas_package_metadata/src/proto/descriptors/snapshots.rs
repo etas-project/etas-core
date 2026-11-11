@@ -58,6 +58,7 @@ pub(super) fn encode(snapshots: &DefinitionSnapshots) -> schema::Snapshots {
     schema::Snapshots {
         agents: snapshots.agents.iter().map(&encode).collect(),
         flows: snapshots.flows.iter().map(&encode).collect(),
+        tools: snapshots.tools.iter().map(&encode).collect(),
         methods: snapshots.methods.iter().map(encode).collect(),
     }
 }
@@ -140,6 +141,11 @@ pub(super) fn decode(snapshots: schema::Snapshots) -> Result<DefinitionSnapshots
             .into_iter()
             .map(&decode)
             .collect::<Result<_, Error>>()?,
+        tools: snapshots
+            .tools
+            .into_iter()
+            .map(&decode)
+            .collect::<Result<_, Error>>()?,
         methods: snapshots
             .methods
             .into_iter()
@@ -157,6 +163,7 @@ pub(super) fn validate_wire(
             .agents
             .len()
             .saturating_add(snapshots.flows.len())
+            .saturating_add(snapshots.tools.len())
             .saturating_add(snapshots.methods.len()),
         "definition snapshots",
     )?;
@@ -164,6 +171,7 @@ pub(super) fn validate_wire(
         .agents
         .iter()
         .chain(&snapshots.flows)
+        .chain(&snapshots.tools)
         .chain(&snapshots.methods)
     {
         if snapshot.generic_environment_context.is_some() {

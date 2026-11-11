@@ -1,6 +1,15 @@
 use crate::type_validation::{type_kind_to_wire, validate_type_shape};
 use prost::Message;
 mod callable_values;
+mod default_behavior;
+pub(crate) fn default_behavior_fingerprint(
+    value: &crate::DefaultBehavior,
+) -> etas_code::CodeFingerprint {
+    etas_code::CodeFingerprint::of_bytes(
+        "etas.metadata.default-behavior.v1",
+        &default_behavior::to_proto(value).encode_to_vec(),
+    )
+}
 mod methods;
 mod request_templates;
 pub(super) mod spec_invocations;
@@ -1631,6 +1640,10 @@ fn reject_unexpected_action_arg_ty(kind: &ProtoActionArgKind) -> Result<(), Meta
 fn type_to_proto(ty: &Type) -> ProtoType {
     ProtoType {
         kind: type_kind_to_wire(ty.kind).to_owned(),
+        agent_context: ty
+            .agent_context
+            .as_ref()
+            .map(super::descriptors::encode_method_identity),
         parameter: ty
             .parameter
             .as_ref()
@@ -1694,6 +1707,10 @@ fn type_from_proto_with_budget(
         .collect::<Result<Vec<_>, MetadataArtifactError>>()?;
     let ty = Type {
         kind,
+        agent_context: ty
+            .agent_context
+            .map(super::descriptors::decode_method_identity)
+            .transpose()?,
         parameter: ty
             .parameter
             .map(|parameter| {
@@ -1961,6 +1978,7 @@ fn effect_summary_from_proto(
 
 fn default_handler_effects_to_proto(effects: &DefaultHandlerEffects) -> ProtoDefaultHandlerEffects {
     ProtoDefaultHandlerEffects {
+        behavior: effects.behavior.as_ref().map(default_behavior::to_proto),
         direct_effects: Some(effect_row_to_proto(&effects.direct_effects)),
         default_actions: Some(effect_row_to_proto(&effects.default_actions)),
         handlers: effects
@@ -1978,6 +1996,10 @@ fn default_handler_effects_from_proto(
     effects: ProtoDefaultHandlerEffects,
 ) -> Result<DefaultHandlerEffects, MetadataArtifactError> {
     Ok(DefaultHandlerEffects {
+        behavior: effects
+            .behavior
+            .map(default_behavior::from_proto)
+            .transpose()?,
         direct_effects: effect_row_from_proto(
             effects
                 .direct_effects
@@ -2016,6 +2038,11 @@ fn action_trace_to_proto(trace: &ActionTrace) -> ProtoActionTrace {
     };
     match trace {
         ActionTrace::Empty => {}
+        ActionTrace::DefaultHandler { guards, body } => {
+            proto.kind = ProtoActionTraceKind::DefaultHandler as i32;
+            proto.actions = guards.iter().map(effect_ref_to_proto).collect();
+            proto.children.push(action_trace_to_proto(body));
+        }
         ActionTrace::Event(event) => {
             proto.kind = ProtoActionTraceKind::Event as i32;
             proto.event = Some(ProtoActionTraceEvent {
@@ -2074,6 +2101,24 @@ fn action_trace_from_proto_with_budget(
         .map_err(|_| invalid("effect summary action trace has unknown kind"))?;
     match kind {
         ProtoActionTraceKind::Empty => Ok(ActionTrace::Empty),
+        ProtoActionTraceKind::DefaultHandler => {
+            let [body] = trace
+                .children
+                .try_into()
+                .map_err(|_| invalid("default handler trace requires one body"))?;
+            Ok(ActionTrace::DefaultHandler {
+                guards: trace
+                    .actions
+                    .into_iter()
+                    .map(effect_ref_from_proto)
+                    .collect::<Result<_, _>>()?,
+                body: Box::new(action_trace_from_proto_with_budget(
+                    body,
+                    depth + 1,
+                    budget,
+                )?),
+            })
+        }
         ProtoActionTraceKind::Event => {
             let event = trace
                 .event
@@ -2496,6 +2541,7 @@ fn spec_kind_from_wire(value: &str) -> Result<SpecKind, MetadataArtifactError> {
 
 fn type_kind_from_wire(value: &str) -> Result<TypeKind, MetadataArtifactError> {
     match value {
+        "agent_context" => Ok(TypeKind::AgentContext),
         "existential" => Ok(TypeKind::Existential),
         "primitive" => Ok(TypeKind::Primitive),
         "var" => Ok(TypeKind::Var),
@@ -2972,6 +3018,7 @@ mod tests {
             handled_requested_actions: Some(ProtoEffectRow::default()),
             action_trace: Some(ProtoActionTrace::default()),
             default_handler_effects: Some(ProtoDefaultHandlerEffects {
+                behavior: None,
                 direct_effects: Some(ProtoEffectRow::default()),
                 default_actions: Some(ProtoEffectRow::default()),
                 handlers: vec![ProtoDefaultHandlerContribution {

@@ -1,26 +1,10 @@
-use crate::{EffectDecl, StdDecl, StdRegistryBuilder, StdSymbolKind};
+use crate::{StdRegistryBuilder, StdSymbolId};
 
-pub fn register(builder: &mut StdRegistryBuilder) {
+pub fn register(builder: &mut StdRegistryBuilder, effects: &[(&str, StdSymbolId)]) {
     let module = builder.module(&["std", "runtime", "effects"], "Core effect declarations.");
-    for name in [
-        "Agentic", "Network", "FileIO", "Command", "Memory", "Secret", "Time", "Human",
-    ] {
-        let decl = EffectDecl::core(name);
-        let symbol = builder.symbol(
-            module,
-            name,
-            StdSymbolKind::Effect,
-            StdDecl::Effect(decl),
-            "Core Etas effect declaration.",
-        );
-        builder.prelude(name, symbol);
+    for (name, symbol) in effects {
+        builder
+            .re_export(module, name, *symbol)
+            .expect("runtime effect export has one canonical declaration");
     }
-    let error = builder.symbol(
-        module,
-        "Error",
-        StdSymbolKind::Effect,
-        StdDecl::Effect(EffectDecl::generic_core("Error", &["E"])),
-        "Generic error effect declaration.",
-    );
-    builder.prelude("Error", error);
 }

@@ -13,6 +13,7 @@ pub(super) fn with_snapshot() -> DefinitionDescriptorSet {
         CodeFingerprint::from_bytes([10; 32]),
     );
     headers.snapshots = Some(DefinitionSnapshots {
+        tools: vec![],
         methods: vec![],
         flows: vec![DefinitionSnapshotInfo {
             identity: flow.clone(),

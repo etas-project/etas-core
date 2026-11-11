@@ -1,6 +1,22 @@
 use super::*;
 
 #[test]
+fn continuation_reasoning_roundtrips_without_duplicating_tool_requests() {
+    let output = response(
+        Some(json!("tool_calls")),
+        json!({
+            "content":null, "reasoning_content":"retained",
+            "tool_calls":[{"id":"call", "function":{"name":"echo", "arguments":"{}"}}],
+        }),
+    )
+    .result
+    .unwrap();
+    let encoded = encode_openai_message(&output.message).unwrap();
+    assert_eq!(encoded["reasoning_content"], "retained");
+    assert_eq!(encoded["tool_calls"].as_array().unwrap().len(), 1);
+}
+
+#[test]
 fn null_optional_tool_fields_are_absent_not_malformed() {
     for message in [
         json!({"content":"text"}),
@@ -51,7 +67,7 @@ fn response(reason: Option<Value>, message: Value) -> ModelResponse {
 }
 
 #[test]
-fn length_retains_usage_and_rejects_even_valid_text_or_truncated_tools() {
+fn length_retains_usage_and_never_exposes_truncated_tools_as_executable_calls() {
     for message in [
         json!({"content":"[\"delegate\",\"Read context.txt\"]","reasoning_content":"PRIVATE_REASONING"}),
         json!({"content":""}),
@@ -60,10 +76,11 @@ fn length_retains_usage_and_rejects_even_valid_text_or_truncated_tools() {
         let response = response(Some(json!("length")), message);
         assert_eq!(response.id, crate::HostRequestId(49));
         let usage = response.usage.unwrap();
-        assert_eq!(usage.input_tokens + usage.output_tokens, 14);
-        let error = response.result.unwrap_err();
-        assert_eq!(error.code, HostErrorCode::IncompleteResponse);
-        assert!(!error.to_string().contains("PRIVATE_REASONING"));
+        assert_eq!(usage.input_tokens, Some(10));
+        assert_eq!(usage.output_tokens, Some(4));
+        let output = response.result.unwrap();
+        assert_eq!(output.termination, crate::ModelTermination::Truncated);
+        assert!(output.message.tool_calls.is_empty());
     }
 }
 
@@ -84,9 +101,9 @@ fn missing_null_unknown_and_conflicting_finish_reasons_fail_closed_with_usage() 
     assert_eq!(
         response(Some(json!("content_filter")), json!({"content":"valid"}))
             .result
-            .unwrap_err()
-            .code,
-        HostErrorCode::ProviderRejected
+            .unwrap()
+            .termination,
+        crate::ModelTermination::Refused("content_filter".into())
     );
     assert!(
         response(
@@ -96,11 +113,13 @@ fn missing_null_unknown_and_conflicting_finish_reasons_fail_closed_with_usage() 
         .result
         .is_ok()
     );
-    assert!(
+    assert!(matches!(
         response(Some(json!("tool_calls")), json!({"content":"valid"}))
             .result
-            .is_err()
-    );
+            .unwrap()
+            .termination,
+        crate::ModelTermination::InvalidToolCall(_)
+    ));
     assert!(
         response(
             Some(json!("stop")),
@@ -109,4 +128,36 @@ fn missing_null_unknown_and_conflicting_finish_reasons_fail_closed_with_usage() 
         .result
         .is_err()
     );
+}
+
+#[test]
+fn malformed_model_tool_arguments_are_turn_outcomes_not_transport_failures() {
+    let reply = response(
+        Some(json!("tool_calls")),
+        json!({
+            "content":null, "tool_calls":[
+                {"id":"ok", "function":{"name":"echo","arguments":"{}"}},
+                {"id":"bad", "function":{"name":"echo","arguments":"{"}},
+            ]
+        }),
+    );
+    assert!(reply.usage.is_some());
+    let output = reply.result.unwrap();
+    assert!(matches!(
+        output.termination,
+        crate::ModelTermination::InvalidToolCall(_)
+    ));
+    assert!(output.message.tool_calls.is_empty());
+    let output = response(
+        Some(json!("tool_calls")),
+        json!({
+            "tool_calls":[{"id":"output","function":{"name":OPENAI_OUTPUT_TOOL,"arguments":"{"}}]
+        }),
+    )
+    .result
+    .unwrap();
+    assert!(matches!(
+        output.termination,
+        crate::ModelTermination::InvalidOutput(_)
+    ));
 }

@@ -3,10 +3,10 @@ use std::{future::Future, pin::Pin};
 use serde_json::{Value, json};
 
 use crate::{
-    AuthConfig, HostError, HostErrorCode, HttpTransport, ModelClient, ModelContent, ModelMessage,
-    ModelOutput, ModelProviderCapabilities, ModelRequest, ModelResponse, ModelRole, ModelToolCall,
-    ModelToolChoice, ModelUsage, PrivateResolutionPolicy, RetryPolicy, TransportTimeoutPolicy,
-    host_json_to_value, host_value_to_json_string,
+    AuthConfig, HostError, HostErrorCode, HostValue, HttpTransport, ModelClient, ModelContent,
+    ModelMessage, ModelOutput, ModelProviderCapabilities, ModelRequest, ModelResponse, ModelRole,
+    ModelToolCall, ModelToolChoice, ModelUsage, PrivateResolutionPolicy, RetryPolicy,
+    TransportTimeoutPolicy, host_json_to_value, host_value_to_json, host_value_to_json_string,
 };
 
 use super::{
@@ -104,15 +104,21 @@ impl AnthropicProtocolAdapter {
     ) -> Result<ModelResponse, HostError> {
         let id = request.id;
         let budget_deadline = request.budget.deadline()?;
+        let transport = match request.options.attempt_policy {
+            super::ModelAttemptPolicy::Configured => self.transport.clone(),
+            super::ModelAttemptPolicy::Single => {
+                self.transport.clone().with_retry(RetryPolicy::none())
+            }
+        };
         let body = encode_anthropic_messages_request(&request)?;
         let response = match operation {
             Some(operation) => {
-                self.transport
+                transport
                     .send_json_scoped("/v1/messages", body, budget_deadline, operation)
                     .await?
             }
             None => {
-                self.transport
+                transport
                     .send_json_with_deadline("/v1/messages", body, budget_deadline)
                     .await?
             }
@@ -173,9 +179,50 @@ fn encode_anthropic_messages_request(request: &ModelRequest) -> Result<String, H
         match message.role {
             ModelRole::System => system_parts.push(message_text(message)?),
             ModelRole::User | ModelRole::Assistant => {
+                let mut blocks = Vec::new();
+                for (namespace, value) in &message.provider_data {
+                    if namespace != "anthropic.v1" || message.role != ModelRole::Assistant {
+                        return Err(HostError::new(
+                            HostErrorCode::InvalidRequest,
+                            "unsupported model continuation namespace or role",
+                        ));
+                    }
+                    let value = host_value_to_json(value)?;
+                    let Some(values) = value.as_array() else {
+                        return Err(HostError::new(
+                            HostErrorCode::InvalidRequest,
+                            "invalid Anthropic continuation data",
+                        ));
+                    };
+                    for value in values {
+                        let block = value.clone();
+                        if !matches!(
+                            block.get("type").and_then(Value::as_str),
+                            Some("thinking" | "redacted_thinking")
+                        ) {
+                            return Err(HostError::new(
+                                HostErrorCode::InvalidRequest,
+                                "continuation data is not a thinking block",
+                            ));
+                        }
+                        blocks.push(block);
+                    }
+                }
+                if !message.content.is_empty() {
+                    blocks.push(json!({"type":"text", "text":message_text(message)?}));
+                }
+                for call in &message.tool_calls {
+                    if message.role != ModelRole::Assistant {
+                        return Err(HostError::new(
+                            HostErrorCode::InvalidRequest,
+                            "only assistant messages may carry tool calls",
+                        ));
+                    }
+                    blocks.push(json!({"type":"tool_use", "id":call.id, "name":call.tool, "input":host_value_to_json(&call.args)?}));
+                }
                 messages.push(json!({
                     "role": anthropic_role_text(message.role)?,
-                    "content": message_text(message)?,
+                    "content": if message.provider_data.is_empty() && message.tool_calls.is_empty() { Value::String(message_text(message)?) } else { Value::Array(blocks) },
                 }));
             }
             ModelRole::Tool => {
@@ -334,27 +381,19 @@ fn decode_anthropic_messages_response(
 }
 
 fn decode_anthropic_output(value: &Value) -> Result<ModelOutput, HostError> {
-    match value.get("stop_reason").and_then(Value::as_str) {
-        Some("end_turn" | "stop_sequence" | "tool_use") => {}
+    let mut termination = match value.get("stop_reason").and_then(Value::as_str) {
+        Some("end_turn" | "stop_sequence" | "tool_use") => crate::ModelTermination::Complete,
         Some("max_tokens" | "pause_turn" | "model_context_window_exceeded") => {
-            return Err(HostError::new(
-                HostErrorCode::IncompleteResponse,
-                "Anthropic-compatible generation is incomplete",
-            ));
+            crate::ModelTermination::Truncated
         }
-        Some("refusal") => {
-            return Err(HostError::new(
-                HostErrorCode::ProviderRejected,
-                "Anthropic-compatible generation was refused",
-            ));
-        }
+        Some("refusal") => crate::ModelTermination::Refused("refusal".into()),
         _ => {
             return Err(HostError::new(
                 HostErrorCode::InvalidResponse,
                 "Anthropic-compatible response has a missing or unknown stop_reason",
             ));
         }
-    }
+    };
     let content_blocks = value
         .get("content")
         .and_then(Value::as_array)
@@ -366,8 +405,12 @@ fn decode_anthropic_output(value: &Value) -> Result<ModelOutput, HostError> {
         })?;
     let mut content = Vec::new();
     let mut tool_calls = Vec::new();
+    let mut continuation = Vec::new();
     for block in content_blocks {
         match block.get("type").and_then(Value::as_str) {
+            Some("thinking" | "redacted_thinking") => {
+                continuation.push(host_json_to_value(block.clone())?)
+            }
             Some("text") => {
                 let text = block.get("text").and_then(Value::as_str).ok_or_else(|| {
                     HostError::new(
@@ -380,23 +423,19 @@ fn decode_anthropic_output(value: &Value) -> Result<ModelOutput, HostError> {
                 }
             }
             Some("tool_use") => {
-                let id = required_string(block, "id")?;
-                let tool = required_string(block, "name")?;
-                let input = block.get("input").cloned().ok_or_else(|| {
-                    HostError::new(
-                        HostErrorCode::InvalidResponse,
-                        "Anthropic-compatible tool_use block is missing input",
-                    )
-                })?;
-                if tool == ANTHROPIC_OUTPUT_TOOL {
-                    content.push(ModelContent::Value(host_json_to_value(input)?));
+                if termination != crate::ModelTermination::Complete {
                     continue;
                 }
-                tool_calls.push(ModelToolCall {
-                    id,
-                    tool,
-                    args: host_json_to_value(input)?,
-                });
+                match decode_anthropic_tool_call(block) {
+                    Ok(call) if call.tool == ANTHROPIC_OUTPUT_TOOL => {
+                        content.push(ModelContent::Value(call.args));
+                    }
+                    Ok(call) => tool_calls.push(call),
+                    Err(error) => {
+                        termination = error.into();
+                        tool_calls.clear();
+                    }
+                }
             }
             Some(kind) => {
                 return Err(HostError::new(
@@ -413,7 +452,21 @@ fn decode_anthropic_output(value: &Value) -> Result<ModelOutput, HostError> {
             }
         }
     }
-    if content.is_empty() && tool_calls.is_empty() {
+    if termination == crate::ModelTermination::Complete
+        && value.get("stop_reason").and_then(Value::as_str) == Some("tool_use")
+        && tool_calls.is_empty()
+        && !content
+            .iter()
+            .any(|item| matches!(item, ModelContent::Value(_)))
+    {
+        termination = crate::ModelTermination::InvalidToolCall(
+            "model requested tools without a tool-use payload".into(),
+        );
+    }
+    if content.is_empty()
+        && tool_calls.is_empty()
+        && termination == crate::ModelTermination::Complete
+    {
         return Err(HostError::new(
             HostErrorCode::InvalidResponse,
             "Anthropic-compatible response contained no assistant content or tool calls",
@@ -421,24 +474,49 @@ fn decode_anthropic_output(value: &Value) -> Result<ModelOutput, HostError> {
     }
     Ok(ModelOutput {
         message: ModelMessage {
+            provider_data: if continuation.is_empty() {
+                Vec::new()
+            } else {
+                vec![("anthropic.v1".into(), HostValue::List(continuation))]
+            },
             role: ModelRole::Assistant,
             content,
             tool_call_id: None,
-            tool_calls: tool_calls.clone(),
+            tool_calls,
         },
-        tool_calls,
+        termination,
+        provider_request_id: value
+            .get("id")
+            .filter(|id| !id.is_null())
+            .map(|_| required_string(value, "id"))
+            .transpose()?,
     })
 }
 
-fn decode_anthropic_usage(value: &Value) -> Result<Option<ModelUsage>, HostError> {
-    let Some(usage) = value.get("usage") else {
-        return Ok(None);
+fn decode_anthropic_tool_call(
+    block: &Value,
+) -> Result<ModelToolCall, super::payload_error::ModelPayloadError> {
+    let id = required_string(block, "id")?;
+    let tool = required_string(block, "name")?;
+    let payload_error = |error| {
+        super::payload_error::ModelPayloadError::for_tool(&tool, ANTHROPIC_OUTPUT_TOOL, error)
     };
-    Ok(Some(ModelUsage {
-        input_tokens: required_u64(usage, "input_tokens")?,
-        output_tokens: required_u64(usage, "output_tokens")?,
-        cost: None,
-    }))
+    let input = block
+        .get("input")
+        .cloned()
+        .ok_or_else(|| {
+            HostError::new(
+                HostErrorCode::InvalidResponse,
+                "Anthropic-compatible tool_use block is missing input",
+            )
+        })
+        .map_err(&payload_error)?;
+    let args = host_json_to_value(input).map_err(payload_error)?;
+    Ok(ModelToolCall { id, tool, args })
+}
+
+fn decode_anthropic_usage(value: &Value) -> Result<Option<ModelUsage>, HostError> {
+    super::usage::decode(value, "input_tokens", "output_tokens")
 }
 
 fn required_string(object: &Value, field: &'static str) -> Result<String, HostError> {
@@ -455,16 +533,6 @@ fn required_string(object: &Value, field: &'static str) -> Result<String, HostEr
         })
 }
 
-fn required_u64(object: &Value, field: &'static str) -> Result<u64, HostError> {
-    object.get(field).and_then(Value::as_u64).ok_or_else(|| {
-        HostError::new(
-            HostErrorCode::InvalidResponse,
-            "provider usage field is missing or not an unsigned integer",
-        )
-        .with_detail("field", field)
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use crate::{
@@ -476,21 +544,32 @@ mod tests {
 
     #[test]
     fn stop_reason_is_checked_before_content_and_retains_usage() {
-        for (reason, code) in [
-            ("max_tokens", HostErrorCode::IncompleteResponse),
-            ("pause_turn", HostErrorCode::IncompleteResponse),
+        for (reason, termination) in [
+            ("max_tokens", crate::ModelTermination::Truncated),
+            ("pause_turn", crate::ModelTermination::Truncated),
             (
                 "model_context_window_exceeded",
-                HostErrorCode::IncompleteResponse,
+                crate::ModelTermination::Truncated,
             ),
-            ("refusal", HostErrorCode::ProviderRejected),
-            ("unknown", HostErrorCode::InvalidResponse),
+            (
+                "refusal",
+                crate::ModelTermination::Refused("refusal".into()),
+            ),
         ] {
             let body = json!({"stop_reason":reason,"content":[],"usage":{"input_tokens":10,"output_tokens":4}}).to_string();
             let response = decode_anthropic_messages_response(HostRequestId(49), &body).unwrap();
-            assert_eq!(response.usage.unwrap().output_tokens, 4);
-            assert_eq!(response.result.unwrap_err().code, code);
+            assert_eq!(response.usage.unwrap().output_tokens, Some(4));
+            assert_eq!(response.result.unwrap().termination, termination);
         }
+        let unknown = decode_anthropic_messages_response(
+            HostRequestId(49),
+            &json!({"stop_reason":"unknown","content":[]}).to_string(),
+        )
+        .unwrap();
+        assert_eq!(
+            unknown.result.unwrap_err().code,
+            HostErrorCode::InvalidResponse
+        );
         for reason in ["end_turn", "stop_sequence"] {
             let body = json!({"stop_reason":reason,"content":[{"type":"text","text":"complete"}]})
                 .to_string();
@@ -533,7 +612,7 @@ mod tests {
         let response =
             decode_anthropic_messages_response(HostRequestId(7), &body).expect("response decodes");
         let response = response.result.expect("complete output");
-        assert!(response.tool_calls.is_empty());
+        assert!(response.message.tool_calls.is_empty());
         assert_eq!(
             response.message.content,
             vec![ModelContent::Value(HostValue::Json(
@@ -550,6 +629,7 @@ mod tests {
         let mut request = typed_request();
         request.response_schema = None;
         request.messages = vec![ModelMessage {
+            provider_data: Vec::new(),
             role: ModelRole::Tool,
             content: vec![ModelContent::Value(HostValue::String("ok".to_owned()))],
             tool_call_id: Some("toolu_1".to_owned()),
@@ -614,10 +694,12 @@ mod tests {
 
     fn typed_request() -> ModelRequest {
         ModelRequest {
+            action: crate::ModelAction::Infer,
             id: HostRequestId(1),
             provider: None,
             model: ModelName("test-model".to_owned()),
             messages: vec![ModelMessage {
+                provider_data: Vec::new(),
                 role: ModelRole::User,
                 content: vec![ModelContent::Text("emit output".to_owned())],
                 tool_call_id: None,
@@ -632,6 +714,7 @@ mod tests {
             }])),
             policy_ref: None,
             options: ModelOptions {
+                attempt_policy: Default::default(),
                 temperature: None,
                 max_output_tokens: Some(64),
                 metadata: Vec::new(),
@@ -645,5 +728,27 @@ mod tests {
             trace: TraceContext::root(TraceId(1)),
             budget: ExecutionBudget::default(),
         }
+    }
+
+    #[test]
+    fn continuation_thinking_and_tool_use_roundtrip_together() {
+        let wire = json!({"id":"response", "stop_reason":"tool_use", "content":[
+            {"type":"thinking", "thinking":"retained", "signature":"signature"},
+            {"type":"tool_use", "id":"call", "name":"echo", "input":{}},
+        ]});
+        let output = decode_anthropic_messages_response(HostRequestId(1), &wire.to_string())
+            .unwrap()
+            .result
+            .unwrap();
+        let mut request = typed_request();
+        request.response_schema = None;
+        request.messages = vec![output.message];
+        let encoded: Value =
+            serde_json::from_str(&encode_anthropic_messages_request(&request).unwrap()).unwrap();
+        assert_eq!(
+            encoded["messages"][0]["content"][0]["signature"],
+            "signature"
+        );
+        assert_eq!(encoded["messages"][0]["content"][1]["id"], "call");
     }
 }

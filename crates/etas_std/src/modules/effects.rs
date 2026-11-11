@@ -11,6 +11,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         "Source-language effect declarations re-exported for package imports.",
     );
 
+    let mut runtime_exports = Vec::new();
     for effect in STANDARD_EFFECTS {
         let mut declaration = if effect.name == "Error" {
             EffectDecl::generic_core("Error", &["E"])
@@ -34,7 +35,9 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         if effect.prelude {
             builder.prelude(effect.name, symbol);
         }
+        runtime_exports.push((effect.name, symbol));
     }
+    super::runtime::effects::register(builder, &runtime_exports);
 
     let mut action_modules = BTreeMap::<&str, StdModuleId>::new();
     for action in STANDARD_ACTIONS {
@@ -87,9 +90,15 @@ fn declare_standard_action_generics(
             .with_type_params(&[StdGenericParam::new("K")])
             .with_selector_param_names(&["K"]),
         "Agentic" if action.name == "infer" => decl
-            .with_type_params(&[StdGenericParam::new("O")])
+            .with_type_params(&[StdGenericParam::new("C"), StdGenericParam::new("O")])
             .with_selector_param_names(&["C", "O"])
-            .with_compiler_role(crate::CompilerActionRole::AgentInference),
+            .with_compiler_role(crate::CompilerActionRole::AgentInference)
+            .with_default_handler_effects(Vec::new()),
+        "Agentic" if action.name == "step" => decl
+            .with_type_params(&[StdGenericParam::new("C"), StdGenericParam::new("O")])
+            .with_selector_param_names(&["C", "O"])
+            .with_compiler_role(crate::CompilerActionRole::AgentStep)
+            .with_default_handler_effects(Vec::new()),
         "Memory" => decl.with_type_params(&[StdGenericParam::new("R")]),
         _ => decl,
     };
@@ -469,12 +478,20 @@ const STANDARD_ACTIONS: &[StandardActionSpec] = &[
         output: "O",
         stable_id: 88,
         runtime_requirement: StdRuntimeRequirement::Agentic,
-        effect_args: &[
-            EffectActionArgKind::StaticResourcePath { ty: "Agent" },
-            EffectActionArgKind::Type,
-        ],
+        effect_args: &[EffectActionArgKind::Type, EffectActionArgKind::Type],
         high_impact_ack: false,
         description: "Agentic inference action.",
+    },
+    StandardActionSpec {
+        owner: "Agentic",
+        name: "step",
+        params: &["std.agent.session.Conversation", "Schema[O]"],
+        output: "std.agent.StepResult[C, O]",
+        stable_id: 150,
+        runtime_requirement: StdRuntimeRequirement::Agentic,
+        effect_args: &[EffectActionArgKind::Type, EffectActionArgKind::Type],
+        high_impact_ack: false,
+        description: "One model generation without tool invocation or repair.",
     },
     StandardActionSpec {
         owner: "Memory",

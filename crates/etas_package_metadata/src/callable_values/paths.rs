@@ -66,12 +66,82 @@ impl CallableRequestTarget {
     }
 }
 
+impl crate::DefaultBehavior {
+    pub fn remap_paths(
+        &mut self,
+        mut remap: impl FnMut(CallableValuePathKind, &[String]) -> Vec<String>,
+    ) {
+        remap_parts(vec![Part::Behavior(self)], &mut remap);
+    }
+}
+
 fn remap_parts(
     mut work: Vec<Part<'_>>,
     remap: &mut dyn FnMut(CallableValuePathKind, &[String]) -> Vec<String>,
 ) {
     while let Some(part) = work.pop() {
         match part {
+            Part::Behavior(behavior) => {
+                work.push(Part::Footprint(&mut behavior.direct));
+                for entry in &mut behavior.guarded {
+                    work.extend(entry.guards.iter_mut().map(Part::Effect));
+                    work.push(Part::Footprint(&mut entry.footprint));
+                }
+            }
+            Part::Footprint(footprint) => {
+                work.extend(
+                    [
+                        &mut footprint.escaping_effects,
+                        &mut footprint.requested_actions,
+                        &mut footprint.default_actions,
+                        &mut footprint.handled_actions,
+                    ]
+                    .into_iter()
+                    .map(Part::Row),
+                );
+                if let Some(requests) = &mut footprint.handler_requests {
+                    for action in &mut requests.actions {
+                        work.push(Part::Effect(&mut action.action));
+                        if let Some(signature) = &mut action.signature {
+                            work.extend(signature.params.iter_mut().map(Part::Type));
+                            work.push(Part::Type(&mut signature.output));
+                        }
+                        for binding in action.type_bindings.iter_mut().flatten() {
+                            work.push(Part::Type(&mut binding.ty));
+                        }
+                    }
+                    for parameter in &mut requests.parameters {
+                        work.push(Part::Target(&mut parameter.parameter));
+                        work.extend(parameter.excluded.iter_mut().map(Part::Effect));
+                    }
+                }
+                for requirement in footprint
+                    .requirements
+                    .trace_requirements
+                    .iter_mut()
+                    .chain(&mut footprint.requirements.trace_obligations)
+                {
+                    if let crate::MethodTraceRequirement::Clause(clause) = requirement {
+                        for bound in &mut clause.selector_bounds {
+                            bound.spec_path = remap(CallableValuePathKind::Spec, &bound.spec_path);
+                            bound.effect_path =
+                                remap(CallableValuePathKind::Effect, &bound.effect_path);
+                            work.extend(bound.spec_args.iter_mut().map(Part::Type));
+                        }
+                        work.extend(
+                            [
+                                &mut clause.pattern,
+                                &mut clause.guard,
+                                &mut clause.target,
+                                &mut clause.obligation,
+                            ]
+                            .into_iter()
+                            .flatten()
+                            .map(Part::Row),
+                        );
+                    }
+                }
+            }
             Part::Graph(graph) => {
                 for object in &mut graph.objects {
                     work.push(Part::Type(&mut object.object_type));
@@ -83,6 +153,9 @@ fn remap_parts(
                     }
                 }
                 for node in &mut graph.values {
+                    if let Some(behavior) = &mut node.default_handler_effects.behavior {
+                        work.push(Part::Behavior(behavior));
+                    }
                     if let Some(requests) = &mut node.handler_requests {
                         for action in &mut requests.actions {
                             work.push(Part::Effect(&mut action.action));
@@ -124,6 +197,9 @@ fn remap_parts(
                 }
             }
             Part::Target(CallableRequestTarget::Parameter(_)) => {}
+            Part::Target(CallableRequestTarget::AgentTools(context)) => {
+                work.push(Part::Type(context))
+            }
             Part::Target(CallableRequestTarget::SpecMethod(method)) => {
                 method.spec = remap(CallableValuePathKind::Spec, &method.spec);
                 work.push(Part::Type(&mut method.receiver));
@@ -177,6 +253,10 @@ fn remap_parts(
             }
             Part::Trace(trace) => match trace {
                 ActionTrace::Event(event) => work.push(Part::Effect(&mut event.action)),
+                ActionTrace::DefaultHandler { guards, body } => {
+                    work.extend(guards.iter_mut().map(Part::Effect));
+                    work.push(Part::Trace(body));
+                }
                 ActionTrace::Seq(parts) | ActionTrace::Choice(parts) => {
                     work.extend(parts.iter_mut().map(Part::Trace))
                 }
@@ -199,6 +279,8 @@ fn remap_parts(
 }
 
 enum Part<'a> {
+    Behavior(&'a mut crate::DefaultBehavior),
+    Footprint(&'a mut crate::EffectFootprint),
     Graph(&'a mut CallableValueGraph),
     Target(&'a mut CallableRequestTarget),
     Type(&'a mut Type),

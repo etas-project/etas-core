@@ -9,6 +9,8 @@ pub struct Snapshots {
     pub flows: Vec<DefinitionSnapshot>,
     #[prost(message, repeated, tag = "3")]
     pub methods: Vec<DefinitionSnapshot>,
+    #[prost(message, repeated, tag = "4")]
+    pub tools: Vec<DefinitionSnapshot>,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]

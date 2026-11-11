@@ -64,7 +64,9 @@ impl RuntimeTypeRole {
 
     pub(crate) fn accepts_declaration(self, declaration: &super::TypeDecl) -> bool {
         let kind = match self {
-            Self::ContextPolicy | Self::RetentionPolicy | Self::Limit => super::TypeDeclKind::Enum,
+            Self::ContextPolicy | Self::RetentionPolicy | Self::Limit | Self::JsonValue => {
+                super::TypeDeclKind::Enum
+            }
             _ => super::TypeDeclKind::Support,
         };
         let representation = match self {

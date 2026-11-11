@@ -34,7 +34,7 @@ pub(in crate::proto) fn validate_model(
                 }
                 0
             }
-            TypeInfo::Primitive(_) | TypeInfo::Parameter(_) => 0,
+            TypeInfo::Primitive(_) | TypeInfo::Parameter(_) | TypeInfo::AgentContext(_) => 0,
             TypeInfo::Builtin { arguments, .. } | TypeInfo::Tuple(arguments) => arguments.len(),
             TypeInfo::Record(fields) => fields.len(),
             TypeInfo::Nominal {
@@ -146,7 +146,7 @@ pub(in crate::proto) fn validate_wire(
                 }
                 0
             }
-            None | Some(K::Primitive(_) | K::Parameter(_)) => 0,
+            None | Some(K::Primitive(_) | K::Parameter(_) | K::AgentContext(_)) => 0,
             Some(K::Builtin(value)) => value.arguments.len(),
             Some(K::Tuple(value)) => value.values.len(),
             Some(K::Record(value)) => value.values.len(),

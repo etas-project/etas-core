@@ -318,6 +318,11 @@ fn pattern_id(effect: &CanonicalEffect, family_members: &[DefinitionKey]) -> Act
                 encoder.tag(2);
                 encoder.fingerprint(key.fingerprint());
             }
+            CanonicalSelector::ResourceProjection { root, fields } => {
+                encoder.tag(7);
+                encoder.fingerprint(root.fingerprint());
+                encoder.path(fields);
+            }
             CanonicalSelector::Callable(callable) => {
                 encoder.tag(3);
                 encoder.fingerprint(callable.fingerprint());
@@ -443,6 +448,12 @@ fn validate_selector_with_budget(
 ) -> Result<(), ActionPatternError> {
     match selector {
         CanonicalSelector::Resource(key) => budget.definition(key)?,
+        CanonicalSelector::ResourceProjection { root, fields } => {
+            budget.definition(root)?;
+            for field in fields {
+                budget.literal(field)?;
+            }
+        }
         CanonicalSelector::Callable(callable) => budget.callable(callable)?,
         CanonicalSelector::String(value) | CanonicalSelector::Integer(value) => {
             budget.literal(value)?

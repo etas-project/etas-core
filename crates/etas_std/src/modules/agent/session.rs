@@ -25,7 +25,7 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         (
             "Conversation",
             Some(record(&[
-                ("session", "SessionId"),
+                ("session", "Option[SessionId]"),
                 ("messages", "Array[Message[std.json.JsonValue]]"),
                 ("summary", "Option[SessionPublishedContext]"),
                 ("cursor", "Option[string]"),

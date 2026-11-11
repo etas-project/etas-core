@@ -403,6 +403,12 @@ fn charge_effect(
         match argument {
             StaticEffectArgInfo::Type(_) => charge_graph(graph, budget)?,
             StaticEffectArgInfo::Resource(key) => budget.charge(key_work(key))?,
+            StaticEffectArgInfo::ResourceProjection { root, fields } => {
+                budget.charge(key_work(root))?;
+                for field in fields {
+                    budget.charge(field.len().saturating_add(1))?;
+                }
+            }
             StaticEffectArgInfo::Callable(id) => budget.charge(callable_work(id))?,
             StaticEffectArgInfo::String(value) | StaticEffectArgInfo::Integer(value) => {
                 budget.charge(value.len())?

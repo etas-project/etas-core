@@ -5,16 +5,32 @@ use crate::{
 
 pub fn register(builder: &mut StdRegistryBuilder) {
     let module = builder.module(&["std", "json"], "Structured JSON support declarations.");
-    builder.symbol(
+    let value = builder.symbol(
         module,
         "JsonValue",
         StdSymbolKind::Type,
         StdDecl::Type(
-            TypeDecl::generic("JsonValue", &[], TypeDeclKind::Support)
+            TypeDecl::generic("JsonValue", &[], TypeDeclKind::Enum)
                 .runtime_role(crate::RuntimeTypeRole::JsonValue),
         ),
-        "Structured JSON value support type.",
+        "The shared transparent recursive JSON value ADT.",
     );
+    for (name, params) in [
+        ("Null", &[][..]),
+        ("Bool", &["bool"][..]),
+        ("Number", &["f64"][..]),
+        ("String", &["string"][..]),
+        ("Array", &["Array[std.json.JsonValue]"][..]),
+        ("Object", &["Map[string, std.json.JsonValue]"][..]),
+    ] {
+        builder
+            .enum_constructor(
+                value,
+                FlowDecl::pure(name, params, "std.json.JsonValue"),
+                "Construct a JSON value without encoding or performing I/O.",
+            )
+            .expect("JsonValue owner is registered");
+    }
     let error = builder.symbol(
         module,
         "JsonError",

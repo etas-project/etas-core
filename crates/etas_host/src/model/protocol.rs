@@ -20,6 +20,7 @@ pub struct ModelProviderCapabilities {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ModelRequest {
+    pub action: ModelAction,
     pub id: HostRequestId,
     pub provider: Option<ModelProviderId>,
     pub model: ModelName,
@@ -34,6 +35,21 @@ pub struct ModelRequest {
     pub budget: ExecutionBudget,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ModelAction {
+    Infer,
+    Step,
+}
+
+impl ModelAction {
+    pub fn qualified_name(self) -> &'static str {
+        match self {
+            Self::Infer => "Agentic.infer",
+            Self::Step => "Agentic.step",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum ModelToolChoice {
     #[default]
@@ -44,6 +60,7 @@ pub enum ModelToolChoice {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ModelMessage {
+    pub provider_data: Vec<(String, HostValue)>,
     pub role: ModelRole,
     pub content: Vec<ModelContent>,
     pub tool_call_id: Option<String>,
@@ -75,7 +92,17 @@ pub struct ModelResponse {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ModelOutput {
     pub message: ModelMessage,
-    pub tool_calls: Vec<ModelToolCall>,
+    pub termination: ModelTermination,
+    pub provider_request_id: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ModelTermination {
+    Complete,
+    Truncated,
+    Refused(String),
+    InvalidToolCall(String),
+    InvalidOutput(String),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -87,15 +114,23 @@ pub struct ModelToolCall {
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ModelOptions {
+    pub attempt_policy: ModelAttemptPolicy,
     pub temperature: Option<f32>,
     pub max_output_tokens: Option<u64>,
     pub metadata: Vec<(String, HostValue)>,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ModelAttemptPolicy {
+    #[default]
+    Configured,
+    Single,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ModelUsage {
-    pub input_tokens: u64,
-    pub output_tokens: u64,
+    pub input_tokens: Option<u64>,
+    pub output_tokens: Option<u64>,
     pub cost: Option<ModelCostUsage>,
 }
 

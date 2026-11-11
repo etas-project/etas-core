@@ -506,6 +506,8 @@ pub struct ProtoOptionalEffectArg {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoType {
+    #[prost(message, optional, tag = "10")]
+    pub agent_context: Option<super::descriptors::ProtoMethodIdentity>,
     #[prost(string, tag = "1")]
     pub kind: String,
     #[prost(string, tag = "2")]
@@ -656,12 +658,54 @@ pub struct ProtoParameterRequestTemplate {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoDefaultHandlerEffects {
+    #[prost(message, optional, tag = "4")]
+    pub behavior: Option<ProtoDefaultBehavior>,
     #[prost(message, optional, tag = "1")]
     pub direct_effects: Option<ProtoEffectRow>,
     #[prost(message, optional, tag = "2")]
     pub default_actions: Option<ProtoEffectRow>,
     #[prost(message, repeated, tag = "3")]
     pub handlers: Vec<ProtoDefaultHandlerContribution>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoDefaultBehavior {
+    #[prost(message, optional, tag = "1")]
+    pub direct: Option<ProtoEffectFootprint>,
+    #[prost(message, repeated, tag = "2")]
+    pub guarded: Vec<ProtoGuardedEffectFootprint>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoGuardedEffectFootprint {
+    #[prost(message, repeated, tag = "1")]
+    pub guards: Vec<ProtoEffectRef>,
+    #[prost(message, optional, tag = "2")]
+    pub footprint: Option<ProtoEffectFootprint>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoEffectFootprint {
+    #[prost(message, optional, tag = "1")]
+    pub escaping_effects: Option<ProtoEffectRow>,
+    #[prost(message, optional, tag = "2")]
+    pub requested_actions: Option<ProtoEffectRow>,
+    #[prost(message, optional, tag = "3")]
+    pub default_actions: Option<ProtoEffectRow>,
+    #[prost(message, optional, tag = "4")]
+    pub handled_actions: Option<ProtoEffectRow>,
+    #[prost(message, optional, tag = "5")]
+    pub handler_requests: Option<ProtoRequestInstantiationTemplate>,
+    #[prost(message, optional, tag = "6")]
+    pub residual_checks: Option<ProtoResidualReferenceSet>,
+    #[prost(message, optional, tag = "7")]
+    pub behavior: Option<ProtoCallableValueBehavior>,
+    #[prost(message, repeated, tag = "8")]
+    pub limits: Vec<ProtoMethodLimitRequirement>,
+    #[prost(message, repeated, tag = "9")]
+    pub trace_requirements: Vec<ProtoMethodTraceRequirement>,
+    #[prost(message, repeated, tag = "10")]
+    pub trace_obligations: Vec<ProtoMethodTraceRequirement>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -690,7 +734,7 @@ pub struct ProtoActionTrace {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoCallableRequestTarget {
-    #[prost(oneof = "proto_callable_request_target::Target", tags = "1, 2")]
+    #[prost(oneof = "proto_callable_request_target::Target", tags = "1, 2, 3")]
     pub target: Option<proto_callable_request_target::Target>,
 }
 
@@ -701,6 +745,8 @@ pub mod proto_callable_request_target {
         Parameter(String),
         #[prost(message, boxed, tag = "2")]
         SpecMethod(Box<super::ProtoSpecMethodInvocation>),
+        #[prost(message, boxed, tag = "3")]
+        AgentTools(Box<super::ProtoType>),
     }
 }
 
@@ -765,6 +811,7 @@ pub enum ProtoActionTraceKind {
     Repeat = 5,
     UnknownOrder = 6,
     Widened = 7,
+    DefaultHandler = 8,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, prost::Enumeration)]

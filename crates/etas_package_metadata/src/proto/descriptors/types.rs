@@ -95,6 +95,7 @@ fn decode_fields(fields: p::Fields) -> Vec<FieldInfo> {
 pub(super) fn encode(ty: &TypeInfo) -> p::Type {
     use p::ty::Kind as K;
     let kind = match ty {
+        TypeInfo::AgentContext(method) => K::AgentContext(super::identities::encode_method(method)),
         TypeInfo::Existential { bounds } => K::Existential(p::Existential {
             bounds: bounds.iter().map(super::effects::encode_spec).collect(),
         }),
@@ -212,6 +213,9 @@ fn declaration(
 pub(super) fn decode(ty: p::Type) -> Result<TypeInfo, Error> {
     use p::ty::Kind as K;
     Ok(match required(ty.kind, "type kind")? {
+        K::AgentContext(method) => {
+            TypeInfo::AgentContext(super::identities::decode_method(method)?)
+        }
         K::Existential(value) => TypeInfo::Existential {
             bounds: value
                 .bounds

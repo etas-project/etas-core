@@ -2,6 +2,7 @@ use crate::{MetadataArtifactError, Type, TypeKind};
 
 pub(crate) fn type_kind_to_wire(kind: TypeKind) -> &'static str {
     match kind {
+        TypeKind::AgentContext => "agent_context",
         TypeKind::Existential => "existential",
         TypeKind::Primitive => "primitive",
         TypeKind::Var => "var",
@@ -41,6 +42,22 @@ pub(crate) fn type_kind_to_wire(kind: TypeKind) -> &'static str {
 
 pub(crate) fn validate_type_shape(ty: &Type) -> Result<(), MetadataArtifactError> {
     let kind = ty.kind;
+    if kind == TypeKind::AgentContext {
+        if ty.agent_context.is_none()
+            || !ty.name.is_empty()
+            || !ty.path.is_empty()
+            || !ty.children.is_empty()
+            || !ty.fields.is_empty()
+            || ty.effects.is_some()
+            || ty.produced_effects.is_some()
+        {
+            return Err(invalid(
+                "agent context requires only a canonical method identity",
+            ));
+        }
+    } else if ty.agent_context.is_some() {
+        return Err(invalid("only agent context types carry a method identity"));
+    }
     let Type {
         name,
         path,

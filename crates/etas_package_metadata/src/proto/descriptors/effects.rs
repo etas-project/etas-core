@@ -15,6 +15,12 @@ pub(super) fn encode_effect(effect: &EffectInfo) -> p::Effect {
                     StaticEffectArgInfo::Resource(key) => {
                         p::static_arg::Kind::Resource(encode_key(key))
                     }
+                    StaticEffectArgInfo::ResourceProjection { root, fields } => {
+                        p::static_arg::Kind::ResourceProjection(p::ResourceProjection {
+                            root: Some(encode_key(root)),
+                            fields: fields.clone(),
+                        })
+                    }
                     StaticEffectArgInfo::String(value) => {
                         p::static_arg::Kind::String(value.clone())
                     }
@@ -55,6 +61,15 @@ pub(super) fn decode_effect(effect: p::Effect) -> Result<EffectInfo, Error> {
                     p::static_arg::Kind::Type(ty) => StaticEffectArgInfo::Type(TypeInfoRef(ty)),
                     p::static_arg::Kind::Resource(key) => {
                         StaticEffectArgInfo::Resource(decode_key(key)?)
+                    }
+                    p::static_arg::Kind::ResourceProjection(projection) => {
+                        StaticEffectArgInfo::ResourceProjection {
+                            root: decode_key(required(
+                                projection.root,
+                                "resource projection root",
+                            )?)?,
+                            fields: projection.fields,
+                        }
                     }
                     p::static_arg::Kind::String(value) => StaticEffectArgInfo::String(value),
                     p::static_arg::Kind::Integer(value) => StaticEffectArgInfo::Integer(value),

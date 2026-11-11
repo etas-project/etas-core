@@ -175,6 +175,12 @@ impl OpenAiProtocolAdapter {
     ) -> Result<ModelResponse, HostError> {
         let id = request.id;
         let budget_deadline = request.budget.deadline()?;
+        let transport = match request.options.attempt_policy {
+            super::ModelAttemptPolicy::Configured => self.transport.clone(),
+            super::ModelAttemptPolicy::Single => {
+                self.transport.clone().with_retry(RetryPolicy::none())
+            }
+        };
         let body = encode_openai_chat_request_with_dialect(
             &request,
             self.dialect,
@@ -183,12 +189,12 @@ impl OpenAiProtocolAdapter {
         )?;
         let response = match operation {
             Some(operation) => {
-                self.transport
+                transport
                     .send_json_scoped("/chat/completions", body, budget_deadline, operation)
                     .await?
             }
             None => {
-                self.transport
+                transport
                     .send_json_with_deadline("/chat/completions", body, budget_deadline)
                     .await?
             }
@@ -403,6 +409,30 @@ fn encode_openai_message(message: &ModelMessage) -> Result<Value, HostError> {
                 ));
             }
             let mut object = serde_json::Map::new();
+            for (namespace, data) in &message.provider_data {
+                let data = host_value_to_json(data)?;
+                let Some(fields) = data.as_object() else {
+                    return Err(HostError::new(
+                        HostErrorCode::InvalidRequest,
+                        "invalid OpenAI continuation data",
+                    ));
+                };
+                if namespace != "openai.v1" || role != ModelRole::Assistant {
+                    return Err(HostError::new(
+                        HostErrorCode::InvalidRequest,
+                        "unsupported model continuation namespace or role",
+                    ));
+                }
+                for (name, value) in fields {
+                    if !matches!(name.as_str(), "reasoning_content" | "reasoning_details") {
+                        return Err(HostError::new(
+                            HostErrorCode::InvalidRequest,
+                            "continuation data cannot override request fields",
+                        ));
+                    }
+                    object.insert(name.clone(), value.clone());
+                }
+            }
             object.insert(
                 "role".to_owned(),
                 Value::String(role_text(role)?.to_owned()),
@@ -527,27 +557,17 @@ fn decode_openai_output(value: &Value) -> Result<ModelOutput, HostError> {
                 "OpenAI-compatible response is missing a non-null finish_reason",
             )
         })?;
-    match reason {
-        "stop" | "tool_calls" | "function_call" => {}
-        "length" => {
-            return Err(HostError::new(
-                HostErrorCode::IncompleteResponse,
-                "OpenAI-compatible generation is incomplete (finish_reason=length)",
-            ));
-        }
-        "content_filter" => {
-            return Err(HostError::new(
-                HostErrorCode::ProviderRejected,
-                "OpenAI-compatible generation was stopped by content filtering",
-            ));
-        }
+    let mut termination = match reason {
+        "stop" | "tool_calls" | "function_call" => crate::ModelTermination::Complete,
+        "length" => crate::ModelTermination::Truncated,
+        "content_filter" => crate::ModelTermination::Refused("content_filter".into()),
         _ => {
             return Err(HostError::new(
                 HostErrorCode::InvalidResponse,
                 "OpenAI-compatible response has an unknown finish_reason",
             ));
         }
-    }
+    };
     let message = choice
         .get("message")
         .filter(|message| message.is_object())
@@ -557,6 +577,19 @@ fn decode_openai_output(value: &Value) -> Result<ModelOutput, HostError> {
                 "OpenAI-compatible response is missing choices[0].message",
             )
         })?;
+    if let Some(refusal) = message.get("refusal").filter(|value| !value.is_null()) {
+        termination = crate::ModelTermination::Refused(
+            refusal
+                .as_str()
+                .ok_or_else(|| {
+                    HostError::new(
+                        HostErrorCode::InvalidResponse,
+                        "OpenAI-compatible refusal is not text",
+                    )
+                })?
+                .to_owned(),
+        );
+    }
     let has_tools = message
         .get("tool_calls")
         .and_then(Value::as_array)
@@ -564,10 +597,7 @@ fn decode_openai_output(value: &Value) -> Result<ModelOutput, HostError> {
     let has_function = message
         .get("function_call")
         .is_some_and(|value| !value.is_null());
-    if (reason == "stop" && (has_tools || has_function))
-        || (reason == "tool_calls" && !has_tools)
-        || (reason == "function_call" && !has_function)
-    {
+    if reason == "stop" && (has_tools || has_function) {
         return Err(HostError::new(
             HostErrorCode::InvalidResponse,
             "OpenAI-compatible finish_reason does not match its message payload",
@@ -585,9 +615,34 @@ fn decode_openai_output(value: &Value) -> Result<ModelOutput, HostError> {
             ));
         }
     };
-    let (structured_content, tool_calls) = decode_openai_tool_calls(message)?;
+    let (structured_content, tool_calls) = if termination == crate::ModelTermination::Complete {
+        let decoded = if (reason == "tool_calls" && !has_tools)
+            || (reason == "function_call" && !has_function)
+        {
+            Err(super::payload_error::ModelPayloadError::from(
+                HostError::new(
+                    HostErrorCode::InvalidResponse,
+                    "model requested tools without a nonempty tool-call payload",
+                ),
+            ))
+        } else {
+            decode_openai_tool_calls(message)
+        };
+        match decoded {
+            Ok(decoded) => decoded,
+            Err(error) => {
+                termination = error.into();
+                (Vec::new(), Vec::new())
+            }
+        }
+    } else {
+        (Vec::new(), Vec::new())
+    };
     content.extend(structured_content);
-    if content.is_empty() && tool_calls.is_empty() {
+    if content.is_empty()
+        && tool_calls.is_empty()
+        && termination == crate::ModelTermination::Complete
+    {
         return Err(HostError::new(
             HostErrorCode::InvalidResponse,
             "OpenAI-compatible response contained no assistant content or tool calls",
@@ -595,18 +650,40 @@ fn decode_openai_output(value: &Value) -> Result<ModelOutput, HostError> {
     }
     Ok(ModelOutput {
         message: ModelMessage {
+            provider_data: {
+                let fields = ["reasoning_content", "reasoning_details"]
+                    .into_iter()
+                    .filter_map(|name| {
+                        message
+                            .get(name)
+                            .filter(|value| !value.is_null())
+                            .map(|value| (name, value))
+                    })
+                    .map(|(name, value)| Ok((name.into(), host_json_to_value(value.clone())?)))
+                    .collect::<Result<Vec<_>, HostError>>()?;
+                if fields.is_empty() {
+                    Vec::new()
+                } else {
+                    vec![("openai.v1".into(), HostValue::Record(fields))]
+                }
+            },
             role: ModelRole::Assistant,
             content,
             tool_call_id: None,
-            tool_calls: tool_calls.clone(),
+            tool_calls,
         },
-        tool_calls,
+        termination,
+        provider_request_id: value
+            .get("id")
+            .filter(|id| !id.is_null())
+            .map(|_| required_string(value, "id"))
+            .transpose()?,
     })
 }
 
 fn decode_openai_tool_calls(
     message: &Value,
-) -> Result<(Vec<ModelContent>, Vec<ModelToolCall>), HostError> {
+) -> Result<(Vec<ModelContent>, Vec<ModelToolCall>), super::payload_error::ModelPayloadError> {
     if message
         .get("tool_calls")
         .is_some_and(|value| !value.is_null())
@@ -617,7 +694,8 @@ fn decode_openai_tool_calls(
         return Err(HostError::new(
             HostErrorCode::InvalidResponse,
             "OpenAI-compatible response contains both tool_calls and function_call",
-        ));
+        )
+        .into());
     }
     let Some(tool_calls) = message.get("tool_calls").filter(|value| !value.is_null()) else {
         if let Some(function_call) = message
@@ -645,16 +723,23 @@ fn decode_openai_tool_calls(
             )
         })?;
         let tool = required_string(function, "name")?;
-        let arguments = required_string(function, "arguments")?;
-        let args_json = serde_json::from_str::<Value>(&arguments).map_err(|error| {
-            HostError::new(
-                HostErrorCode::InvalidResponse,
-                "OpenAI-compatible tool call arguments are not valid JSON",
-            )
-            .with_detail("error", error.to_string())
-        })?;
+        let payload_error = |error| {
+            super::payload_error::ModelPayloadError::for_tool(&tool, OPENAI_OUTPUT_TOOL, error)
+        };
+        let arguments = required_string(function, "arguments").map_err(&payload_error)?;
+        let args_json = serde_json::from_str::<Value>(&arguments)
+            .map_err(|error| {
+                HostError::new(
+                    HostErrorCode::InvalidResponse,
+                    "OpenAI-compatible tool call arguments are not valid JSON",
+                )
+                .with_detail("error", error.to_string())
+            })
+            .map_err(&payload_error)?;
         if tool == OPENAI_OUTPUT_TOOL {
-            structured.push(ModelContent::Value(host_json_to_value(args_json)?));
+            structured.push(ModelContent::Value(
+                host_json_to_value(args_json).map_err(payload_error)?,
+            ));
         } else {
             decoded.push(ModelToolCall {
                 id,
@@ -668,19 +753,25 @@ fn decode_openai_tool_calls(
 
 fn decode_openai_legacy_function_call(
     function_call: &Value,
-) -> Result<(Vec<ModelContent>, Vec<ModelToolCall>), HostError> {
+) -> Result<(Vec<ModelContent>, Vec<ModelToolCall>), super::payload_error::ModelPayloadError> {
     let tool = required_string(function_call, "name")?;
-    let arguments = required_string(function_call, "arguments")?;
-    let args_json = serde_json::from_str::<Value>(&arguments).map_err(|error| {
-        HostError::new(
-            HostErrorCode::InvalidResponse,
-            "OpenAI-compatible function_call arguments are not valid JSON",
-        )
-        .with_detail("error", error.to_string())
-    })?;
+    let payload_error =
+        |error| super::payload_error::ModelPayloadError::for_tool(&tool, OPENAI_OUTPUT_TOOL, error);
+    let arguments = required_string(function_call, "arguments").map_err(&payload_error)?;
+    let args_json = serde_json::from_str::<Value>(&arguments)
+        .map_err(|error| {
+            HostError::new(
+                HostErrorCode::InvalidResponse,
+                "OpenAI-compatible function_call arguments are not valid JSON",
+            )
+            .with_detail("error", error.to_string())
+        })
+        .map_err(&payload_error)?;
     if tool == OPENAI_OUTPUT_TOOL {
         Ok((
-            vec![ModelContent::Value(host_json_to_value(args_json)?)],
+            vec![ModelContent::Value(
+                host_json_to_value(args_json).map_err(payload_error)?,
+            )],
             Vec::new(),
         ))
     } else {
@@ -696,16 +787,7 @@ fn decode_openai_legacy_function_call(
 }
 
 fn decode_openai_usage(value: &Value) -> Result<Option<ModelUsage>, HostError> {
-    let Some(usage) = value.get("usage") else {
-        return Ok(None);
-    };
-    let input_tokens = required_u64(usage, "prompt_tokens")?;
-    let output_tokens = required_u64(usage, "completion_tokens")?;
-    Ok(Some(ModelUsage {
-        input_tokens,
-        output_tokens,
-        cost: None,
-    }))
+    super::usage::decode(value, "prompt_tokens", "completion_tokens")
 }
 
 fn required_string(object: &Value, field: &'static str) -> Result<String, HostError> {
@@ -722,16 +804,6 @@ fn required_string(object: &Value, field: &'static str) -> Result<String, HostEr
         })
 }
 
-fn required_u64(object: &Value, field: &'static str) -> Result<u64, HostError> {
-    object.get(field).and_then(Value::as_u64).ok_or_else(|| {
-        HostError::new(
-            HostErrorCode::InvalidResponse,
-            "provider usage field is missing or not an unsigned integer",
-        )
-        .with_detail("field", field)
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use crate::{
@@ -743,10 +815,12 @@ mod tests {
 
     fn typed_request() -> ModelRequest {
         ModelRequest {
+            action: crate::ModelAction::Infer,
             id: HostRequestId(1),
             provider: None,
             model: ModelName("test-model".to_owned()),
             messages: vec![ModelMessage {
+                provider_data: Vec::new(),
                 role: ModelRole::User,
                 content: vec![ModelContent::Text("emit output".to_owned())],
                 tool_call_id: None,
@@ -971,10 +1045,12 @@ mod tests {
     #[test]
     fn omlx_request_encodes_explicit_thinking_control() {
         let request = ModelRequest {
+            action: crate::ModelAction::Infer,
             id: HostRequestId(1),
             provider: None,
             model: ModelName("qwen-thinking-model".to_owned()),
             messages: vec![ModelMessage {
+                provider_data: Vec::new(),
                 role: ModelRole::User,
                 content: vec![ModelContent::Text("reply briefly".to_owned())],
                 tool_call_id: None,
@@ -1033,10 +1109,12 @@ mod tests {
     #[test]
     fn openai_request_for_required_tool_choice_names_tool() {
         let request = ModelRequest {
+            action: crate::ModelAction::Infer,
             id: HostRequestId(1),
             provider: None,
             model: ModelName("test-model".to_owned()),
             messages: vec![ModelMessage {
+                provider_data: Vec::new(),
                 role: ModelRole::User,
                 content: vec![ModelContent::Text("use the tool".to_owned())],
                 tool_call_id: None,
@@ -1088,10 +1166,12 @@ mod tests {
     #[test]
     fn legacy_function_dialect_does_not_emit_openai_tools() {
         let request = ModelRequest {
+            action: crate::ModelAction::Infer,
             id: HostRequestId(1),
             provider: None,
             model: ModelName("test-model".to_owned()),
             messages: vec![ModelMessage {
+                provider_data: Vec::new(),
                 role: ModelRole::User,
                 content: vec![ModelContent::Text("use the tool".to_owned())],
                 tool_call_id: None,
@@ -1158,7 +1238,7 @@ mod tests {
         let response =
             decode_openai_chat_response(HostRequestId(7), &body).expect("response decodes");
         let response = response.result.expect("complete output");
-        assert!(response.tool_calls.is_empty());
+        assert!(response.message.tool_calls.is_empty());
         assert_eq!(
             response.message.content,
             vec![ModelContent::Value(HostValue::Json(
@@ -1190,9 +1270,8 @@ mod tests {
         let response =
             decode_openai_chat_response(HostRequestId(7), &body).expect("response decodes");
         let response = response.result.expect("complete output");
-        assert_eq!(response.tool_calls.len(), 1);
-        assert_eq!(response.tool_calls[0].id, "function-call-1");
-        assert_eq!(response.tool_calls[0].tool, "host.echo");
-        assert_eq!(response.message.tool_calls, response.tool_calls);
+        assert_eq!(response.message.tool_calls.len(), 1);
+        assert_eq!(response.message.tool_calls[0].id, "function-call-1");
+        assert_eq!(response.message.tool_calls[0].tool, "host.echo");
     }
 }

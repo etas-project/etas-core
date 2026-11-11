@@ -31,6 +31,9 @@ pub(super) fn to_proto(target: &CallableRequestTarget) -> ProtoCallableRequestTa
     ProtoCallableRequestTarget {
         target: Some(match target {
             CallableRequestTarget::Parameter(parameter) => Target::Parameter(parameter.clone()),
+            CallableRequestTarget::AgentTools(context) => {
+                Target::AgentTools(Box::new(type_to_proto(context)))
+            }
             CallableRequestTarget::SpecMethod(invocation) => {
                 Target::SpecMethod(Box::new(ProtoSpecMethodInvocation {
                     receiver: Some(type_to_proto(&invocation.receiver)),
@@ -81,6 +84,9 @@ pub(super) fn from_proto(
         .ok_or_else(|| invalid("callable evidence target is missing its kind"))?
     {
         Target::Parameter(parameter) => CallableRequestTarget::Parameter(parameter),
+        Target::AgentTools(context) => CallableRequestTarget::AgentTools(Box::new(
+            type_from_proto_with_budget(*context, depth + 1, budget)?,
+        )),
         Target::SpecMethod(invocation) => {
             CallableRequestTarget::SpecMethod(Box::new(SpecMethodInvocation {
                 receiver: type_from_proto_with_budget(

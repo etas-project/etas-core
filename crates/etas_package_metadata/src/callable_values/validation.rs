@@ -58,6 +58,15 @@ impl CallableValueGraph {
             work.push(Part::Row(&handler.produced));
         }
         work.push(Part::Trace(&node.action_trace));
+        if let Some(behavior) = &node.default_handler_effects.behavior {
+            behavior.validate_resources()?;
+            for entry in &behavior.guarded {
+                work.extend(entry.guards.iter().map(Part::Effect));
+            }
+            for footprint in behavior.footprints() {
+                work.push(Part::Footprint(footprint));
+            }
+        }
         let has_parameter_calls = validate_parts(&bindings, work)?;
         if has_parameter_calls && node.behavior.independent_determinism.is_none() {
             return Err(invalid(
@@ -128,7 +137,61 @@ fn validate_parts(
     let mut has_parameter_calls = false;
     while let Some(part) = work.pop() {
         match part {
+            Part::Footprint(footprint) => {
+                work.extend(
+                    [
+                        &footprint.escaping_effects,
+                        &footprint.requested_actions,
+                        &footprint.default_actions,
+                        &footprint.handled_actions,
+                    ]
+                    .into_iter()
+                    .map(Part::Row),
+                );
+                if let Some(requests) = &footprint.handler_requests {
+                    for action in &requests.actions {
+                        work.push(Part::Effect(&action.action));
+                        if let Some(signature) = &action.signature {
+                            work.extend(signature.params.iter().map(Part::Type));
+                            work.push(Part::Type(&signature.output));
+                        }
+                        for binding in action.type_bindings.iter().flatten() {
+                            work.push(Part::Type(&binding.ty));
+                        }
+                    }
+                    for parameter in &requests.parameters {
+                        work.push(Part::Target(&parameter.parameter));
+                        work.extend(parameter.excluded.iter().map(Part::Effect));
+                    }
+                }
+                for requirement in footprint
+                    .requirements
+                    .trace_requirements
+                    .iter()
+                    .chain(&footprint.requirements.trace_obligations)
+                {
+                    if let crate::MethodTraceRequirement::Clause(clause) = requirement {
+                        for row in [
+                            &clause.pattern,
+                            &clause.guard,
+                            &clause.target,
+                            &clause.obligation,
+                        ]
+                        .into_iter()
+                        .flatten()
+                        {
+                            work.push(Part::Row(row));
+                        }
+                        for bound in &clause.selector_bounds {
+                            work.extend(bound.spec_args.iter().map(Part::Type));
+                        }
+                    }
+                }
+            }
             Part::Target(crate::CallableRequestTarget::Parameter(_)) => {}
+            Part::Target(crate::CallableRequestTarget::AgentTools(context)) => {
+                work.push(Part::Type(context))
+            }
             Part::Target(crate::CallableRequestTarget::SpecMethod(method)) => {
                 valid_path(&method.spec)?;
                 work.push(Part::Type(&method.receiver));
@@ -188,6 +251,10 @@ fn validate_parts(
             }
             Part::Trace(trace) => match trace {
                 ActionTrace::Event(event) => work.push(Part::Effect(&event.action)),
+                ActionTrace::DefaultHandler { guards, body } => {
+                    work.extend(guards.iter().map(Part::Effect));
+                    work.push(Part::Trace(body));
+                }
                 ActionTrace::Seq(parts) | ActionTrace::Choice(parts) => {
                     work.extend(parts.iter().map(Part::Trace))
                 }
@@ -213,6 +280,7 @@ fn validate_parts(
 }
 
 enum Part<'a> {
+    Footprint(&'a crate::EffectFootprint),
     Target(&'a crate::CallableRequestTarget),
     Type(&'a Type),
     Row(&'a EffectRow),

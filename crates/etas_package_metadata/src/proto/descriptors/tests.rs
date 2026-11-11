@@ -11,6 +11,35 @@ mod header_tests;
 mod snapshot_tests;
 
 #[test]
+fn checked_resource_projection_survives_binary_descriptor_roundtrip() {
+    let set = DefinitionDescriptorSet {
+        graph: DescriptorGraphInput {
+            rows: vec![EffectRowInfo {
+                tail: None,
+                effects: vec![EffectInfo {
+                    target: EffectTargetInfo::Action {
+                        effect: key("Memory", DefinitionKind::Effect),
+                        name: "read".into(),
+                    },
+                    arguments: vec![StaticEffectArgInfo::ResourceProjection {
+                        root: key("RuntimeMemory", DefinitionKind::Value),
+                        fields: vec!["Reviews".into()],
+                    }],
+                }],
+            }],
+            ..Default::default()
+        },
+        declarations: vec![],
+        headers: None,
+    };
+    let wire = to_proto(&set).encode_to_vec();
+    assert_eq!(
+        from_proto(ProtoDescriptorGraph::decode(wire.as_slice()).unwrap()).unwrap(),
+        set
+    );
+}
+
+#[test]
 fn implementation_binders_survive_binary_descriptor_roundtrip() {
     let subject = key("Container", DefinitionKind::Type);
     let implementation = ImplementationKey::new(

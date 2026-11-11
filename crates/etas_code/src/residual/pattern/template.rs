@@ -260,6 +260,11 @@ fn template_fingerprint(
                         encoder.tag(2);
                         encoder.fingerprint(value.fingerprint());
                     }
+                    CanonicalSelector::ResourceProjection { root, fields } => {
+                        encoder.tag(7);
+                        encoder.fingerprint(root.fingerprint());
+                        encoder.path(fields);
+                    }
                     CanonicalSelector::Callable(value) => {
                         encoder.tag(3);
                         encoder.fingerprint(value.fingerprint());

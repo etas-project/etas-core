@@ -100,7 +100,6 @@ fn compiler_descriptor_types_are_opaque_and_have_unique_registry_roles() {
         ("AgentId", CodeTypeRole::AgentId),
         ("TypeInfo", CodeTypeRole::TypeInfo),
         ("GenericOwnerInfo", CodeTypeRole::GenericOwnerInfo),
-        ("ToolRef", CodeTypeRole::ToolRef),
         ("StaticValueInfo", CodeTypeRole::StaticValueInfo),
         ("TraceConstraintInfo", CodeTypeRole::TraceConstraintInfo),
     ] {
@@ -114,6 +113,30 @@ fn compiler_descriptor_types_are_opaque_and_have_unique_registry_roles() {
         assert_eq!(ty.construction, StdTypeConstruction::IntrinsicOnly);
         assert!(ty.representation.is_none());
     }
+}
+
+#[test]
+fn reflection_reexports_the_transparent_agent_tool_reference() {
+    let registry = standard_registry();
+    let tool = registry
+        .lookup_qualified(&["std", "agent", "ToolRef"])
+        .unwrap();
+    assert_eq!(
+        registry.lookup_qualified(&["std", "compiler", "ToolRef"]),
+        Some(tool)
+    );
+    let StdDecl::Type(decl) = &tool.decl else {
+        panic!("ToolRef type");
+    };
+    assert_eq!(decl.construction, StdTypeConstruction::Public);
+    assert_eq!(decl.code_role, None);
+    assert_eq!(
+        decl.representation,
+        Some(etas_std::StdType::Record(vec![
+            etas_std::StdRecordField::new("id", etas_std::StdType::parse("string")),
+            etas_std::StdRecordField::new("revision", etas_std::StdType::parse("string")),
+        ]))
+    );
 }
 
 #[test]
@@ -184,8 +207,27 @@ fn contextual_inference_is_backed_by_a_unique_checked_standard_action_role() {
         action.params[1],
         etas_std::StdType::Schema(Box::new(action.output.clone()))
     );
-    assert_eq!(action.type_params.len(), 1);
-    assert_eq!(action.effect_args.len(), 2);
+    assert_eq!(
+        action
+            .type_params
+            .iter()
+            .map(|parameter| parameter.name.as_str())
+            .collect::<Vec<_>>(),
+        ["C", "O"]
+    );
+    assert!(
+        action
+            .type_params
+            .iter()
+            .all(|parameter| parameter.kind == etas_std::StdGenericParamKind::Type)
+    );
+    assert_eq!(
+        action.effect_args,
+        [
+            etas_std::EffectActionArgKind::Type,
+            etas_std::EffectActionArgKind::Type
+        ]
+    );
     assert_eq!(action.selector_param_names, ["C", "O"]);
 
     let mut builder = StdRegistryBuilder::new(StdRegistryVersion::phase1());

@@ -90,6 +90,7 @@ pub struct EffectActionDecl {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, etas_core::RetainedSize)]
 pub enum CompilerActionRole {
     AgentInference,
+    AgentStep,
     TaskYield,
     TaskAwait,
 }

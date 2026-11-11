@@ -293,6 +293,7 @@ pub enum ActionArgKind {
 )]
 pub struct Type {
     pub kind: TypeKind,
+    pub agent_context: Option<etas_code::MethodId>,
     pub parameter: Option<GenericTypeParameter>,
     pub name: String,
     pub path: Vec<String>,
@@ -463,9 +464,54 @@ pub struct ParameterRequestTemplate {
     etas_core::RetainedSize,
 )]
 pub struct DefaultHandlerEffects {
+    pub behavior: Option<DefaultBehavior>,
     pub direct_effects: EffectRow,
     pub default_actions: EffectRow,
     pub handlers: Vec<DefaultHandlerContribution>,
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub struct DefaultBehavior {
+    pub direct: EffectFootprint,
+    pub guarded: Vec<GuardedEffectFootprint>,
+}
+
+impl DefaultBehavior {
+    pub fn validate_resources(&self) -> Result<(), crate::MetadataArtifactError> {
+        crate::proto::validate_default_behavior(self)
+    }
+
+    pub fn footprints(&self) -> impl Iterator<Item = &EffectFootprint> {
+        std::iter::once(&self.direct).chain(self.guarded.iter().map(|entry| &entry.footprint))
+    }
+
+    pub fn fingerprint(&self) -> etas_code::CodeFingerprint {
+        crate::proto::default_behavior_fingerprint(self)
+    }
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub struct GuardedEffectFootprint {
+    pub guards: Vec<EffectRef>,
+    pub footprint: EffectFootprint,
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub struct EffectFootprint {
+    pub escaping_effects: EffectRow,
+    pub requested_actions: EffectRow,
+    pub default_actions: EffectRow,
+    pub handled_actions: EffectRow,
+    pub handler_requests: Option<RequestInstantiationTemplate>,
+    pub residual_checks: Vec<etas_code::residual::identity::ResidualObligationRef>,
+    pub behavior: crate::CallableValueBehavior,
+    pub requirements: MethodRequirements,
 }
 
 #[derive(
@@ -490,6 +536,10 @@ pub enum ActionTrace {
     #[default]
     Empty,
     Event(ActionTraceEvent),
+    DefaultHandler {
+        guards: Vec<EffectRef>,
+        body: Box<ActionTrace>,
+    },
     ParameterCall {
         parameter: crate::CallableRequestTarget,
     },
@@ -878,6 +928,7 @@ pub enum Visibility {
     etas_core::RetainedSize,
 )]
 pub enum TypeKind {
+    AgentContext,
     Existential,
     #[default]
     Primitive,

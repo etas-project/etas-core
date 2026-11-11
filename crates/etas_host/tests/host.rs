@@ -137,10 +137,12 @@ fn model_protocol_adapter_preserves_boundary_context() {
         cost: None,
     });
     let request = ModelRequest {
+        action: etas_host::ModelAction::Infer,
         id: HostRequestId(1),
         provider: None,
         model: ModelName("local-test".to_owned()),
         messages: vec![ModelMessage {
+            provider_data: Vec::new(),
             role: ModelRole::User,
             content: vec![ModelContent::Text("hello".to_owned())],
             tool_call_id: None,
@@ -171,16 +173,18 @@ fn model_protocol_adapter_preserves_boundary_context() {
         id: request.id,
         result: Ok(etas_host::ModelOutput {
             message: ModelMessage {
+                provider_data: Vec::new(),
                 role: ModelRole::Assistant,
                 content: vec![ModelContent::Text("ok".to_owned())],
                 tool_call_id: None,
                 tool_calls: Vec::new(),
             },
-            tool_calls: Vec::new(),
+            termination: etas_host::ModelTermination::Complete,
+            provider_request_id: None,
         }),
         usage: Some(ModelUsage {
-            input_tokens: 2,
-            output_tokens: 1,
+            input_tokens: Some(2),
+            output_tokens: Some(1),
             cost: None,
         }),
     };

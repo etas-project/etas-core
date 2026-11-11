@@ -1077,10 +1077,12 @@ async fn retry_delay_does_not_reset_request_deadline() {
 
 fn model_request(id: HostRequestId, sandbox: SandboxPolicy) -> ModelRequest {
     ModelRequest {
+        action: etas_host::ModelAction::Infer,
         id,
         provider: None,
         model: ModelName("sandbox-test".to_owned()),
         messages: vec![ModelMessage {
+            provider_data: Vec::new(),
             role: ModelRole::User,
             content: vec![ModelContent::Text("hello".to_owned())],
             tool_call_id: None,
@@ -1091,6 +1093,7 @@ fn model_request(id: HostRequestId, sandbox: SandboxPolicy) -> ModelRequest {
         response_schema: None,
         policy_ref: None,
         options: ModelOptions {
+            attempt_policy: Default::default(),
             temperature: Some(0.0),
             max_output_tokens: Some(8),
             metadata: Vec::new(),

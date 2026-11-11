@@ -131,8 +131,13 @@ impl Encoder {
                         TypeKind::Existential => 31,
                         TypeKind::Parameter => 32,
                         TypeKind::Task => 33,
+                        TypeKind::AgentContext => 34,
                     });
                     self.option(ty.parameter.is_some());
+                    self.option(ty.agent_context.is_some());
+                    if let Some(method) = &ty.agent_context {
+                        self.0.update(method.fingerprint().as_bytes());
+                    }
                     if let Some(parameter) = &ty.parameter {
                         self.0.update(parameter.owner.fingerprint().as_bytes());
                         self.number(parameter.position as usize);
@@ -194,6 +199,12 @@ impl Encoder {
                     self.byte(5);
                     match trace {
                         ActionTrace::Empty => self.byte(0),
+                        ActionTrace::DefaultHandler { guards, body } => {
+                            self.byte(8);
+                            self.number(guards.len());
+                            pending.push(Task::Trace(body));
+                            pending.extend(guards.iter().rev().map(Task::Effect));
+                        }
                         ActionTrace::Event(event) => {
                             self.byte(1);
                             self.byte(match event.source {
@@ -341,6 +352,10 @@ pub fn callable_value_graph_input_fingerprint(
         e.encode(Task::Row(&node.handled_requested_actions));
         e.encode(Task::Row(&node.default_handler_effects.direct_effects));
         e.encode(Task::Row(&node.default_handler_effects.default_actions));
+        e.option(node.default_handler_effects.behavior.is_some());
+        if let Some(behavior) = &node.default_handler_effects.behavior {
+            e.0.update(behavior.fingerprint().as_bytes());
+        }
         e.number(node.default_handler_effects.handlers.len());
         for handler in &node.default_handler_effects.handlers {
             e.encode(Task::Effect(&handler.action));

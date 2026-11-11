@@ -137,6 +137,10 @@ impl DescriptorGraph {
             DescriptorNode::Type(reference) => {
                 encoder.tag(1);
                 match &self.data().types[reference.0 as usize] {
+                    TypeInfo::AgentContext(method) => {
+                        encoder.tag(14);
+                        encoder.fingerprint(method.fingerprint());
+                    }
                     TypeInfo::Existential { bounds } => {
                         encoder.tag(12);
                         encoder.number(bounds.len() as u64);
@@ -431,6 +435,11 @@ fn encode_effect(encoder: &mut CanonicalEncoder, effect: &EffectInfo) {
             StaticEffectArgInfo::Resource(key) => {
                 encoder.tag(2);
                 encoder.fingerprint(key.fingerprint());
+            }
+            StaticEffectArgInfo::ResourceProjection { root, fields } => {
+                encoder.tag(7);
+                encoder.fingerprint(root.fingerprint());
+                encoder.path(fields);
             }
             StaticEffectArgInfo::String(value) => {
                 encoder.tag(3);
