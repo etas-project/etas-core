@@ -76,21 +76,11 @@ impl Default for CommandExecutionPolicy {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct LocalCommandClient {
     policy: CommandExecutionPolicy,
     regions: WorkspaceRegionRegistry,
     processes: CommandProcessRegistry,
-}
-
-impl Default for LocalCommandClient {
-    fn default() -> Self {
-        Self {
-            policy: CommandExecutionPolicy::default(),
-            regions: WorkspaceRegionRegistry::default(),
-            processes: CommandProcessRegistry::default(),
-        }
-    }
 }
 
 impl LocalCommandClient {
