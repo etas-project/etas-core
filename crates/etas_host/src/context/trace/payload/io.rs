@@ -1,10 +1,10 @@
 use crate::console::{ConsoleOperation, ConsoleRequest};
 use crate::{
     BrowserProtocolOperation, BrowserProtocolRequest, ByteStreamOrigin, ByteStreamRef,
-    CommandRequest, FilesystemOperation, FilesystemRequest, HostTraceFieldSensitivity,
-    HostTracePayload, HostValue, SecretOperation, SecretRequest, StreamOperation, StreamRequest,
-    TcpConnectOperation, TcpConnectRequest, TcpStreamRef, TlsConnectOperation, TlsConnectRequest,
-    WorkspacePathRef,
+    CommandProcessOperation, CommandProcessRequest, CommandRequest, FilesystemOperation,
+    FilesystemRequest, HostTraceFieldSensitivity, HostTracePayload, HostValue, SecretOperation,
+    SecretRequest, StreamOperation, StreamRequest, TcpConnectOperation, TcpConnectRequest,
+    TcpStreamRef, TlsConnectOperation, TlsConnectRequest, WorkspacePathRef,
 };
 
 use super::{HostTraceRequest, option, record, variant};
@@ -140,6 +140,67 @@ impl HostTraceRequest for CommandRequest {
                 option(self.stdin.clone().map(HostValue::Bytes)),
                 HostTraceFieldSensitivity::Secret,
             )
+    }
+}
+
+impl HostTraceRequest for CommandProcessRequest {
+    fn trace_payload(&self) -> HostTracePayload {
+        let (action, operation) = match &self.operation {
+            CommandProcessOperation::Start { argv, env, cwd } => (
+                "Command.start",
+                variant(
+                    "Start",
+                    vec![
+                        HostValue::List(argv.iter().cloned().map(HostValue::String).collect()),
+                        HostValue::Record(
+                            env.iter()
+                                .map(|(name, value)| {
+                                    (name.clone(), HostValue::String(value.clone()))
+                                })
+                                .collect(),
+                        ),
+                        option(cwd.as_ref().map(workspace_path)),
+                    ],
+                ),
+            ),
+            CommandProcessOperation::Reconnect { process } => (
+                "Command.reconnect",
+                variant("Reconnect", vec![HostValue::String(process.clone())]),
+            ),
+            CommandProcessOperation::Read { process, max_bytes } => (
+                "Command.read",
+                variant(
+                    "Read",
+                    vec![
+                        HostValue::String(process.clone()),
+                        HostValue::UInt(*max_bytes as u128),
+                    ],
+                ),
+            ),
+            CommandProcessOperation::Write { process, bytes } => (
+                "Command.write",
+                variant(
+                    "Write",
+                    vec![
+                        HostValue::String(process.clone()),
+                        HostValue::Bytes(bytes.clone()),
+                    ],
+                ),
+            ),
+            CommandProcessOperation::CloseStdin { process } => (
+                "Command.write",
+                variant("CloseStdin", vec![HostValue::String(process.clone())]),
+            ),
+            CommandProcessOperation::Stop { process } => (
+                "Command.stop",
+                variant("Stop", vec![HostValue::String(process.clone())]),
+            ),
+        };
+        HostTracePayload::new("command", action).with_field(
+            "operation",
+            operation,
+            HostTraceFieldSensitivity::Sensitive,
+        )
     }
 }
 

@@ -91,6 +91,7 @@ macro_rules! result_response {
 }
 result_response!(
     crate::CommandResponse,
+    crate::CommandProcessResponse,
     crate::FilesystemResponse,
     crate::MemoryResponse,
     crate::SessionResponse,
