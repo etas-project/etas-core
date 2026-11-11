@@ -1032,6 +1032,7 @@ enum EffectReferenceKind {
     Action,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn validate_effect_row(
     registry: &StdRegistry,
     logical_effects: &LogicalEffectIndex<'_>,

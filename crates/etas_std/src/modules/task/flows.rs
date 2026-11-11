@@ -351,6 +351,7 @@ fn error_effect() -> StdEffectRef {
     StdEffectRef::typed(&["Error"], StdType::Var("X".into()))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn register_flow(
     builder: &mut StdRegistryBuilder,
     module: crate::StdModuleId,

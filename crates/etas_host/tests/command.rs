@@ -8,9 +8,10 @@ use std::{
 
 use etas_host::{
     AuthorityContext, Budget, CommandClient, CommandExecutionPolicy, CommandOutput, CommandPolicy,
-    CommandRequest, DestructiveOpPolicy, ExecutionBudget, FilesystemPolicy, HostActionGrant,
-    HostErrorCode, HostRequestId, LocalCommandClient, NetworkPolicy, PolicyContext, SandboxPolicy,
-    TimeBudget, TraceContext, TraceId,
+    CommandProcessClient, CommandProcessEvent, CommandProcessOperation, CommandProcessPayload,
+    CommandProcessRequest, CommandRequest, DestructiveOpPolicy, ExecutionBudget, FilesystemPolicy,
+    HostActionGrant, HostErrorCode, HostRequestId, LocalCommandClient, NetworkPolicy,
+    PolicyContext, SandboxPolicy, TimeBudget, TraceContext, TraceId,
 };
 
 #[cfg(unix)]
@@ -96,6 +97,143 @@ async fn local_command_executes_at_workspace_region_root() {
         std::fs::canonicalize(cwd).unwrap(),
         std::fs::canonicalize(workspace.path()).unwrap()
     );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn background_command_supports_incremental_io_stop_and_reconnect() {
+    let client = LocalCommandClient::new();
+    let start = client
+        .execute_process(process_request(
+            "start",
+            CommandProcessOperation::Start {
+                argv: vec![
+                    "/bin/sh".into(),
+                    "-c".into(),
+                    "printf ready; IFS= read -r line; printf ':%s' \"$line\"; IFS= read -r eof || printf :eof; /bin/sleep 30".into(),
+                ],
+                env: Vec::new(),
+                cwd: None,
+            },
+        ))
+        .await
+        .unwrap()
+        .result
+        .unwrap();
+    let CommandProcessPayload::Handle { id } = start else {
+        panic!("start did not return a process handle")
+    };
+
+    let reconnected = client
+        .execute_process(process_request(
+            "reconnect",
+            CommandProcessOperation::Reconnect {
+                process: id.clone(),
+            },
+        ))
+        .await
+        .unwrap()
+        .result
+        .unwrap();
+    assert_eq!(
+        reconnected,
+        CommandProcessPayload::Handle { id: id.clone() }
+    );
+
+    let mut output = read_process(&client, &id).await;
+    assert_eq!(output, b"ready");
+    client
+        .execute_process(process_request(
+            "write",
+            CommandProcessOperation::Write {
+                process: id.clone(),
+                bytes: b"hello\n".to_vec(),
+            },
+        ))
+        .await
+        .unwrap()
+        .result
+        .unwrap();
+    output.extend(read_process(&client, &id).await);
+    assert_eq!(output, b"ready:hello");
+    client
+        .execute_process(process_request(
+            "write",
+            CommandProcessOperation::CloseStdin {
+                process: id.clone(),
+            },
+        ))
+        .await
+        .unwrap()
+        .result
+        .unwrap();
+    output.extend(read_process(&client, &id).await);
+    assert_eq!(output, b"ready:hello:eof");
+
+    let stopped = client
+        .execute_process(process_request(
+            "stop",
+            CommandProcessOperation::Stop {
+                process: id.clone(),
+            },
+        ))
+        .await
+        .unwrap()
+        .result
+        .unwrap();
+    assert!(matches!(
+        stopped,
+        CommandProcessPayload::Event(CommandProcessEvent::Stopped { .. })
+    ));
+}
+
+#[cfg(unix)]
+async fn read_process(client: &LocalCommandClient, id: &str) -> Vec<u8> {
+    let response = tokio::time::timeout(
+        Duration::from_secs(2),
+        client.execute_process(process_request(
+            "read",
+            CommandProcessOperation::Read {
+                process: id.to_owned(),
+                max_bytes: 64,
+            },
+        )),
+    )
+    .await
+    .expect("background process read timed out")
+    .unwrap()
+    .result
+    .unwrap();
+    match response {
+        CommandProcessPayload::Event(CommandProcessEvent::Output { stdout, stderr })
+        | CommandProcessPayload::Event(CommandProcessEvent::Stopped { stdout, stderr })
+        | CommandProcessPayload::Event(CommandProcessEvent::Exited { stdout, stderr, .. }) => {
+            assert!(stderr.is_empty());
+            stdout
+        }
+        payload => panic!("unexpected background process payload: {payload:?}"),
+    }
+}
+
+#[cfg(unix)]
+fn process_request(action: &str, operation: CommandProcessOperation) -> CommandProcessRequest {
+    CommandProcessRequest {
+        id: HostRequestId(20),
+        operation,
+        authority: AuthorityContext {
+            grants: vec![HostActionGrant::allow("Command", action)],
+            approvals: Vec::new(),
+            sandbox: SandboxPolicy::allow_listed(
+                FilesystemPolicy::deny_all(),
+                NetworkPolicy::deny_all(),
+                CommandPolicy::allow_trusted_programs(vec!["/bin/sh".to_owned()]),
+                DestructiveOpPolicy::deny_all(),
+            ),
+            policy: PolicyContext::default(),
+        },
+        trace: TraceContext::root(TraceId(20)),
+        budget: ExecutionBudget::default(),
+    }
 }
 
 #[tokio::test]

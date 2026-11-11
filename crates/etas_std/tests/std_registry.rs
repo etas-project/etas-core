@@ -522,7 +522,10 @@ fn registry_declares_minimal_standard_effect_action_vocabulary() {
                 "stderr_write",
             ][..],
         ),
-        ("Command", &["run"][..]),
+        (
+            "Command",
+            &["run", "start", "reconnect", "read", "write", "stop"][..],
+        ),
         ("Secret", &["read"][..]),
         ("Agentic", &["infer"][..]),
         ("Memory", &["read", "write"][..]),
@@ -909,6 +912,25 @@ fn registry_stores_structured_std_flow_types() {
         flow.requested_actions,
         vec![StdEffectRef::wildcard(&["Command", "run"], 1)]
     );
+    for (name, action) in [
+        ("start", "start"),
+        ("reconnect", "reconnect"),
+        ("read", "read"),
+        ("write", "write"),
+        ("close_stdin", "write"),
+        ("stop", "stop"),
+    ] {
+        let declaration = registry
+            .lookup_qualified(&["std", "host", "command", name])
+            .unwrap_or_else(|| panic!("std.host.command.{name} should exist"));
+        let StdDecl::Flow(flow) = &declaration.decl else {
+            panic!("std.host.command.{name} should be a flow");
+        };
+        assert_eq!(
+            flow.requested_actions,
+            vec![StdEffectRef::wildcard(&["Command", action], 1)]
+        );
+    }
 
     let prompt_new = registry
         .lookup_qualified(&["std", "agent", "prompt", "new"])
