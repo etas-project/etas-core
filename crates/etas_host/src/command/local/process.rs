@@ -10,8 +10,12 @@ use tokio::{
     sync::{mpsc, oneshot},
     time::{Instant, sleep_until},
 };
+use tokio_util::sync::CancellationToken;
 
-use crate::{CommandProcessEvent, HostError, HostErrorCode, sandbox::platform::PreparedIsolation};
+use crate::{
+    CommandProcessEvent, HostError, HostErrorCode, execution::CancelSignal,
+    sandbox::platform::PreparedIsolation,
+};
 
 use super::{
     CommandExecutionPolicy,
@@ -36,6 +40,7 @@ enum ProcessControl {
     Read {
         max_bytes: usize,
         reply: oneshot::Sender<Result<CommandProcessEvent, HostError>>,
+        cancellation: CancellationToken,
     },
     Stop {
         reply: oneshot::Sender<Result<CommandProcessEvent, HostError>>,
@@ -62,6 +67,15 @@ struct ProcessWorker {
 struct PendingRead {
     max_bytes: usize,
     reply: oneshot::Sender<Result<CommandProcessEvent, HostError>>,
+    cancellation: CancellationToken,
+}
+
+struct CancelPendingReadOnDrop(CancellationToken);
+
+impl Drop for CancelPendingReadOnDrop {
+    fn drop(&mut self) {
+        self.0.cancel();
+    }
 }
 
 #[derive(Clone)]
@@ -166,6 +180,7 @@ impl CommandProcessRegistry {
         id: &str,
         max_bytes: usize,
         policy: CommandExecutionPolicy,
+        signal: Option<CancelSignal>,
     ) -> Result<CommandProcessEvent, HostError> {
         if max_bytes == 0 || max_bytes > policy.max_stdout_bytes.max(policy.max_stderr_bytes) {
             return Err(HostError::new(
@@ -176,12 +191,33 @@ impl CommandProcessRegistry {
         }
         let record = self.record(id)?;
         let (reply, response) = oneshot::channel();
+        let cancellation = CancellationToken::new();
+        let _cancel_on_drop = CancelPendingReadOnDrop(cancellation.clone());
         record
             .control
-            .send(ProcessControl::Read { max_bytes, reply })
+            .send(ProcessControl::Read {
+                max_bytes,
+                reply,
+                cancellation: cancellation.clone(),
+            })
             .await
             .map_err(|_| process_unavailable(id))?;
-        response.await.map_err(|_| process_unavailable(id))?
+        let mut response = response;
+        let response = match signal {
+            Some(signal) => {
+                tokio::select! {
+                    biased;
+                    cancelled = signal.cancelled() => {
+                        cancellation.cancel();
+                        cancelled?;
+                        (&mut response).await
+                    }
+                    response = &mut response => response,
+                }
+            }
+            None => response.await,
+        };
+        response.map_err(|_| process_unavailable(id))?
     }
 
     pub(super) async fn write(&self, id: &str, bytes: Vec<u8>) -> Result<(), HostError> {
@@ -254,30 +290,45 @@ impl ProcessWorker {
         let mut stderr_chunk = [0_u8; 8192];
         loop {
             self.finish_natural_exit();
+            self.cancel_pending_read_if_requested();
             self.fulfill_pending_read();
+            let read_cancellation = self
+                .pending_read
+                .as_ref()
+                .map(|pending| pending.cancellation.clone());
             tokio::select! {
-                control = self.control.recv() => match control {
-                    Some(ProcessControl::Read { max_bytes, reply }) => {
-                        if self.pending_read.is_some() {
-                            let _ = reply.send(Err(HostError::new(
-                                HostErrorCode::InvalidRequest,
-                                "background command already has a pending read",
-                            )));
-                        } else {
-                            self.pending_read = Some(PendingRead { max_bytes, reply });
+                _ = wait_for_read_cancellation(read_cancellation) => {
+                    self.cancel_pending_read();
+                }
+                control = self.control.recv() => {
+                    self.cancel_pending_read_if_requested();
+                    match control {
+                        Some(ProcessControl::Read { max_bytes, reply, cancellation }) => {
+                            if self.pending_read.is_some() {
+                                let _ = reply.send(Err(HostError::new(
+                                    HostErrorCode::InvalidRequest,
+                                    "background command already has a pending read",
+                                )));
+                            } else {
+                                self.pending_read = Some(PendingRead {
+                                    max_bytes,
+                                    reply,
+                                    cancellation,
+                                });
+                                self.fulfill_pending_read();
+                            }
+                        }
+                        Some(ProcessControl::Stop { reply }) => {
+                            let event = self.stop(stdin.clone()).await;
                             self.fulfill_pending_read();
+                            let _ = reply.send(event);
                         }
-                    }
-                    Some(ProcessControl::Stop { reply }) => {
-                        let event = self.stop(stdin.clone()).await;
-                        self.fulfill_pending_read();
-                        let _ = reply.send(event);
-                    }
-                    None => {
-                        if self.terminal.is_none() {
-                            let _ = self.stop(stdin.clone()).await;
+                        None => {
+                            if self.terminal.is_none() {
+                                let _ = self.stop(stdin.clone()).await;
+                            }
+                            return;
                         }
-                        return;
                     }
                 },
                 read = self.stdout.read(&mut stdout_chunk), if self.stdout_open && self.terminal.is_none() => {
@@ -327,6 +378,10 @@ impl ProcessWorker {
         let Some(pending) = self.pending_read.take() else {
             return;
         };
+        if pending.cancellation.is_cancelled() {
+            let _ = pending.reply.send(Err(cancelled_read()));
+            return;
+        }
         if pending.reply.is_closed() {
             return;
         }
@@ -356,6 +411,22 @@ impl ProcessWorker {
             _ => Ok(CommandProcessEvent::Output { stdout, stderr }),
         };
         let _ = pending.reply.send(result);
+    }
+
+    fn cancel_pending_read_if_requested(&mut self) {
+        if self
+            .pending_read
+            .as_ref()
+            .is_some_and(|pending| pending.cancellation.is_cancelled())
+        {
+            self.cancel_pending_read();
+        }
+    }
+
+    fn cancel_pending_read(&mut self) {
+        if let Some(pending) = self.pending_read.take() {
+            let _ = pending.reply.send(Err(cancelled_read()));
+        }
     }
 
     async fn append_stdout(&mut self, bytes: &[u8]) {
@@ -448,6 +519,20 @@ impl ProcessWorker {
             ProcessTerminal::Failed(error) => Err(error),
         }
     }
+}
+
+async fn wait_for_read_cancellation(cancellation: Option<CancellationToken>) {
+    match cancellation {
+        Some(cancellation) => cancellation.cancelled().await,
+        None => pending::<()>().await,
+    }
+}
+
+fn cancelled_read() -> HostError {
+    HostError::new(
+        HostErrorCode::Cancelled,
+        "background command read was cancelled",
+    )
 }
 
 fn process_id() -> Result<String, HostError> {
