@@ -267,7 +267,12 @@ impl LocalCommandClient {
             }
             CommandProcessOperation::Read { process, max_bytes } => CommandProcessPayload::Event(
                 self.processes
-                    .read(&process, max_bytes, self.policy)
+                    .read(
+                        &process,
+                        max_bytes,
+                        self.policy,
+                        operation.map(|operation| operation.signal().clone()),
+                    )
                     .await?,
             ),
             CommandProcessOperation::Write { process, bytes } => {

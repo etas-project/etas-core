@@ -188,6 +188,113 @@ async fn background_command_supports_incremental_io_stop_and_reconnect() {
 }
 
 #[cfg(unix)]
+#[tokio::test]
+async fn cancelling_scoped_background_read_releases_slot_without_stopping_process() {
+    use etas_host::execution::{CancellationReason, ExecutionScope, ExternalOutcome};
+
+    let client = LocalCommandClient::new();
+    let started = client
+        .execute_process(process_request(
+            "start",
+            CommandProcessOperation::Start {
+                argv: vec![
+                    "/bin/sh".into(),
+                    "-c".into(),
+                    "printf '%s\\n' \"$$\"; IFS= read -r line; printf '%s' \"$line\"; IFS= read -r keepalive"
+                        .into(),
+                ],
+                env: Vec::new(),
+                cwd: None,
+            },
+        ))
+        .await
+        .unwrap()
+        .result
+        .unwrap();
+    let CommandProcessPayload::Handle { id } = started else {
+        panic!("start did not return a process handle")
+    };
+    let process_id = String::from_utf8(read_process(&client, &id).await)
+        .unwrap()
+        .trim()
+        .parse::<libc::pid_t>()
+        .unwrap();
+    let mut cleanup = ProcessCleanup(vec![process_id]);
+
+    let scope = ExecutionScope::new();
+    let registration = scope
+        .register(
+            None,
+            Some(HostRequestId(21)),
+            TraceContext::root(TraceId(21)),
+        )
+        .unwrap();
+    registration.begin_dispatch().unwrap();
+    let context = registration.context().clone();
+    let read_client = client.clone();
+    let read_id = id.clone();
+    let mut pending = tokio::spawn(async move {
+        read_client
+            .execute_process_scoped(
+                process_request(
+                    "read",
+                    CommandProcessOperation::Read {
+                        process: read_id,
+                        max_bytes: 64,
+                    },
+                ),
+                &context,
+            )
+            .await
+    });
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    scope
+        .cancel_source()
+        .stop(CancellationReason::Requested)
+        .unwrap();
+
+    let error = tokio::time::timeout(Duration::from_millis(500), &mut pending)
+        .await
+        .expect("cancelled background read did not settle promptly")
+        .unwrap()
+        .unwrap_err();
+    assert_eq!(error.code, HostErrorCode::Cancelled, "{error}");
+    registration
+        .complete(ExternalOutcome::Unknown, vec![])
+        .unwrap();
+    scope.finish_body(true).unwrap();
+    scope.join().await.unwrap();
+
+    assert!(
+        process_is_live(process_id),
+        "read cancellation stopped process"
+    );
+    client
+        .execute_process(process_request(
+            "write",
+            CommandProcessOperation::Write {
+                process: id.clone(),
+                bytes: b"after\n".to_vec(),
+            },
+        ))
+        .await
+        .unwrap()
+        .result
+        .unwrap();
+    assert_eq!(read_process(&client, &id).await, b"after");
+    client
+        .execute_process(process_request(
+            "stop",
+            CommandProcessOperation::Stop { process: id },
+        ))
+        .await
+        .unwrap()
+        .result
+        .unwrap();
+    cleanup.0.clear();
+}
+
+#[cfg(unix)]
 async fn read_process(client: &LocalCommandClient, id: &str) -> Vec<u8> {
     let response = tokio::time::timeout(
         Duration::from_secs(2),
