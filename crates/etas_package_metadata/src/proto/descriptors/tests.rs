@@ -609,34 +609,49 @@ fn graph_protobuf_preserves_recursive_types_generic_identity_and_trace_placehold
 }
 
 #[test]
-fn result_tags_survive_portable_descriptors() {
-    let mut input = fixture();
-    let result = TypeInfoRef(input.graph.types.len() as u32);
-    input.graph.types.push(TypeInfo::Builtin {
-        constructor: BuiltinTypeInfo::Result,
-        arguments: vec![TypeInfoRef(0), TypeInfoRef(1)],
-    });
-    for ok in [true, false] {
-        input
-            .graph
-            .traces
-            .push(TraceInfo::Outcome(CallableOutcomeInfo::Returned {
-                ty: result,
-                observation: ReturnObservationInfo::Result(ok),
-            }));
+fn option_and_result_tags_survive_portable_descriptors() {
+    for option in [false, true] {
+        let mut input = fixture();
+        let result = TypeInfoRef(input.graph.types.len() as u32);
+        input.graph.types.push(TypeInfo::Builtin {
+            constructor: if option {
+                BuiltinTypeInfo::Option
+            } else {
+                BuiltinTypeInfo::Result
+            },
+            arguments: if option {
+                vec![TypeInfoRef(0)]
+            } else {
+                vec![TypeInfoRef(0), TypeInfoRef(1)]
+            },
+        });
+        for tag in [true, false] {
+            input
+                .graph
+                .traces
+                .push(TraceInfo::Outcome(CallableOutcomeInfo::Returned {
+                    ty: result,
+                    observation: if option {
+                        ReturnObservationInfo::Option(tag)
+                    } else {
+                        ReturnObservationInfo::Result(tag)
+                    },
+                }));
+        }
+        input.validate(limits()).unwrap();
+        let wire = to_proto(&input);
+        assert_eq!(wire.version, if option { 13 } else { 12 });
+        let output =
+            from_proto(ProtoDescriptorGraph::decode(wire.encode_to_vec().as_slice()).unwrap())
+                .unwrap();
+        assert_eq!(input, output);
+        let end = output.graph.traces.len() as u32;
+        let graph = DescriptorGraph::new(output.graph, limits()).unwrap();
+        assert_ne!(
+            graph.trace_fingerprint(TraceInfoRef(end - 2)).unwrap(),
+            graph.trace_fingerprint(TraceInfoRef(end - 1)).unwrap()
+        );
     }
-    input.validate(limits()).unwrap();
-    let wire = to_proto(&input);
-    assert_eq!(wire.version, 12);
-    let output =
-        from_proto(ProtoDescriptorGraph::decode(wire.encode_to_vec().as_slice()).unwrap()).unwrap();
-    assert_eq!(input, output);
-    let end = output.graph.traces.len() as u32;
-    let graph = DescriptorGraph::new(output.graph, limits()).unwrap();
-    assert_ne!(
-        graph.trace_fingerprint(TraceInfoRef(end - 2)).unwrap(),
-        graph.trace_fingerprint(TraceInfoRef(end - 1)).unwrap()
-    );
 }
 
 #[test]

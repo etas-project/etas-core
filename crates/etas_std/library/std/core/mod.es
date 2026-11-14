@@ -1,4 +1,9 @@
 module std.core;
+
+// Terminating execution is a runtime capability; callers own their error policy.
+@std.binding("std.core.abort")
+public flow abort(message: string) -> never ![] {}
+
 @std.role("std.core.Index")
 public spec Index;
 impl i8 ~ Index;

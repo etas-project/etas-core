@@ -136,7 +136,9 @@ implementations. `std.result` owns the `Result<T, E>` enum, its `Ok`/`Err`
 constructor flows and `is_ok`/`is_err` functions and methods. Checked roles keep
 the existing Result value ABI and constructor-pattern semantics; the Rust
 query view takes parameter names, enum payloads and Index impls from the bundle.
-Descriptor schema 12 carries typed Result return tags across processes.
+`std.option` similarly owns `Option<T>`, its constructors, predicates and unwrap.
+Both Option and Result expose checked source methods and source unwrap bodies.
+Descriptor schema 13 carries typed Option and Result tags across processes.
 The bootstrap catalog contains no spec implementations: Index impls are loaded
 from checked source rather than duplicated as native bootstrap facts.
 
@@ -150,8 +152,8 @@ complete legacy registry factory alone does not finish std source ownership.
 Native-backed flows can own their public declaration in Etas source:
 
 ```etas
-@std.binding("std.text.trim")
-public flow trim(value: string) -> string ![] {}
+@std.binding("std.char.is_whitespace")
+public flow is_whitespace(value: char) -> bool ![] {}
 ```
 
 The compiler accepts this annotation only in an explicit std source build,
@@ -161,7 +163,10 @@ call to the primitive through a private native binding identity. Public source
 exports replace their bootstrap slots without changing prelude/re-export IDs;
 application calls still enter the installed source owner. Generic type and
 effect arguments are forwarded through the normal checked invocation pipeline.
-`std.text.trim` is the first maintained native-backed source declaration.
+`std.text.trim` now implements Unicode trimming in Etas using that property
+primitive; it has no native bootstrap declaration. Array extend and list
+push/extend algorithms also have Etas bodies. Collection type/method migration
+remains in progress; these first collection algorithms are public flow APIs.
 
 Verified SDK queries also retain canonical declaration identities for source
 types and enum constructors. Registry image schema 2 preserves those owners and

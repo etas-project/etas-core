@@ -630,7 +630,7 @@ pub struct ParameterInteger {
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct Observation {
-    #[prost(oneof = "observation::Kind", tags = "1, 2, 3, 4, 5")]
+    #[prost(oneof = "observation::Kind", tags = "1, 2, 3, 4, 5, 6")]
     pub kind: Option<observation::Kind>,
 }
 pub mod observation {
@@ -646,6 +646,8 @@ pub mod observation {
         Variant(super::VariantObservation),
         #[prost(bool, tag = "5")]
         Result(bool),
+        #[prost(bool, tag = "6")]
+        Option(bool),
     }
 }
 

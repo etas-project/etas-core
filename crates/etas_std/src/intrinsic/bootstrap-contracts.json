@@ -108,6 +108,48 @@
     {
       "declaration": {
         "Flow": {
+          "name": "is_whitespace",
+          "output": {
+            "Primitive": "Bool"
+          },
+          "params": [
+            {
+              "Primitive": "Char"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "char",
+        "is_whitespace"
+      ],
+      "primitive": {
+        "dispatch": "PureKernel",
+        "id": 150,
+        "latent_effect": "None",
+        "lowering": "PureBuiltin",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "char",
+          "is_whitespace"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
           "name": "utf8_encode",
           "output": {
             "Primitive": "Bytes"
@@ -2899,6 +2941,48 @@
     },
     {
       "declaration": {
+        "Flow": {
+          "name": "abort",
+          "output": {
+            "Primitive": "Never"
+          },
+          "params": [
+            {
+              "Primitive": "String"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "core",
+        "abort"
+      ],
+      "primitive": {
+        "dispatch": "PureKernel",
+        "id": 1,
+        "latent_effect": "None",
+        "lowering": "PureBuiltin",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "core",
+          "abort"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
         "Type": {
           "canonical_type": null,
           "code_role": null,
@@ -5485,6 +5569,48 @@
     {
       "declaration": {
         "Flow": {
+          "name": "lowercase",
+          "output": {
+            "Primitive": "String"
+          },
+          "params": [
+            {
+              "Primitive": "String"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "text",
+        "lowercase"
+      ],
+      "primitive": {
+        "dispatch": "PureKernel",
+        "id": 4,
+        "latent_effect": "None",
+        "lowering": "PureBuiltin",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "text",
+          "lowercase"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
           "name": "parse_usize",
           "output": {
             "Result": {
@@ -5527,48 +5653,6 @@
           "std",
           "text",
           "parse_usize"
-        ],
-        "runtime_requirement": "None"
-      }
-    },
-    {
-      "declaration": {
-        "Flow": {
-          "name": "trim",
-          "output": {
-            "Primitive": "String"
-          },
-          "params": [
-            {
-              "Primitive": "String"
-            }
-          ],
-          "public_effect_tail": null,
-          "public_effects": [],
-          "requested_action_tail": null,
-          "requested_actions": [],
-          "source_method": null,
-          "type_params": []
-        }
-      },
-      "enum_owner": null,
-      "kind": "Flow",
-      "path": [
-        "std",
-        "text",
-        "trim"
-      ],
-      "primitive": {
-        "dispatch": "PureKernel",
-        "id": 2,
-        "latent_effect": "None",
-        "lowering": "PureBuiltin",
-        "memory_access": "None",
-        "purity": "Pure",
-        "qualified_path": [
-          "std",
-          "text",
-          "trim"
         ],
         "runtime_requirement": "None"
       }
@@ -5904,6 +5988,14 @@
         "runtime",
         "limits",
         "WallTime"
+      ]
+    ],
+    [
+      "abort",
+      [
+        "std",
+        "core",
+        "abort"
       ]
     ],
     [

@@ -169,10 +169,25 @@ fn has_result_observations(graph: &DescriptorGraphInput) -> bool {
     })
 }
 
+fn has_option_observations(graph: &DescriptorGraphInput) -> bool {
+    graph.traces.iter().any(|trace| {
+        matches!(
+            trace,
+            etas_code::descriptor::TraceInfo::Outcome(
+                etas_code::descriptor::CallableOutcomeInfo::Returned {
+                    observation: etas_code::descriptor::ReturnObservationInfo::Option(_),
+                    ..
+                }
+            )
+        )
+    })
+}
+
 pub(super) fn to_proto(set: &DefinitionDescriptorSet) -> ProtoDescriptorGraph {
     let input = &set.graph;
     ProtoDescriptorGraph {
         version: match &set.headers {
+            _ if has_option_observations(input) => 13,
             _ if has_result_observations(input) => 12,
             _ if input.types.iter().any(|ty| match ty {
                 etas_code::descriptor::TypeInfo::Builtin {
@@ -297,6 +312,7 @@ pub(super) fn from_proto(
             | (10, _)
             | (11, _)
             | (12, _)
+            | (13, _)
     ) {
         return Err(invalid("unsupported descriptor graph schema"));
     }
@@ -341,7 +357,7 @@ pub(super) fn from_proto(
             "implementation binders require their descriptor schema",
         ));
     }
-    if (has_callable_definition && !matches!(input.version, 8..=12))
+    if (has_callable_definition && !matches!(input.version, 8..=13))
         || (input.version == 8 && !has_callable_definition)
     {
         return Err(invalid(
@@ -349,7 +365,7 @@ pub(super) fn from_proto(
         ));
     }
     if (matches!(input.version, 5..=7)
-        || (matches!(input.version, 8..=12)
+        || (matches!(input.version, 8..=13)
             && input.headers.as_ref().is_some_and(|headers| {
                 headers
                     .agents
@@ -372,7 +388,7 @@ pub(super) fn from_proto(
         .as_ref()
         .and_then(|headers| headers.snapshots.as_ref())
         .is_some_and(|snapshots| !snapshots.flows.is_empty());
-    if (has_flows && !matches!(input.version, 6..=12)) || (input.version == 6 && !has_flows) {
+    if (has_flows && !matches!(input.version, 6..=13)) || (input.version == 6 && !has_flows) {
         return Err(invalid(
             "flow snapshot coordinates require their descriptor schema",
         ));
@@ -382,7 +398,7 @@ pub(super) fn from_proto(
         .as_ref()
         .and_then(|headers| headers.snapshots.as_ref())
         .is_some_and(|snapshots| !snapshots.methods.is_empty());
-    if (has_methods && !matches!(input.version, 7..=12)) || (input.version == 7 && !has_methods) {
+    if (has_methods && !matches!(input.version, 7..=13)) || (input.version == 7 && !has_methods) {
         return Err(invalid(
             "method snapshot coordinates require their descriptor schema",
         ));
@@ -424,9 +440,12 @@ pub(super) fn from_proto(
             .map(traces::decode)
             .collect::<Result<_, _>>()?,
     };
-    if has_result_observations(&input) != (version == 12) {
+    if (has_result_observations(&input) && version < 12)
+        || (version == 12 && !has_result_observations(&input))
+        || has_option_observations(&input) != (version == 13)
+    {
         return Err(invalid(
-            "Result observations require their descriptor schema",
+            "Option/Result observations require their descriptor schema",
         ));
     }
     // Wire references are inert until the shared descriptor validator accepts them.

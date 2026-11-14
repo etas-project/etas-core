@@ -27,8 +27,12 @@ pub(super) fn validate(
         return Err(invalid("enum constructor must have a callable signature"));
     };
     let result_role = owner.qualified_path == ["std", "result", "Result"];
+    let option_role = owner.qualified_path == ["std", "option", "Option"];
     if result_role && decl.params.len() != 2 {
         return Err(invalid("Result role requires two type parameters"));
+    }
+    if option_role && decl.params.len() != 1 {
+        return Err(invalid("Option role requires one type parameter"));
     }
     let mut expected_path = owner.qualified_path.clone();
     expected_path.push(flow.name.clone());
@@ -57,6 +61,8 @@ pub(super) fn validate(
             ok: Box::new(StdType::Var(decl.params[0].name.clone())),
             err: Box::new(StdType::Var(decl.params[1].name.clone())),
         }
+    } else if option_role {
+        StdType::Option(Box::new(StdType::Var(decl.params[0].name.clone())))
     } else if decl.params.is_empty() {
         StdType::Named(name)
     } else {

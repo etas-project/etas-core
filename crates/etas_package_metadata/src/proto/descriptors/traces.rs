@@ -168,6 +168,7 @@ fn encode_observation(observation: &ReturnObservationInfo) -> p::Observation {
             ReturnObservationInfo::Unit => p::observation::Kind::Unit(true),
             ReturnObservationInfo::Bool(value) => p::observation::Kind::Bool(*value),
             ReturnObservationInfo::Result(value) => p::observation::Kind::Result(*value),
+            ReturnObservationInfo::Option(value) => p::observation::Kind::Option(*value),
             ReturnObservationInfo::Variant { owner, name } => {
                 p::observation::Kind::Variant(p::VariantObservation {
                     owner: Some(encode_key(owner)),
@@ -185,6 +186,7 @@ fn decode_observation(observation: p::Observation) -> Result<ReturnObservationIn
             p::observation::Kind::Unit(true) => ReturnObservationInfo::Unit,
             p::observation::Kind::Bool(value) => ReturnObservationInfo::Bool(value),
             p::observation::Kind::Result(value) => ReturnObservationInfo::Result(value),
+            p::observation::Kind::Option(value) => ReturnObservationInfo::Option(value),
             p::observation::Kind::Variant(value) => ReturnObservationInfo::Variant {
                 owner: decode_key(required(value.owner, "return variant owner")?)?,
                 name: value.name,

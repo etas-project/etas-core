@@ -178,6 +178,8 @@ pub enum ReturnObservationInfo {
     Bool(bool),
     /// The compiler-managed Result tag: true for Ok, false for Err.
     Result(bool),
+    /// The compiler-managed Option tag: true for Some, false for None.
+    Option(bool),
     Variant {
         owner: DefinitionKey,
         name: String,

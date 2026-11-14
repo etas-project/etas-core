@@ -5,6 +5,8 @@ fn main() {
     let registry = etas_std::standard_registry();
     let mut paths = [
         "std.core.Index",
+        "std.core.abort",
+        "std.char.is_whitespace",
         "std.runtime.error.raise",
         "std.runtime.budget.Money",
         "std.runtime.time.Duration",
@@ -29,8 +31,8 @@ fn main() {
         "std.text.chars",
         "std.text.from_char",
         "std.text.parse_usize",
-        "std.text.trim",
         "std.text.uppercase",
+        "std.text.lowercase",
         "std.task.Task",
         "std.task.Scheduler",
         "std.task.Continuation",

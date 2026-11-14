@@ -312,6 +312,10 @@ impl DescriptorGraph {
                                         encoder.tag(4);
                                         encoder.tag(u8::from(*value));
                                     }
+                                    ReturnObservationInfo::Option(value) => {
+                                        encoder.tag(5);
+                                        encoder.tag(u8::from(*value));
+                                    }
                                 }
                             }
                         }
@@ -409,6 +413,10 @@ fn encode_parameter_call(encoder: &mut CanonicalEncoder, call: &ParameterCallInf
                                 }
                                 super::ReturnObservationInfo::Result(value) => {
                                     encoder.tag(4);
+                                    encoder.tag(u8::from(*value));
+                                }
+                                super::ReturnObservationInfo::Option(value) => {
+                                    encoder.tag(5);
                                     encoder.tag(u8::from(*value));
                                 }
                             }
