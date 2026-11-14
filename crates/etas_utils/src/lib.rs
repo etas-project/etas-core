@@ -4,6 +4,7 @@ pub mod graph;
 pub mod pattern;
 pub mod pipeline;
 pub mod profile;
+pub mod serde_ordered;
 
 pub use automaton::{
     AcceptingState, AutomatonMonitor, InitialState, Matcher, NoTransitionPolicy, ProductAutomaton,
