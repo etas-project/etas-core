@@ -31,6 +31,7 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
     validate_unique_symbols(registry)?;
     validate_prelude(registry)?;
     validate_stable_ids(registry)?;
+    validate_source_declarations(registry)?;
     let logical_effects = LogicalEffectIndex::build(registry)?;
     let mut code_roles = BTreeSet::new();
     let mut runtime_roles = BTreeSet::new();
@@ -381,6 +382,57 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
     }
     validate_spec_impls(registry)?;
     validate_effect_extension_cycles(&logical_effects)?;
+    Ok(())
+}
+
+fn validate_source_declarations(registry: &StdRegistry) -> Result<(), StdRegistryValidationError> {
+    use etas_code::DefinitionKind;
+    let invalid = |reason: &str| StdRegistryValidationError {
+        symbol: "<std source declarations>".into(),
+        reason: reason.into(),
+    };
+    for (id, key) in &registry.declarations {
+        let symbol = registry
+            .symbol(*id)
+            .ok_or_else(|| invalid("missing source declaration"))?;
+        let kind = match &symbol.decl {
+            StdDecl::Type(decl) if decl.kind == TypeDeclKind::Spec => DefinitionKind::Spec,
+            StdDecl::Type(_) => DefinitionKind::Type,
+            StdDecl::Flow(_) if symbol.enum_owner.is_some() => DefinitionKind::EnumVariant,
+            StdDecl::Flow(_) => DefinitionKind::Flow,
+            StdDecl::Effect(_) => DefinitionKind::Effect,
+            StdDecl::Value(_) => DefinitionKind::Value,
+            _ => return Err(invalid("unsupported source declaration identity")),
+        };
+        if key.kind() != kind
+            || key
+                .module()
+                .iter()
+                .chain(key.declaration())
+                .ne(symbol.qualified_path.iter())
+        {
+            return Err(invalid(
+                "source declaration identity differs from its query entry",
+            ));
+        }
+    }
+    for (id, names) in &registry.enum_field_names {
+        let symbol = registry
+            .symbol(*id)
+            .ok_or_else(|| invalid("missing named enum constructor"))?;
+        let StdDecl::Flow(flow) = &symbol.decl else {
+            return Err(invalid("named enum fields require a constructor"));
+        };
+        if symbol.enum_owner.is_none()
+            || names.len() != flow.params.len()
+            || names.iter().any(String::is_empty)
+            || names.iter().collect::<BTreeSet<_>>().len() != names.len()
+        {
+            return Err(invalid(
+                "named enum fields differ from the constructor layout",
+            ));
+        }
+    }
     Ok(())
 }
 

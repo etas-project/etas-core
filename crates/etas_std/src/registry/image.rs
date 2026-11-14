@@ -14,7 +14,7 @@ use crate::{
     StdImplementationRef, StdIntrinsicId,
 };
 
-const SCHEMA: u32 = 1;
+const SCHEMA: u32 = 2;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StdRegistryImage {
@@ -31,6 +31,8 @@ pub struct StdRegistryImage {
     flow_overloads: BTreeMap<StdSymbolId, Vec<FlowDecl>>,
     action_overloads: BTreeMap<StdSymbolId, Vec<EffectActionDecl>>,
     bodies: BTreeMap<u32, StdBodyBinding>,
+    declarations: BTreeMap<StdSymbolId, etas_code::DefinitionKey>,
+    enum_field_names: BTreeMap<StdSymbolId, Vec<String>>,
 }
 
 impl StdRegistryImage {
@@ -63,6 +65,8 @@ impl StdRegistryImage {
             flow_overloads: registry.flow_overloads.clone(),
             action_overloads: registry.action_overloads.clone(),
             bodies: registry.bodies.clone(),
+            declarations: registry.declarations.clone(),
+            enum_field_names: registry.enum_field_names.clone(),
         })
     }
 
@@ -82,6 +86,8 @@ impl StdRegistryImage {
             flow_overloads: self.flow_overloads,
             action_overloads: self.action_overloads,
             bodies: self.bodies,
+            declarations: self.declarations,
+            enum_field_names: self.enum_field_names,
         };
         for (index, module) in registry.modules.iter().enumerate() {
             if module.id.0 as usize != index {

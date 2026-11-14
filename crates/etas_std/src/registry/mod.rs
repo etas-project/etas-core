@@ -30,6 +30,8 @@ pub struct StdRegistry {
     modules: Vec<StdModule>,
     symbols: Vec<Option<StdSymbol>>,
     bodies: BTreeMap<u32, crate::StdBodyBinding>,
+    declarations: BTreeMap<StdSymbolId, etas_code::DefinitionKey>,
+    enum_field_names: BTreeMap<StdSymbolId, Vec<String>>,
     prelude: StdPrelude,
     qualified: BTreeMap<Vec<String>, StdSymbolId>,
     intrinsics: BTreeMap<StdIntrinsicId, IntrinsicDescriptor>,
@@ -75,6 +77,7 @@ impl StdRegistry {
                 )
             })
             .map(|symbol| symbol.id)
+            .chain(self.declarations.keys().copied())
             .collect::<std::collections::BTreeSet<_>>();
         for id in &source_ids {
             registry.symbols[id.0 as usize] = None;
@@ -85,7 +88,22 @@ impl StdRegistry {
             .flow_overloads
             .retain(|id, _| !source_ids.contains(id));
         registry.bodies.clear();
+        registry.declarations.clear();
         registry
+            .enum_field_names
+            .retain(|id, _| !source_ids.contains(id));
+        registry
+    }
+
+    /// Canonical source owner supplied by the verified library bundle.
+    pub fn declaration_key(&self, symbol: StdSymbolId) -> Option<&etas_code::DefinitionKey> {
+        self.declarations
+            .get(&symbol)
+            .or_else(|| self.body_binding(symbol)?.callable.as_declaration())
+    }
+
+    pub fn enum_field_names(&self, constructor: StdSymbolId) -> Option<&[String]> {
+        self.enum_field_names.get(&constructor).map(Vec::as_slice)
     }
 
     pub fn body_binding(&self, symbol: StdSymbolId) -> Option<&crate::StdBodyBinding> {

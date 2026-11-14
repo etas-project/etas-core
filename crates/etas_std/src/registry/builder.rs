@@ -85,6 +85,23 @@ impl StdRegistryBuilder {
         id
     }
 
+    pub fn bind_declaration(&mut self, symbol: StdSymbolId, key: etas_code::DefinitionKey) {
+        assert!(
+            self.registry.declarations.insert(symbol, key).is_none(),
+            "source declaration already bound"
+        );
+    }
+
+    pub fn named_enum_fields(&mut self, constructor: StdSymbolId, names: Vec<String>) {
+        assert!(
+            self.registry
+                .enum_field_names
+                .insert(constructor, names)
+                .is_none(),
+            "enum fields already bound"
+        );
+    }
+
     pub fn symbol(
         &mut self,
         module: StdModuleId,

@@ -147,6 +147,11 @@ application calls still enter the installed source owner. Generic type and
 effect arguments are forwarded through the normal checked invocation pipeline.
 `std.text.trim` is the first maintained native-backed source declaration.
 
+Verified SDK queries also retain canonical declaration identities for source
+types and enum constructors. Registry image schema 2 preserves those owners and
+named enum payload fields; the native bootstrap view removes source-owned slots.
+These declarations do not acquire native roles from their spelling.
+
 `StdRegistryImage` serializes the query data, native contracts, public exports,
 prelude and source callable identities. `into_registry` validates its references
 and contracts before publishing the query view. Native symbol addresses survive
