@@ -1,19 +1,30 @@
 use crate::StdIntrinsicId;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    etas_core::RetainedSize,
+)]
 pub enum StdLibrarySourceId {
     TextAssembly,
     TextFormat,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum StdImplementationDeterminism {
     Deterministic,
     RuntimeMediated,
     NonDeterministic,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct StdSourceImplementation {
     pub source: StdLibrarySourceId,
     pub item: &'static str,
@@ -34,7 +45,7 @@ impl StdSourceImplementation {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum StdImplementationRef {
     Primitive {
         intrinsic: StdIntrinsicId,

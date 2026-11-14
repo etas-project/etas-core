@@ -1,6 +1,6 @@
 use super::{StdGenericParam, StdType};
 
-#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct EffectDecl {
     pub name: String,
     pub params: Vec<StdGenericParam>,
@@ -67,7 +67,7 @@ impl EffectDecl {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct EffectActionDecl {
     pub owner: String,
     pub name: String,
@@ -87,14 +87,25 @@ pub struct EffectActionDecl {
     pub default_handler_effect_tail: Option<String>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    etas_core::RetainedSize,
+)]
 pub enum CompilerActionRole {
     AgentInference,
     TaskYield,
     TaskAwait,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum EffectActionArgKind {
     Type,
     MemoryPlace,
@@ -102,7 +113,7 @@ pub enum EffectActionArgKind {
     StringPattern,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum StdRuntimeRequirement {
     Agentic,
     ToolCall,

@@ -1,7 +1,7 @@
 use super::StdIntrinsicId;
 
 // These explicit codes are part of stable intrinsic identity, not arena indices.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 #[repr(u32)]
 pub enum StdCollectionKind {
     Array = 0,
@@ -35,7 +35,7 @@ impl StdCollectionKind {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 #[repr(u32)]
 pub enum StdCollectionOperation {
     Get = 0,
@@ -59,7 +59,7 @@ pub enum StdCollectionOperation {
     Open = 18,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub struct StdCollectionIntrinsic {
     pub kind: StdCollectionKind,
     pub operation: StdCollectionOperation,

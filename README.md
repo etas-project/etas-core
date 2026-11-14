@@ -102,6 +102,25 @@ cargo test -p etas_host --offline
 
 `--offline` assumes Cargo dependencies have already been fetched.
 
+### Standard Library Migration Baseline
+
+Export the legacy std contract and compare a candidate inventory in a separate
+process:
+
+```bash
+cargo run --offline --locked -p etas_std --example std_migration_baseline -- export /tmp/std-legacy.json
+target/debug/examples/std_migration_baseline compare /tmp/std-legacy.json /tmp/std-candidate.json
+```
+
+The JSON inventory uses canonical module and symbol paths rather than registry
+ordinals. It records declarations, overloads, effects, implementations, exports,
+prelude bindings, runtime roles and primitive contracts. Each primitive lists
+the symbols that require it and those that use it as optional acceleration.
+The comparison reports coverage and contract, export and implementation changes
+per module, and exits unsuccessfully if the inventories differ. Source body or
+native binding changes still need runtime differential verification; this
+inventory is an audit format, not a loadable std bundle.
+
 ## Downstream Use
 
 Committed downstream dependencies use the repository Git identity. During
