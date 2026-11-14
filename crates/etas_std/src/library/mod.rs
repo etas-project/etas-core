@@ -4,6 +4,8 @@ use crate::StdLibrarySourceId;
 pub struct StdLibrarySource {
     pub id: StdLibrarySourceId,
     pub virtual_path: &'static str,
+    /// Legacy provider namespace for the embedded implementation. Source builds
+    /// use the module declared in the .es file instead.
     pub module_path: &'static [&'static str],
     pub source: &'static str,
     pub dependencies: &'static [StdLibrarySourceId],

@@ -121,6 +121,12 @@ per module, and exits unsuccessfully if the inventories differ. Source body or
 native binding changes still need runtime differential verification; this
 inventory is an audit format, not a loadable std bundle.
 
+The maintained source package is `crates/etas_std/etas.toml`, with source root
+`library`. The text files declare `std.text` as module parts so moving a flow
+between files preserves its canonical name. Public flow declarations live in
+those `.es` files. The fixed embedded-source table remains the legacy provider's
+implementation asset list; source library discovery scans the manifest root.
+
 ## Downstream Use
 
 Committed downstream dependencies use the repository Git identity. During

@@ -1,9 +1,9 @@
-module __etas_std.text.format;
+module std.text;
 
 import std.collections.array_get;
 import std.text.{InvalidFormat, TextError, chars, from_char, parse_usize};
 
-flow format(template: string, arguments: Array<string>) -> Result<string, TextError> {
+public flow format(template: string, arguments: Array<string>) -> Result<string, TextError> {
     var output = "";
     var index_text = "";
     var after_open = false;
