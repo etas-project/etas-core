@@ -37,7 +37,7 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
     let mut value_roles = BTreeSet::new();
     let mut action_roles = BTreeSet::new();
     for symbol in registry.symbols() {
-        validate_implementation(symbol)?;
+        validate_implementation(registry, symbol)?;
         super::enum_constructor::validate(registry, symbol)?;
         super::value_role::validate(registry, symbol, &mut value_roles)?;
         if let Some(argument) = registry.memory_place_result_argument(symbol.id)
@@ -292,9 +292,9 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                                     && matches!(
                                         action.effect_args.as_slice(),
                                         [
-                                            EffectActionArgKind::StaticResourcePath { ty: "Agent" },
+                                            EffectActionArgKind::StaticResourcePath { ty },
                                             EffectActionArgKind::Type
-                                        ]
+                                        ] if ty == "Agent"
                                     )
                                     && action.runtime_requirement
                                         == Some(crate::StdRuntimeRequirement::Agentic)
@@ -384,7 +384,10 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
     Ok(())
 }
 
-fn validate_implementation(symbol: &crate::StdSymbol) -> Result<(), StdRegistryValidationError> {
+fn validate_implementation(
+    registry: &StdRegistry,
+    symbol: &crate::StdSymbol,
+) -> Result<(), StdRegistryValidationError> {
     let Some(implementation) = symbol.implementation else {
         return Ok(());
     };
@@ -413,6 +416,25 @@ fn validate_implementation(symbol: &crate::StdSymbol) -> Result<(), StdRegistryV
             if symbol.intrinsic.as_ref().map(|descriptor| descriptor.id) != optimized_intrinsic {
                 return Err(invalid(
                     "source implementation optimization must share the symbol's intrinsic identity",
+                ));
+            }
+        }
+        StdImplementationRef::Artifact { .. } => {
+            if symbol.intrinsic.is_some() || !matches!(symbol.decl, StdDecl::Flow(_)) {
+                return Err(invalid(
+                    "artifact source callable requires a flow declaration without a primitive shortcut",
+                ));
+            }
+            let binding = registry
+                .body_binding(symbol.id)
+                .ok_or_else(|| invalid("source callable has no body binding"))?;
+            if binding
+                .callable
+                .as_declaration()
+                .is_some_and(|definition| definition.kind() != etas_code::DefinitionKind::Flow)
+            {
+                return Err(invalid(
+                    "source flow body binding has the wrong declaration kind",
                 ));
             }
         }

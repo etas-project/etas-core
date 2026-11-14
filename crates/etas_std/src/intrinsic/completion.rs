@@ -1,6 +1,8 @@
 use super::{StdIntrinsicId, pure, runtime};
 
-#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub enum IntrinsicCompletionSemantics {
     /// The operation returns a checked value, including Result-based failures.
     /// Resource exhaustion remains an invocation failure, not a language result.

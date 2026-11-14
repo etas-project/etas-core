@@ -1,4 +1,13 @@
-#[derive(Clone, Debug, Default, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    etas_core::RetainedSize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub struct DocsMetadata {
     pub summary: String,
 }

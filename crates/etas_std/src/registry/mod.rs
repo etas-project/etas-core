@@ -5,11 +5,13 @@ mod checked_index;
 mod collection;
 mod default_action;
 mod enum_constructor;
+mod image;
 pub mod lookup;
 pub mod module;
 pub mod prelude;
 mod validation;
 mod value_role;
+pub use image::StdRegistryImage;
 
 pub use builder::StdRegistryBuilder;
 pub use module::{
@@ -26,7 +28,8 @@ use crate::{IntrinsicDescriptor, StdImplFact, StdIntrinsicId};
 pub struct StdRegistry {
     version: StdRegistryVersion,
     modules: Vec<StdModule>,
-    symbols: Vec<StdSymbol>,
+    symbols: Vec<Option<StdSymbol>>,
+    bodies: BTreeMap<u32, crate::StdBodyBinding>,
     prelude: StdPrelude,
     qualified: BTreeMap<Vec<String>, StdSymbolId>,
     intrinsics: BTreeMap<StdIntrinsicId, IntrinsicDescriptor>,
@@ -53,7 +56,44 @@ impl StdRegistry {
     }
 
     pub fn symbols(&self) -> impl Iterator<Item = &StdSymbol> {
-        self.symbols.iter()
+        self.symbols.iter().flatten()
+    }
+
+    /// Native/type bootstrap view. Removed source slots preserve the numeric
+    /// native ABI addresses shared with the checked library image.
+    pub fn native_bootstrap(&self) -> Self {
+        let mut registry = self.clone();
+        let source_ids = self
+            .symbols()
+            .filter(|symbol| {
+                matches!(
+                    symbol.implementation,
+                    Some(
+                        crate::StdImplementationRef::Source { .. }
+                            | crate::StdImplementationRef::Artifact { .. }
+                    )
+                )
+            })
+            .map(|symbol| symbol.id)
+            .collect::<std::collections::BTreeSet<_>>();
+        for id in &source_ids {
+            registry.symbols[id.0 as usize] = None;
+        }
+        registry.qualified.retain(|_, id| !source_ids.contains(id));
+        registry.prelude.remove_symbols(&source_ids);
+        registry
+            .flow_overloads
+            .retain(|id, _| !source_ids.contains(id));
+        registry.bodies.clear();
+        registry
+    }
+
+    pub fn body_binding(&self, symbol: StdSymbolId) -> Option<&crate::StdBodyBinding> {
+        let crate::StdImplementationRef::Artifact { body } = self.symbol(symbol)?.implementation?
+        else {
+            return None;
+        };
+        self.bodies.get(&body)
     }
 
     /// Module-level declarations and explicit re-exports, retaining canonical identity.
@@ -78,7 +118,7 @@ impl StdRegistry {
     }
 
     pub fn symbol(&self, id: StdSymbolId) -> Option<&StdSymbol> {
-        self.symbols.get(id.0 as usize)
+        self.symbols.get(id.0 as usize).and_then(Option::as_ref)
     }
 
     /// All static signatures share one resolved symbol and intrinsic identity.
@@ -170,7 +210,7 @@ impl StdRegistry {
         self.qualified
             .entry(symbol.qualified_path.clone())
             .or_insert(symbol.id);
-        self.symbols.push(symbol);
+        self.symbols.push(Some(symbol));
     }
 
     pub(crate) fn prelude_mut(&mut self) -> &mut StdPrelude {

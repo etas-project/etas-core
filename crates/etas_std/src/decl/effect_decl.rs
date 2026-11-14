@@ -1,6 +1,8 @@
 use super::{StdGenericParam, StdType};
 
-#[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub struct EffectDecl {
     pub name: String,
     pub params: Vec<StdGenericParam>,
@@ -67,7 +69,9 @@ impl EffectDecl {
     }
 }
 
-#[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub struct EffectActionDecl {
     pub owner: String,
     pub name: String,
@@ -89,6 +93,7 @@ pub struct EffectActionDecl {
 
 #[derive(
     serde::Serialize,
+    serde::Deserialize,
     Clone,
     Copy,
     Debug,
@@ -105,15 +110,19 @@ pub enum CompilerActionRole {
     TaskAwait,
 }
 
-#[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub enum EffectActionArgKind {
     Type,
     MemoryPlace,
-    StaticResourcePath { ty: &'static str },
+    StaticResourcePath { ty: std::borrow::Cow<'static, str> },
     StringPattern,
 }
 
-#[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub enum StdRuntimeRequirement {
     Agentic,
     ToolCall,

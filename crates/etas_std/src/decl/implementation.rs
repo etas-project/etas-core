@@ -2,6 +2,7 @@ use crate::StdIntrinsicId;
 
 #[derive(
     serde::Serialize,
+    serde::Deserialize,
     Clone,
     Copy,
     Debug,
@@ -17,7 +18,9 @@ pub enum StdLibrarySourceId {
     TextFormat,
 }
 
-#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub enum StdImplementationDeterminism {
     Deterministic,
     RuntimeMediated,
@@ -45,15 +48,29 @@ impl StdSourceImplementation {
     }
 }
 
-#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub enum StdImplementationRef {
     Primitive {
         intrinsic: StdIntrinsicId,
     },
+    #[serde(skip_deserializing)]
     Source {
         target: StdSourceImplementation,
         optimized_intrinsic: Option<StdIntrinsicId>,
     },
+    /// Bundle-local address; its canonical definition is in the registry image.
+    Artifact {
+        body: u32,
+    },
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub struct StdBodyBinding {
+    pub callable: etas_code::CallableId,
 }
 
 impl StdImplementationRef {

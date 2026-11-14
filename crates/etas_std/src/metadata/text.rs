@@ -1,4 +1,6 @@
-#[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub struct TextCompatibilityDescriptor {
     pub public_contract: String,
     pub primitive_abi: String,

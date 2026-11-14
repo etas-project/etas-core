@@ -88,6 +88,28 @@ mod tests {
     }
 
     #[test]
+    fn library_bodies_share_the_package_container_without_changing_public_metadata() {
+        let metadata = sample_metadata();
+        let original = encode_sample(&metadata);
+        let path = Path::new("std.etasmeta");
+        let decoded = decode_metadata_artifact(path, &original).unwrap();
+        let mut sections = package_metadata_to_sections(&metadata).unwrap();
+        let body = b"checked library body graph".to_vec();
+        sections.push(EncodedMetadataSection {
+            kind: MetadataSectionKind::LibraryBodies,
+            payload: body.clone(),
+        });
+        let bytes = encode_metadata_artifact(&decoded.header, sections).unwrap();
+        let loaded = decode_metadata_artifact(path, &bytes).unwrap();
+        assert_eq!(
+            loaded.sections.get(&MetadataSectionKind::LibraryBodies),
+            Some(&body)
+        );
+        let (_, public) = package_metadata_from_artifact(path, &bytes).unwrap();
+        assert_eq!(public, metadata);
+    }
+
+    #[test]
     fn metadata_artifact_round_trips_package_metadata() {
         let metadata = sample_metadata();
         let bytes = encode_sample(&metadata);

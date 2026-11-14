@@ -38,7 +38,9 @@ pub enum RuntimeTypeRole {
     Continuation,
 }
 
-#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub enum RuntimeFieldRole {
     CommandExitCode,
     CommandStdout,

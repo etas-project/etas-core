@@ -17,7 +17,8 @@ pub use effect_ref::{StdEffectRef, StdEffectRowExpr, StdStaticArg};
 pub use flow_decl::{FlowDecl, FlowSourceMethod, FlowSourceMethodKind, FlowSourceMethodOperation};
 pub use impl_decl::StdImplFact;
 pub use implementation::{
-    StdImplementationDeterminism, StdImplementationRef, StdLibrarySourceId, StdSourceImplementation,
+    StdBodyBinding, StdImplementationDeterminism, StdImplementationRef, StdLibrarySourceId,
+    StdSourceImplementation,
 };
 pub use requirement::{RequirementDecl, RequirementKind, RequirementSemantics, StdLimitKind};
 pub use runtime_type::{RuntimeField, RuntimeFieldRole, RuntimeTypeRole};
@@ -31,7 +32,9 @@ pub use type_decl::{
 };
 pub use value_decl::{StdValueRole, ValueDecl};
 
-#[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub enum StdDecl {
     Type(TypeDecl),
     Effect(EffectDecl),

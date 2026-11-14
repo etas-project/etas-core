@@ -121,6 +121,31 @@ per module, and exits unsuccessfully if the inventories differ. Source body or
 native binding changes still need runtime differential verification; this
 inventory is an audit format, not a loadable std bundle.
 
+The maintained source package is `crates/etas_std/etas.toml`, with source root
+`library`. The text files declare `std.text` as module parts so moving a flow
+between files preserves its canonical name. Public flow declarations live in
+those `.es` files. The fixed embedded-source table remains the legacy provider's
+implementation asset list; source library discovery scans the manifest root.
+`StdRegistry::native_bootstrap` exposes the transitional Rust type/primitive
+contract without any source-backed legacy declarations. Native symbol IDs stay
+unchanged, so source definitions can acquire their own canonical identities.
+The final minimal bootstrap and artifact provider are separate migration stages.
+
+`StdRegistryImage` serializes the query data, native contracts, public exports,
+prelude and source callable identities. `into_registry` validates its references
+and contracts before publishing the query view. Native symbol addresses survive
+removed source slots, and new source callables use `CallableId` bindings rather
+than legacy source enums. Legacy embedded-source implementations cannot be
+decoded from an artifact image. Static resource type names retain borrowed
+storage in Rust tables and owned storage when decoded.
+
+The reader below constructs its registry entirely from the image:
+
+```bash
+cargo run --offline --locked -p etas_std --example std_registry_image -- export-native /tmp/std-native.json
+target/debug/examples/std_registry_image read /tmp/std-native.json
+```
+
 ## Downstream Use
 
 Committed downstream dependencies use the repository Git identity. During

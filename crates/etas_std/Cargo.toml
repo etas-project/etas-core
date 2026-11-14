@@ -1,6 +1,6 @@
 [package]
 name = "etas_std"
-version = "0.2.1"
+version = "0.2.4"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -8,6 +8,7 @@ repository.workspace = true
 
 [dependencies]
 etas_core.workspace = true
+etas_code.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 blake3.workspace = true

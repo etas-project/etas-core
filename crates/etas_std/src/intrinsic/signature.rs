@@ -1,6 +1,8 @@
 use super::{LoweringHint, StdIntrinsicId};
 
-#[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub struct IntrinsicDescriptor {
     pub id: StdIntrinsicId,
     pub qualified_path: Vec<String>,
@@ -27,14 +29,18 @@ impl IntrinsicDescriptor {
     }
 }
 
-#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub enum IntrinsicPurity {
     Pure,
     Runtime,
     Host,
 }
 
-#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub enum IntrinsicDispatch {
     PureKernel,
     Runtime,
@@ -42,14 +48,34 @@ pub enum IntrinsicDispatch {
     LoweringOnly,
 }
 
-#[derive(serde::Serialize, Clone, Copy, Debug, Default, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    etas_core::RetainedSize,
+)]
 pub enum IntrinsicLatentEffect {
     #[default]
     None,
     TransparentFirstArg,
 }
 
-#[derive(serde::Serialize, Clone, Copy, Debug, Default, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    etas_core::RetainedSize,
+)]
 pub enum IntrinsicMemoryAccess {
     #[default]
     None,
@@ -59,7 +85,17 @@ pub enum IntrinsicMemoryAccess {
     ReadWriteFirstArgStore,
 }
 
-#[derive(serde::Serialize, Clone, Copy, Debug, Default, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    etas_core::RetainedSize,
+)]
 pub enum IntrinsicRuntimeRequirement {
     #[default]
     None,

@@ -2,12 +2,28 @@ use std::collections::BTreeMap;
 
 use super::StdSymbolId;
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    etas_core::RetainedSize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub struct StdPrelude {
     symbols: BTreeMap<String, Vec<StdSymbolRef>>,
 }
 
 impl StdPrelude {
+    pub(crate) fn remove_symbols(&mut self, ids: &std::collections::BTreeSet<StdSymbolId>) {
+        self.symbols.retain(|_, bindings| {
+            bindings.retain(|binding| !ids.contains(&binding.id));
+            !bindings.is_empty()
+        });
+    }
+
     pub fn insert(&mut self, name: impl Into<String>, id: StdSymbolId) {
         let name = name.into();
         let candidates = self.symbols.entry(name.clone()).or_default();
@@ -32,7 +48,9 @@ impl StdPrelude {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, etas_core::RetainedSize, serde::Serialize, serde::Deserialize,
+)]
 pub struct StdSymbolRef {
     pub name: String,
     pub id: StdSymbolId,

@@ -10,10 +10,10 @@ pub use decl::{
     CodeTypeRole, CompilerActionRole, EffectActionArgKind, EffectActionDecl, EffectDecl, FlowDecl,
     FlowSourceMethod, FlowSourceMethodKind, FlowSourceMethodOperation, RequirementDecl,
     RequirementKind, RequirementSemantics, RuntimeField, RuntimeFieldRole, RuntimeTypeRole,
-    StdDecl, StdEffectRef, StdEffectRowExpr, StdGenericParam, StdGenericParamKind, StdImplFact,
-    StdImplementationDeterminism, StdImplementationRef, StdIterableItem, StdLibrarySourceId,
-    StdLimitKind, StdPrimitiveType, StdRecordField, StdRuntimeRequirement, StdSpecRef,
-    StdStaticArg, StdSupportConstraint, StdTrustWrapper, StdType, StdTypeConstruction,
+    StdBodyBinding, StdDecl, StdEffectRef, StdEffectRowExpr, StdGenericParam, StdGenericParamKind,
+    StdImplFact, StdImplementationDeterminism, StdImplementationRef, StdIterableItem,
+    StdLibrarySourceId, StdLimitKind, StdPrimitiveType, StdRecordField, StdRuntimeRequirement,
+    StdSpecRef, StdStaticArg, StdSupportConstraint, StdTrustWrapper, StdType, StdTypeConstruction,
     StdValueRole, ToolDecl, TypeDecl, TypeDeclKind, ValueDecl,
 };
 pub use intrinsic::{
@@ -28,6 +28,6 @@ pub use metadata::{CompletionMetadata, DocsMetadata, StdManifest, TextCompatibil
 pub use modules::standard_registry;
 pub use registry::{
     StdModule, StdModuleId, StdNamespace, StdPrelude, StdRegistry, StdRegistryBuilder,
-    StdRegistryValidationError, StdRegistryVersion, StdSymbol, StdSymbolId, StdSymbolKind,
-    StdSymbolRef,
+    StdRegistryImage, StdRegistryValidationError, StdRegistryVersion, StdSymbol, StdSymbolId,
+    StdSymbolKind, StdSymbolRef,
 };
