@@ -1,4 +1,4 @@
-#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum LoweringHint {
     None,
     PureBuiltin,
@@ -22,7 +22,7 @@ pub enum LoweringHint {
     },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum StdTaskIntrinsic {
     Run,
     Start,
@@ -38,7 +38,7 @@ pub enum StdTaskIntrinsic {
     MapConcurrentCollect,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum StdActionReducer {
     BoundedDirectoryList {
         entry_limit_parameter: usize,

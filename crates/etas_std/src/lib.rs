@@ -2,6 +2,7 @@ pub mod decl;
 pub mod intrinsic;
 pub mod library;
 pub mod metadata;
+pub mod migration;
 pub mod modules;
 pub mod registry;
 

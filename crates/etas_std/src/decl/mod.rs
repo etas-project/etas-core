@@ -31,7 +31,7 @@ pub use type_decl::{
 };
 pub use value_decl::{StdValueRole, ValueDecl};
 
-#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum StdDecl {
     Type(TypeDecl),
     Effect(EffectDecl),

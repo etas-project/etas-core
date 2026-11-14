@@ -38,14 +38,14 @@ pub enum RuntimeTypeRole {
     Continuation,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
 pub enum RuntimeFieldRole {
     CommandExitCode,
     CommandStdout,
     CommandStderr,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RuntimeField {
     pub name: &'static str,
     pub ty: StdPrimitiveType,
