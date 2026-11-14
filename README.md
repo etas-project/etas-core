@@ -126,6 +126,10 @@ The maintained source package is `crates/etas_std/etas.toml`, with source root
 between files preserves its canonical name. Public flow declarations live in
 those `.es` files. The fixed embedded-source table remains the legacy provider's
 implementation asset list; source library discovery scans the manifest root.
+`StdRegistry::native_bootstrap` exposes the transitional Rust type/primitive
+contract without any source-backed legacy declarations. Native symbol IDs stay
+unchanged, so source definitions can acquire their own canonical identities.
+The final minimal bootstrap and artifact provider are separate migration stages.
 
 ## Downstream Use
 
