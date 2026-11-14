@@ -12,7 +12,7 @@ use crate::MetadataArtifactError;
 
 pub const PACKAGE_METADATA_FILE: &str = ".etas/package.etasmeta";
 pub const MAGIC: &[u8; 8] = b"ETASMETA";
-pub const ARTIFACT_SCHEMA_VERSION: u32 = 47;
+pub const ARTIFACT_SCHEMA_VERSION: u32 = 48;
 pub const COMPRESSION_ZSTD: u8 = 1;
 const SECTION_TABLE_ENTRY_SIZE: usize = 2 + 1 + 8 + 8 + 8 + 32;
 pub const MAX_METADATA_ARTIFACT_SIZE: usize = 64 * 1024 * 1024;
@@ -34,6 +34,8 @@ pub enum MetadataSectionKind {
     StdContracts = 7,
     PackageGraph = 8,
     PublicSymbols = 9,
+    /// Compiler-owned checked body graph, paired with the public package data.
+    LibraryBodies = 10,
 }
 
 impl MetadataSectionKind {
@@ -48,6 +50,7 @@ impl MetadataSectionKind {
             7 => Ok(Self::StdContracts),
             8 => Ok(Self::PackageGraph),
             9 => Ok(Self::PublicSymbols),
+            10 => Ok(Self::LibraryBodies),
             _ => Err(MetadataArtifactError::invalid(
                 PACKAGE_METADATA_FILE,
                 format!("package metadata artifact has unknown section kind `{value}`"),
