@@ -55,7 +55,9 @@ impl StdRegistryBuilder {
                 matches!(
                     original.implementation,
                     Some(StdImplementationRef::Primitive { .. })
-                ) && matches!(original.decl, StdDecl::Flow(_)),
+                ) && (matches!(original.decl, StdDecl::Flow(_))
+                    || (original.kind == StdSymbolKind::Constructor
+                        && matches!(original.decl, StdDecl::Type(_)))),
                 "source flow can replace a native flow contract only"
             );
             let id = original.id;
@@ -90,6 +92,22 @@ impl StdRegistryBuilder {
             self.registry.declarations.insert(symbol, key).is_none(),
             "source declaration already bound"
         );
+    }
+
+    /// The source owns role parameter names; the compiler retains its execution role.
+    pub fn source_type_parameters(
+        &mut self,
+        symbol: StdSymbolId,
+        parameters: Vec<crate::StdGenericParam>,
+    ) {
+        let declaration = &mut self.registry.symbols[symbol.0 as usize]
+            .as_mut()
+            .expect("source role symbol")
+            .decl;
+        let StdDecl::Type(declaration) = declaration else {
+            panic!("checked source type role");
+        };
+        declaration.params = parameters;
     }
 
     pub fn named_enum_fields(&mut self, constructor: StdSymbolId, names: Vec<String>) {
@@ -366,6 +384,14 @@ impl StdRegistryBuilder {
 
     pub fn spec_impl(&mut self, implementation: StdImplFact) {
         self.registry.push_spec_impl(implementation);
+    }
+
+    /// Replace a bootstrap spec's implementations with its checked bundle facts.
+    pub fn replace_spec_impls(&mut self, path: &[String], implementations: Vec<StdImplFact>) {
+        self.registry
+            .spec_impls
+            .retain(|implementation| implementation.spec.path != path);
+        self.registry.spec_impls.extend(implementations);
     }
 
     pub fn finish(self) -> StdRegistry {

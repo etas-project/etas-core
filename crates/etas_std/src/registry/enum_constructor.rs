@@ -26,6 +26,10 @@ pub(super) fn validate(
     let StdDecl::Flow(flow) = &symbol.decl else {
         return Err(invalid("enum constructor must have a callable signature"));
     };
+    let result_role = owner.qualified_path == ["std", "result", "Result"];
+    if result_role && decl.params.len() != 2 {
+        return Err(invalid("Result role requires two type parameters"));
+    }
     let mut expected_path = owner.qualified_path.clone();
     expected_path.push(flow.name.clone());
     if symbol.kind != StdSymbolKind::Constructor
@@ -48,7 +52,12 @@ pub(super) fn validate(
         ));
     }
     let name = owner.qualified_path.join(".");
-    let output = if decl.params.is_empty() {
+    let output = if result_role {
+        StdType::Result {
+            ok: Box::new(StdType::Var(decl.params[0].name.clone())),
+            err: Box::new(StdType::Var(decl.params[1].name.clone())),
+        }
+    } else if decl.params.is_empty() {
         StdType::Named(name)
     } else {
         StdType::NamedApplied {

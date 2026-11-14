@@ -131,6 +131,20 @@ contract without any source-backed legacy declarations. Native symbol IDs stay
 unchanged, so source definitions can acquire their own canonical identities.
 The final minimal bootstrap remains a separate migration gate.
 
+The maintained `std.core` source owns the `Index` marker spec and its integer
+implementations. `std.result` owns the `Result<T, E>` enum, its `Ok`/`Err`
+constructor flows and `is_ok`/`is_err` functions and methods. Checked roles keep
+the existing Result value ABI and constructor-pattern semantics; the Rust
+query view takes parameter names, enum payloads and Index impls from the bundle.
+Descriptor schema 12 carries typed Result return tags across processes.
+
+Public standard-library declarations and algorithms belong in Etas. Rust keeps
+execution rules such as continuation capture/resume and Result representation,
+and host primitives for threads, I/O and storage. A generated `StdRegistry`
+query view is part of loading the checked source bundle. The transitional
+compiler/host contract catalog still needs a minimality audit; disabling the
+complete legacy registry factory alone does not finish std source ownership.
+
 Native-backed flows can own their public declaration in Etas source:
 
 ```etas

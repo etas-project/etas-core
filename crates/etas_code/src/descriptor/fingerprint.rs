@@ -308,6 +308,10 @@ impl DescriptorGraph {
                                         encoder.fingerprint(owner.fingerprint());
                                         encoder.bytes(name.as_bytes());
                                     }
+                                    ReturnObservationInfo::Result(value) => {
+                                        encoder.tag(4);
+                                        encoder.tag(u8::from(*value));
+                                    }
                                 }
                             }
                         }
@@ -402,6 +406,10 @@ fn encode_parameter_call(encoder: &mut CanonicalEncoder, call: &ParameterCallInf
                                     encoder.tag(3);
                                     encoder.fingerprint(owner.fingerprint());
                                     encoder.bytes(name.as_bytes());
+                                }
+                                super::ReturnObservationInfo::Result(value) => {
+                                    encoder.tag(4);
+                                    encoder.tag(u8::from(*value));
                                 }
                             }
                         }

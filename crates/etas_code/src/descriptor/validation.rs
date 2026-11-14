@@ -741,6 +741,10 @@ impl Validator<'_> {
                     }
                     break;
                 }
+                Some(TypeInfo::Builtin {
+                    constructor: super::BuiltinTypeInfo::Result,
+                    ..
+                }) if matches!(observation, ReturnObservationInfo::Result(_)) => return Ok(()),
                 None => {
                     return Err(DescriptorError::MissingReference {
                         from: node,

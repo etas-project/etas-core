@@ -167,6 +167,7 @@ fn encode_observation(observation: &ReturnObservationInfo) -> p::Observation {
             ReturnObservationInfo::Any => p::observation::Kind::Any(true),
             ReturnObservationInfo::Unit => p::observation::Kind::Unit(true),
             ReturnObservationInfo::Bool(value) => p::observation::Kind::Bool(*value),
+            ReturnObservationInfo::Result(value) => p::observation::Kind::Result(*value),
             ReturnObservationInfo::Variant { owner, name } => {
                 p::observation::Kind::Variant(p::VariantObservation {
                     owner: Some(encode_key(owner)),
@@ -183,6 +184,7 @@ fn decode_observation(observation: p::Observation) -> Result<ReturnObservationIn
             p::observation::Kind::Any(true) => ReturnObservationInfo::Any,
             p::observation::Kind::Unit(true) => ReturnObservationInfo::Unit,
             p::observation::Kind::Bool(value) => ReturnObservationInfo::Bool(value),
+            p::observation::Kind::Result(value) => ReturnObservationInfo::Result(value),
             p::observation::Kind::Variant(value) => ReturnObservationInfo::Variant {
                 owner: decode_key(required(value.owner, "return variant owner")?)?,
                 name: value.name,
@@ -200,19 +202,7 @@ fn encode_outcome(outcome: &CallableOutcomeInfo) -> p::Outcome {
         kind: Some(match outcome {
             CallableOutcomeInfo::Returned { ty, observation } => K::Returned(p::Returned {
                 ty: ty.0,
-                observation: Some(p::Observation {
-                    kind: Some(match observation {
-                        ReturnObservationInfo::Any => p::observation::Kind::Any(true),
-                        ReturnObservationInfo::Unit => p::observation::Kind::Unit(true),
-                        ReturnObservationInfo::Bool(value) => p::observation::Kind::Bool(*value),
-                        ReturnObservationInfo::Variant { owner, name } => {
-                            p::observation::Kind::Variant(p::VariantObservation {
-                                owner: Some(encode_key(owner)),
-                                name: name.clone(),
-                            })
-                        }
-                    }),
-                }),
+                observation: Some(encode_observation(observation)),
             }),
             CallableOutcomeInfo::Raised { error } => K::Raised(error.0),
             CallableOutcomeInfo::NonReturn => K::NonReturn(true),
@@ -231,21 +221,7 @@ fn decode_outcome(outcome: p::Outcome) -> Result<CallableOutcomeInfo, Error> {
     Ok(match required(outcome.kind, "callable outcome")? {
         K::Returned(value) => CallableOutcomeInfo::Returned {
             ty: TypeInfoRef(value.ty),
-            observation: match required(
-                required(value.observation, "return observation")?.kind,
-                "return observation kind",
-            )? {
-                p::observation::Kind::Any(true) => ReturnObservationInfo::Any,
-                p::observation::Kind::Unit(true) => ReturnObservationInfo::Unit,
-                p::observation::Kind::Bool(value) => ReturnObservationInfo::Bool(value),
-                p::observation::Kind::Variant(value) => ReturnObservationInfo::Variant {
-                    owner: decode_key(required(value.owner, "return variant owner")?)?,
-                    name: value.name,
-                },
-                p::observation::Kind::Any(false) | p::observation::Kind::Unit(false) => {
-                    return Err(invalid("invalid return observation marker"));
-                }
-            },
+            observation: decode_observation(required(value.observation, "return observation")?)?,
         },
         K::Raised(error) => CallableOutcomeInfo::Raised {
             error: TypeInfoRef(error),

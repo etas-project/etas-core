@@ -176,7 +176,12 @@ pub enum ReturnObservationInfo {
     Any,
     Unit,
     Bool(bool),
-    Variant { owner: DefinitionKey, name: String },
+    /// The compiler-managed Result tag: true for Ok, false for Err.
+    Result(bool),
+    Variant {
+        owner: DefinitionKey,
+        name: String,
+    },
 }
 
 #[derive(
