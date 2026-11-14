@@ -38,6 +38,33 @@ impl StdRegistryBuilder {
         self.registry
             .bodies
             .insert(body, crate::StdBodyBinding { callable });
+        let mut path = self
+            .registry
+            .module(module)
+            .expect("source module")
+            .path
+            .clone();
+        path.push(name.to_owned());
+        if let Some(mut original) = self
+            .registry
+            .lookup_qualified(&path)
+            .cloned()
+            .filter(|symbol| symbol.qualified_path == path)
+        {
+            assert!(
+                matches!(
+                    original.implementation,
+                    Some(StdImplementationRef::Primitive { .. })
+                ) && matches!(original.decl, StdDecl::Flow(_)),
+                "source flow can replace a native flow contract only"
+            );
+            let id = original.id;
+            original.decl = StdDecl::Flow(declaration);
+            original.intrinsic = None;
+            original.implementation = Some(StdImplementationRef::Artifact { body });
+            self.registry.symbols[id.0 as usize] = Some(original);
+            return id;
+        }
         self.symbol_with_implementation(
             module,
             name,

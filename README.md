@@ -129,7 +129,23 @@ implementation asset list; source library discovery scans the manifest root.
 `StdRegistry::native_bootstrap` exposes the transitional Rust type/primitive
 contract without any source-backed legacy declarations. Native symbol IDs stay
 unchanged, so source definitions can acquire their own canonical identities.
-The final minimal bootstrap and artifact provider are separate migration stages.
+The final minimal bootstrap remains a separate migration gate.
+
+Native-backed flows can own their public declaration in Etas source:
+
+```etas
+@std.binding("std.text.trim")
+public flow trim(value: string) -> string ![] {}
+```
+
+The compiler accepts this annotation only in an explicit std source build,
+requires an empty body and explicit result/effects, and checks parameters,
+generic bounds and public effects against the primitive ABI. It emits a checked
+call to the primitive through a private native binding identity. Public source
+exports replace their bootstrap slots without changing prelude/re-export IDs;
+application calls still enter the installed source owner. Generic type and
+effect arguments are forwarded through the normal checked invocation pipeline.
+`std.text.trim` is the first maintained native-backed source declaration.
 
 `StdRegistryImage` serializes the query data, native contracts, public exports,
 prelude and source callable identities. `into_registry` validates its references
