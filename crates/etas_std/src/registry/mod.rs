@@ -24,6 +24,7 @@ use crate::{IntrinsicDescriptor, StdImplFact, StdIntrinsicId};
 
 #[derive(Clone, Debug, Default, etas_core::RetainedSize)]
 pub struct StdRegistry {
+    hide_source_declarations: bool,
     version: StdRegistryVersion,
     modules: Vec<StdModule>,
     symbols: Vec<StdSymbol>,
@@ -53,7 +54,40 @@ impl StdRegistry {
     }
 
     pub fn symbols(&self) -> impl Iterator<Item = &StdSymbol> {
-        self.symbols.iter()
+        self.symbols
+            .iter()
+            .filter(|symbol| self.symbol_visible(symbol))
+    }
+
+    /// Transitional native/type contract for checking source std. Source-backed
+    /// legacy declarations are absent from all public symbol lookups; retained
+    /// native symbols keep their existing ABI identities.
+    pub fn native_bootstrap(&self) -> Self {
+        let mut registry = self.clone();
+        registry.hide_source_declarations = true;
+        let source_ids = self
+            .symbols()
+            .filter(|symbol| {
+                matches!(
+                    symbol.implementation,
+                    Some(crate::StdImplementationRef::Source { .. })
+                )
+            })
+            .map(|symbol| symbol.id)
+            .collect::<std::collections::BTreeSet<_>>();
+        registry.qualified.retain(|_, id| !source_ids.contains(id));
+        registry
+            .flow_overloads
+            .retain(|id, _| !source_ids.contains(id));
+        registry
+    }
+
+    fn symbol_visible(&self, symbol: &StdSymbol) -> bool {
+        !self.hide_source_declarations
+            || !matches!(
+                symbol.implementation,
+                Some(crate::StdImplementationRef::Source { .. })
+            )
     }
 
     /// Module-level declarations and explicit re-exports, retaining canonical identity.
@@ -78,7 +112,9 @@ impl StdRegistry {
     }
 
     pub fn symbol(&self, id: StdSymbolId) -> Option<&StdSymbol> {
-        self.symbols.get(id.0 as usize)
+        self.symbols
+            .get(id.0 as usize)
+            .filter(|symbol| self.symbol_visible(symbol))
     }
 
     /// All static signatures share one resolved symbol and intrinsic identity.
