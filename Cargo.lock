@@ -252,7 +252,7 @@ dependencies = [
 
 [[package]]
 name = "etas_core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "etas_memory_derive",
  "serde",
@@ -309,9 +309,10 @@ dependencies = [
 
 [[package]]
 name = "etas_std"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "blake3",
+ "etas_code",
  "etas_core",
  "serde",
  "serde_json",

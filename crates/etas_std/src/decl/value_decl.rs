@@ -1,6 +1,8 @@
 use super::StdType;
 
-#[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub struct ValueDecl {
     pub name: String,
     pub ty: StdType,

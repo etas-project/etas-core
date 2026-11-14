@@ -20,6 +20,34 @@ impl StdRegistryBuilder {
         }
     }
 
+    pub fn from_registry(registry: StdRegistry) -> Self {
+        Self { registry }
+    }
+
+    pub fn source_flow(
+        &mut self,
+        module: StdModuleId,
+        name: &str,
+        declaration: crate::FlowDecl,
+        callable: etas_code::CallableId,
+        summary: &str,
+    ) -> StdSymbolId {
+        let body = self.registry.bodies.last_key_value().map_or(0, |(id, _)| {
+            id.checked_add(1).expect("std body identity capacity")
+        });
+        self.registry
+            .bodies
+            .insert(body, crate::StdBodyBinding { callable });
+        self.symbol_with_implementation(
+            module,
+            name,
+            StdSymbolKind::Flow,
+            StdDecl::Flow(declaration),
+            summary,
+            (None, Some(StdImplementationRef::Artifact { body })),
+        )
+    }
+
     pub fn module(&mut self, path: &[&str], summary: &str) -> StdModuleId {
         let id = StdModuleId(self.registry.modules().count() as u32);
         self.registry.push_module(StdModule {
@@ -94,7 +122,7 @@ impl StdRegistryBuilder {
         runtime: (Option<IntrinsicDescriptor>, Option<StdImplementationRef>),
     ) -> StdSymbolId {
         let (intrinsic, implementation) = runtime;
-        let id = StdSymbolId(self.registry.symbols().count() as u32);
+        let id = StdSymbolId(self.registry.symbols.len() as u32);
         let module_path = self
             .registry
             .module(module)
@@ -149,7 +177,7 @@ impl StdRegistryBuilder {
         let module = symbol.module;
         let mut qualified_path = symbol.qualified_path.clone();
         qualified_path.push(declaration.name.clone());
-        let id = StdSymbolId(self.registry.symbols().count() as u32);
+        let id = StdSymbolId(self.registry.symbols.len() as u32);
         self.registry.push_symbol(StdSymbol {
             id,
             module,

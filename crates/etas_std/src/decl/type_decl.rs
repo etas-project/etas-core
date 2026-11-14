@@ -1,6 +1,8 @@
 use super::std_type::StdType;
 
-#[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub struct TypeDecl {
     pub name: String,
     pub params: Vec<StdGenericParam>,
@@ -109,7 +111,9 @@ impl TypeDecl {
     }
 }
 
-#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub enum StdIterableItem {
     Element { parameter: usize },
     Entry { key: usize, value: usize },
@@ -125,14 +129,25 @@ impl StdIterableItem {
     }
 }
 
-#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub enum StdTypeConstruction {
     Public,
     IntrinsicOnly,
 }
 
 #[derive(
-    serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, etas_core::RetainedSize,
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    etas_core::RetainedSize,
 )]
 pub enum CodeTypeRole {
     AgentDefinition,
@@ -167,14 +182,26 @@ impl CodeTypeRole {
     }
 }
 
-#[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub struct StdGenericParam {
     pub name: String,
     pub kind: StdGenericParamKind,
     pub bounds: Vec<StdSpecRef>,
 }
 
-#[derive(serde::Serialize, Clone, Copy, Debug, Default, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    etas_core::RetainedSize,
+)]
 pub enum StdGenericParamKind {
     #[default]
     Type,
@@ -207,7 +234,9 @@ impl StdGenericParam {
     }
 }
 
-#[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub struct StdSpecRef {
     pub path: Vec<String>,
     pub args: Vec<StdType>,
@@ -229,7 +258,9 @@ impl StdSpecRef {
     }
 }
 
-#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub enum TypeDeclKind {
     Primitive,
     Struct,

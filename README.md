@@ -131,6 +131,21 @@ contract without any source-backed legacy declarations. Native symbol IDs stay
 unchanged, so source definitions can acquire their own canonical identities.
 The final minimal bootstrap and artifact provider are separate migration stages.
 
+`StdRegistryImage` serializes the query data, native contracts, public exports,
+prelude and source callable identities. `into_registry` validates its references
+and contracts before publishing the query view. Native symbol addresses survive
+removed source slots, and new source callables use `CallableId` bindings rather
+than legacy source enums. Legacy embedded-source implementations cannot be
+decoded from an artifact image. Static resource type names retain borrowed
+storage in Rust tables and owned storage when decoded.
+
+The reader below constructs its registry entirely from the image:
+
+```bash
+cargo run --offline --locked -p etas_std --example std_registry_image -- export-native /tmp/std-native.json
+target/debug/examples/std_registry_image read /tmp/std-native.json
+```
+
 ## Downstream Use
 
 Committed downstream dependencies use the repository Git identity. During

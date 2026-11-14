@@ -6,7 +6,16 @@ use crate::{
 etas_core::id_type!(StdModuleId);
 etas_core::id_type!(StdSymbolId);
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    etas_core::RetainedSize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub struct StdRegistryVersion {
     pub contract: String,
     pub text: TextCompatibilityDescriptor,
@@ -25,14 +34,18 @@ impl StdRegistryVersion {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, etas_core::RetainedSize, serde::Serialize, serde::Deserialize,
+)]
 pub struct StdModule {
     pub id: StdModuleId,
     pub path: Vec<String>,
     pub docs: DocsMetadata,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, etas_core::RetainedSize, serde::Serialize, serde::Deserialize,
+)]
 pub struct StdSymbol {
     pub id: StdSymbolId,
     pub module: StdModuleId,
@@ -47,7 +60,9 @@ pub struct StdSymbol {
     pub completion: CompletionMetadata,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize, serde::Serialize, serde::Deserialize,
+)]
 pub enum StdSymbolKind {
     Type,
     Constructor,
@@ -60,7 +75,19 @@ pub enum StdSymbolKind {
     Module,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, etas_core::RetainedSize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    etas_core::RetainedSize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub enum StdNamespace {
     Type,
     Value,

@@ -553,7 +553,7 @@ fn registry_declares_minimal_standard_effect_action_vocabulary() {
     assert_eq!(
         command_run.effect_args,
         vec![EffectActionArgKind::StaticResourcePath {
-            ty: "std.host.sandbox.SandboxProfile"
+            ty: std::borrow::Cow::Borrowed("std.host.sandbox.SandboxProfile")
         }]
     );
 
@@ -1439,7 +1439,7 @@ fn registry_distinguishes_anonymous_selectors_from_type_parameter_bindings() {
         (EffectActionArgKind::StringPattern, "", vec![], true),
         (
             EffectActionArgKind::StaticResourcePath {
-                ty: "BrowserProfile",
+                ty: std::borrow::Cow::Borrowed("BrowserProfile"),
             },
             "",
             vec![],

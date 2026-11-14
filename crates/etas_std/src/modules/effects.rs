@@ -370,7 +370,7 @@ const STANDARD_ACTIONS: &[StandardActionSpec] = &[
         stable_id: 83,
         runtime_requirement: StdRuntimeRequirement::Command,
         effect_args: &[EffectActionArgKind::StaticResourcePath {
-            ty: "std.host.sandbox.SandboxProfile",
+            ty: std::borrow::Cow::Borrowed("std.host.sandbox.SandboxProfile"),
         }],
         high_impact_ack: true,
         description: "Command run action.",
@@ -383,7 +383,7 @@ const STANDARD_ACTIONS: &[StandardActionSpec] = &[
         stable_id: 151,
         runtime_requirement: StdRuntimeRequirement::Command,
         effect_args: &[EffectActionArgKind::StaticResourcePath {
-            ty: "std.host.sandbox.SandboxProfile",
+            ty: std::borrow::Cow::Borrowed("std.host.sandbox.SandboxProfile"),
         }],
         high_impact_ack: true,
         description: "Background command start action.",
@@ -396,7 +396,7 @@ const STANDARD_ACTIONS: &[StandardActionSpec] = &[
         stable_id: 152,
         runtime_requirement: StdRuntimeRequirement::Command,
         effect_args: &[EffectActionArgKind::StaticResourcePath {
-            ty: "std.host.sandbox.SandboxProfile",
+            ty: std::borrow::Cow::Borrowed("std.host.sandbox.SandboxProfile"),
         }],
         high_impact_ack: true,
         description: "Background command reconnect action.",
@@ -409,7 +409,7 @@ const STANDARD_ACTIONS: &[StandardActionSpec] = &[
         stable_id: 153,
         runtime_requirement: StdRuntimeRequirement::Command,
         effect_args: &[EffectActionArgKind::StaticResourcePath {
-            ty: "CommandHandle",
+            ty: std::borrow::Cow::Borrowed("CommandHandle"),
         }],
         high_impact_ack: false,
         description: "Background command incremental output action.",
@@ -422,7 +422,7 @@ const STANDARD_ACTIONS: &[StandardActionSpec] = &[
         stable_id: 154,
         runtime_requirement: StdRuntimeRequirement::Command,
         effect_args: &[EffectActionArgKind::StaticResourcePath {
-            ty: "CommandHandle",
+            ty: std::borrow::Cow::Borrowed("CommandHandle"),
         }],
         high_impact_ack: true,
         description: "Background command input action.",
@@ -435,7 +435,7 @@ const STANDARD_ACTIONS: &[StandardActionSpec] = &[
         stable_id: 155,
         runtime_requirement: StdRuntimeRequirement::Command,
         effect_args: &[EffectActionArgKind::StaticResourcePath {
-            ty: "CommandHandle",
+            ty: std::borrow::Cow::Borrowed("CommandHandle"),
         }],
         high_impact_ack: true,
         description: "Background command stop action.",
@@ -470,7 +470,9 @@ const STANDARD_ACTIONS: &[StandardActionSpec] = &[
         stable_id: 88,
         runtime_requirement: StdRuntimeRequirement::Agentic,
         effect_args: &[
-            EffectActionArgKind::StaticResourcePath { ty: "Agent" },
+            EffectActionArgKind::StaticResourcePath {
+                ty: std::borrow::Cow::Borrowed("Agent"),
+            },
             EffectActionArgKind::Type,
         ],
         high_impact_ack: false,
@@ -663,7 +665,7 @@ const STANDARD_ACTIONS: &[StandardActionSpec] = &[
         stable_id: 141,
         runtime_requirement: StdRuntimeRequirement::Browser,
         effect_args: &[EffectActionArgKind::StaticResourcePath {
-            ty: "BrowserProfile",
+            ty: std::borrow::Cow::Borrowed("BrowserProfile"),
         }],
         high_impact_ack: false,
         description: "Browser protocol attach action.",
@@ -676,7 +678,7 @@ const STANDARD_ACTIONS: &[StandardActionSpec] = &[
         stable_id: 142,
         runtime_requirement: StdRuntimeRequirement::Browser,
         effect_args: &[EffectActionArgKind::StaticResourcePath {
-            ty: "BrowserSession",
+            ty: std::borrow::Cow::Borrowed("BrowserSession"),
         }],
         high_impact_ack: false,
         description: "Browser protocol send action.",
@@ -689,7 +691,7 @@ const STANDARD_ACTIONS: &[StandardActionSpec] = &[
         stable_id: 143,
         runtime_requirement: StdRuntimeRequirement::Browser,
         effect_args: &[EffectActionArgKind::StaticResourcePath {
-            ty: "BrowserSession",
+            ty: std::borrow::Cow::Borrowed("BrowserSession"),
         }],
         high_impact_ack: false,
         description: "Browser protocol receive action.",
@@ -702,7 +704,7 @@ const STANDARD_ACTIONS: &[StandardActionSpec] = &[
         stable_id: 144,
         runtime_requirement: StdRuntimeRequirement::Browser,
         effect_args: &[EffectActionArgKind::StaticResourcePath {
-            ty: "BrowserSession",
+            ty: std::borrow::Cow::Borrowed("BrowserSession"),
         }],
         high_impact_ack: false,
         description: "Browser protocol close action.",
@@ -715,7 +717,7 @@ const STANDARD_ACTIONS: &[StandardActionSpec] = &[
         stable_id: 145,
         runtime_requirement: StdRuntimeRequirement::Browser,
         effect_args: &[EffectActionArgKind::StaticResourcePath {
-            ty: "BrowserSession",
+            ty: std::borrow::Cow::Borrowed("BrowserSession"),
         }],
         high_impact_ack: false,
         description: "Browser protocol screenshot action.",
