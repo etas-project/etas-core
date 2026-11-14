@@ -206,8 +206,22 @@ fn validate_inner(
                 }
                 let mut seen = BTreeSet::new();
                 for parameter in parameters {
-                    validator.binder_kind(node, *parameter, GenericParameterKind::Type)?;
-                    let binder = &input.binders[parameter.0 as usize];
+                    let binder = input.binders.get(parameter.0 as usize).ok_or(
+                        DescriptorError::MissingReference {
+                            from: node,
+                            target: DescriptorNode::Binder(*parameter),
+                        },
+                    )?;
+                    let opaque_effect = matches!(
+                        ty,
+                        TypeInfo::Nominal {
+                            representation: None,
+                            ..
+                        }
+                    ) && binder.kind == GenericParameterKind::EffectRow;
+                    if !opaque_effect {
+                        validator.binder_kind(node, *parameter, GenericParameterKind::Type)?;
+                    }
                     if binder.owner != GenericOwner::Declaration(definition.clone())
                         || !seen.insert(*parameter)
                     {
@@ -252,6 +266,17 @@ fn validate_inner(
                     return Err(DescriptorError::Invalid {
                         node,
                         reason: "applied type generic arity differs from its constructor",
+                    });
+                }
+                if parameters.iter().any(|parameter| {
+                    input
+                        .binders
+                        .get(parameter.0 as usize)
+                        .is_some_and(|binder| binder.kind == GenericParameterKind::EffectRow)
+                }) {
+                    return Err(DescriptorError::Invalid {
+                        node,
+                        reason: "type arguments cannot fill an opaque effect-row parameter; use its structural constructor",
                     });
                 }
             }

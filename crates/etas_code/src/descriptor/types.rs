@@ -80,12 +80,14 @@ pub enum BuiltinTypeInfo {
     Sanitized,
     /// A checked `CallableDef<F>` role supplied by the standard registry.
     CallableDefinition,
+    SchedulerHandle,
+    Continuation,
 }
 
 impl BuiltinTypeInfo {
     pub const fn arity(self) -> usize {
         match self {
-            Self::Prompt | Self::PromptPart => 0,
+            Self::Prompt | Self::PromptPart | Self::SchedulerHandle => 0,
             Self::Map | Self::Result | Self::Store => 2,
             _ => 1,
         }

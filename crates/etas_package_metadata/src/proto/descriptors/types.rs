@@ -64,7 +64,9 @@ enum_codec!(
     Secret = 20,
     Public = 21,
     Sanitized = 22,
-    CallableDefinition = 23
+    CallableDefinition = 23,
+    SchedulerHandle = 24,
+    Continuation = 25
 );
 
 fn refs(values: &[TypeInfoRef]) -> Vec<u32> {

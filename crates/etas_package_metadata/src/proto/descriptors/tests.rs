@@ -657,6 +657,8 @@ fn every_primitive_and_compiler_constructor_has_a_stable_wire_mapping() {
         B::Secret,
         B::Public,
         B::Sanitized,
+        B::SchedulerHandle,
+        B::Continuation,
         B::CallableDefinition,
     ];
     let set = DefinitionDescriptorSet {
@@ -679,7 +681,7 @@ fn every_primitive_and_compiler_constructor_has_a_stable_wire_mapping() {
         declarations: vec![],
     };
     let wire = to_proto(&set);
-    assert_eq!(wire.version, 8);
+    assert_eq!(wire.version, 11);
     assert_eq!(from_proto(wire.clone()).unwrap(), set);
     let mut downgraded = wire;
     downgraded.version = 1;

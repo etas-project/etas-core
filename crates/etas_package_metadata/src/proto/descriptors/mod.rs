@@ -159,6 +159,24 @@ pub(super) fn to_proto(set: &DefinitionDescriptorSet) -> ProtoDescriptorGraph {
     let input = &set.graph;
     ProtoDescriptorGraph {
         version: match &set.headers {
+            _ if input.types.iter().any(|ty| match ty {
+                etas_code::descriptor::TypeInfo::Builtin {
+                    constructor:
+                        etas_code::descriptor::BuiltinTypeInfo::SchedulerHandle
+                        | etas_code::descriptor::BuiltinTypeInfo::Continuation,
+                    ..
+                } => true,
+                etas_code::descriptor::TypeInfo::Nominal { parameters, .. } => {
+                    parameters.iter().any(|parameter| {
+                        input.binders[parameter.0 as usize].kind
+                            == etas_code::descriptor::GenericParameterKind::EffectRow
+                    })
+                }
+                _ => false,
+            }) =>
+            {
+                11
+            }
             _ if input.binders.iter().any(|binder| {
                 matches!(
                     binder.owner,
@@ -262,12 +280,28 @@ pub(super) fn from_proto(
             | (8, Some((_, _, true)))
             | (9, _)
             | (10, _)
+            | (11, _)
     ) {
         return Err(invalid("unsupported descriptor graph schema"));
     }
     let has_callable_definition = input.types.iter().any(|ty| {
         matches!(&ty.kind, Some(schema::ty::Kind::Builtin(builtin)) if builtin.constructor == 23)
     });
+    let has_task_control = input.types.iter().any(|ty| match &ty.kind {
+        Some(schema::ty::Kind::Builtin(builtin)) => matches!(builtin.constructor, 24 | 25),
+        Some(schema::ty::Kind::Nominal(nominal)) => nominal.parameters.iter().any(|parameter| {
+            input
+                .binders
+                .get(*parameter as usize)
+                .is_some_and(|binder| binder.kind == 2)
+        }),
+        _ => false,
+    });
+    if has_task_control != (input.version == 11) {
+        return Err(invalid(
+            "task control types require their descriptor schema",
+        ));
+    }
     let has_existential = input
         .types
         .iter()
@@ -284,12 +318,14 @@ pub(super) fn from_proto(
             )
         )
     });
-    if has_implementation_binders != (input.version == 10) {
+    if (has_implementation_binders && input.version < 10)
+        || (input.version == 10 && !has_implementation_binders)
+    {
         return Err(invalid(
             "implementation binders require their descriptor schema",
         ));
     }
-    if (has_callable_definition && !matches!(input.version, 8..=10))
+    if (has_callable_definition && !matches!(input.version, 8..=11))
         || (input.version == 8 && !has_callable_definition)
     {
         return Err(invalid(
@@ -297,7 +333,7 @@ pub(super) fn from_proto(
         ));
     }
     if (matches!(input.version, 5..=7)
-        || (matches!(input.version, 8..=10)
+        || (matches!(input.version, 8..=11)
             && input.headers.as_ref().is_some_and(|headers| {
                 headers
                     .agents
@@ -320,7 +356,7 @@ pub(super) fn from_proto(
         .as_ref()
         .and_then(|headers| headers.snapshots.as_ref())
         .is_some_and(|snapshots| !snapshots.flows.is_empty());
-    if (has_flows && !matches!(input.version, 6..=10)) || (input.version == 6 && !has_flows) {
+    if (has_flows && !matches!(input.version, 6..=11)) || (input.version == 6 && !has_flows) {
         return Err(invalid(
             "flow snapshot coordinates require their descriptor schema",
         ));
@@ -330,7 +366,7 @@ pub(super) fn from_proto(
         .as_ref()
         .and_then(|headers| headers.snapshots.as_ref())
         .is_some_and(|snapshots| !snapshots.methods.is_empty());
-    if (has_methods && !matches!(input.version, 7..=10)) || (input.version == 7 && !has_methods) {
+    if (has_methods && !matches!(input.version, 7..=11)) || (input.version == 7 && !has_methods) {
         return Err(invalid(
             "method snapshot coordinates require their descriptor schema",
         ));
