@@ -20,6 +20,19 @@ pub fn map<S: Serializer, K: Serialize + Ord, V: Serialize>(
     output.end()
 }
 
+pub fn sources<S: Serializer, V: Serialize>(
+    value: &HashMap<etas_core::SourceId, V>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    let mut entries = value.iter().collect::<Vec<_>>();
+    entries.sort_unstable_by_key(|(source, _)| source.0);
+    let mut output = serializer.serialize_map(Some(entries.len()))?;
+    for (source, value) in entries {
+        output.serialize_entry(source, value)?;
+    }
+    output.end()
+}
+
 pub fn set<S: Serializer, T: Serialize + Ord>(
     value: &HashSet<T>,
     serializer: S,

@@ -2,6 +2,7 @@ use crate::StdIntrinsicId;
 
 #[derive(
     serde::Serialize,
+    serde::Deserialize,
     Clone,
     Copy,
     Debug,
