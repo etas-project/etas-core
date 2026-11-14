@@ -1,0 +1,6228 @@
+{
+  "aliases": [
+    [
+      [
+        "std",
+        "text",
+        "InvalidFormat"
+      ],
+      [
+        "std",
+        "text",
+        "TextError",
+        "InvalidFormat"
+      ]
+    ],
+    [
+      [
+        "std",
+        "text",
+        "InvalidIndex"
+      ],
+      [
+        "std",
+        "text",
+        "TextError",
+        "InvalidIndex"
+      ]
+    ],
+    [
+      [
+        "std",
+        "text",
+        "InvalidRange"
+      ],
+      [
+        "std",
+        "text",
+        "TextError",
+        "InvalidRange"
+      ]
+    ],
+    [
+      [
+        "std",
+        "text",
+        "LengthOverflow"
+      ],
+      [
+        "std",
+        "text",
+        "TextError",
+        "LengthOverflow"
+      ]
+    ],
+    [
+      [
+        "std",
+        "text",
+        "NotCharBoundary"
+      ],
+      [
+        "std",
+        "text",
+        "TextError",
+        "NotCharBoundary"
+      ]
+    ],
+    [
+      [
+        "std",
+        "text",
+        "NumericOverflow"
+      ],
+      [
+        "std",
+        "text",
+        "TextError",
+        "NumericOverflow"
+      ]
+    ],
+    [
+      [
+        "std",
+        "text",
+        "ParseFailure"
+      ],
+      [
+        "std",
+        "text",
+        "TextError",
+        "ParseFailure"
+      ]
+    ]
+  ],
+  "compatibility": {
+    "contract": "phase1",
+    "text": {
+      "primitive_abi": "etas.std.text.primitive-abi.v1",
+      "public_contract": "etas.std.text.contract.v1",
+      "source_implementation": "etas.std.text.source.v1",
+      "target_usize_bits": 64,
+      "unicode_algorithm": "etas.std.text.unicode.v1",
+      "unicode_data_fingerprint": "7c74aebf116629b6",
+      "unicode_version": "17.0.0"
+    }
+  },
+  "contracts": [
+    {
+      "declaration": {
+        "Flow": {
+          "name": "utf8_encode",
+          "output": {
+            "Primitive": "Bytes"
+          },
+          "params": [
+            {
+              "Primitive": "String"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "codec",
+        "text",
+        "utf8_encode"
+      ],
+      "primitive": {
+        "dispatch": "PureKernel",
+        "id": 30,
+        "latent_effect": "None",
+        "lowering": "PureBuiltin",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "codec",
+          "text",
+          "utf8_encode"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Support",
+          "name": "Array",
+          "params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "T"
+            }
+          ],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "collections",
+        "Array"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "IntrinsicOnly",
+          "derivable": false,
+          "iterable_item": {
+            "Element": {
+              "parameter": 0
+            }
+          },
+          "kind": "Support",
+          "name": "Iter",
+          "params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "T"
+            }
+          ],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "collections",
+        "Iter"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Support",
+          "name": "List",
+          "params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "T"
+            }
+          ],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "collections",
+        "List"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Support",
+          "name": "Map",
+          "params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "K"
+            },
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "V"
+            }
+          ],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "collections",
+        "Map"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Support",
+          "name": "Range",
+          "params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "I"
+            }
+          ],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "collections",
+        "Range"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Support",
+          "name": "Set",
+          "params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "T"
+            }
+          ],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "collections",
+        "Set"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Support",
+          "name": "Slice",
+          "params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "T"
+            }
+          ],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "collections",
+        "Slice"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "get",
+          "output": {
+            "Option": {
+              "Var": "T"
+            }
+          },
+          "params": [
+            {
+              "Array": {
+                "Var": "T"
+              }
+            },
+            {
+              "Var": "I"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": {
+            "kind": "ValueMethod",
+            "name": "get",
+            "operation": "Call",
+            "owner_type_params": [],
+            "receiver": {
+              "Array": {
+                "Var": "T"
+              }
+            }
+          },
+          "type_params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "T"
+            },
+            {
+              "bounds": [
+                {
+                  "args": [],
+                  "path": [
+                    "std",
+                    "core",
+                    "Index"
+                  ]
+                }
+              ],
+              "kind": "Type",
+              "name": "I"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "collections",
+        "array_get"
+      ],
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 3000,
+        "latent_effect": "None",
+        "lowering": {
+          "Collection": {
+            "kind": "Array",
+            "operation": "Get"
+          }
+        },
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "collections",
+          "array_get"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "push",
+          "output": {
+            "Array": {
+              "Var": "T"
+            }
+          },
+          "params": [
+            {
+              "Array": {
+                "Var": "T"
+              }
+            },
+            {
+              "Var": "T"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": {
+            "kind": "ValueMethod",
+            "name": "push",
+            "operation": "Call",
+            "owner_type_params": [],
+            "receiver": {
+              "Array": {
+                "Var": "T"
+              }
+            }
+          },
+          "type_params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "T"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "collections",
+        "array_push"
+      ],
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 3004,
+        "latent_effect": "None",
+        "lowering": {
+          "Collection": {
+            "kind": "Array",
+            "operation": "Push"
+          }
+        },
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "collections",
+          "array_push"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": "ActionSummary",
+          "construction": "IntrinsicOnly",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "ActionSummary",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "ActionSummary"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": "AgentDefinition",
+          "construction": "IntrinsicOnly",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "AgentDef",
+          "params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "A"
+            }
+          ],
+          "projected_fields": [
+            {
+              "name": "body",
+              "ty": {
+                "Option": {
+                  "Named": "std.compiler.SyntaxBlock"
+                }
+              }
+            },
+            {
+              "name": "effects",
+              "ty": {
+                "Named": "std.compiler.EffectSummary"
+              }
+            },
+            {
+              "name": "determinism",
+              "ty": {
+                "Option": {
+                  "Named": "std.compiler.Determinism"
+                }
+              }
+            },
+            {
+              "name": "trace",
+              "ty": {
+                "Option": {
+                  "Named": "std.compiler.TraceSummary"
+                }
+              }
+            },
+            {
+              "name": "revision",
+              "ty": {
+                "Named": "std.compiler.RevisionInfo"
+              }
+            },
+            {
+              "name": "dependencies",
+              "ty": {
+                "Named": "std.compiler.DependencyInfo"
+              }
+            },
+            {
+              "name": "signature",
+              "ty": {
+                "Option": {
+                  "Named": "std.compiler.SignatureInfo"
+                }
+              }
+            },
+            {
+              "name": "identity",
+              "ty": {
+                "Named": "std.compiler.AgentId"
+              }
+            },
+            {
+              "name": "annotations",
+              "ty": {
+                "Array": {
+                  "Named": "std.compiler.AnnotationInfo"
+                }
+              }
+            },
+            {
+              "name": "tools",
+              "ty": {
+                "Array": {
+                  "Named": "std.compiler.ToolRef"
+                }
+              }
+            },
+            {
+              "name": "specs",
+              "ty": {
+                "Array": {
+                  "Named": "std.compiler.SpecInfo"
+                }
+              }
+            },
+            {
+              "name": "methods",
+              "ty": {
+                "Array": {
+                  "Named": "std.compiler.CallableDef"
+                }
+              }
+            }
+          ],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "AgentDef"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": "AgentId",
+          "construction": "IntrinsicOnly",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "AgentId",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "AgentId"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "AnalysisStep",
+          "params": [],
+          "projected_fields": [],
+          "representation": {
+            "Record": [
+              {
+                "name": "callable",
+                "ty": {
+                  "Named": "std.compiler.CallableId"
+                }
+              },
+              {
+                "name": "location",
+                "ty": {
+                  "Option": {
+                    "Named": "std.compiler.DiagnosticLocation"
+                  }
+                }
+              },
+              {
+                "name": "message",
+                "ty": {
+                  "Primitive": "String"
+                }
+              }
+            ]
+          },
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "AnalysisStep"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "AnnotationArgumentInfo",
+          "params": [],
+          "projected_fields": [
+            {
+              "name": "name",
+              "ty": {
+                "Option": {
+                  "Primitive": "String"
+                }
+              }
+            },
+            {
+              "name": "value",
+              "ty": {
+                "Named": "std.compiler.StaticValueInfo"
+              }
+            }
+          ],
+          "representation": {
+            "Record": [
+              {
+                "name": "name",
+                "ty": {
+                  "Option": {
+                    "Primitive": "String"
+                  }
+                }
+              },
+              {
+                "name": "value",
+                "ty": {
+                  "Named": "std.compiler.StaticValueInfo"
+                }
+              }
+            ]
+          },
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "AnnotationArgumentInfo"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "AnnotationInfo",
+          "params": [],
+          "projected_fields": [
+            {
+              "name": "path",
+              "ty": {
+                "Array": {
+                  "Primitive": "String"
+                }
+              }
+            },
+            {
+              "name": "arguments",
+              "ty": {
+                "Array": {
+                  "Named": "std.compiler.AnnotationArgumentInfo"
+                }
+              }
+            }
+          ],
+          "representation": {
+            "Record": [
+              {
+                "name": "path",
+                "ty": {
+                  "Array": {
+                    "Primitive": "String"
+                  }
+                }
+              },
+              {
+                "name": "arguments",
+                "ty": {
+                  "Array": {
+                    "Named": "std.compiler.AnnotationArgumentInfo"
+                  }
+                }
+              }
+            ]
+          },
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "AnnotationInfo"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": "CallableDefinition",
+          "construction": "IntrinsicOnly",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "CallableDef",
+          "params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "F"
+            }
+          ],
+          "projected_fields": [
+            {
+              "name": "body",
+              "ty": {
+                "Option": {
+                  "Named": "std.compiler.SyntaxBlock"
+                }
+              }
+            },
+            {
+              "name": "effects",
+              "ty": {
+                "Named": "std.compiler.EffectSummary"
+              }
+            },
+            {
+              "name": "determinism",
+              "ty": {
+                "Option": {
+                  "Named": "std.compiler.Determinism"
+                }
+              }
+            },
+            {
+              "name": "trace",
+              "ty": {
+                "Option": {
+                  "Named": "std.compiler.TraceSummary"
+                }
+              }
+            },
+            {
+              "name": "revision",
+              "ty": {
+                "Named": "std.compiler.RevisionInfo"
+              }
+            },
+            {
+              "name": "dependencies",
+              "ty": {
+                "Named": "std.compiler.DependencyInfo"
+              }
+            },
+            {
+              "name": "id",
+              "ty": {
+                "Named": "std.compiler.CallableId"
+              }
+            },
+            {
+              "name": "signature",
+              "ty": {
+                "Named": "std.compiler.SignatureInfo"
+              }
+            }
+          ],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "CallableDef"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": "CallableId",
+          "construction": "IntrinsicOnly",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "CallableId",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "CallableId"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "ChangeReport",
+          "params": [],
+          "projected_fields": [
+            {
+              "name": "schema",
+              "ty": {
+                "Primitive": "String"
+              }
+            },
+            {
+              "name": "identity",
+              "ty": {
+                "Named": "std.compiler.DefinitionId"
+              }
+            },
+            {
+              "name": "old_revision",
+              "ty": {
+                "Named": "std.compiler.RevisionInfo"
+              }
+            },
+            {
+              "name": "new_revision",
+              "ty": {
+                "Named": "std.compiler.RevisionInfo"
+              }
+            },
+            {
+              "name": "old_body_available",
+              "ty": {
+                "Primitive": "Bool"
+              }
+            },
+            {
+              "name": "new_body_available",
+              "ty": {
+                "Primitive": "Bool"
+              }
+            },
+            {
+              "name": "body_changed",
+              "ty": {
+                "Option": {
+                  "Primitive": "Bool"
+                }
+              }
+            },
+            {
+              "name": "signature_changed",
+              "ty": {
+                "Primitive": "Bool"
+              }
+            },
+            {
+              "name": "dependencies_changed",
+              "ty": {
+                "Primitive": "Bool"
+              }
+            },
+            {
+              "name": "declared_bound_changed",
+              "ty": {
+                "Primitive": "Bool"
+              }
+            },
+            {
+              "name": "escaping_changed",
+              "ty": {
+                "Option": {
+                  "Primitive": "Bool"
+                }
+              }
+            },
+            {
+              "name": "requested_changed",
+              "ty": {
+                "Option": {
+                  "Primitive": "Bool"
+                }
+              }
+            },
+            {
+              "name": "default_handled_changed",
+              "ty": {
+                "Option": {
+                  "Primitive": "Bool"
+                }
+              }
+            },
+            {
+              "name": "determinism_changed",
+              "ty": {
+                "Option": {
+                  "Primitive": "Bool"
+                }
+              }
+            },
+            {
+              "name": "trace_changed",
+              "ty": {
+                "Option": {
+                  "Primitive": "Bool"
+                }
+              }
+            }
+          ],
+          "representation": {
+            "Record": [
+              {
+                "name": "schema",
+                "ty": {
+                  "Primitive": "String"
+                }
+              },
+              {
+                "name": "identity",
+                "ty": {
+                  "Named": "std.compiler.DefinitionId"
+                }
+              },
+              {
+                "name": "old_revision",
+                "ty": {
+                  "Named": "std.compiler.RevisionInfo"
+                }
+              },
+              {
+                "name": "new_revision",
+                "ty": {
+                  "Named": "std.compiler.RevisionInfo"
+                }
+              },
+              {
+                "name": "old_body_available",
+                "ty": {
+                  "Primitive": "Bool"
+                }
+              },
+              {
+                "name": "new_body_available",
+                "ty": {
+                  "Primitive": "Bool"
+                }
+              },
+              {
+                "name": "body_changed",
+                "ty": {
+                  "Option": {
+                    "Primitive": "Bool"
+                  }
+                }
+              },
+              {
+                "name": "signature_changed",
+                "ty": {
+                  "Primitive": "Bool"
+                }
+              },
+              {
+                "name": "dependencies_changed",
+                "ty": {
+                  "Primitive": "Bool"
+                }
+              },
+              {
+                "name": "declared_bound_changed",
+                "ty": {
+                  "Primitive": "Bool"
+                }
+              },
+              {
+                "name": "escaping_changed",
+                "ty": {
+                  "Option": {
+                    "Primitive": "Bool"
+                  }
+                }
+              },
+              {
+                "name": "requested_changed",
+                "ty": {
+                  "Option": {
+                    "Primitive": "Bool"
+                  }
+                }
+              },
+              {
+                "name": "default_handled_changed",
+                "ty": {
+                  "Option": {
+                    "Primitive": "Bool"
+                  }
+                }
+              },
+              {
+                "name": "determinism_changed",
+                "ty": {
+                  "Option": {
+                    "Primitive": "Bool"
+                  }
+                }
+              },
+              {
+                "name": "trace_changed",
+                "ty": {
+                  "Option": {
+                    "Primitive": "Bool"
+                  }
+                }
+              }
+            ]
+          },
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "ChangeReport"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "CheckReport",
+          "params": [],
+          "projected_fields": [
+            {
+              "name": "status",
+              "ty": {
+                "Primitive": "String"
+              }
+            },
+            {
+              "name": "diagnostics",
+              "ty": {
+                "Array": {
+                  "Named": "std.compiler.DiagnosticRecord"
+                }
+              }
+            },
+            {
+              "name": "revision",
+              "ty": {
+                "Named": "std.compiler.RevisionInfo"
+              }
+            },
+            {
+              "name": "dependencies",
+              "ty": {
+                "Named": "std.compiler.DependencyInfo"
+              }
+            },
+            {
+              "name": "snapshot_fingerprint",
+              "ty": {
+                "Primitive": "String"
+              }
+            },
+            {
+              "name": "effects",
+              "ty": {
+                "Named": "std.compiler.EffectSummary"
+              }
+            },
+            {
+              "name": "determinism",
+              "ty": {
+                "Option": {
+                  "Named": "std.compiler.Determinism"
+                }
+              }
+            },
+            {
+              "name": "trace",
+              "ty": {
+                "Option": {
+                  "Named": "std.compiler.TraceSummary"
+                }
+              }
+            },
+            {
+              "name": "runtime_checks",
+              "ty": {
+                "Array": {
+                  "Named": "std.compiler.RuntimeCheckInfo"
+                }
+              }
+            }
+          ],
+          "representation": {
+            "Record": [
+              {
+                "name": "status",
+                "ty": {
+                  "Primitive": "String"
+                }
+              },
+              {
+                "name": "diagnostics",
+                "ty": {
+                  "Array": {
+                    "Named": "std.compiler.DiagnosticRecord"
+                  }
+                }
+              },
+              {
+                "name": "revision",
+                "ty": {
+                  "Named": "std.compiler.RevisionInfo"
+                }
+              },
+              {
+                "name": "dependencies",
+                "ty": {
+                  "Named": "std.compiler.DependencyInfo"
+                }
+              },
+              {
+                "name": "snapshot_fingerprint",
+                "ty": {
+                  "Primitive": "String"
+                }
+              },
+              {
+                "name": "effects",
+                "ty": {
+                  "Named": "std.compiler.EffectSummary"
+                }
+              },
+              {
+                "name": "determinism",
+                "ty": {
+                  "Option": {
+                    "Named": "std.compiler.Determinism"
+                  }
+                }
+              },
+              {
+                "name": "trace",
+                "ty": {
+                  "Option": {
+                    "Named": "std.compiler.TraceSummary"
+                  }
+                }
+              },
+              {
+                "name": "runtime_checks",
+                "ty": {
+                  "Array": {
+                    "Named": "std.compiler.RuntimeCheckInfo"
+                  }
+                }
+              }
+            ]
+          },
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "CheckReport"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "CompileError",
+          "params": [],
+          "projected_fields": [],
+          "representation": {
+            "Record": [
+              {
+                "name": "kind",
+                "ty": {
+                  "Primitive": "String"
+                }
+              },
+              {
+                "name": "diagnostics",
+                "ty": {
+                  "Array": {
+                    "Named": "std.compiler.DiagnosticRecord"
+                  }
+                }
+              }
+            ]
+          },
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "CompileError"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "DefinitionBindingInfo",
+          "params": [],
+          "projected_fields": [
+            {
+              "name": "path",
+              "ty": {
+                "Array": {
+                  "Primitive": "String"
+                }
+              }
+            },
+            {
+              "name": "definition",
+              "ty": {
+                "Named": "std.compiler.DefinitionId"
+              }
+            }
+          ],
+          "representation": {
+            "Record": [
+              {
+                "name": "path",
+                "ty": {
+                  "Array": {
+                    "Primitive": "String"
+                  }
+                }
+              },
+              {
+                "name": "definition",
+                "ty": {
+                  "Named": "std.compiler.DefinitionId"
+                }
+              }
+            ]
+          },
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "DefinitionBindingInfo"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": "DefinitionId",
+          "construction": "IntrinsicOnly",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "DefinitionId",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "DefinitionId"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "DependencyArtifactInfo",
+          "params": [],
+          "projected_fields": [
+            {
+              "name": "import_root",
+              "ty": {
+                "Primitive": "String"
+              }
+            },
+            {
+              "name": "fingerprint",
+              "ty": {
+                "Primitive": "String"
+              }
+            }
+          ],
+          "representation": {
+            "Record": [
+              {
+                "name": "import_root",
+                "ty": {
+                  "Primitive": "String"
+                }
+              },
+              {
+                "name": "fingerprint",
+                "ty": {
+                  "Primitive": "String"
+                }
+              }
+            ]
+          },
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "DependencyArtifactInfo"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "DependencyInfo",
+          "params": [],
+          "projected_fields": [
+            {
+              "name": "environment",
+              "ty": {
+                "Primitive": "String"
+              }
+            },
+            {
+              "name": "lexical_owner",
+              "ty": {
+                "Named": "std.compiler.DefinitionId"
+              }
+            },
+            {
+              "name": "standard_package",
+              "ty": {
+                "Primitive": "String"
+              }
+            },
+            {
+              "name": "modules",
+              "ty": {
+                "Array": {
+                  "Named": "std.compiler.ModuleOriginInfo"
+                }
+              }
+            },
+            {
+              "name": "bindings",
+              "ty": {
+                "Array": {
+                  "Named": "std.compiler.DefinitionBindingInfo"
+                }
+              }
+            },
+            {
+              "name": "artifacts",
+              "ty": {
+                "Array": {
+                  "Named": "std.compiler.DependencyArtifactInfo"
+                }
+              }
+            }
+          ],
+          "representation": {
+            "Record": [
+              {
+                "name": "environment",
+                "ty": {
+                  "Primitive": "String"
+                }
+              },
+              {
+                "name": "lexical_owner",
+                "ty": {
+                  "Named": "std.compiler.DefinitionId"
+                }
+              },
+              {
+                "name": "standard_package",
+                "ty": {
+                  "Primitive": "String"
+                }
+              },
+              {
+                "name": "modules",
+                "ty": {
+                  "Array": {
+                    "Named": "std.compiler.ModuleOriginInfo"
+                  }
+                }
+              },
+              {
+                "name": "bindings",
+                "ty": {
+                  "Array": {
+                    "Named": "std.compiler.DefinitionBindingInfo"
+                  }
+                }
+              },
+              {
+                "name": "artifacts",
+                "ty": {
+                  "Array": {
+                    "Named": "std.compiler.DependencyArtifactInfo"
+                  }
+                }
+              }
+            ]
+          },
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "DependencyInfo"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": "DescriptorDetail",
+          "construction": "IntrinsicOnly",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "DescriptorDetail",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "DescriptorDetail"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": "Determinism",
+          "construction": "IntrinsicOnly",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "Determinism",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "Determinism"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "DiagnosticDetails",
+          "params": [],
+          "projected_fields": [],
+          "representation": {
+            "Record": [
+              {
+                "name": "expected",
+                "ty": {
+                  "Option": {
+                    "Named": "std.compiler.DescriptorDetail"
+                  }
+                }
+              },
+              {
+                "name": "actual",
+                "ty": {
+                  "Option": {
+                    "Named": "std.compiler.DescriptorDetail"
+                  }
+                }
+              },
+              {
+                "name": "constraint",
+                "ty": {
+                  "Option": {
+                    "Named": "std.compiler.ViolatedConstraint"
+                  }
+                }
+              },
+              {
+                "name": "related",
+                "ty": {
+                  "Array": {
+                    "Named": "std.compiler.RelatedLocation"
+                  }
+                }
+              },
+              {
+                "name": "analysis_path",
+                "ty": {
+                  "Array": {
+                    "Named": "std.compiler.AnalysisStep"
+                  }
+                }
+              },
+              {
+                "name": "trace_witness",
+                "ty": {
+                  "Option": {
+                    "Named": "std.compiler.TraceWitness"
+                  }
+                }
+              }
+            ]
+          },
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "DiagnosticDetails"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "DiagnosticLocation",
+          "params": [],
+          "projected_fields": [],
+          "representation": {
+            "Record": [
+              {
+                "name": "source",
+                "ty": {
+                  "Primitive": "String"
+                }
+              },
+              {
+                "name": "revision",
+                "ty": {
+                  "Primitive": "String"
+                }
+              },
+              {
+                "name": "byte_start",
+                "ty": {
+                  "Primitive": "USize"
+                }
+              },
+              {
+                "name": "byte_end",
+                "ty": {
+                  "Primitive": "USize"
+                }
+              }
+            ]
+          },
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "DiagnosticLocation"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "DiagnosticRecord",
+          "params": [],
+          "projected_fields": [],
+          "representation": {
+            "Record": [
+              {
+                "name": "code",
+                "ty": {
+                  "Primitive": "String"
+                }
+              },
+              {
+                "name": "severity",
+                "ty": {
+                  "Primitive": "String"
+                }
+              },
+              {
+                "name": "message",
+                "ty": {
+                  "Primitive": "String"
+                }
+              },
+              {
+                "name": "location",
+                "ty": {
+                  "Option": {
+                    "Named": "std.compiler.DiagnosticLocation"
+                  }
+                }
+              },
+              {
+                "name": "details",
+                "ty": {
+                  "Option": {
+                    "Named": "std.compiler.DiagnosticDetails"
+                  }
+                }
+              }
+            ]
+          },
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "DiagnosticRecord"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": "EffectRowInfo",
+          "construction": "IntrinsicOnly",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "EffectRowInfo",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "EffectRowInfo"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "EffectSummary",
+          "params": [],
+          "projected_fields": [
+            {
+              "name": "declared_bound",
+              "ty": {
+                "Option": {
+                  "Named": "std.compiler.EffectRowInfo"
+                }
+              }
+            },
+            {
+              "name": "escaping",
+              "ty": {
+                "Option": {
+                  "Named": "std.compiler.EffectRowInfo"
+                }
+              }
+            },
+            {
+              "name": "requested",
+              "ty": {
+                "Option": {
+                  "Named": "std.compiler.ActionSummary"
+                }
+              }
+            },
+            {
+              "name": "default_handled",
+              "ty": {
+                "Option": {
+                  "Named": "std.compiler.ActionSummary"
+                }
+              }
+            }
+          ],
+          "representation": {
+            "Record": [
+              {
+                "name": "declared_bound",
+                "ty": {
+                  "Option": {
+                    "Named": "std.compiler.EffectRowInfo"
+                  }
+                }
+              },
+              {
+                "name": "escaping",
+                "ty": {
+                  "Option": {
+                    "Named": "std.compiler.EffectRowInfo"
+                  }
+                }
+              },
+              {
+                "name": "requested",
+                "ty": {
+                  "Option": {
+                    "Named": "std.compiler.ActionSummary"
+                  }
+                }
+              },
+              {
+                "name": "default_handled",
+                "ty": {
+                  "Option": {
+                    "Named": "std.compiler.ActionSummary"
+                  }
+                }
+              }
+            ]
+          },
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "EffectSummary"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": "GenericOwnerInfo",
+          "construction": "IntrinsicOnly",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "GenericOwnerInfo",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "GenericOwnerInfo"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "GenericParameterInfo",
+          "params": [],
+          "projected_fields": [
+            {
+              "name": "owner",
+              "ty": {
+                "Named": "std.compiler.GenericOwnerInfo"
+              }
+            },
+            {
+              "name": "position",
+              "ty": {
+                "Primitive": "USize"
+              }
+            },
+            {
+              "name": "name",
+              "ty": {
+                "Primitive": "String"
+              }
+            },
+            {
+              "name": "kind",
+              "ty": {
+                "Primitive": "String"
+              }
+            },
+            {
+              "name": "bounds",
+              "ty": {
+                "Array": {
+                  "Named": "std.compiler.SpecInfo"
+                }
+              }
+            }
+          ],
+          "representation": {
+            "Record": [
+              {
+                "name": "owner",
+                "ty": {
+                  "Named": "std.compiler.GenericOwnerInfo"
+                }
+              },
+              {
+                "name": "position",
+                "ty": {
+                  "Primitive": "USize"
+                }
+              },
+              {
+                "name": "name",
+                "ty": {
+                  "Primitive": "String"
+                }
+              },
+              {
+                "name": "kind",
+                "ty": {
+                  "Primitive": "String"
+                }
+              },
+              {
+                "name": "bounds",
+                "ty": {
+                  "Array": {
+                    "Named": "std.compiler.SpecInfo"
+                  }
+                }
+              }
+            ]
+          },
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "GenericParameterInfo"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "ModuleOriginInfo",
+          "params": [],
+          "projected_fields": [
+            {
+              "name": "module",
+              "ty": {
+                "Array": {
+                  "Primitive": "String"
+                }
+              }
+            },
+            {
+              "name": "package",
+              "ty": {
+                "Primitive": "String"
+              }
+            }
+          ],
+          "representation": {
+            "Record": [
+              {
+                "name": "module",
+                "ty": {
+                  "Array": {
+                    "Primitive": "String"
+                  }
+                }
+              },
+              {
+                "name": "package",
+                "ty": {
+                  "Primitive": "String"
+                }
+              }
+            ]
+          },
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "ModuleOriginInfo"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "ParameterInfo",
+          "params": [],
+          "projected_fields": [
+            {
+              "name": "name",
+              "ty": {
+                "Option": {
+                  "Primitive": "String"
+                }
+              }
+            },
+            {
+              "name": "ty",
+              "ty": {
+                "Named": "std.compiler.TypeInfo"
+              }
+            }
+          ],
+          "representation": {
+            "Record": [
+              {
+                "name": "name",
+                "ty": {
+                  "Option": {
+                    "Primitive": "String"
+                  }
+                }
+              },
+              {
+                "name": "ty",
+                "ty": {
+                  "Named": "std.compiler.TypeInfo"
+                }
+              }
+            ]
+          },
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "ParameterInfo"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "ParseError",
+          "params": [],
+          "projected_fields": [],
+          "representation": {
+            "Record": [
+              {
+                "name": "diagnostics",
+                "ty": {
+                  "Array": {
+                    "Named": "std.compiler.DiagnosticRecord"
+                  }
+                }
+              }
+            ]
+          },
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "ParseError"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "RelatedLocation",
+          "params": [],
+          "projected_fields": [],
+          "representation": {
+            "Record": [
+              {
+                "name": "location",
+                "ty": {
+                  "Named": "std.compiler.DiagnosticLocation"
+                }
+              },
+              {
+                "name": "message",
+                "ty": {
+                  "Primitive": "String"
+                }
+              }
+            ]
+          },
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "RelatedLocation"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "RevisionInfo",
+          "params": [],
+          "projected_fields": [
+            {
+              "name": "key",
+              "ty": {
+                "Primitive": "String"
+              }
+            },
+            {
+              "name": "content",
+              "ty": {
+                "Primitive": "String"
+              }
+            },
+            {
+              "name": "parent",
+              "ty": {
+                "Option": {
+                  "Primitive": "String"
+                }
+              }
+            }
+          ],
+          "representation": {
+            "Record": [
+              {
+                "name": "key",
+                "ty": {
+                  "Primitive": "String"
+                }
+              },
+              {
+                "name": "content",
+                "ty": {
+                  "Primitive": "String"
+                }
+              },
+              {
+                "name": "parent",
+                "ty": {
+                  "Option": {
+                    "Primitive": "String"
+                  }
+                }
+              }
+            ]
+          },
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "RevisionInfo"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "RuntimeCheckInfo",
+          "params": [],
+          "projected_fields": [
+            {
+              "name": "kind",
+              "ty": {
+                "Primitive": "String"
+              }
+            },
+            {
+              "name": "location",
+              "ty": {
+                "Option": {
+                  "Named": "std.compiler.DiagnosticLocation"
+                }
+              }
+            },
+            {
+              "name": "spec",
+              "ty": {
+                "Option": {
+                  "Named": "std.compiler.DefinitionId"
+                }
+              }
+            }
+          ],
+          "representation": {
+            "Record": [
+              {
+                "name": "kind",
+                "ty": {
+                  "Primitive": "String"
+                }
+              },
+              {
+                "name": "location",
+                "ty": {
+                  "Option": {
+                    "Named": "std.compiler.DiagnosticLocation"
+                  }
+                }
+              },
+              {
+                "name": "spec",
+                "ty": {
+                  "Option": {
+                    "Named": "std.compiler.DefinitionId"
+                  }
+                }
+              }
+            ]
+          },
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "RuntimeCheckInfo"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "SignatureInfo",
+          "params": [],
+          "projected_fields": [
+            {
+              "name": "generics",
+              "ty": {
+                "Array": {
+                  "Named": "std.compiler.GenericParameterInfo"
+                }
+              }
+            },
+            {
+              "name": "parameters",
+              "ty": {
+                "Array": {
+                  "Named": "std.compiler.ParameterInfo"
+                }
+              }
+            },
+            {
+              "name": "output",
+              "ty": {
+                "Named": "std.compiler.TypeInfo"
+              }
+            },
+            {
+              "name": "declared_output",
+              "ty": {
+                "Option": {
+                  "Named": "std.compiler.TypeInfo"
+                }
+              }
+            },
+            {
+              "name": "effects",
+              "ty": {
+                "Option": {
+                  "Named": "std.compiler.EffectRowInfo"
+                }
+              }
+            }
+          ],
+          "representation": {
+            "Record": [
+              {
+                "name": "generics",
+                "ty": {
+                  "Array": {
+                    "Named": "std.compiler.GenericParameterInfo"
+                  }
+                }
+              },
+              {
+                "name": "parameters",
+                "ty": {
+                  "Array": {
+                    "Named": "std.compiler.ParameterInfo"
+                  }
+                }
+              },
+              {
+                "name": "output",
+                "ty": {
+                  "Named": "std.compiler.TypeInfo"
+                }
+              },
+              {
+                "name": "declared_output",
+                "ty": {
+                  "Option": {
+                    "Named": "std.compiler.TypeInfo"
+                  }
+                }
+              },
+              {
+                "name": "effects",
+                "ty": {
+                  "Option": {
+                    "Named": "std.compiler.EffectRowInfo"
+                  }
+                }
+              }
+            ]
+          },
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "SignatureInfo"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "SpecInfo",
+          "params": [],
+          "projected_fields": [
+            {
+              "name": "definition",
+              "ty": {
+                "Option": {
+                  "Named": "std.compiler.DefinitionId"
+                }
+              }
+            },
+            {
+              "name": "arguments",
+              "ty": {
+                "Array": {
+                  "Named": "std.compiler.TypeInfo"
+                }
+              }
+            },
+            {
+              "name": "trace",
+              "ty": {
+                "Option": {
+                  "Named": "std.compiler.TraceConstraintInfo"
+                }
+              }
+            }
+          ],
+          "representation": {
+            "Record": [
+              {
+                "name": "definition",
+                "ty": {
+                  "Option": {
+                    "Named": "std.compiler.DefinitionId"
+                  }
+                }
+              },
+              {
+                "name": "arguments",
+                "ty": {
+                  "Array": {
+                    "Named": "std.compiler.TypeInfo"
+                  }
+                }
+              },
+              {
+                "name": "trace",
+                "ty": {
+                  "Option": {
+                    "Named": "std.compiler.TraceConstraintInfo"
+                  }
+                }
+              }
+            ]
+          },
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "SpecInfo"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": "StaticValueInfo",
+          "construction": "IntrinsicOnly",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "StaticValueInfo",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "StaticValueInfo"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": "SyntaxBlock",
+          "construction": "IntrinsicOnly",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "SyntaxBlock",
+          "params": [],
+          "projected_fields": [
+            {
+              "name": "text",
+              "ty": {
+                "Primitive": "String"
+              }
+            }
+          ],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "SyntaxBlock"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": "ToolRef",
+          "construction": "IntrinsicOnly",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "ToolRef",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "ToolRef"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": "TraceConstraintInfo",
+          "construction": "IntrinsicOnly",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "TraceConstraintInfo",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "TraceConstraintInfo"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": "TraceSummary",
+          "construction": "IntrinsicOnly",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "TraceSummary",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "TraceSummary"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": "TraceWitness",
+          "construction": "IntrinsicOnly",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "TraceWitness",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "TraceWitness"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": "TypeInfo",
+          "construction": "IntrinsicOnly",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "TypeInfo",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "TypeInfo"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Struct",
+          "name": "ViolatedConstraint",
+          "params": [],
+          "projected_fields": [],
+          "representation": {
+            "Record": [
+              {
+                "name": "kind",
+                "ty": {
+                  "Primitive": "String"
+                }
+              },
+              {
+                "name": "owner",
+                "ty": {
+                  "Option": {
+                    "Named": "std.compiler.DefinitionId"
+                  }
+                }
+              },
+              {
+                "name": "message",
+                "ty": {
+                  "Primitive": "String"
+                }
+              }
+            ]
+          },
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "compiler",
+        "ViolatedConstraint"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Spec",
+          "name": "Index",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "core",
+        "Index"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Primitive",
+          "name": "bool",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "core",
+        "bool"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Primitive",
+          "name": "bytes",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "core",
+        "bytes"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Primitive",
+          "name": "char",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "core",
+        "char"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Primitive",
+          "name": "f32",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "core",
+        "f32"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Primitive",
+          "name": "f64",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "core",
+        "f64"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Primitive",
+          "name": "i128",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "core",
+        "i128"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Primitive",
+          "name": "i16",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "core",
+        "i16"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Primitive",
+          "name": "i32",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "core",
+        "i32"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Primitive",
+          "name": "i64",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "core",
+        "i64"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Primitive",
+          "name": "i8",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "core",
+        "i8"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Primitive",
+          "name": "isize",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "core",
+        "isize"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Primitive",
+          "name": "never",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "core",
+        "never"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Primitive",
+          "name": "string",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "core",
+        "string"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Primitive",
+          "name": "u128",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "core",
+        "u128"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Primitive",
+          "name": "u16",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "core",
+        "u16"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Primitive",
+          "name": "u32",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "core",
+        "u32"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Primitive",
+          "name": "u64",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "core",
+        "u64"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Primitive",
+          "name": "u8",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "core",
+        "u8"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Primitive",
+          "name": "unit",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "core",
+        "unit"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Primitive",
+          "name": "usize",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "core",
+        "usize"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Effect": {
+          "core": true,
+          "extends": [],
+          "high_impact_ack": false,
+          "name": "Agentic",
+          "params": [],
+          "runtime_requirement": "Agentic",
+          "stable_id": 0
+        }
+      },
+      "enum_owner": null,
+      "kind": "Effect",
+      "path": [
+        "std",
+        "effects",
+        "Agentic"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Effect": {
+          "core": true,
+          "extends": [],
+          "high_impact_ack": false,
+          "name": "Command",
+          "params": [],
+          "runtime_requirement": "Command",
+          "stable_id": 3
+        }
+      },
+      "enum_owner": null,
+      "kind": "Effect",
+      "path": [
+        "std",
+        "effects",
+        "Command"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Effect": {
+          "core": true,
+          "extends": [],
+          "high_impact_ack": false,
+          "name": "Error",
+          "params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "E"
+            }
+          ],
+          "runtime_requirement": "RuntimeHandler",
+          "stable_id": 8
+        }
+      },
+      "enum_owner": null,
+      "kind": "Effect",
+      "path": [
+        "std",
+        "effects",
+        "Error"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Effect": {
+          "core": true,
+          "extends": [],
+          "high_impact_ack": false,
+          "name": "FileIO",
+          "params": [],
+          "runtime_requirement": "FileIO",
+          "stable_id": 2
+        }
+      },
+      "enum_owner": null,
+      "kind": "Effect",
+      "path": [
+        "std",
+        "effects",
+        "FileIO"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Effect": {
+          "core": false,
+          "extends": [
+            "FileIO"
+          ],
+          "high_impact_ack": false,
+          "name": "Fs",
+          "params": [],
+          "runtime_requirement": "FileIO",
+          "stable_id": 25
+        }
+      },
+      "enum_owner": null,
+      "kind": "Effect",
+      "path": [
+        "std",
+        "effects",
+        "Fs"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Effect": {
+          "core": true,
+          "extends": [],
+          "high_impact_ack": false,
+          "name": "Human",
+          "params": [],
+          "runtime_requirement": "HostAuthority",
+          "stable_id": 10
+        }
+      },
+      "enum_owner": null,
+      "kind": "Effect",
+      "path": [
+        "std",
+        "effects",
+        "Human"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Effect": {
+          "core": true,
+          "extends": [],
+          "high_impact_ack": false,
+          "name": "Memory",
+          "params": [],
+          "runtime_requirement": "DurableMemory",
+          "stable_id": 4
+        }
+      },
+      "enum_owner": null,
+      "kind": "Effect",
+      "path": [
+        "std",
+        "effects",
+        "Memory"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Effect": {
+          "core": true,
+          "extends": [],
+          "high_impact_ack": false,
+          "name": "Network",
+          "params": [],
+          "runtime_requirement": "Network",
+          "stable_id": 1
+        }
+      },
+      "enum_owner": null,
+      "kind": "Effect",
+      "path": [
+        "std",
+        "effects",
+        "Network"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Effect": {
+          "core": true,
+          "extends": [],
+          "high_impact_ack": false,
+          "name": "Secret",
+          "params": [],
+          "runtime_requirement": "SecretAccess",
+          "stable_id": 6
+        }
+      },
+      "enum_owner": null,
+      "kind": "Effect",
+      "path": [
+        "std",
+        "effects",
+        "Secret"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Effect": {
+          "core": true,
+          "extends": [],
+          "high_impact_ack": false,
+          "name": "Time",
+          "params": [],
+          "runtime_requirement": "Time",
+          "stable_id": 7
+        }
+      },
+      "enum_owner": null,
+      "kind": "Effect",
+      "path": [
+        "std",
+        "effects",
+        "Time"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.fs.IOError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "effect_args": [
+            "Type"
+          ],
+          "high_impact_ack": false,
+          "name": "read",
+          "output": {
+            "Primitive": "Bytes"
+          },
+          "owner": "Fs",
+          "params": [
+            {
+              "NamedApplied": {
+                "args": [
+                  {
+                    "Var": "R"
+                  }
+                ],
+                "name": "WorkspacePath"
+              }
+            }
+          ],
+          "runtime_requirement": "FileIO",
+          "selector_param_names": [
+            "R"
+          ],
+          "stable_id": 136,
+          "type_params": [
+            {
+              "bounds": [
+                {
+                  "args": [],
+                  "path": [
+                    "std",
+                    "fs",
+                    "Region"
+                  ]
+                }
+              ],
+              "kind": "Type",
+              "name": "R"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "kind": "EffectAction",
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Fs",
+        "read"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Support",
+          "name": "IOError",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "fs",
+        "IOError"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Spec",
+          "name": "Region",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "fs",
+        "Region"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Support",
+          "name": "WorkspacePath",
+          "params": [
+            {
+              "bounds": [
+                {
+                  "args": [],
+                  "path": [
+                    "std",
+                    "fs",
+                    "Region"
+                  ]
+                }
+              ],
+              "kind": "Type",
+              "name": "R"
+            }
+          ],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": "WorkspacePath"
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "fs",
+        "WorkspacePath"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "path",
+          "output": {
+            "Result": {
+              "err": {
+                "Named": "std.fs.IOError"
+              },
+              "ok": {
+                "NamedApplied": {
+                  "args": [
+                    {
+                      "Var": "R"
+                    }
+                  ],
+                  "name": "std.fs.WorkspacePath"
+                }
+              }
+            }
+          },
+          "params": [
+            {
+              "Primitive": "String"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": [
+            {
+              "bounds": [
+                {
+                  "args": [],
+                  "path": [
+                    "std",
+                    "fs",
+                    "Region"
+                  ]
+                }
+              ],
+              "kind": "Type",
+              "name": "R"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "fs",
+        "path"
+      ],
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 1123,
+        "latent_effect": "None",
+        "lowering": "RuntimeCall",
+        "memory_access": "None",
+        "purity": "Runtime",
+        "qualified_path": [
+          "std",
+          "fs",
+          "path"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "read_bytes",
+          "output": {
+            "Primitive": "Bytes"
+          },
+          "params": [
+            {
+              "NamedApplied": {
+                "args": [
+                  {
+                    "Var": "R"
+                  }
+                ],
+                "name": "WorkspacePath"
+              }
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.fs.IOError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "requested_action_tail": null,
+          "requested_actions": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Var": "R"
+                  }
+                }
+              ],
+              "path": [
+                "Fs",
+                "read"
+              ]
+            }
+          ],
+          "source_method": null,
+          "type_params": [
+            {
+              "bounds": [
+                {
+                  "args": [],
+                  "path": [
+                    "std",
+                    "fs",
+                    "Region"
+                  ]
+                }
+              ],
+              "kind": "Type",
+              "name": "R"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "fs",
+        "read_bytes"
+      ],
+      "primitive": {
+        "dispatch": "Host",
+        "id": 1106,
+        "latent_effect": "None",
+        "lowering": {
+          "DefaultAction": {
+            "payload": [
+              0
+            ],
+            "stable_id": 136
+          }
+        },
+        "memory_access": "None",
+        "purity": "Host",
+        "qualified_path": [
+          "std",
+          "fs",
+          "read_bytes"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Enum",
+          "name": "None",
+          "params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "T"
+            }
+          ],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Constructor",
+      "path": [
+        "std",
+        "option",
+        "None"
+      ],
+      "primitive": {
+        "dispatch": "PureKernel",
+        "id": 35,
+        "latent_effect": "TransparentFirstArg",
+        "lowering": "PureBuiltin",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "option",
+          "None"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Enum",
+          "name": "Option",
+          "params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "T"
+            }
+          ],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "option",
+        "Option"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Enum",
+          "name": "Some",
+          "params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "T"
+            }
+          ],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Constructor",
+      "path": [
+        "std",
+        "option",
+        "Some"
+      ],
+      "primitive": {
+        "dispatch": "PureKernel",
+        "id": 24,
+        "latent_effect": "TransparentFirstArg",
+        "lowering": "PureBuiltin",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "option",
+          "Some"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Enum",
+          "name": "Err",
+          "params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "T"
+            },
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "E"
+            }
+          ],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Constructor",
+      "path": [
+        "std",
+        "result",
+        "Err"
+      ],
+      "primitive": {
+        "dispatch": "PureKernel",
+        "id": 26,
+        "latent_effect": "TransparentFirstArg",
+        "lowering": "PureBuiltin",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "result",
+          "Err"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Enum",
+          "name": "Ok",
+          "params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "T"
+            },
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "E"
+            }
+          ],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Constructor",
+      "path": [
+        "std",
+        "result",
+        "Ok"
+      ],
+      "primitive": {
+        "dispatch": "PureKernel",
+        "id": 25,
+        "latent_effect": "TransparentFirstArg",
+        "lowering": "PureBuiltin",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "result",
+          "Ok"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Enum",
+          "name": "Result",
+          "params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "T"
+            },
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "E"
+            }
+          ],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "result",
+        "Result"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Support",
+          "name": "Money",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "runtime",
+        "budget",
+        "Money"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": null,
+          "effect_args": [
+            "Type"
+          ],
+          "high_impact_ack": false,
+          "name": "raise",
+          "output": {
+            "Primitive": "Never"
+          },
+          "owner": "Error",
+          "params": [
+            {
+              "Var": "E"
+            }
+          ],
+          "runtime_requirement": null,
+          "selector_param_names": [
+            "E"
+          ],
+          "stable_id": 33,
+          "type_params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "E"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "kind": "EffectAction",
+      "path": [
+        "std",
+        "runtime",
+        "error",
+        "raise"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Requirement": {
+          "kind": "Limit",
+          "name": "Attempts",
+          "params": [
+            {
+              "Primitive": "USize"
+            }
+          ],
+          "semantics": {
+            "Limit": "Attempts"
+          }
+        }
+      },
+      "enum_owner": null,
+      "kind": "Requirement",
+      "path": [
+        "std",
+        "runtime",
+        "limits",
+        "Attempts"
+      ],
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 55,
+        "latent_effect": "None",
+        "lowering": "RuntimeCall",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "runtime",
+          "limits",
+          "Attempts"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Requirement": {
+          "kind": "Limit",
+          "name": "Concurrency",
+          "params": [
+            {
+              "Primitive": "USize"
+            }
+          ],
+          "semantics": {
+            "Limit": "Concurrency"
+          }
+        }
+      },
+      "enum_owner": null,
+      "kind": "Requirement",
+      "path": [
+        "std",
+        "runtime",
+        "limits",
+        "Concurrency"
+      ],
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 157,
+        "latent_effect": "None",
+        "lowering": "RuntimeCall",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "runtime",
+          "limits",
+          "Concurrency"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Requirement": {
+          "kind": "Limit",
+          "name": "ContextTokens",
+          "params": [
+            {
+              "Primitive": "USize"
+            }
+          ],
+          "semantics": {
+            "Limit": "ContextTokens"
+          }
+        }
+      },
+      "enum_owner": null,
+      "kind": "Requirement",
+      "path": [
+        "std",
+        "runtime",
+        "limits",
+        "ContextTokens"
+      ],
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 52,
+        "latent_effect": "None",
+        "lowering": "RuntimeCall",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "runtime",
+          "limits",
+          "ContextTokens"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Requirement": {
+          "kind": "Limit",
+          "name": "Cost",
+          "params": [
+            {
+              "Named": "Money"
+            }
+          ],
+          "semantics": {
+            "Limit": "Cost"
+          }
+        }
+      },
+      "enum_owner": null,
+      "kind": "Requirement",
+      "path": [
+        "std",
+        "runtime",
+        "limits",
+        "Cost"
+      ],
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 53,
+        "latent_effect": "None",
+        "lowering": "RuntimeCall",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "runtime",
+          "limits",
+          "Cost"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Requirement": {
+          "kind": "Limit",
+          "name": "Iterations",
+          "params": [
+            {
+              "Primitive": "USize"
+            }
+          ],
+          "semantics": {
+            "Limit": "Iterations"
+          }
+        }
+      },
+      "enum_owner": null,
+      "kind": "Requirement",
+      "path": [
+        "std",
+        "runtime",
+        "limits",
+        "Iterations"
+      ],
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 50,
+        "latent_effect": "None",
+        "lowering": "RuntimeCall",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "runtime",
+          "limits",
+          "Iterations"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Enum",
+          "name": "Limit",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": "Limit"
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "runtime",
+        "limits",
+        "Limit"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "Attempts",
+          "output": {
+            "Named": "std.runtime.limits.Limit"
+          },
+          "params": [
+            {
+              "Primitive": "USize"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": [
+        "std",
+        "runtime",
+        "limits",
+        "Limit"
+      ],
+      "kind": "Constructor",
+      "path": [
+        "std",
+        "runtime",
+        "limits",
+        "Limit",
+        "Attempts"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "Concurrency",
+          "output": {
+            "Named": "std.runtime.limits.Limit"
+          },
+          "params": [
+            {
+              "Primitive": "USize"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": [
+        "std",
+        "runtime",
+        "limits",
+        "Limit"
+      ],
+      "kind": "Constructor",
+      "path": [
+        "std",
+        "runtime",
+        "limits",
+        "Limit",
+        "Concurrency"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "ContextTokens",
+          "output": {
+            "Named": "std.runtime.limits.Limit"
+          },
+          "params": [
+            {
+              "Primitive": "USize"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": [
+        "std",
+        "runtime",
+        "limits",
+        "Limit"
+      ],
+      "kind": "Constructor",
+      "path": [
+        "std",
+        "runtime",
+        "limits",
+        "Limit",
+        "ContextTokens"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "Cost",
+          "output": {
+            "Named": "std.runtime.limits.Limit"
+          },
+          "params": [
+            {
+              "Named": "Money"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": [
+        "std",
+        "runtime",
+        "limits",
+        "Limit"
+      ],
+      "kind": "Constructor",
+      "path": [
+        "std",
+        "runtime",
+        "limits",
+        "Limit",
+        "Cost"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "Iterations",
+          "output": {
+            "Named": "std.runtime.limits.Limit"
+          },
+          "params": [
+            {
+              "Primitive": "USize"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": [
+        "std",
+        "runtime",
+        "limits",
+        "Limit"
+      ],
+      "kind": "Constructor",
+      "path": [
+        "std",
+        "runtime",
+        "limits",
+        "Limit",
+        "Iterations"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "Tokens",
+          "output": {
+            "Named": "std.runtime.limits.Limit"
+          },
+          "params": [
+            {
+              "Primitive": "USize"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": [
+        "std",
+        "runtime",
+        "limits",
+        "Limit"
+      ],
+      "kind": "Constructor",
+      "path": [
+        "std",
+        "runtime",
+        "limits",
+        "Limit",
+        "Tokens"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "WallTime",
+          "output": {
+            "Named": "std.runtime.limits.Limit"
+          },
+          "params": [
+            {
+              "Named": "Duration"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": [
+        "std",
+        "runtime",
+        "limits",
+        "Limit"
+      ],
+      "kind": "Constructor",
+      "path": [
+        "std",
+        "runtime",
+        "limits",
+        "Limit",
+        "WallTime"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Requirement": {
+          "kind": "Limit",
+          "name": "Tokens",
+          "params": [
+            {
+              "Primitive": "USize"
+            }
+          ],
+          "semantics": {
+            "Limit": "Tokens"
+          }
+        }
+      },
+      "enum_owner": null,
+      "kind": "Requirement",
+      "path": [
+        "std",
+        "runtime",
+        "limits",
+        "Tokens"
+      ],
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 51,
+        "latent_effect": "None",
+        "lowering": "RuntimeCall",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "runtime",
+          "limits",
+          "Tokens"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Requirement": {
+          "kind": "Limit",
+          "name": "WallTime",
+          "params": [
+            {
+              "Named": "Duration"
+            }
+          ],
+          "semantics": {
+            "Limit": "WallTime"
+          }
+        }
+      },
+      "enum_owner": null,
+      "kind": "Requirement",
+      "path": [
+        "std",
+        "runtime",
+        "limits",
+        "WallTime"
+      ],
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 54,
+        "latent_effect": "None",
+        "lowering": "RuntimeCall",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "runtime",
+          "limits",
+          "WallTime"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Support",
+          "name": "Duration",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "runtime",
+        "time",
+        "Duration"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Effect": {
+          "core": true,
+          "extends": [],
+          "high_impact_ack": false,
+          "name": "Async",
+          "params": [],
+          "runtime_requirement": "TaskScheduler",
+          "stable_id": 28
+        }
+      },
+      "enum_owner": null,
+      "kind": "Effect",
+      "path": [
+        "std",
+        "task",
+        "Async"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "IntrinsicOnly",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Support",
+          "name": "Continuation",
+          "params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "T"
+            }
+          ],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": "Continuation"
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "task",
+        "Continuation"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "IntrinsicOnly",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Support",
+          "name": "Scheduler",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": "Scheduler"
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "task",
+        "Scheduler"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "IntrinsicOnly",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Support",
+          "name": "Task",
+          "params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "T"
+            },
+            {
+              "bounds": [],
+              "kind": "EffectRow",
+              "name": "E"
+            }
+          ],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": "Task"
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "task",
+        "Task"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": "TaskAwait",
+          "default_handler_effect_tail": "E",
+          "default_handler_effects": [],
+          "effect_args": [],
+          "high_impact_ack": false,
+          "name": "await",
+          "output": {
+            "Var": "T"
+          },
+          "owner": "Async",
+          "params": [
+            {
+              "Task": {
+                "effects": {
+                  "effects": [],
+                  "tail": "E"
+                },
+                "output": {
+                  "Var": "T"
+                }
+              }
+            }
+          ],
+          "runtime_requirement": "TaskScheduler",
+          "selector_param_names": [],
+          "stable_id": 149,
+          "type_params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "T"
+            },
+            {
+              "bounds": [],
+              "kind": "EffectRow",
+              "name": "E"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "kind": "EffectAction",
+      "path": [
+        "std",
+        "task",
+        "actions",
+        "Async",
+        "await"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": "TaskYield",
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [],
+          "effect_args": [],
+          "high_impact_ack": false,
+          "name": "yield",
+          "output": {
+            "Primitive": "Unit"
+          },
+          "owner": "Async",
+          "params": [],
+          "runtime_requirement": "TaskScheduler",
+          "selector_param_names": [],
+          "stable_id": 148,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "kind": "EffectAction",
+      "path": [
+        "std",
+        "task",
+        "actions",
+        "Async",
+        "yield"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "run",
+          "output": {
+            "Var": "T"
+          },
+          "params": [
+            {
+              "Function": {
+                "effects": {
+                  "effects": [],
+                  "tail": "E"
+                },
+                "input": [
+                  {
+                    "Named": "std.task.Scheduler"
+                  }
+                ],
+                "output": {
+                  "Var": "T"
+                }
+              }
+            }
+          ],
+          "public_effect_tail": "E",
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "T"
+            },
+            {
+              "bounds": [],
+              "kind": "EffectRow",
+              "name": "E"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "task",
+        "run"
+      ],
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 1400,
+        "latent_effect": "None",
+        "lowering": {
+          "Task": "Run"
+        },
+        "memory_access": "None",
+        "purity": "Runtime",
+        "qualified_path": [
+          "std",
+          "task",
+          "run"
+        ],
+        "runtime_requirement": "TaskScheduler"
+      }
+    },
+    {
+      "declaration": {
+        "Type": {
+          "canonical_type": null,
+          "code_role": null,
+          "construction": "Public",
+          "derivable": false,
+          "iterable_item": null,
+          "kind": "Enum",
+          "name": "TextError",
+          "params": [],
+          "projected_fields": [],
+          "representation": null,
+          "runtime_role": null
+        }
+      },
+      "enum_owner": null,
+      "kind": "Type",
+      "path": [
+        "std",
+        "text",
+        "TextError"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "InvalidFormat",
+          "output": {
+            "Named": "std.text.TextError"
+          },
+          "params": [],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": [
+        "std",
+        "text",
+        "TextError"
+      ],
+      "kind": "Constructor",
+      "path": [
+        "std",
+        "text",
+        "TextError",
+        "InvalidFormat"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "InvalidIndex",
+          "output": {
+            "Named": "std.text.TextError"
+          },
+          "params": [],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": [
+        "std",
+        "text",
+        "TextError"
+      ],
+      "kind": "Constructor",
+      "path": [
+        "std",
+        "text",
+        "TextError",
+        "InvalidIndex"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "InvalidRange",
+          "output": {
+            "Named": "std.text.TextError"
+          },
+          "params": [],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": [
+        "std",
+        "text",
+        "TextError"
+      ],
+      "kind": "Constructor",
+      "path": [
+        "std",
+        "text",
+        "TextError",
+        "InvalidRange"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "LengthOverflow",
+          "output": {
+            "Named": "std.text.TextError"
+          },
+          "params": [],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": [
+        "std",
+        "text",
+        "TextError"
+      ],
+      "kind": "Constructor",
+      "path": [
+        "std",
+        "text",
+        "TextError",
+        "LengthOverflow"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "NotCharBoundary",
+          "output": {
+            "Named": "std.text.TextError"
+          },
+          "params": [],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": [
+        "std",
+        "text",
+        "TextError"
+      ],
+      "kind": "Constructor",
+      "path": [
+        "std",
+        "text",
+        "TextError",
+        "NotCharBoundary"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "NumericOverflow",
+          "output": {
+            "Named": "std.text.TextError"
+          },
+          "params": [],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": [
+        "std",
+        "text",
+        "TextError"
+      ],
+      "kind": "Constructor",
+      "path": [
+        "std",
+        "text",
+        "TextError",
+        "NumericOverflow"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "ParseFailure",
+          "output": {
+            "Named": "std.text.TextError"
+          },
+          "params": [],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": [
+        "std",
+        "text",
+        "TextError"
+      ],
+      "kind": "Constructor",
+      "path": [
+        "std",
+        "text",
+        "TextError",
+        "ParseFailure"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "char_count",
+          "output": {
+            "Primitive": "USize"
+          },
+          "params": [
+            {
+              "Primitive": "String"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "text",
+        "char_count"
+      ],
+      "primitive": {
+        "dispatch": "PureKernel",
+        "id": 60,
+        "latent_effect": "None",
+        "lowering": "PureBuiltin",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "text",
+          "char_count"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "chars",
+          "output": {
+            "NamedApplied": {
+              "args": [
+                {
+                  "Primitive": "Char"
+                }
+              ],
+              "name": "Iter"
+            }
+          },
+          "params": [
+            {
+              "Primitive": "String"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "text",
+        "chars"
+      ],
+      "primitive": {
+        "dispatch": "PureKernel",
+        "id": 63,
+        "latent_effect": "None",
+        "lowering": "PureBuiltin",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "text",
+          "chars"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "from_char",
+          "output": {
+            "Primitive": "String"
+          },
+          "params": [
+            {
+              "Primitive": "Char"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "text",
+        "from_char"
+      ],
+      "primitive": {
+        "dispatch": "PureKernel",
+        "id": 130,
+        "latent_effect": "None",
+        "lowering": "PureBuiltin",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "text",
+          "from_char"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "parse_usize",
+          "output": {
+            "Result": {
+              "err": {
+                "Named": "std.text.TextError"
+              },
+              "ok": {
+                "Primitive": "USize"
+              }
+            }
+          },
+          "params": [
+            {
+              "Primitive": "String"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "text",
+        "parse_usize"
+      ],
+      "primitive": {
+        "dispatch": "PureKernel",
+        "id": 111,
+        "latent_effect": "None",
+        "lowering": "PureBuiltin",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "text",
+          "parse_usize"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "trim",
+          "output": {
+            "Primitive": "String"
+          },
+          "params": [
+            {
+              "Primitive": "String"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "text",
+        "trim"
+      ],
+      "primitive": {
+        "dispatch": "PureKernel",
+        "id": 2,
+        "latent_effect": "None",
+        "lowering": "PureBuiltin",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "text",
+          "trim"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "uppercase",
+          "output": {
+            "Primitive": "String"
+          },
+          "params": [
+            {
+              "Primitive": "String"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "text",
+        "uppercase"
+      ],
+      "primitive": {
+        "dispatch": "PureKernel",
+        "id": 5,
+        "latent_effect": "None",
+        "lowering": "PureBuiltin",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "text",
+          "uppercase"
+        ],
+        "runtime_requirement": "None"
+      }
+    }
+  ],
+  "implementations": [
+    {
+      "self_type": {
+        "Primitive": "I8"
+      },
+      "spec": {
+        "args": [],
+        "path": [
+          "std",
+          "core",
+          "Index"
+        ]
+      }
+    },
+    {
+      "self_type": {
+        "Primitive": "I16"
+      },
+      "spec": {
+        "args": [],
+        "path": [
+          "std",
+          "core",
+          "Index"
+        ]
+      }
+    },
+    {
+      "self_type": {
+        "Primitive": "I32"
+      },
+      "spec": {
+        "args": [],
+        "path": [
+          "std",
+          "core",
+          "Index"
+        ]
+      }
+    },
+    {
+      "self_type": {
+        "Primitive": "I64"
+      },
+      "spec": {
+        "args": [],
+        "path": [
+          "std",
+          "core",
+          "Index"
+        ]
+      }
+    },
+    {
+      "self_type": {
+        "Primitive": "I128"
+      },
+      "spec": {
+        "args": [],
+        "path": [
+          "std",
+          "core",
+          "Index"
+        ]
+      }
+    },
+    {
+      "self_type": {
+        "Primitive": "ISize"
+      },
+      "spec": {
+        "args": [],
+        "path": [
+          "std",
+          "core",
+          "Index"
+        ]
+      }
+    },
+    {
+      "self_type": {
+        "Primitive": "U8"
+      },
+      "spec": {
+        "args": [],
+        "path": [
+          "std",
+          "core",
+          "Index"
+        ]
+      }
+    },
+    {
+      "self_type": {
+        "Primitive": "U16"
+      },
+      "spec": {
+        "args": [],
+        "path": [
+          "std",
+          "core",
+          "Index"
+        ]
+      }
+    },
+    {
+      "self_type": {
+        "Primitive": "U32"
+      },
+      "spec": {
+        "args": [],
+        "path": [
+          "std",
+          "core",
+          "Index"
+        ]
+      }
+    },
+    {
+      "self_type": {
+        "Primitive": "U64"
+      },
+      "spec": {
+        "args": [],
+        "path": [
+          "std",
+          "core",
+          "Index"
+        ]
+      }
+    },
+    {
+      "self_type": {
+        "Primitive": "U128"
+      },
+      "spec": {
+        "args": [],
+        "path": [
+          "std",
+          "core",
+          "Index"
+        ]
+      }
+    },
+    {
+      "self_type": {
+        "Primitive": "USize"
+      },
+      "spec": {
+        "args": [],
+        "path": [
+          "std",
+          "core",
+          "Index"
+        ]
+      }
+    }
+  ],
+  "prelude": [
+    [
+      "Agentic",
+      [
+        "std",
+        "effects",
+        "Agentic"
+      ]
+    ],
+    [
+      "Array",
+      [
+        "std",
+        "collections",
+        "Array"
+      ]
+    ],
+    [
+      "Async",
+      [
+        "std",
+        "task",
+        "Async"
+      ]
+    ],
+    [
+      "Attempts",
+      [
+        "std",
+        "runtime",
+        "limits",
+        "Attempts"
+      ]
+    ],
+    [
+      "Command",
+      [
+        "std",
+        "effects",
+        "Command"
+      ]
+    ],
+    [
+      "Concurrency",
+      [
+        "std",
+        "runtime",
+        "limits",
+        "Concurrency"
+      ]
+    ],
+    [
+      "ContextTokens",
+      [
+        "std",
+        "runtime",
+        "limits",
+        "ContextTokens"
+      ]
+    ],
+    [
+      "Continuation",
+      [
+        "std",
+        "task",
+        "Continuation"
+      ]
+    ],
+    [
+      "Cost",
+      [
+        "std",
+        "runtime",
+        "limits",
+        "Cost"
+      ]
+    ],
+    [
+      "Err",
+      [
+        "std",
+        "result",
+        "Err"
+      ]
+    ],
+    [
+      "Error",
+      [
+        "std",
+        "effects",
+        "Error"
+      ]
+    ],
+    [
+      "FileIO",
+      [
+        "std",
+        "effects",
+        "FileIO"
+      ]
+    ],
+    [
+      "Human",
+      [
+        "std",
+        "effects",
+        "Human"
+      ]
+    ],
+    [
+      "Index",
+      [
+        "std",
+        "core",
+        "Index"
+      ]
+    ],
+    [
+      "Iter",
+      [
+        "std",
+        "collections",
+        "Iter"
+      ]
+    ],
+    [
+      "Iterations",
+      [
+        "std",
+        "runtime",
+        "limits",
+        "Iterations"
+      ]
+    ],
+    [
+      "Limit",
+      [
+        "std",
+        "runtime",
+        "limits",
+        "Limit"
+      ]
+    ],
+    [
+      "List",
+      [
+        "std",
+        "collections",
+        "List"
+      ]
+    ],
+    [
+      "Map",
+      [
+        "std",
+        "collections",
+        "Map"
+      ]
+    ],
+    [
+      "Memory",
+      [
+        "std",
+        "effects",
+        "Memory"
+      ]
+    ],
+    [
+      "Network",
+      [
+        "std",
+        "effects",
+        "Network"
+      ]
+    ],
+    [
+      "None",
+      [
+        "std",
+        "option",
+        "None"
+      ]
+    ],
+    [
+      "Ok",
+      [
+        "std",
+        "result",
+        "Ok"
+      ]
+    ],
+    [
+      "Option",
+      [
+        "std",
+        "option",
+        "Option"
+      ]
+    ],
+    [
+      "Range",
+      [
+        "std",
+        "collections",
+        "Range"
+      ]
+    ],
+    [
+      "Result",
+      [
+        "std",
+        "result",
+        "Result"
+      ]
+    ],
+    [
+      "Scheduler",
+      [
+        "std",
+        "task",
+        "Scheduler"
+      ]
+    ],
+    [
+      "Secret",
+      [
+        "std",
+        "effects",
+        "Secret"
+      ]
+    ],
+    [
+      "Set",
+      [
+        "std",
+        "collections",
+        "Set"
+      ]
+    ],
+    [
+      "Slice",
+      [
+        "std",
+        "collections",
+        "Slice"
+      ]
+    ],
+    [
+      "Some",
+      [
+        "std",
+        "option",
+        "Some"
+      ]
+    ],
+    [
+      "Task",
+      [
+        "std",
+        "task",
+        "Task"
+      ]
+    ],
+    [
+      "Time",
+      [
+        "std",
+        "effects",
+        "Time"
+      ]
+    ],
+    [
+      "Tokens",
+      [
+        "std",
+        "runtime",
+        "limits",
+        "Tokens"
+      ]
+    ],
+    [
+      "WallTime",
+      [
+        "std",
+        "runtime",
+        "limits",
+        "WallTime"
+      ]
+    ],
+    [
+      "bool",
+      [
+        "std",
+        "core",
+        "bool"
+      ]
+    ],
+    [
+      "bytes",
+      [
+        "std",
+        "core",
+        "bytes"
+      ]
+    ],
+    [
+      "char",
+      [
+        "std",
+        "core",
+        "char"
+      ]
+    ],
+    [
+      "f32",
+      [
+        "std",
+        "core",
+        "f32"
+      ]
+    ],
+    [
+      "f64",
+      [
+        "std",
+        "core",
+        "f64"
+      ]
+    ],
+    [
+      "i128",
+      [
+        "std",
+        "core",
+        "i128"
+      ]
+    ],
+    [
+      "i16",
+      [
+        "std",
+        "core",
+        "i16"
+      ]
+    ],
+    [
+      "i32",
+      [
+        "std",
+        "core",
+        "i32"
+      ]
+    ],
+    [
+      "i64",
+      [
+        "std",
+        "core",
+        "i64"
+      ]
+    ],
+    [
+      "i8",
+      [
+        "std",
+        "core",
+        "i8"
+      ]
+    ],
+    [
+      "isize",
+      [
+        "std",
+        "core",
+        "isize"
+      ]
+    ],
+    [
+      "never",
+      [
+        "std",
+        "core",
+        "never"
+      ]
+    ],
+    [
+      "string",
+      [
+        "std",
+        "core",
+        "string"
+      ]
+    ],
+    [
+      "u128",
+      [
+        "std",
+        "core",
+        "u128"
+      ]
+    ],
+    [
+      "u16",
+      [
+        "std",
+        "core",
+        "u16"
+      ]
+    ],
+    [
+      "u32",
+      [
+        "std",
+        "core",
+        "u32"
+      ]
+    ],
+    [
+      "u64",
+      [
+        "std",
+        "core",
+        "u64"
+      ]
+    ],
+    [
+      "u8",
+      [
+        "std",
+        "core",
+        "u8"
+      ]
+    ],
+    [
+      "unit",
+      [
+        "std",
+        "core",
+        "unit"
+      ]
+    ],
+    [
+      "usize",
+      [
+        "std",
+        "core",
+        "usize"
+      ]
+    ]
+  ],
+  "schema": 1
+}

@@ -1,0 +1,138 @@
+use etas_std::{StdDecl, StdRegistryVersion, StdSymbolKind};
+use std::collections::BTreeSet;
+
+fn main() {
+    let registry = etas_std::standard_registry();
+    let mut paths = [
+        "std.core.Index",
+        "std.runtime.error.raise",
+        "std.runtime.budget.Money",
+        "std.runtime.time.Duration",
+        "std.runtime.limits.Limit",
+        "std.collections.Array",
+        "std.collections.List",
+        "std.collections.Map",
+        "std.collections.Set",
+        "std.collections.Range",
+        "std.collections.Slice",
+        "std.collections.Iter",
+        "std.collections.array_get",
+        "std.collections.array_push",
+        "std.option.Option",
+        "std.option.Some",
+        "std.option.None",
+        "std.result.Result",
+        "std.result.Ok",
+        "std.result.Err",
+        "std.text.TextError",
+        "std.text.char_count",
+        "std.text.chars",
+        "std.text.from_char",
+        "std.text.parse_usize",
+        "std.text.trim",
+        "std.text.uppercase",
+        "std.task.Task",
+        "std.task.Scheduler",
+        "std.task.Continuation",
+        "std.task.run",
+        "std.task.Async",
+        "std.task.actions.Async.yield",
+        "std.task.actions.Async.await",
+        "std.effects.Error",
+        "std.effects.FileIO",
+        "std.effects.Fs",
+        "std.effects.actions.Fs.read",
+        "std.fs.Region",
+        "std.fs.WorkspacePath",
+        "std.fs.IOError",
+        "std.fs.path",
+        "std.fs.read_bytes",
+        "std.codec.text.utf8_encode",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect::<BTreeSet<_>>();
+    for symbol in registry.symbols() {
+        if matches!(symbol.decl, StdDecl::Type(ref ty) if ty.kind == etas_std::TypeDeclKind::Primitive)
+            || (symbol
+                .qualified_path
+                .starts_with(&["std".into(), "compiler".into()])
+                && matches!(symbol.decl, StdDecl::Type(_)))
+            || matches!(symbol.decl, StdDecl::Effect(ref effect) if effect.core)
+            || symbol.kind == StdSymbolKind::Requirement
+            || symbol
+                .qualified_path
+                .starts_with(&["std".into(), "text".into(), "TextError".into()])
+        {
+            paths.insert(symbol.qualified_path.join("."));
+        }
+    }
+    // Native enum payloads are part of the compiler ABI, including limits.
+    let constructors = registry
+        .symbols()
+        .filter_map(|symbol| {
+            let owner = registry.symbol(symbol.enum_owner?)?;
+            paths
+                .contains(&owner.qualified_path.join("."))
+                .then(|| symbol.qualified_path.join("."))
+        })
+        .collect::<Vec<_>>();
+    paths.extend(constructors);
+    let selected = paths
+        .iter()
+        .map(|path| {
+            registry
+                .lookup_qualified(&path.split('.').collect::<Vec<_>>())
+                .unwrap_or_else(|| panic!("missing {path}"))
+        })
+        .collect::<Vec<_>>();
+    let ids = selected
+        .iter()
+        .map(|symbol| symbol.id)
+        .collect::<BTreeSet<_>>();
+    let contracts = selected.into_iter().map(|symbol| serde_json::json!({
+        "path": symbol.qualified_path,
+        "kind": symbol.kind,
+        "declaration": symbol.decl,
+        "primitive": symbol.intrinsic,
+        "enum_owner": symbol.enum_owner.map(|id| registry.symbol(id).unwrap().qualified_path.clone()),
+    })).collect::<Vec<_>>();
+    let prelude = registry
+        .prelude()
+        .symbols()
+        .filter(|symbol| ids.contains(&symbol.id))
+        .map(|symbol| {
+            (
+                symbol.name.clone(),
+                registry.symbol(symbol.id).unwrap().qualified_path.clone(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let aliases = registry
+        .modules()
+        .flat_map(|module| {
+            registry
+                .module_exports(module.id)
+                .filter(|(_, symbol)| ids.contains(&symbol.id))
+                .filter_map(move |(name, symbol)| {
+                    let mut alias = module.path.clone();
+                    alias.push(name.into());
+                    (alias != symbol.qualified_path)
+                        .then_some((alias, symbol.qualified_path.clone()))
+                })
+        })
+        .collect::<Vec<_>>();
+    let implementations = registry
+        .spec_impls()
+        .filter(|implementation| implementation.spec.path == ["std", "core", "Index"])
+        .collect::<Vec<_>>();
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "schema": 1, "compatibility": StdRegistryVersion::phase1(),
+            "contracts": contracts, "prelude": prelude, "aliases": aliases,
+            "implementations": implementations,
+        }))
+        .unwrap()
+    );
+}

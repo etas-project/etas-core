@@ -5,6 +5,22 @@ use crate::{
     StdModuleId, StdRegistryBuilder, StdRuntimeRequirement, StdSpecRef, StdSymbolKind, StdType,
 };
 
+/// Recognize native effect/action names while qualifying package metadata.
+/// This checks compiler/host identity tables and constructs no std API registry.
+pub fn is_standard_effect_reference(name: &str) -> bool {
+    name.starts_with("std.")
+        || matches!(
+            name,
+            "Async" | "Error.raise" | "Async.yield" | "Async.await" | "Code.check" | "Code.compile"
+        )
+        || STANDARD_EFFECTS.iter().any(|effect| effect.name == name)
+        || STANDARD_ACTIONS.iter().any(|action| {
+            name.strip_prefix(action.owner)
+                .and_then(|suffix| suffix.strip_prefix('.'))
+                == Some(action.name)
+        })
+}
+
 pub fn register(builder: &mut StdRegistryBuilder) {
     let module = builder.module(
         &["std", "effects"],

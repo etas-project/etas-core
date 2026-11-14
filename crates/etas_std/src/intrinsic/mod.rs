@@ -1,3 +1,5 @@
+mod bootstrap;
+pub use bootstrap::{compiler_contract_identity, compiler_contract_registry};
 mod collection;
 mod completion;
 pub use collection::{StdCollectionIntrinsic, StdCollectionKind, StdCollectionOperation};

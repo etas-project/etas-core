@@ -20,8 +20,16 @@ pub mod tls;
 
 mod registration;
 
-use crate::{StdRegistry, StdRegistryBuilder, StdRegistryVersion};
+use crate::StdRegistry;
+#[cfg(not(feature = "forbid-legacy-registry"))]
+use crate::{StdRegistryBuilder, StdRegistryVersion};
 
+#[cfg(feature = "forbid-legacy-registry")]
+pub fn standard_registry() -> StdRegistry {
+    panic!("the complete legacy std registry is disabled in this toolchain");
+}
+
+#[cfg(not(feature = "forbid-legacy-registry"))]
 pub fn standard_registry() -> StdRegistry {
     let mut builder = StdRegistryBuilder::new(StdRegistryVersion::phase1());
     core::register(&mut builder);
