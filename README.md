@@ -137,6 +137,8 @@ constructor flows and `is_ok`/`is_err` functions and methods. Checked roles keep
 the existing Result value ABI and constructor-pattern semantics; the Rust
 query view takes parameter names, enum payloads and Index impls from the bundle.
 Descriptor schema 12 carries typed Result return tags across processes.
+The bootstrap catalog contains no spec implementations: Index impls are loaded
+from checked source rather than duplicated as native bootstrap facts.
 
 Public standard-library declarations and algorithms belong in Etas. Rust keeps
 execution rules such as continuation capture/resume and Result representation,

@@ -96,6 +96,11 @@ mod tests {
         let kernel = compiler_contract_registry();
         let legacy = crate::standard_registry();
         assert_eq!(kernel.version(), legacy.version());
+        assert_eq!(
+            kernel.spec_impls().count(),
+            0,
+            "impls belong to checked source"
+        );
         for contract in kernel.symbols() {
             let native = legacy.lookup_qualified(&contract.qualified_path).unwrap();
             assert_eq!(contract.decl, native.decl);

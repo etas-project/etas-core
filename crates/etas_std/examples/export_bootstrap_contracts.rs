@@ -122,16 +122,12 @@ fn main() {
                 })
         })
         .collect::<Vec<_>>();
-    let implementations = registry
-        .spec_impls()
-        .filter(|implementation| implementation.spec.path == ["std", "core", "Index"])
-        .collect::<Vec<_>>();
     println!(
         "{}",
         serde_json::to_string_pretty(&serde_json::json!({
             "schema": 1, "compatibility": StdRegistryVersion::phase1(),
             "contracts": contracts, "prelude": prelude, "aliases": aliases,
-            "implementations": implementations,
+            "implementations": [],
         }))
         .unwrap()
     );
