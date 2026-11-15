@@ -1,5 +1,12 @@
 use crate::StdLibrarySourceId;
 
+/// Maintainer tooling can copy the source package from its Cargo checkout.
+/// Installed compilers locate their SDK through the verified installation
+/// manifest instead; this path is never a runtime library fallback.
+pub fn source_checkout_manifest() -> &'static std::path::Path {
+    std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/etas.toml"))
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StdLibrarySource {
     pub id: StdLibrarySourceId,

@@ -15,6 +15,23 @@ pub struct IntrinsicDescriptor {
 }
 
 impl IntrinsicDescriptor {
+    /// Checked value inputs whose payloads can appear in the returned value.
+    /// Storage operations preserve data origins without invoking those values.
+    pub fn payload_arguments(&self) -> &'static [usize] {
+        use super::{StdCollectionKind as K, StdCollectionOperation as O};
+        if self.latent_effect == IntrinsicLatentEffect::TransparentFirstArg {
+            return &[0];
+        }
+        match &self.lowering {
+            LoweringHint::Collection(operation) => match (operation.kind, operation.operation) {
+                (K::Array, O::Get) => &[0],
+                (K::Array, O::Push) => &[0, 1],
+                _ => &[],
+            },
+            _ => &[],
+        }
+    }
+
     pub fn runtime(id: u32, path: &[&str], purity: IntrinsicPurity) -> Self {
         Self {
             id: StdIntrinsicId(id),

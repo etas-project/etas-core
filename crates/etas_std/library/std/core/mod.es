@@ -4,6 +4,11 @@ module std.core;
 @std.binding("std.core.abort")
 public flow abort(message: string) -> never ![] {}
 
+public flow assert(condition: bool) -> unit ![] {
+    if !condition { abort("assertion failed"); }
+    return;
+}
+
 @std.role("std.core.Index")
 public spec Index;
 impl i8 ~ Index;

@@ -16,10 +16,17 @@ pub enum StdSourceRole {
     Task,
     Scheduler,
     Continuation,
+    Array,
+    List,
+    Map,
+    Set,
+    Range,
+    Slice,
+    Iter,
 }
 
 impl StdSourceRole {
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 17] = [
         Self::Index,
         Self::Option,
         Self::Some,
@@ -30,6 +37,13 @@ impl StdSourceRole {
         Self::Task,
         Self::Scheduler,
         Self::Continuation,
+        Self::Array,
+        Self::List,
+        Self::Map,
+        Self::Set,
+        Self::Range,
+        Self::Slice,
+        Self::Iter,
     ];
 
     pub fn path(self) -> &'static str {
@@ -44,6 +58,13 @@ impl StdSourceRole {
             Self::Task => "std.task.Task",
             Self::Scheduler => "std.task.Scheduler",
             Self::Continuation => "std.task.Continuation",
+            Self::Array => "std.collections.Array",
+            Self::List => "std.collections.List",
+            Self::Map => "std.collections.Map",
+            Self::Set => "std.collections.Set",
+            Self::Range => "std.collections.Range",
+            Self::Slice => "std.collections.Slice",
+            Self::Iter => "std.collections.Iter",
         }
     }
 
@@ -55,8 +76,17 @@ impl StdSourceRole {
         use StdGenericParamKind::{EffectRow, Type};
         match self {
             Self::Index | Self::Scheduler => &[],
-            Self::Option | Self::Some | Self::None | Self::Continuation => &[Type],
-            Self::Result | Self::Ok | Self::Err => &[Type, Type],
+            Self::Option
+            | Self::Some
+            | Self::None
+            | Self::Continuation
+            | Self::Array
+            | Self::List
+            | Self::Set
+            | Self::Range
+            | Self::Slice
+            | Self::Iter => &[Type],
+            Self::Result | Self::Ok | Self::Err | Self::Map => &[Type, Type],
             Self::Task => &[Type, EffectRow],
         }
     }
@@ -77,15 +107,34 @@ impl StdSourceRole {
         }
     }
 
+    pub fn is_bodyless_type(self) -> bool {
+        matches!(
+            self,
+            Self::Task
+                | Self::Scheduler
+                | Self::Continuation
+                | Self::Array
+                | Self::List
+                | Self::Map
+                | Self::Set
+                | Self::Range
+                | Self::Slice
+                | Self::Iter
+        )
+    }
+
     /// Make a query view from source-owned parameters and the execution ABI.
     pub fn declaration(self, parameters: Vec<StdGenericParam>) -> TypeDecl {
         let kind = match self {
             Self::Index => TypeDeclKind::Spec,
-            Self::Task | Self::Scheduler | Self::Continuation => TypeDeclKind::Support,
+            role if role.is_bodyless_type() => TypeDeclKind::Support,
             _ => TypeDeclKind::Enum,
         };
         let name = self.path().rsplit('.').next().unwrap();
         let declaration = TypeDecl::generic_params(name, parameters, kind);
+        if self == Self::Iter {
+            return declaration.iterable_elements(0).intrinsic_only();
+        }
         match self.runtime_role() {
             Some(role) => declaration.runtime_role(role).intrinsic_only(),
             None => declaration,
