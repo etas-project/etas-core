@@ -1,6 +1,14 @@
 module std.collections;
 import std.collections.{array_get, array_push};
 
+public flow list_get<T, I ~ Index>(values: List<T>, index: I) -> Option<T> ![] {
+    var items: Array<T> = [];
+    for value in values limit Iterations(18446744073709551615) {
+        items = array_push(items, value);
+    }
+    return array_get(items, index);
+}
+
 public flow array_pop<T>(values: Array<T>) -> (Array<T>, Option<T>) ![] {
     var remaining: Array<T> = [];
     var previous: Option<T> = None;
@@ -93,6 +101,7 @@ impl Array<T> {
 }
 
 impl List<T> {
+    public flow get<I ~ Index>(self, index: I) -> Option<T> ![] { return list_get(self, index); }
     public flow head(self) -> Option<T> ![] { return list_head(self); }
     public flow tail(self) -> Option<List<T>> ![] { return list_tail(self); }
     public flow pop(self) -> (List<T>, Option<T>) ![] { return list_pop(self); }

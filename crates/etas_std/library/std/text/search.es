@@ -3,6 +3,15 @@ module std.text;
 import std.collections.{array_get, array_push};
 import std.text.{chars, char_count, from_char};
 
+// Scalar order identifies the four UTF-8 encoding widths.
+// U+0080, U+0800 and U+10000 begin the longer forms.
+flow scalar_width(scalar: char) -> usize ![] {
+    if scalar < '' { return 1; }
+    if scalar < 'ࠀ' { return 2; }
+    if scalar < '𐀀' { return 3; }
+    return 4;
+}
+
 flow character_array(text: string) -> Array<char> ![] {
     var output: Array<char> = [];
     for scalar in chars(text) limit Iterations(18446744073709551615) {
@@ -21,6 +30,54 @@ flow matches_at(text: Array<char>, pattern: Array<char>, start: usize) -> bool !
         index = index + 1;
     }
     return true;
+}
+
+flow match_position(text: string, pattern: string, last: bool) -> Option<(usize, usize)> ![] {
+    let values = character_array(text);
+    let expected = character_array(pattern);
+    let length = char_count(text);
+    var index: usize = 0;
+    var byte: usize = 0;
+    var found: Option<(usize, usize)> = None;
+    while index <= length limit Iterations(18446744073709551615) {
+        if matches_at(values, expected, index) {
+            if !last { return Some((index, byte)); }
+            found = Some((index, byte));
+        }
+        if index == length { return found; }
+        byte = byte + scalar_width(array_get(values, index).unwrap());
+        index = index + 1;
+    }
+    return found;
+}
+
+public flow find(text: string, pattern: string) -> Option<usize> ![] {
+    return match match_position(text, pattern, false) {
+        Some((_, byte)) => Some(byte), None => None,
+    };
+}
+
+public flow rfind(text: string, pattern: string) -> Option<usize> ![] {
+    return match match_position(text, pattern, true) {
+        Some((_, byte)) => Some(byte), None => None,
+    };
+}
+
+public flow count(text: string, pattern: string) -> usize ![] {
+    let pattern_length = char_count(pattern);
+    if pattern_length == 0 { return char_count(text) + 1; }
+    let values = character_array(text);
+    let expected = character_array(pattern);
+    let length = char_count(text);
+    var index: usize = 0;
+    var total: usize = 0;
+    while index < length limit Iterations(18446744073709551615) {
+        if matches_at(values, expected, index) {
+            total = total + 1;
+            index = index + pattern_length;
+        } else { index = index + 1; }
+    }
+    return total;
 }
 
 public flow starts_with(text: string, prefix: string) -> bool ![] {
