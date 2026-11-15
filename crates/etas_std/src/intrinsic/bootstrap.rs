@@ -43,6 +43,7 @@ pub fn compiler_contract_identity() -> String {
             role.path(),
             role.parameter_kinds(),
             role.runtime_role(),
+            role.primitive_type(),
             role.code_role(),
             role.effect_execution(),
             (0..role.parameter_kinds().len())
@@ -50,7 +51,7 @@ pub fn compiler_contract_identity() -> String {
                 .collect::<Vec<_>>(),
         )
     });
-    hash.update(&serde_json::to_vec(&(3, roles.as_slice())).expect("compiler role ABI"));
+    hash.update(&serde_json::to_vec(&(4, roles.as_slice())).expect("compiler role ABI"));
     format!("blake3:{}", hash.finalize().to_hex())
 }
 

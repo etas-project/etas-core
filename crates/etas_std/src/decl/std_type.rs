@@ -90,7 +90,16 @@ pub enum StdSupportConstraint {
 }
 
 #[derive(
-    serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize,
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    etas_core::RetainedSize,
 )]
 pub enum StdPrimitiveType {
     Bool,

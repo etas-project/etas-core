@@ -1,12 +1,13 @@
 use crate::{
-    CodeTypeRole, RuntimeTypeRole, StdGenericParam, StdGenericParamKind, StdSymbolKind, TypeDecl,
-    TypeDeclKind,
+    CodeTypeRole, RuntimeTypeRole, StdGenericParam, StdGenericParamKind, StdPrimitiveType,
+    StdSymbolKind, TypeDecl, TypeDeclKind,
 };
 
 /// Compiler identities and minimum execution ABI for declarations owned by std
 /// source. Parameter names, public exports and bodies are not part of this ABI.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 pub enum StdSourceRole {
+    Primitive(StdPrimitiveType),
     Index,
     Region,
     WorkspacePath,
@@ -57,7 +58,27 @@ pub enum StdSourceRole {
 }
 
 impl StdSourceRole {
-    pub const ALL: [Self; 47] = [
+    pub const ALL: [Self; 67] = [
+        Self::Primitive(StdPrimitiveType::Bool),
+        Self::Primitive(StdPrimitiveType::Bytes),
+        Self::Primitive(StdPrimitiveType::Char),
+        Self::Primitive(StdPrimitiveType::F32),
+        Self::Primitive(StdPrimitiveType::F64),
+        Self::Primitive(StdPrimitiveType::I128),
+        Self::Primitive(StdPrimitiveType::I16),
+        Self::Primitive(StdPrimitiveType::I32),
+        Self::Primitive(StdPrimitiveType::I64),
+        Self::Primitive(StdPrimitiveType::I8),
+        Self::Primitive(StdPrimitiveType::ISize),
+        Self::Primitive(StdPrimitiveType::Never),
+        Self::Primitive(StdPrimitiveType::String),
+        Self::Primitive(StdPrimitiveType::U128),
+        Self::Primitive(StdPrimitiveType::U16),
+        Self::Primitive(StdPrimitiveType::U32),
+        Self::Primitive(StdPrimitiveType::U64),
+        Self::Primitive(StdPrimitiveType::U8),
+        Self::Primitive(StdPrimitiveType::Unit),
+        Self::Primitive(StdPrimitiveType::USize),
         Self::Index,
         Self::Region,
         Self::WorkspacePath,
@@ -109,6 +130,26 @@ impl StdSourceRole {
 
     pub fn path(self) -> &'static str {
         match self {
+            Self::Primitive(StdPrimitiveType::Bool) => "std.core.bool",
+            Self::Primitive(StdPrimitiveType::Bytes) => "std.core.bytes",
+            Self::Primitive(StdPrimitiveType::Char) => "std.core.char",
+            Self::Primitive(StdPrimitiveType::F32) => "std.core.f32",
+            Self::Primitive(StdPrimitiveType::F64) => "std.core.f64",
+            Self::Primitive(StdPrimitiveType::I128) => "std.core.i128",
+            Self::Primitive(StdPrimitiveType::I16) => "std.core.i16",
+            Self::Primitive(StdPrimitiveType::I32) => "std.core.i32",
+            Self::Primitive(StdPrimitiveType::I64) => "std.core.i64",
+            Self::Primitive(StdPrimitiveType::I8) => "std.core.i8",
+            Self::Primitive(StdPrimitiveType::ISize) => "std.core.isize",
+            Self::Primitive(StdPrimitiveType::Never) => "std.core.never",
+            Self::Primitive(StdPrimitiveType::String) => "std.core.string",
+            Self::Primitive(StdPrimitiveType::U128) => "std.core.u128",
+            Self::Primitive(StdPrimitiveType::U16) => "std.core.u16",
+            Self::Primitive(StdPrimitiveType::U32) => "std.core.u32",
+            Self::Primitive(StdPrimitiveType::U64) => "std.core.u64",
+            Self::Primitive(StdPrimitiveType::U8) => "std.core.u8",
+            Self::Primitive(StdPrimitiveType::Unit) => "std.core.unit",
+            Self::Primitive(StdPrimitiveType::USize) => "std.core.usize",
             Self::Index => "std.core.Index",
             Self::Region => "std.fs.Region",
             Self::WorkspacePath => "std.fs.WorkspacePath",
@@ -166,7 +207,8 @@ impl StdSourceRole {
     pub fn parameter_kinds(self) -> &'static [StdGenericParamKind] {
         use StdGenericParamKind::{EffectRow, Type};
         match self {
-            Self::Index
+            Self::Primitive(_)
+            | Self::Index
             | Self::Region
             | Self::Scheduler
             | Self::CompilerActionSummary
@@ -267,7 +309,8 @@ impl StdSourceRole {
     }
 
     pub fn is_bodyless_type(self) -> bool {
-        (self.code_role().is_some() && !self.is_projected_type())
+        self.primitive_type().is_some()
+            || (self.code_role().is_some() && !self.is_projected_type())
             || matches!(
                 self,
                 Self::WorkspacePath
@@ -282,6 +325,13 @@ impl StdSourceRole {
                     | Self::Slice
                     | Self::Iter
             )
+    }
+
+    pub fn primitive_type(self) -> Option<StdPrimitiveType> {
+        match self {
+            Self::Primitive(primitive) => Some(primitive),
+            _ => None,
+        }
     }
 
     pub fn is_projected_type(self) -> bool {
@@ -329,6 +379,7 @@ impl StdSourceRole {
     /// Make a query view from source-owned parameters and the execution ABI.
     pub fn declaration(self, parameters: Vec<StdGenericParam>) -> TypeDecl {
         let kind = match self {
+            Self::Primitive(_) => TypeDeclKind::Primitive,
             role if role.code_role().is_some() => TypeDeclKind::Struct,
             role if role.is_spec() => TypeDeclKind::Spec,
             role if role.is_bodyless_type() => TypeDeclKind::Support,
