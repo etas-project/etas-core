@@ -7,6 +7,8 @@ use crate::{
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 pub enum StdSourceRole {
     Index,
+    Region,
+    WorkspacePath,
     Option,
     Some,
     None,
@@ -26,8 +28,10 @@ pub enum StdSourceRole {
 }
 
 impl StdSourceRole {
-    pub const ALL: [Self; 17] = [
+    pub const ALL: [Self; 19] = [
         Self::Index,
+        Self::Region,
+        Self::WorkspacePath,
         Self::Option,
         Self::Some,
         Self::None,
@@ -49,6 +53,8 @@ impl StdSourceRole {
     pub fn path(self) -> &'static str {
         match self {
             Self::Index => "std.core.Index",
+            Self::Region => "std.fs.Region",
+            Self::WorkspacePath => "std.fs.WorkspacePath",
             Self::Option => "std.option.Option",
             Self::Some => "std.option.Some",
             Self::None => "std.option.None",
@@ -75,8 +81,9 @@ impl StdSourceRole {
     pub fn parameter_kinds(self) -> &'static [StdGenericParamKind] {
         use StdGenericParamKind::{EffectRow, Type};
         match self {
-            Self::Index | Self::Scheduler => &[],
-            Self::Option
+            Self::Index | Self::Region | Self::Scheduler => &[],
+            Self::WorkspacePath
+            | Self::Option
             | Self::Some
             | Self::None
             | Self::Continuation
@@ -91,8 +98,21 @@ impl StdSourceRole {
         }
     }
 
+    pub fn is_spec(self) -> bool {
+        matches!(self, Self::Index | Self::Region)
+    }
+
+    pub fn parameter_bounds(self, index: usize) -> Vec<crate::StdSpecRef> {
+        if self == Self::WorkspacePath && index == 0 {
+            vec![crate::StdSpecRef::new(&["std", "fs", "Region"])]
+        } else {
+            Vec::new()
+        }
+    }
+
     pub fn runtime_role(self) -> Option<RuntimeTypeRole> {
         match self {
+            Self::WorkspacePath => Some(RuntimeTypeRole::WorkspacePath),
             Self::Task => Some(RuntimeTypeRole::Task),
             Self::Scheduler => Some(RuntimeTypeRole::Scheduler),
             Self::Continuation => Some(RuntimeTypeRole::Continuation),
@@ -110,7 +130,8 @@ impl StdSourceRole {
     pub fn is_bodyless_type(self) -> bool {
         matches!(
             self,
-            Self::Task
+            Self::WorkspacePath
+                | Self::Task
                 | Self::Scheduler
                 | Self::Continuation
                 | Self::Array
@@ -126,7 +147,7 @@ impl StdSourceRole {
     /// Make a query view from source-owned parameters and the execution ABI.
     pub fn declaration(self, parameters: Vec<StdGenericParam>) -> TypeDecl {
         let kind = match self {
-            Self::Index => TypeDeclKind::Spec,
+            role if role.is_spec() => TypeDeclKind::Spec,
             role if role.is_bodyless_type() => TypeDeclKind::Support,
             _ => TypeDeclKind::Enum,
         };
@@ -136,6 +157,9 @@ impl StdSourceRole {
             return declaration.iterable_elements(0).intrinsic_only();
         }
         match self.runtime_role() {
+            Some(RuntimeTypeRole::WorkspacePath) => {
+                declaration.runtime_role(RuntimeTypeRole::WorkspacePath)
+            }
             Some(role) => declaration.runtime_role(role).intrinsic_only(),
             None => declaration,
         }
@@ -149,7 +173,7 @@ impl StdSourceRole {
                 .map(|(index, kind)| StdGenericParam {
                     name: format!("$role{index}"),
                     kind: *kind,
-                    bounds: Vec::new(),
+                    bounds: self.parameter_bounds(index),
                 })
                 .collect(),
         )

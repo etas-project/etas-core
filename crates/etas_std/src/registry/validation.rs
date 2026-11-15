@@ -1076,7 +1076,10 @@ fn validate_named_type(
         declaration
     };
     let Some(declaration) = declaration else {
-        if arity == 0 && registry.native_enum_reference(name).is_some() {
+        if arity == 0
+            && (registry.native_enum_reference(name).is_some()
+                || registry.native_opaque_reference(name).is_some())
+        {
             return Ok(());
         }
         return invalid(owner.to_owned(), format!("unknown standard type `{name}`"));

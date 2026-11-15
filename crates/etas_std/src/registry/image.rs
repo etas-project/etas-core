@@ -14,7 +14,7 @@ use crate::{
     StdImplementationRef, StdIntrinsicId,
 };
 
-const SCHEMA: u32 = 3;
+const SCHEMA: u32 = 4;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StdRegistryImage {
@@ -34,6 +34,7 @@ pub struct StdRegistryImage {
     declarations: BTreeMap<StdSymbolId, etas_code::DefinitionKey>,
     enum_field_names: BTreeMap<StdSymbolId, Vec<String>>,
     native_enum_references: BTreeMap<String, super::StdNativeEnumReference>,
+    native_opaque_references: BTreeMap<String, super::StdNativeOpaqueReference>,
 }
 
 impl StdRegistryImage {
@@ -52,6 +53,15 @@ impl StdRegistryImage {
                 })
             {
                 return Err(invalid("checked source enum disagrees with its native ABI reference"));
+            }
+        }
+        for reference in registry.native_opaque_references() {
+            if let Some(owner) = registry.lookup_qualified(&reference.path) {
+                if !reference.matches_declaration(&owner.decl) {
+                    return Err(invalid(
+                        "checked opaque source type disagrees with its native ABI reference",
+                    ));
+                }
             }
         }
         if registry.symbols().any(|symbol| {
@@ -84,6 +94,7 @@ impl StdRegistryImage {
             declarations: registry.declarations.clone(),
             enum_field_names: registry.enum_field_names.clone(),
             native_enum_references: registry.native_enum_references.clone(),
+            native_opaque_references: registry.native_opaque_references.clone(),
         })
     }
 
@@ -106,6 +117,7 @@ impl StdRegistryImage {
             declarations: self.declarations,
             enum_field_names: self.enum_field_names,
             native_enum_references: self.native_enum_references,
+            native_opaque_references: self.native_opaque_references,
         };
         for (index, module) in registry.modules.iter().enumerate() {
             if module.id.0 as usize != index {

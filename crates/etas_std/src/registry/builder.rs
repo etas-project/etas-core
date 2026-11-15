@@ -395,6 +395,14 @@ impl StdRegistryBuilder {
         assert!(previous.is_none(), "duplicate native enum ABI reference");
     }
 
+    pub fn native_opaque_reference(&mut self, reference: super::StdNativeOpaqueReference) {
+        let previous = self
+            .registry
+            .native_opaque_references
+            .insert(reference.path.join("."), reference);
+        assert!(previous.is_none(), "duplicate native opaque ABI reference");
+    }
+
     /// Replace a bootstrap spec's implementations with its checked bundle facts.
     pub fn replace_spec_impls(&mut self, path: &[String], implementations: Vec<StdImplFact>) {
         self.registry

@@ -3432,96 +3432,6 @@
     },
     {
       "declaration": {
-        "Type": {
-          "canonical_type": null,
-          "code_role": null,
-          "construction": "Public",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Support",
-          "name": "IOError",
-          "params": [],
-          "projected_fields": [],
-          "representation": null,
-          "runtime_role": null
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "fs",
-        "IOError"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Type": {
-          "canonical_type": null,
-          "code_role": null,
-          "construction": "Public",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Spec",
-          "name": "Region",
-          "params": [],
-          "projected_fields": [],
-          "representation": null,
-          "runtime_role": null
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "fs",
-        "Region"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Type": {
-          "canonical_type": null,
-          "code_role": null,
-          "construction": "Public",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Support",
-          "name": "WorkspacePath",
-          "params": [
-            {
-              "bounds": [
-                {
-                  "args": [],
-                  "path": [
-                    "std",
-                    "fs",
-                    "Region"
-                  ]
-                }
-              ],
-              "kind": "Type",
-              "name": "R"
-            }
-          ],
-          "projected_fields": [],
-          "representation": null,
-          "runtime_role": "WorkspacePath"
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "fs",
-        "WorkspacePath"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
         "Flow": {
           "name": "path",
           "output": {
@@ -4746,6 +4656,15 @@
       "required_unit_variants": [
         "ParseFailure",
         "NumericOverflow"
+      ]
+    }
+  ],
+  "native_opaque_references": [
+    {
+      "path": [
+        "std",
+        "fs",
+        "IOError"
       ]
     }
   ],

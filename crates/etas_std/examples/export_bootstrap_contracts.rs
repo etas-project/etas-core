@@ -25,9 +25,6 @@ fn main() {
         "std.effects.FileIO",
         "std.effects.Fs",
         "std.effects.actions.Fs.read",
-        "std.fs.Region",
-        "std.fs.WorkspacePath",
-        "std.fs.IOError",
         "std.fs.path",
         "std.fs.read_bytes",
         "std.codec.text.utf8_encode",
@@ -119,6 +116,7 @@ fn main() {
                 "path": ["std", "text", "TextError"],
                 "required_unit_variants": ["ParseFailure", "NumericOverflow"],
             }],
+            "native_opaque_references": [{"path": ["std", "fs", "IOError"]}],
             "implementations": [],
         }))
         .unwrap()

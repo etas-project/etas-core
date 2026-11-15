@@ -16,6 +16,7 @@ struct ContractSet {
     compatibility: StdRegistryVersion,
     contracts: Vec<Contract>,
     native_enum_references: Vec<crate::StdNativeEnumReference>,
+    native_opaque_references: Vec<crate::StdNativeOpaqueReference>,
     prelude: Vec<(String, Vec<String>)>,
     aliases: Vec<(Vec<String>, Vec<String>)>,
     implementations: Vec<StdImplFact>,
@@ -40,6 +41,9 @@ pub fn compiler_contract_identity() -> String {
             role.path(),
             role.parameter_kinds(),
             role.runtime_role(),
+            (0..role.parameter_kinds().len())
+                .map(|index| role.parameter_bounds(index))
+                .collect::<Vec<_>>(),
         )
     });
     hash.update(&serde_json::to_vec(&(1, roles)).expect("compiler role ABI"));
@@ -55,6 +59,9 @@ pub fn compiler_contract_registry() -> StdRegistry {
     let mut builder = StdRegistryBuilder::new(contracts.compatibility);
     for reference in contracts.native_enum_references {
         builder.native_enum_reference(reference);
+    }
+    for reference in contracts.native_opaque_references {
+        builder.native_opaque_reference(reference);
     }
     let mut modules = BTreeMap::new();
     let mut symbols = BTreeMap::new();
@@ -170,5 +177,7 @@ mod tests {
                 .required_unit_variants,
             ["ParseFailure", "NumericOverflow"]
         );
+        assert!(kernel.lookup_qualified(&["std", "fs", "IOError"]).is_none());
+        assert!(kernel.native_opaque_reference("std.fs.IOError").is_some());
     }
 }

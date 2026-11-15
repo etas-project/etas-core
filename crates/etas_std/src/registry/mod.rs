@@ -13,7 +13,7 @@ pub mod prelude;
 mod validation;
 mod value_role;
 pub use image::StdRegistryImage;
-pub use native_reference::StdNativeEnumReference;
+pub use native_reference::{StdNativeEnumReference, StdNativeOpaqueReference};
 
 pub use builder::StdRegistryBuilder;
 pub use module::{
@@ -42,6 +42,7 @@ pub struct StdRegistry {
     flow_overloads: BTreeMap<StdSymbolId, Vec<crate::FlowDecl>>,
     action_overloads: BTreeMap<StdSymbolId, Vec<crate::EffectActionDecl>>,
     native_enum_references: BTreeMap<String, StdNativeEnumReference>,
+    native_opaque_references: BTreeMap<String, StdNativeOpaqueReference>,
 }
 
 impl StdRegistry {
@@ -83,6 +84,32 @@ impl StdRegistry {
                 return Err(StdRegistryValidationError {
                     symbol: reference.path.join("."),
                     reason: "native ABI reference has no matching checked source enum".into(),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    pub fn native_opaque_references(&self) -> impl Iterator<Item = &StdNativeOpaqueReference> {
+        self.native_opaque_references.values()
+    }
+
+    pub fn native_opaque_reference(&self, path: &str) -> Option<&StdNativeOpaqueReference> {
+        self.native_opaque_references.get(path)
+    }
+
+    pub fn validate_resolved_native_opaque_references(
+        &self,
+    ) -> Result<(), StdRegistryValidationError> {
+        for reference in self.native_opaque_references() {
+            let valid = self
+                .lookup_qualified(&reference.path)
+                .is_some_and(|owner| reference.matches_declaration(&owner.decl));
+            if !valid {
+                return Err(StdRegistryValidationError {
+                    symbol: reference.path.join("."),
+                    reason: "native ABI reference has no matching checked opaque source type"
+                        .into(),
                 });
             }
         }
