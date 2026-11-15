@@ -14,7 +14,7 @@ use crate::{
     StdImplementationRef, StdIntrinsicId,
 };
 
-const SCHEMA: u32 = 2;
+const SCHEMA: u32 = 3;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StdRegistryImage {
@@ -33,11 +33,27 @@ pub struct StdRegistryImage {
     bodies: BTreeMap<u32, StdBodyBinding>,
     declarations: BTreeMap<StdSymbolId, etas_code::DefinitionKey>,
     enum_field_names: BTreeMap<StdSymbolId, Vec<String>>,
+    native_enum_references: BTreeMap<String, super::StdNativeEnumReference>,
 }
 
 impl StdRegistryImage {
     pub fn capture(registry: &StdRegistry) -> Result<Self, StdRegistryValidationError> {
         registry.validate()?;
+        for reference in registry.native_enum_references() {
+            let Some(owner) = registry.lookup_qualified(&reference.path) else {
+                continue;
+            };
+            if !matches!(&owner.decl, crate::StdDecl::Type(declaration)
+                if declaration.kind == crate::TypeDeclKind::Enum && declaration.params.is_empty())
+                || reference.required_unit_variants.iter().any(|name| {
+                    !registry.enum_constructor(owner.id, name).is_some_and(|variant| {
+                        matches!(&variant.decl, crate::StdDecl::Flow(flow) if flow.params.is_empty())
+                    })
+                })
+            {
+                return Err(invalid("checked source enum disagrees with its native ABI reference"));
+            }
+        }
         if registry.symbols().any(|symbol| {
             matches!(
                 symbol.implementation,
@@ -67,6 +83,7 @@ impl StdRegistryImage {
             bodies: registry.bodies.clone(),
             declarations: registry.declarations.clone(),
             enum_field_names: registry.enum_field_names.clone(),
+            native_enum_references: registry.native_enum_references.clone(),
         })
     }
 
@@ -88,6 +105,7 @@ impl StdRegistryImage {
             bodies: self.bodies,
             declarations: self.declarations,
             enum_field_names: self.enum_field_names,
+            native_enum_references: self.native_enum_references,
         };
         for (index, module) in registry.modules.iter().enumerate() {
             if module.id.0 as usize != index {

@@ -29,7 +29,7 @@ pub use metadata::{CompletionMetadata, DocsMetadata, StdManifest, TextCompatibil
 pub use modules::effects::is_standard_effect_reference;
 pub use modules::standard_registry;
 pub use registry::{
-    StdModule, StdModuleId, StdNamespace, StdPrelude, StdRegistry, StdRegistryBuilder,
-    StdRegistryImage, StdRegistryValidationError, StdRegistryVersion, StdSymbol, StdSymbolId,
-    StdSymbolKind, StdSymbolRef,
+    StdModule, StdModuleId, StdNamespace, StdNativeEnumReference, StdPrelude, StdRegistry,
+    StdRegistryBuilder, StdRegistryImage, StdRegistryValidationError, StdRegistryVersion,
+    StdSymbol, StdSymbolId, StdSymbolKind, StdSymbolRef,
 };

@@ -387,6 +387,14 @@ impl StdRegistryBuilder {
         self.registry.push_spec_impl(implementation);
     }
 
+    pub fn native_enum_reference(&mut self, reference: super::StdNativeEnumReference) {
+        let previous = self
+            .registry
+            .native_enum_references
+            .insert(reference.path.join("."), reference);
+        assert!(previous.is_none(), "duplicate native enum ABI reference");
+    }
+
     /// Replace a bootstrap spec's implementations with its checked bundle facts.
     pub fn replace_spec_impls(&mut self, path: &[String], implementations: Vec<StdImplFact>) {
         self.registry

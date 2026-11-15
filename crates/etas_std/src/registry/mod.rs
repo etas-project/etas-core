@@ -8,10 +8,12 @@ mod enum_constructor;
 mod image;
 pub mod lookup;
 pub mod module;
+mod native_reference;
 pub mod prelude;
 mod validation;
 mod value_role;
 pub use image::StdRegistryImage;
+pub use native_reference::StdNativeEnumReference;
 
 pub use builder::StdRegistryBuilder;
 pub use module::{
@@ -39,6 +41,7 @@ pub struct StdRegistry {
     spec_impls: Vec<StdImplFact>,
     flow_overloads: BTreeMap<StdSymbolId, Vec<crate::FlowDecl>>,
     action_overloads: BTreeMap<StdSymbolId, Vec<crate::EffectActionDecl>>,
+    native_enum_references: BTreeMap<String, StdNativeEnumReference>,
 }
 
 impl StdRegistry {
@@ -51,6 +54,39 @@ impl StdRegistry {
 
     pub fn version(&self) -> &StdRegistryVersion {
         &self.version
+    }
+
+    /// Bootstrap-only ABI references, resolved by ordinary checked std source.
+    pub fn native_enum_references(&self) -> impl Iterator<Item = &StdNativeEnumReference> {
+        self.native_enum_references.values()
+    }
+
+    pub fn native_enum_reference(&self, path: &str) -> Option<&StdNativeEnumReference> {
+        self.native_enum_references.get(path)
+    }
+
+    /// A published provider resolves ABI references to checked declarations.
+    pub fn validate_resolved_native_enum_references(
+        &self,
+    ) -> Result<(), StdRegistryValidationError> {
+        for reference in self.native_enum_references() {
+            let valid = self.lookup_qualified(&reference.path).is_some_and(|owner| {
+                matches!(&owner.decl, crate::StdDecl::Type(declaration)
+                    if declaration.kind == crate::TypeDeclKind::Enum && declaration.params.is_empty())
+                    && reference.required_unit_variants.iter().all(|name| {
+                        self.enum_constructor(owner.id, name).is_some_and(|variant| {
+                            matches!(&variant.decl, crate::StdDecl::Flow(flow) if flow.params.is_empty())
+                        })
+                    })
+            });
+            if !valid {
+                return Err(StdRegistryValidationError {
+                    symbol: reference.path.join("."),
+                    reason: "native ABI reference has no matching checked source enum".into(),
+                });
+            }
+        }
+        Ok(())
     }
 
     pub fn modules(&self) -> impl Iterator<Item = &StdModule> {

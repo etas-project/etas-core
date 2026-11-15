@@ -15,6 +15,7 @@ struct ContractSet {
     schema: u32,
     compatibility: StdRegistryVersion,
     contracts: Vec<Contract>,
+    native_enum_references: Vec<crate::StdNativeEnumReference>,
     prelude: Vec<(String, Vec<String>)>,
     aliases: Vec<(Vec<String>, Vec<String>)>,
     implementations: Vec<StdImplFact>,
@@ -52,6 +53,9 @@ pub fn compiler_contract_registry() -> StdRegistry {
         .expect("compiled bootstrap contracts");
     assert_eq!(contracts.schema, 1, "bootstrap contract schema");
     let mut builder = StdRegistryBuilder::new(contracts.compatibility);
+    for reference in contracts.native_enum_references {
+        builder.native_enum_reference(reference);
+    }
     let mut modules = BTreeMap::new();
     let mut symbols = BTreeMap::new();
     for contract in contracts.contracts {
@@ -154,5 +158,17 @@ mod tests {
         }
         assert!(kernel.lookup_qualified(&["std", "text", "chars"]).is_some());
         assert!(kernel.lookup_qualified(&["std", "text", "join"]).is_none());
+        assert!(
+            kernel
+                .lookup_qualified(&["std", "text", "TextError"])
+                .is_none()
+        );
+        assert_eq!(
+            kernel
+                .native_enum_reference("std.text.TextError")
+                .unwrap()
+                .required_unit_variants,
+            ["ParseFailure", "NumericOverflow"]
+        );
     }
 }

@@ -12,7 +12,6 @@ fn main() {
         "std.runtime.limits.Limit",
         "std.collections.array_get",
         "std.collections.array_push",
-        "std.text.TextError",
         "std.text.chars",
         "std.text.from_char",
         "std.text.parse_usize",
@@ -44,9 +43,6 @@ fn main() {
                 && matches!(symbol.decl, StdDecl::Type(_)))
             || matches!(symbol.decl, StdDecl::Effect(ref effect) if effect.core)
             || symbol.kind == StdSymbolKind::Requirement
-            || symbol
-                .qualified_path
-                .starts_with(&["std".into(), "text".into(), "TextError".into()])
         {
             paths.insert(symbol.qualified_path.join("."));
         }
@@ -119,6 +115,10 @@ fn main() {
         serde_json::to_string_pretty(&serde_json::json!({
             "schema": 1, "compatibility": StdRegistryVersion::phase1(),
             "contracts": contracts, "prelude": prelude, "aliases": aliases,
+            "native_enum_references": [{
+                "path": ["std", "text", "TextError"],
+                "required_unit_variants": ["ParseFailure", "NumericOverflow"],
+            }],
             "implementations": [],
         }))
         .unwrap()
