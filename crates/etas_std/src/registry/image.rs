@@ -14,7 +14,7 @@ use crate::{
     StdImplementationRef, StdIntrinsicId,
 };
 
-const SCHEMA: u32 = 4;
+const SCHEMA: u32 = 5;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StdRegistryImage {
@@ -35,6 +35,7 @@ pub struct StdRegistryImage {
     enum_field_names: BTreeMap<StdSymbolId, Vec<String>>,
     native_enum_references: BTreeMap<String, super::StdNativeEnumReference>,
     native_opaque_references: BTreeMap<String, super::StdNativeOpaqueReference>,
+    native_record_references: BTreeMap<String, super::StdNativeRecordReference>,
 }
 
 impl StdRegistryImage {
@@ -44,15 +45,10 @@ impl StdRegistryImage {
             let Some(owner) = registry.lookup_qualified(&reference.path) else {
                 continue;
             };
-            if !matches!(&owner.decl, crate::StdDecl::Type(declaration)
-                if declaration.kind == crate::TypeDeclKind::Enum && declaration.params.is_empty())
-                || reference.required_unit_variants.iter().any(|name| {
-                    !registry.enum_constructor(owner.id, name).is_some_and(|variant| {
-                        matches!(&variant.decl, crate::StdDecl::Flow(flow) if flow.params.is_empty())
-                    })
-                })
-            {
-                return Err(invalid("checked source enum disagrees with its native ABI reference"));
+            if !reference.matches_owner(registry, owner) {
+                return Err(invalid(
+                    "checked source enum disagrees with its native ABI reference",
+                ));
             }
         }
         for reference in registry.native_opaque_references() {
@@ -60,6 +56,15 @@ impl StdRegistryImage {
                 if !reference.matches_declaration(&owner.decl) {
                     return Err(invalid(
                         "checked opaque source type disagrees with its native ABI reference",
+                    ));
+                }
+            }
+        }
+        for reference in registry.native_record_references() {
+            if let Some(owner) = registry.lookup_qualified(&reference.path) {
+                if !reference.matches_declaration(&owner.decl) {
+                    return Err(invalid(
+                        "checked source record disagrees with its native ABI reference",
                     ));
                 }
             }
@@ -95,6 +100,7 @@ impl StdRegistryImage {
             enum_field_names: registry.enum_field_names.clone(),
             native_enum_references: registry.native_enum_references.clone(),
             native_opaque_references: registry.native_opaque_references.clone(),
+            native_record_references: registry.native_record_references.clone(),
         })
     }
 
@@ -118,6 +124,7 @@ impl StdRegistryImage {
             enum_field_names: self.enum_field_names,
             native_enum_references: self.native_enum_references,
             native_opaque_references: self.native_opaque_references,
+            native_record_references: self.native_record_references,
         };
         for (index, module) in registry.modules.iter().enumerate() {
             if module.id.0 as usize != index {

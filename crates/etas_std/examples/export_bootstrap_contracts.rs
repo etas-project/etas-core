@@ -27,6 +27,18 @@ fn main() {
         "std.effects.actions.Fs.read",
         "std.fs.path",
         "std.fs.read_bytes",
+        "std.fs.root",
+        "std.fs.relative_name",
+        "std.fs.read_bytes_limited",
+        "std.fs.write_bytes",
+        "std.fs.list",
+        "std.fs.list_limited",
+        "std.fs.stat",
+        "std.fs.atomic_replace",
+        "std.effects.actions.Fs.write",
+        "std.effects.actions.Fs.list",
+        "std.effects.actions.Fs.stat",
+        "std.effects.actions.Fs.atomic_replace",
         "std.codec.text.utf8_encode",
     ]
     .into_iter()
@@ -115,8 +127,25 @@ fn main() {
             "native_enum_references": [{
                 "path": ["std", "text", "TextError"],
                 "required_unit_variants": ["ParseFailure", "NumericOverflow"],
+                "required_payload_variants": {},
+            }, {
+                "path": ["std", "fs", "ReadLimitError"],
+                "required_unit_variants": [],
+                "required_payload_variants": {"LimitExceeded": ["USize"]},
+            }, {
+                "path": ["std", "fs", "ListLimitError"],
+                "required_unit_variants": [],
+                "required_payload_variants": {"LimitExceeded": ["USize", "USize"]},
             }],
             "native_opaque_references": [{"path": ["std", "fs", "IOError"]}],
+            "native_record_references": [{
+                "path": ["std", "fs", "FsStat"],
+                "fields": [
+                    {"name": "is_file", "ty": {"Primitive": "Bool"}},
+                    {"name": "is_dir", "ty": {"Primitive": "Bool"}},
+                    {"name": "len", "ty": {"Primitive": "U64"}},
+                ],
+            }],
             "implementations": [],
         }))
         .unwrap()

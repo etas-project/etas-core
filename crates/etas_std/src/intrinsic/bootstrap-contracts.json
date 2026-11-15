@@ -3378,6 +3378,163 @@
           "effect_args": [
             "Type"
           ],
+          "high_impact_ack": true,
+          "name": "atomic_replace",
+          "output": {
+            "Primitive": "Unit"
+          },
+          "owner": "Fs",
+          "params": [
+            {
+              "NamedApplied": {
+                "args": [
+                  {
+                    "Var": "R"
+                  }
+                ],
+                "name": "WorkspacePath"
+              }
+            }
+          ],
+          "runtime_requirement": "FileIO",
+          "selector_param_names": [
+            "R"
+          ],
+          "stable_id": 140,
+          "type_params": [
+            {
+              "bounds": [
+                {
+                  "args": [],
+                  "path": [
+                    "std",
+                    "fs",
+                    "Region"
+                  ]
+                }
+              ],
+              "kind": "Type",
+              "name": "R"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "kind": "EffectAction",
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Fs",
+        "atomic_replace"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.fs.IOError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "effect_args": [
+            "Type"
+          ],
+          "high_impact_ack": false,
+          "name": "list",
+          "output": {
+            "List": {
+              "NamedApplied": {
+                "args": [
+                  {
+                    "Var": "R"
+                  }
+                ],
+                "name": "WorkspacePath"
+              }
+            }
+          },
+          "owner": "Fs",
+          "params": [
+            {
+              "NamedApplied": {
+                "args": [
+                  {
+                    "Var": "R"
+                  }
+                ],
+                "name": "WorkspacePath"
+              }
+            }
+          ],
+          "runtime_requirement": "FileIO",
+          "selector_param_names": [
+            "R"
+          ],
+          "stable_id": 138,
+          "type_params": [
+            {
+              "bounds": [
+                {
+                  "args": [],
+                  "path": [
+                    "std",
+                    "fs",
+                    "Region"
+                  ]
+                }
+              ],
+              "kind": "Type",
+              "name": "R"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "kind": "EffectAction",
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Fs",
+        "list"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.fs.IOError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "effect_args": [
+            "Type"
+          ],
           "high_impact_ack": false,
           "name": "read",
           "output": {
@@ -3429,6 +3586,493 @@
         "read"
       ],
       "primitive": null
+    },
+    {
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.fs.IOError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "effect_args": [
+            "Type"
+          ],
+          "high_impact_ack": false,
+          "name": "stat",
+          "output": {
+            "Named": "FsStat"
+          },
+          "owner": "Fs",
+          "params": [
+            {
+              "NamedApplied": {
+                "args": [
+                  {
+                    "Var": "R"
+                  }
+                ],
+                "name": "WorkspacePath"
+              }
+            }
+          ],
+          "runtime_requirement": "FileIO",
+          "selector_param_names": [
+            "R"
+          ],
+          "stable_id": 139,
+          "type_params": [
+            {
+              "bounds": [
+                {
+                  "args": [],
+                  "path": [
+                    "std",
+                    "fs",
+                    "Region"
+                  ]
+                }
+              ],
+              "kind": "Type",
+              "name": "R"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "kind": "EffectAction",
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Fs",
+        "stat"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.fs.IOError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "effect_args": [
+            "Type"
+          ],
+          "high_impact_ack": true,
+          "name": "write",
+          "output": {
+            "Primitive": "Unit"
+          },
+          "owner": "Fs",
+          "params": [
+            {
+              "NamedApplied": {
+                "args": [
+                  {
+                    "Var": "R"
+                  }
+                ],
+                "name": "WorkspacePath"
+              }
+            }
+          ],
+          "runtime_requirement": "FileIO",
+          "selector_param_names": [
+            "R"
+          ],
+          "stable_id": 137,
+          "type_params": [
+            {
+              "bounds": [
+                {
+                  "args": [],
+                  "path": [
+                    "std",
+                    "fs",
+                    "Region"
+                  ]
+                }
+              ],
+              "kind": "Type",
+              "name": "R"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "kind": "EffectAction",
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Fs",
+        "write"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "atomic_replace",
+          "output": {
+            "Primitive": "Unit"
+          },
+          "params": [
+            {
+              "NamedApplied": {
+                "args": [
+                  {
+                    "Var": "R"
+                  }
+                ],
+                "name": "WorkspacePath"
+              }
+            },
+            {
+              "Primitive": "Bytes"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.fs.IOError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "requested_action_tail": null,
+          "requested_actions": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Var": "R"
+                  }
+                }
+              ],
+              "path": [
+                "Fs",
+                "atomic_replace"
+              ]
+            }
+          ],
+          "source_method": null,
+          "type_params": [
+            {
+              "bounds": [
+                {
+                  "args": [],
+                  "path": [
+                    "std",
+                    "fs",
+                    "Region"
+                  ]
+                }
+              ],
+              "kind": "Type",
+              "name": "R"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "fs",
+        "atomic_replace"
+      ],
+      "primitive": {
+        "dispatch": "Host",
+        "id": 1110,
+        "latent_effect": "None",
+        "lowering": {
+          "DefaultAction": {
+            "payload": [
+              0
+            ],
+            "stable_id": 140
+          }
+        },
+        "memory_access": "None",
+        "purity": "Host",
+        "qualified_path": [
+          "std",
+          "fs",
+          "atomic_replace"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "list",
+          "output": {
+            "List": {
+              "NamedApplied": {
+                "args": [
+                  {
+                    "Var": "R"
+                  }
+                ],
+                "name": "WorkspacePath"
+              }
+            }
+          },
+          "params": [
+            {
+              "NamedApplied": {
+                "args": [
+                  {
+                    "Var": "R"
+                  }
+                ],
+                "name": "WorkspacePath"
+              }
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.fs.IOError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "requested_action_tail": null,
+          "requested_actions": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Var": "R"
+                  }
+                }
+              ],
+              "path": [
+                "Fs",
+                "list"
+              ]
+            }
+          ],
+          "source_method": null,
+          "type_params": [
+            {
+              "bounds": [
+                {
+                  "args": [],
+                  "path": [
+                    "std",
+                    "fs",
+                    "Region"
+                  ]
+                }
+              ],
+              "kind": "Type",
+              "name": "R"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "fs",
+        "list"
+      ],
+      "primitive": {
+        "dispatch": "Host",
+        "id": 1108,
+        "latent_effect": "None",
+        "lowering": {
+          "DefaultAction": {
+            "payload": [
+              0
+            ],
+            "stable_id": 138
+          }
+        },
+        "memory_access": "None",
+        "purity": "Host",
+        "qualified_path": [
+          "std",
+          "fs",
+          "list"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "list_limited",
+          "output": {
+            "List": {
+              "NamedApplied": {
+                "args": [
+                  {
+                    "Var": "R"
+                  }
+                ],
+                "name": "WorkspacePath"
+              }
+            }
+          },
+          "params": [
+            {
+              "NamedApplied": {
+                "args": [
+                  {
+                    "Var": "R"
+                  }
+                ],
+                "name": "WorkspacePath"
+              }
+            },
+            {
+              "Primitive": "USize"
+            },
+            {
+              "Primitive": "USize"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.fs.IOError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            },
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.fs.ListLimitError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "requested_action_tail": null,
+          "requested_actions": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Var": "R"
+                  }
+                }
+              ],
+              "path": [
+                "Fs",
+                "list"
+              ]
+            }
+          ],
+          "source_method": null,
+          "type_params": [
+            {
+              "bounds": [
+                {
+                  "args": [],
+                  "path": [
+                    "std",
+                    "fs",
+                    "Region"
+                  ]
+                }
+              ],
+              "kind": "Type",
+              "name": "R"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "fs",
+        "list_limited"
+      ],
+      "primitive": {
+        "dispatch": "Host",
+        "id": 1142,
+        "latent_effect": "None",
+        "lowering": {
+          "ActionReducer": {
+            "payload": [
+              0
+            ],
+            "reducer": {
+              "BoundedDirectoryList": {
+                "byte_limit_parameter": 2,
+                "entry_limit_parameter": 1
+              }
+            },
+            "stable_id": 138
+          }
+        },
+        "memory_access": "None",
+        "purity": "Host",
+        "qualified_path": [
+          "std",
+          "fs",
+          "list_limited"
+        ],
+        "runtime_requirement": "None"
+      }
     },
     {
       "declaration": {
@@ -3595,6 +4239,447 @@
           "std",
           "fs",
           "read_bytes"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "read_bytes_limited",
+          "output": {
+            "Primitive": "Bytes"
+          },
+          "params": [
+            {
+              "NamedApplied": {
+                "args": [
+                  {
+                    "Var": "R"
+                  }
+                ],
+                "name": "WorkspacePath"
+              }
+            },
+            {
+              "Primitive": "USize"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.fs.IOError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            },
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.fs.ReadLimitError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "requested_action_tail": null,
+          "requested_actions": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Var": "R"
+                  }
+                }
+              ],
+              "path": [
+                "Fs",
+                "read"
+              ]
+            }
+          ],
+          "source_method": null,
+          "type_params": [
+            {
+              "bounds": [
+                {
+                  "args": [],
+                  "path": [
+                    "std",
+                    "fs",
+                    "Region"
+                  ]
+                }
+              ],
+              "kind": "Type",
+              "name": "R"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "fs",
+        "read_bytes_limited"
+      ],
+      "primitive": {
+        "dispatch": "Host",
+        "id": 1139,
+        "latent_effect": "None",
+        "lowering": {
+          "ActionReducer": {
+            "payload": [
+              0
+            ],
+            "reducer": {
+              "BoundedFileRead": {
+                "limit_parameter": 1
+              }
+            },
+            "stable_id": 136
+          }
+        },
+        "memory_access": "None",
+        "purity": "Host",
+        "qualified_path": [
+          "std",
+          "fs",
+          "read_bytes_limited"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "relative_name",
+          "output": {
+            "Primitive": "String"
+          },
+          "params": [
+            {
+              "NamedApplied": {
+                "args": [
+                  {
+                    "Var": "R"
+                  }
+                ],
+                "name": "WorkspacePath"
+              }
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": [
+            {
+              "bounds": [
+                {
+                  "args": [],
+                  "path": [
+                    "std",
+                    "fs",
+                    "Region"
+                  ]
+                }
+              ],
+              "kind": "Type",
+              "name": "R"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "fs",
+        "relative_name"
+      ],
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 1141,
+        "latent_effect": "None",
+        "lowering": "RuntimeCall",
+        "memory_access": "None",
+        "purity": "Runtime",
+        "qualified_path": [
+          "std",
+          "fs",
+          "relative_name"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "root",
+          "output": {
+            "NamedApplied": {
+              "args": [
+                {
+                  "Var": "R"
+                }
+              ],
+              "name": "WorkspacePath"
+            }
+          },
+          "params": [],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": [
+            {
+              "bounds": [
+                {
+                  "args": [],
+                  "path": [
+                    "std",
+                    "fs",
+                    "Region"
+                  ]
+                }
+              ],
+              "kind": "Type",
+              "name": "R"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "fs",
+        "root"
+      ],
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 1140,
+        "latent_effect": "None",
+        "lowering": "RuntimeCall",
+        "memory_access": "None",
+        "purity": "Runtime",
+        "qualified_path": [
+          "std",
+          "fs",
+          "root"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "stat",
+          "output": {
+            "Named": "FsStat"
+          },
+          "params": [
+            {
+              "NamedApplied": {
+                "args": [
+                  {
+                    "Var": "R"
+                  }
+                ],
+                "name": "WorkspacePath"
+              }
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.fs.IOError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "requested_action_tail": null,
+          "requested_actions": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Var": "R"
+                  }
+                }
+              ],
+              "path": [
+                "Fs",
+                "stat"
+              ]
+            }
+          ],
+          "source_method": null,
+          "type_params": [
+            {
+              "bounds": [
+                {
+                  "args": [],
+                  "path": [
+                    "std",
+                    "fs",
+                    "Region"
+                  ]
+                }
+              ],
+              "kind": "Type",
+              "name": "R"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "fs",
+        "stat"
+      ],
+      "primitive": {
+        "dispatch": "Host",
+        "id": 1109,
+        "latent_effect": "None",
+        "lowering": {
+          "DefaultAction": {
+            "payload": [
+              0
+            ],
+            "stable_id": 139
+          }
+        },
+        "memory_access": "None",
+        "purity": "Host",
+        "qualified_path": [
+          "std",
+          "fs",
+          "stat"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "write_bytes",
+          "output": {
+            "Primitive": "Unit"
+          },
+          "params": [
+            {
+              "NamedApplied": {
+                "args": [
+                  {
+                    "Var": "R"
+                  }
+                ],
+                "name": "WorkspacePath"
+              }
+            },
+            {
+              "Primitive": "Bytes"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.fs.IOError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "requested_action_tail": null,
+          "requested_actions": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Var": "R"
+                  }
+                }
+              ],
+              "path": [
+                "Fs",
+                "write"
+              ]
+            }
+          ],
+          "source_method": null,
+          "type_params": [
+            {
+              "bounds": [
+                {
+                  "args": [],
+                  "path": [
+                    "std",
+                    "fs",
+                    "Region"
+                  ]
+                }
+              ],
+              "kind": "Type",
+              "name": "R"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "fs",
+        "write_bytes"
+      ],
+      "primitive": {
+        "dispatch": "Host",
+        "id": 1107,
+        "latent_effect": "None",
+        "lowering": {
+          "DefaultAction": {
+            "payload": [
+              0
+            ],
+            "stable_id": 137
+          }
+        },
+        "memory_access": "None",
+        "purity": "Host",
+        "qualified_path": [
+          "std",
+          "fs",
+          "write_bytes"
         ],
         "runtime_requirement": "None"
       }
@@ -4653,10 +5738,38 @@
         "text",
         "TextError"
       ],
+      "required_payload_variants": {},
       "required_unit_variants": [
         "ParseFailure",
         "NumericOverflow"
       ]
+    },
+    {
+      "path": [
+        "std",
+        "fs",
+        "ReadLimitError"
+      ],
+      "required_payload_variants": {
+        "LimitExceeded": [
+          "USize"
+        ]
+      },
+      "required_unit_variants": []
+    },
+    {
+      "path": [
+        "std",
+        "fs",
+        "ListLimitError"
+      ],
+      "required_payload_variants": {
+        "LimitExceeded": [
+          "USize",
+          "USize"
+        ]
+      },
+      "required_unit_variants": []
     }
   ],
   "native_opaque_references": [
@@ -4665,6 +5778,35 @@
         "std",
         "fs",
         "IOError"
+      ]
+    }
+  ],
+  "native_record_references": [
+    {
+      "fields": [
+        {
+          "name": "is_file",
+          "ty": {
+            "Primitive": "Bool"
+          }
+        },
+        {
+          "name": "is_dir",
+          "ty": {
+            "Primitive": "Bool"
+          }
+        },
+        {
+          "name": "len",
+          "ty": {
+            "Primitive": "U64"
+          }
+        }
+      ],
+      "path": [
+        "std",
+        "fs",
+        "FsStat"
       ]
     }
   ],

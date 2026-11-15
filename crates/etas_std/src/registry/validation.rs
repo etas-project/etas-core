@@ -1078,7 +1078,8 @@ fn validate_named_type(
     let Some(declaration) = declaration else {
         if arity == 0
             && (registry.native_enum_reference(name).is_some()
-                || registry.native_opaque_reference(name).is_some())
+                || registry.native_opaque_reference(name).is_some()
+                || registry.native_record_reference(name).is_some())
         {
             return Ok(());
         }

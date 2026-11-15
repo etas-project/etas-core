@@ -17,6 +17,7 @@ struct ContractSet {
     contracts: Vec<Contract>,
     native_enum_references: Vec<crate::StdNativeEnumReference>,
     native_opaque_references: Vec<crate::StdNativeOpaqueReference>,
+    native_record_references: Vec<crate::StdNativeRecordReference>,
     prelude: Vec<(String, Vec<String>)>,
     aliases: Vec<(Vec<String>, Vec<String>)>,
     implementations: Vec<StdImplFact>,
@@ -62,6 +63,9 @@ pub fn compiler_contract_registry() -> StdRegistry {
     }
     for reference in contracts.native_opaque_references {
         builder.native_opaque_reference(reference);
+    }
+    for reference in contracts.native_record_references {
+        builder.native_record_reference(reference);
     }
     let mut modules = BTreeMap::new();
     let mut symbols = BTreeMap::new();

@@ -124,6 +124,23 @@ fn enum_result_valid(
     path: &[&str],
     variants: &[(&str, Vec<StdType>)],
 ) -> bool {
+    if let Some(reference) = registry.native_enum_reference(&path.join(".")) {
+        let required = variants.iter().all(|(name, params)| {
+            reference.required_variants().any(|(required, fields)| {
+                required == *name
+                    && fields
+                        .iter()
+                        .copied()
+                        .map(StdType::Primitive)
+                        .collect::<Vec<_>>()
+                        == *params
+            })
+        });
+        return required
+            && registry
+                .lookup_qualified(path)
+                .is_none_or(|owner| reference.matches_owner(registry, owner));
+    }
     let Some(owner) = registry.lookup_qualified(path) else {
         return false;
     };
