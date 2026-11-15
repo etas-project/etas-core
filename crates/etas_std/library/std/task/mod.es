@@ -1,5 +1,8 @@
 module std.task;
 
+@std.role("std.task.Async")
+public effect Async;
+
 @std.role("std.task.Task")
 public type Task<T, effect E>;
 

@@ -44,12 +44,13 @@ pub fn compiler_contract_identity() -> String {
             role.parameter_kinds(),
             role.runtime_role(),
             role.code_role(),
+            role.effect_execution(),
             (0..role.parameter_kinds().len())
                 .map(|index| role.parameter_bounds(index))
                 .collect::<Vec<_>>(),
         )
     });
-    hash.update(&serde_json::to_vec(&(2, roles.as_slice())).expect("compiler role ABI"));
+    hash.update(&serde_json::to_vec(&(3, roles.as_slice())).expect("compiler role ABI"));
     format!("blake3:{}", hash.finalize().to_hex())
 }
 
@@ -110,13 +111,7 @@ pub fn compiler_contract_registry() -> StdRegistry {
         let module = *modules.entry(parent.to_vec()).or_insert_with(|| {
             builder.module(&parent.iter().map(String::as_str).collect::<Vec<_>>(), "")
         });
-        let symbol = builder.symbol(
-            module,
-            name,
-            role.symbol_kind(),
-            StdDecl::Type(role.predeclaration()),
-            "",
-        );
+        let symbol = builder.symbol(module, name, role.symbol_kind(), role.predeclaration(), "");
         symbols.insert(path, symbol);
     }
     for (alias, target) in contracts.aliases {
@@ -154,6 +149,16 @@ mod tests {
         for contract in kernel.symbols() {
             let native = legacy.lookup_qualified(&contract.qualified_path).unwrap();
             if let Some(role) = StdSourceRole::from_path(&contract.qualified_path.join(".")) {
+                if let Some((stable_id, core, requirement)) = role.effect_execution() {
+                    let StdDecl::Effect(declaration) = &contract.decl else {
+                        panic!("effect role");
+                    };
+                    assert_eq!(declaration.stable_id, Some(stable_id));
+                    assert_eq!(declaration.core, core);
+                    assert_eq!(declaration.runtime_requirement, Some(requirement));
+                    assert!(declaration.extends.is_empty());
+                    continue;
+                }
                 let StdDecl::Type(declaration) = &contract.decl else {
                     unreachable!()
                 };

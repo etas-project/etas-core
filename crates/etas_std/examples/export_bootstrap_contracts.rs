@@ -67,6 +67,7 @@ fn main() {
             }
         }
     }
+    paths.retain(|path| etas_std::StdSourceRole::from_path(path).is_none());
     // Native enum payloads are part of the compiler ABI, including limits.
     let constructors = registry
         .symbols()

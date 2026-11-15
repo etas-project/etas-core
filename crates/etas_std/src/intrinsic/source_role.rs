@@ -43,10 +43,21 @@ pub enum StdSourceRole {
     CompilerAgentDef,
     CompilerCallableDef,
     CompilerSyntaxBlock,
+    EffectAgentic,
+    EffectNetwork,
+    EffectFileIO,
+    EffectCommand,
+    EffectMemory,
+    EffectSecret,
+    EffectTime,
+    EffectHuman,
+    EffectError,
+    EffectFs,
+    EffectAsync,
 }
 
 impl StdSourceRole {
-    pub const ALL: [Self; 36] = [
+    pub const ALL: [Self; 47] = [
         Self::Index,
         Self::Region,
         Self::WorkspacePath,
@@ -83,6 +94,17 @@ impl StdSourceRole {
         Self::CompilerAgentDef,
         Self::CompilerCallableDef,
         Self::CompilerSyntaxBlock,
+        Self::EffectAgentic,
+        Self::EffectNetwork,
+        Self::EffectFileIO,
+        Self::EffectCommand,
+        Self::EffectMemory,
+        Self::EffectSecret,
+        Self::EffectTime,
+        Self::EffectHuman,
+        Self::EffectError,
+        Self::EffectFs,
+        Self::EffectAsync,
     ];
 
     pub fn path(self) -> &'static str {
@@ -123,6 +145,17 @@ impl StdSourceRole {
             Self::CompilerAgentDef => "std.compiler.AgentDef",
             Self::CompilerCallableDef => "std.compiler.CallableDef",
             Self::CompilerSyntaxBlock => "std.compiler.SyntaxBlock",
+            Self::EffectAgentic => "std.effects.Agentic",
+            Self::EffectNetwork => "std.effects.Network",
+            Self::EffectFileIO => "std.effects.FileIO",
+            Self::EffectCommand => "std.effects.Command",
+            Self::EffectMemory => "std.effects.Memory",
+            Self::EffectSecret => "std.effects.Secret",
+            Self::EffectTime => "std.effects.Time",
+            Self::EffectHuman => "std.effects.Human",
+            Self::EffectError => "std.effects.Error",
+            Self::EffectFs => "std.effects.Fs",
+            Self::EffectAsync => "std.task.Async",
         }
     }
 
@@ -150,7 +183,17 @@ impl StdSourceRole {
             | Self::CompilerTraceSummary
             | Self::CompilerTraceWitness
             | Self::CompilerTypeInfo
-            | Self::CompilerSyntaxBlock => &[],
+            | Self::CompilerSyntaxBlock
+            | Self::EffectAgentic
+            | Self::EffectNetwork
+            | Self::EffectFileIO
+            | Self::EffectCommand
+            | Self::EffectMemory
+            | Self::EffectSecret
+            | Self::EffectTime
+            | Self::EffectHuman
+            | Self::EffectFs
+            | Self::EffectAsync => &[],
             Self::WorkspacePath
             | Self::Option
             | Self::Some
@@ -163,7 +206,8 @@ impl StdSourceRole {
             | Self::Slice
             | Self::Iter
             | Self::CompilerAgentDef
-            | Self::CompilerCallableDef => &[Type],
+            | Self::CompilerCallableDef
+            | Self::EffectError => &[Type],
             Self::Result | Self::Ok | Self::Err | Self::Map => &[Type, Type],
             Self::Task => &[Type, EffectRow],
         }
@@ -217,6 +261,7 @@ impl StdSourceRole {
     pub fn symbol_kind(self) -> StdSymbolKind {
         match self {
             Self::Some | Self::None | Self::Ok | Self::Err => StdSymbolKind::Constructor,
+            role if role.effect_execution().is_some() => StdSymbolKind::Effect,
             _ => StdSymbolKind::Type,
         }
     }
@@ -246,6 +291,41 @@ impl StdSourceRole {
         )
     }
 
+    /// Stable execution tags and host capability rules, without public signatures
+    /// or the source-owned inheritance graph.
+    pub fn effect_execution(self) -> Option<(u32, bool, crate::StdRuntimeRequirement)> {
+        use crate::StdRuntimeRequirement as R;
+        Some(match self {
+            Self::EffectAgentic => (0, true, R::Agentic),
+            Self::EffectNetwork => (1, true, R::Network),
+            Self::EffectFileIO => (2, true, R::FileIO),
+            Self::EffectCommand => (3, true, R::Command),
+            Self::EffectMemory => (4, true, R::DurableMemory),
+            Self::EffectSecret => (6, true, R::SecretAccess),
+            Self::EffectTime => (7, true, R::Time),
+            Self::EffectError => (8, true, R::RuntimeHandler),
+            Self::EffectHuman => (10, true, R::HostAuthority),
+            Self::EffectFs => (25, false, R::FileIO),
+            Self::EffectAsync => (28, true, R::TaskScheduler),
+            _ => return None,
+        })
+    }
+
+    pub fn query_declaration(self, parameters: Vec<StdGenericParam>) -> crate::StdDecl {
+        if let Some((stable_id, core, runtime_requirement)) = self.effect_execution() {
+            return crate::StdDecl::Effect(crate::EffectDecl {
+                name: self.path().rsplit('.').next().unwrap().to_owned(),
+                params: parameters,
+                extends: Vec::new(),
+                core,
+                stable_id: Some(stable_id),
+                runtime_requirement: Some(runtime_requirement),
+                high_impact_ack: false,
+            });
+        }
+        crate::StdDecl::Type(self.declaration(parameters))
+    }
+
     /// Make a query view from source-owned parameters and the execution ABI.
     pub fn declaration(self, parameters: Vec<StdGenericParam>) -> TypeDecl {
         let kind = match self {
@@ -271,8 +351,8 @@ impl StdSourceRole {
         }
     }
 
-    pub(crate) fn predeclaration(self) -> TypeDecl {
-        self.declaration(
+    pub(crate) fn predeclaration(self) -> crate::StdDecl {
+        self.query_declaration(
             self.parameter_kinds()
                 .iter()
                 .enumerate()

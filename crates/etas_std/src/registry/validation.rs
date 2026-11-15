@@ -496,17 +496,20 @@ fn validate_implementation(
 
 struct LogicalEffectIndex<'a> {
     effects: BTreeMap<String, &'a crate::EffectDecl>,
+    canonical_effects: BTreeMap<String, &'a crate::EffectDecl>,
     actions: BTreeMap<(String, String), &'a crate::EffectActionDecl>,
 }
 
 impl<'a> LogicalEffectIndex<'a> {
     fn build(registry: &'a StdRegistry) -> Result<Self, StdRegistryValidationError> {
         let mut effects = BTreeMap::new();
+        let mut canonical_effects = BTreeMap::new();
         let mut actions = BTreeMap::new();
         for symbol in registry.symbols() {
             match &symbol.decl {
                 StdDecl::Effect(effect) => {
                     validate_decl_identity(symbol, StdSymbolKind::Effect, &effect.name, "effect")?;
+                    canonical_effects.insert(symbol.qualified_path.join("."), effect);
                     if let Some(existing) = effects.insert(effect.name.clone(), effect) {
                         return invalid(
                             symbol.qualified_path.join("."),
@@ -538,11 +541,18 @@ impl<'a> LogicalEffectIndex<'a> {
                 _ => {}
             }
         }
-        Ok(Self { effects, actions })
+        Ok(Self {
+            effects,
+            canonical_effects,
+            actions,
+        })
     }
 
     fn effect(&self, name: &str) -> Option<&'a crate::EffectDecl> {
-        self.effects.get(name).copied()
+        self.canonical_effects
+            .get(name)
+            .or_else(|| self.effects.get(name))
+            .copied()
     }
 
     fn action(&self, owner: &str, name: &str) -> Option<&'a crate::EffectActionDecl> {
@@ -1162,16 +1172,8 @@ fn validate_effect_ref(
 
     match kind {
         EffectReferenceKind::Effect => {
-            let [name] = effect.path.as_slice() else {
-                return invalid(
-                    owner_name,
-                    format!(
-                        "public effect `{}` must use its logical effect identity",
-                        effect.path.join(".")
-                    ),
-                );
-            };
-            let Some(declaration) = logical_effects.effect(name) else {
+            let name = effect.path.join(".");
+            let Some(declaration) = logical_effects.effect(&name) else {
                 return invalid(owner_name, format!("unknown effect `{name}`"));
             };
             if effect.args.len() != declaration.params.len() {

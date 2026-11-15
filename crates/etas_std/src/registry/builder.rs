@@ -111,6 +111,24 @@ impl StdRegistryBuilder {
         declaration.params = parameters;
     }
 
+    /// Source declares effect binders and inheritance; execution tags stay native.
+    pub fn source_effect_declaration(
+        &mut self,
+        symbol: StdSymbolId,
+        parameters: Vec<crate::StdGenericParam>,
+        extends: Vec<String>,
+    ) {
+        let StdDecl::Effect(declaration) = &mut self.registry.symbols[symbol.0 as usize]
+            .as_mut()
+            .unwrap()
+            .decl
+        else {
+            unreachable!("checked source effect role");
+        };
+        declaration.params = parameters;
+        declaration.extends = extends;
+    }
+
     /// Projected fields come from the checked source role declaration.
     pub fn source_type_projected_fields(
         &mut self,
