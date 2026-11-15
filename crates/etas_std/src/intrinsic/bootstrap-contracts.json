@@ -693,172 +693,6 @@
       "declaration": {
         "Type": {
           "canonical_type": null,
-          "code_role": null,
-          "construction": "Public",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Struct",
-          "name": "AnalysisStep",
-          "params": [],
-          "projected_fields": [],
-          "representation": {
-            "Record": [
-              {
-                "name": "callable",
-                "ty": {
-                  "Named": "std.compiler.CallableId"
-                }
-              },
-              {
-                "name": "location",
-                "ty": {
-                  "Option": {
-                    "Named": "std.compiler.DiagnosticLocation"
-                  }
-                }
-              },
-              {
-                "name": "message",
-                "ty": {
-                  "Primitive": "String"
-                }
-              }
-            ]
-          },
-          "runtime_role": null
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "compiler",
-        "AnalysisStep"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Type": {
-          "canonical_type": null,
-          "code_role": null,
-          "construction": "Public",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Struct",
-          "name": "AnnotationArgumentInfo",
-          "params": [],
-          "projected_fields": [
-            {
-              "name": "name",
-              "ty": {
-                "Option": {
-                  "Primitive": "String"
-                }
-              }
-            },
-            {
-              "name": "value",
-              "ty": {
-                "Named": "std.compiler.StaticValueInfo"
-              }
-            }
-          ],
-          "representation": {
-            "Record": [
-              {
-                "name": "name",
-                "ty": {
-                  "Option": {
-                    "Primitive": "String"
-                  }
-                }
-              },
-              {
-                "name": "value",
-                "ty": {
-                  "Named": "std.compiler.StaticValueInfo"
-                }
-              }
-            ]
-          },
-          "runtime_role": null
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "compiler",
-        "AnnotationArgumentInfo"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Type": {
-          "canonical_type": null,
-          "code_role": null,
-          "construction": "Public",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Struct",
-          "name": "AnnotationInfo",
-          "params": [],
-          "projected_fields": [
-            {
-              "name": "path",
-              "ty": {
-                "Array": {
-                  "Primitive": "String"
-                }
-              }
-            },
-            {
-              "name": "arguments",
-              "ty": {
-                "Array": {
-                  "Named": "std.compiler.AnnotationArgumentInfo"
-                }
-              }
-            }
-          ],
-          "representation": {
-            "Record": [
-              {
-                "name": "path",
-                "ty": {
-                  "Array": {
-                    "Primitive": "String"
-                  }
-                }
-              },
-              {
-                "name": "arguments",
-                "ty": {
-                  "Array": {
-                    "Named": "std.compiler.AnnotationArgumentInfo"
-                  }
-                }
-              }
-            ]
-          },
-          "runtime_role": null
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "compiler",
-        "AnnotationInfo"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Type": {
-          "canonical_type": null,
           "code_role": "CallableDefinition",
           "construction": "IntrinsicOnly",
           "derivable": false,
@@ -970,491 +804,6 @@
       "declaration": {
         "Type": {
           "canonical_type": null,
-          "code_role": null,
-          "construction": "Public",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Struct",
-          "name": "ChangeReport",
-          "params": [],
-          "projected_fields": [
-            {
-              "name": "schema",
-              "ty": {
-                "Primitive": "String"
-              }
-            },
-            {
-              "name": "identity",
-              "ty": {
-                "Named": "std.compiler.DefinitionId"
-              }
-            },
-            {
-              "name": "old_revision",
-              "ty": {
-                "Named": "std.compiler.RevisionInfo"
-              }
-            },
-            {
-              "name": "new_revision",
-              "ty": {
-                "Named": "std.compiler.RevisionInfo"
-              }
-            },
-            {
-              "name": "old_body_available",
-              "ty": {
-                "Primitive": "Bool"
-              }
-            },
-            {
-              "name": "new_body_available",
-              "ty": {
-                "Primitive": "Bool"
-              }
-            },
-            {
-              "name": "body_changed",
-              "ty": {
-                "Option": {
-                  "Primitive": "Bool"
-                }
-              }
-            },
-            {
-              "name": "signature_changed",
-              "ty": {
-                "Primitive": "Bool"
-              }
-            },
-            {
-              "name": "dependencies_changed",
-              "ty": {
-                "Primitive": "Bool"
-              }
-            },
-            {
-              "name": "declared_bound_changed",
-              "ty": {
-                "Primitive": "Bool"
-              }
-            },
-            {
-              "name": "escaping_changed",
-              "ty": {
-                "Option": {
-                  "Primitive": "Bool"
-                }
-              }
-            },
-            {
-              "name": "requested_changed",
-              "ty": {
-                "Option": {
-                  "Primitive": "Bool"
-                }
-              }
-            },
-            {
-              "name": "default_handled_changed",
-              "ty": {
-                "Option": {
-                  "Primitive": "Bool"
-                }
-              }
-            },
-            {
-              "name": "determinism_changed",
-              "ty": {
-                "Option": {
-                  "Primitive": "Bool"
-                }
-              }
-            },
-            {
-              "name": "trace_changed",
-              "ty": {
-                "Option": {
-                  "Primitive": "Bool"
-                }
-              }
-            }
-          ],
-          "representation": {
-            "Record": [
-              {
-                "name": "schema",
-                "ty": {
-                  "Primitive": "String"
-                }
-              },
-              {
-                "name": "identity",
-                "ty": {
-                  "Named": "std.compiler.DefinitionId"
-                }
-              },
-              {
-                "name": "old_revision",
-                "ty": {
-                  "Named": "std.compiler.RevisionInfo"
-                }
-              },
-              {
-                "name": "new_revision",
-                "ty": {
-                  "Named": "std.compiler.RevisionInfo"
-                }
-              },
-              {
-                "name": "old_body_available",
-                "ty": {
-                  "Primitive": "Bool"
-                }
-              },
-              {
-                "name": "new_body_available",
-                "ty": {
-                  "Primitive": "Bool"
-                }
-              },
-              {
-                "name": "body_changed",
-                "ty": {
-                  "Option": {
-                    "Primitive": "Bool"
-                  }
-                }
-              },
-              {
-                "name": "signature_changed",
-                "ty": {
-                  "Primitive": "Bool"
-                }
-              },
-              {
-                "name": "dependencies_changed",
-                "ty": {
-                  "Primitive": "Bool"
-                }
-              },
-              {
-                "name": "declared_bound_changed",
-                "ty": {
-                  "Primitive": "Bool"
-                }
-              },
-              {
-                "name": "escaping_changed",
-                "ty": {
-                  "Option": {
-                    "Primitive": "Bool"
-                  }
-                }
-              },
-              {
-                "name": "requested_changed",
-                "ty": {
-                  "Option": {
-                    "Primitive": "Bool"
-                  }
-                }
-              },
-              {
-                "name": "default_handled_changed",
-                "ty": {
-                  "Option": {
-                    "Primitive": "Bool"
-                  }
-                }
-              },
-              {
-                "name": "determinism_changed",
-                "ty": {
-                  "Option": {
-                    "Primitive": "Bool"
-                  }
-                }
-              },
-              {
-                "name": "trace_changed",
-                "ty": {
-                  "Option": {
-                    "Primitive": "Bool"
-                  }
-                }
-              }
-            ]
-          },
-          "runtime_role": null
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "compiler",
-        "ChangeReport"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Type": {
-          "canonical_type": null,
-          "code_role": null,
-          "construction": "Public",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Struct",
-          "name": "CheckReport",
-          "params": [],
-          "projected_fields": [
-            {
-              "name": "status",
-              "ty": {
-                "Primitive": "String"
-              }
-            },
-            {
-              "name": "diagnostics",
-              "ty": {
-                "Array": {
-                  "Named": "std.compiler.DiagnosticRecord"
-                }
-              }
-            },
-            {
-              "name": "revision",
-              "ty": {
-                "Named": "std.compiler.RevisionInfo"
-              }
-            },
-            {
-              "name": "dependencies",
-              "ty": {
-                "Named": "std.compiler.DependencyInfo"
-              }
-            },
-            {
-              "name": "snapshot_fingerprint",
-              "ty": {
-                "Primitive": "String"
-              }
-            },
-            {
-              "name": "effects",
-              "ty": {
-                "Named": "std.compiler.EffectSummary"
-              }
-            },
-            {
-              "name": "determinism",
-              "ty": {
-                "Option": {
-                  "Named": "std.compiler.Determinism"
-                }
-              }
-            },
-            {
-              "name": "trace",
-              "ty": {
-                "Option": {
-                  "Named": "std.compiler.TraceSummary"
-                }
-              }
-            },
-            {
-              "name": "runtime_checks",
-              "ty": {
-                "Array": {
-                  "Named": "std.compiler.RuntimeCheckInfo"
-                }
-              }
-            }
-          ],
-          "representation": {
-            "Record": [
-              {
-                "name": "status",
-                "ty": {
-                  "Primitive": "String"
-                }
-              },
-              {
-                "name": "diagnostics",
-                "ty": {
-                  "Array": {
-                    "Named": "std.compiler.DiagnosticRecord"
-                  }
-                }
-              },
-              {
-                "name": "revision",
-                "ty": {
-                  "Named": "std.compiler.RevisionInfo"
-                }
-              },
-              {
-                "name": "dependencies",
-                "ty": {
-                  "Named": "std.compiler.DependencyInfo"
-                }
-              },
-              {
-                "name": "snapshot_fingerprint",
-                "ty": {
-                  "Primitive": "String"
-                }
-              },
-              {
-                "name": "effects",
-                "ty": {
-                  "Named": "std.compiler.EffectSummary"
-                }
-              },
-              {
-                "name": "determinism",
-                "ty": {
-                  "Option": {
-                    "Named": "std.compiler.Determinism"
-                  }
-                }
-              },
-              {
-                "name": "trace",
-                "ty": {
-                  "Option": {
-                    "Named": "std.compiler.TraceSummary"
-                  }
-                }
-              },
-              {
-                "name": "runtime_checks",
-                "ty": {
-                  "Array": {
-                    "Named": "std.compiler.RuntimeCheckInfo"
-                  }
-                }
-              }
-            ]
-          },
-          "runtime_role": null
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "compiler",
-        "CheckReport"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Type": {
-          "canonical_type": null,
-          "code_role": null,
-          "construction": "Public",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Struct",
-          "name": "CompileError",
-          "params": [],
-          "projected_fields": [],
-          "representation": {
-            "Record": [
-              {
-                "name": "kind",
-                "ty": {
-                  "Primitive": "String"
-                }
-              },
-              {
-                "name": "diagnostics",
-                "ty": {
-                  "Array": {
-                    "Named": "std.compiler.DiagnosticRecord"
-                  }
-                }
-              }
-            ]
-          },
-          "runtime_role": null
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "compiler",
-        "CompileError"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Type": {
-          "canonical_type": null,
-          "code_role": null,
-          "construction": "Public",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Struct",
-          "name": "DefinitionBindingInfo",
-          "params": [],
-          "projected_fields": [
-            {
-              "name": "path",
-              "ty": {
-                "Array": {
-                  "Primitive": "String"
-                }
-              }
-            },
-            {
-              "name": "definition",
-              "ty": {
-                "Named": "std.compiler.DefinitionId"
-              }
-            }
-          ],
-          "representation": {
-            "Record": [
-              {
-                "name": "path",
-                "ty": {
-                  "Array": {
-                    "Primitive": "String"
-                  }
-                }
-              },
-              {
-                "name": "definition",
-                "ty": {
-                  "Named": "std.compiler.DefinitionId"
-                }
-              }
-            ]
-          },
-          "runtime_role": null
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "compiler",
-        "DefinitionBindingInfo"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Type": {
-          "canonical_type": null,
           "code_role": "DefinitionId",
           "construction": "IntrinsicOnly",
           "derivable": false,
@@ -1473,172 +822,6 @@
         "std",
         "compiler",
         "DefinitionId"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Type": {
-          "canonical_type": null,
-          "code_role": null,
-          "construction": "Public",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Struct",
-          "name": "DependencyArtifactInfo",
-          "params": [],
-          "projected_fields": [
-            {
-              "name": "import_root",
-              "ty": {
-                "Primitive": "String"
-              }
-            },
-            {
-              "name": "fingerprint",
-              "ty": {
-                "Primitive": "String"
-              }
-            }
-          ],
-          "representation": {
-            "Record": [
-              {
-                "name": "import_root",
-                "ty": {
-                  "Primitive": "String"
-                }
-              },
-              {
-                "name": "fingerprint",
-                "ty": {
-                  "Primitive": "String"
-                }
-              }
-            ]
-          },
-          "runtime_role": null
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "compiler",
-        "DependencyArtifactInfo"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Type": {
-          "canonical_type": null,
-          "code_role": null,
-          "construction": "Public",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Struct",
-          "name": "DependencyInfo",
-          "params": [],
-          "projected_fields": [
-            {
-              "name": "environment",
-              "ty": {
-                "Primitive": "String"
-              }
-            },
-            {
-              "name": "lexical_owner",
-              "ty": {
-                "Named": "std.compiler.DefinitionId"
-              }
-            },
-            {
-              "name": "standard_package",
-              "ty": {
-                "Primitive": "String"
-              }
-            },
-            {
-              "name": "modules",
-              "ty": {
-                "Array": {
-                  "Named": "std.compiler.ModuleOriginInfo"
-                }
-              }
-            },
-            {
-              "name": "bindings",
-              "ty": {
-                "Array": {
-                  "Named": "std.compiler.DefinitionBindingInfo"
-                }
-              }
-            },
-            {
-              "name": "artifacts",
-              "ty": {
-                "Array": {
-                  "Named": "std.compiler.DependencyArtifactInfo"
-                }
-              }
-            }
-          ],
-          "representation": {
-            "Record": [
-              {
-                "name": "environment",
-                "ty": {
-                  "Primitive": "String"
-                }
-              },
-              {
-                "name": "lexical_owner",
-                "ty": {
-                  "Named": "std.compiler.DefinitionId"
-                }
-              },
-              {
-                "name": "standard_package",
-                "ty": {
-                  "Primitive": "String"
-                }
-              },
-              {
-                "name": "modules",
-                "ty": {
-                  "Array": {
-                    "Named": "std.compiler.ModuleOriginInfo"
-                  }
-                }
-              },
-              {
-                "name": "bindings",
-                "ty": {
-                  "Array": {
-                    "Named": "std.compiler.DefinitionBindingInfo"
-                  }
-                }
-              },
-              {
-                "name": "artifacts",
-                "ty": {
-                  "Array": {
-                    "Named": "std.compiler.DependencyArtifactInfo"
-                  }
-                }
-              }
-            ]
-          },
-          "runtime_role": null
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "compiler",
-        "DependencyInfo"
       ],
       "primitive": null
     },
@@ -1696,196 +879,6 @@
       "declaration": {
         "Type": {
           "canonical_type": null,
-          "code_role": null,
-          "construction": "Public",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Struct",
-          "name": "DiagnosticDetails",
-          "params": [],
-          "projected_fields": [],
-          "representation": {
-            "Record": [
-              {
-                "name": "expected",
-                "ty": {
-                  "Option": {
-                    "Named": "std.compiler.DescriptorDetail"
-                  }
-                }
-              },
-              {
-                "name": "actual",
-                "ty": {
-                  "Option": {
-                    "Named": "std.compiler.DescriptorDetail"
-                  }
-                }
-              },
-              {
-                "name": "constraint",
-                "ty": {
-                  "Option": {
-                    "Named": "std.compiler.ViolatedConstraint"
-                  }
-                }
-              },
-              {
-                "name": "related",
-                "ty": {
-                  "Array": {
-                    "Named": "std.compiler.RelatedLocation"
-                  }
-                }
-              },
-              {
-                "name": "analysis_path",
-                "ty": {
-                  "Array": {
-                    "Named": "std.compiler.AnalysisStep"
-                  }
-                }
-              },
-              {
-                "name": "trace_witness",
-                "ty": {
-                  "Option": {
-                    "Named": "std.compiler.TraceWitness"
-                  }
-                }
-              }
-            ]
-          },
-          "runtime_role": null
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "compiler",
-        "DiagnosticDetails"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Type": {
-          "canonical_type": null,
-          "code_role": null,
-          "construction": "Public",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Struct",
-          "name": "DiagnosticLocation",
-          "params": [],
-          "projected_fields": [],
-          "representation": {
-            "Record": [
-              {
-                "name": "source",
-                "ty": {
-                  "Primitive": "String"
-                }
-              },
-              {
-                "name": "revision",
-                "ty": {
-                  "Primitive": "String"
-                }
-              },
-              {
-                "name": "byte_start",
-                "ty": {
-                  "Primitive": "USize"
-                }
-              },
-              {
-                "name": "byte_end",
-                "ty": {
-                  "Primitive": "USize"
-                }
-              }
-            ]
-          },
-          "runtime_role": null
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "compiler",
-        "DiagnosticLocation"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Type": {
-          "canonical_type": null,
-          "code_role": null,
-          "construction": "Public",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Struct",
-          "name": "DiagnosticRecord",
-          "params": [],
-          "projected_fields": [],
-          "representation": {
-            "Record": [
-              {
-                "name": "code",
-                "ty": {
-                  "Primitive": "String"
-                }
-              },
-              {
-                "name": "severity",
-                "ty": {
-                  "Primitive": "String"
-                }
-              },
-              {
-                "name": "message",
-                "ty": {
-                  "Primitive": "String"
-                }
-              },
-              {
-                "name": "location",
-                "ty": {
-                  "Option": {
-                    "Named": "std.compiler.DiagnosticLocation"
-                  }
-                }
-              },
-              {
-                "name": "details",
-                "ty": {
-                  "Option": {
-                    "Named": "std.compiler.DiagnosticDetails"
-                  }
-                }
-              }
-            ]
-          },
-          "runtime_role": null
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "compiler",
-        "DiagnosticRecord"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Type": {
-          "canonical_type": null,
           "code_role": "EffectRowInfo",
           "construction": "IntrinsicOnly",
           "derivable": false,
@@ -1911,99 +904,6 @@
       "declaration": {
         "Type": {
           "canonical_type": null,
-          "code_role": null,
-          "construction": "Public",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Struct",
-          "name": "EffectSummary",
-          "params": [],
-          "projected_fields": [
-            {
-              "name": "declared_bound",
-              "ty": {
-                "Option": {
-                  "Named": "std.compiler.EffectRowInfo"
-                }
-              }
-            },
-            {
-              "name": "escaping",
-              "ty": {
-                "Option": {
-                  "Named": "std.compiler.EffectRowInfo"
-                }
-              }
-            },
-            {
-              "name": "requested",
-              "ty": {
-                "Option": {
-                  "Named": "std.compiler.ActionSummary"
-                }
-              }
-            },
-            {
-              "name": "default_handled",
-              "ty": {
-                "Option": {
-                  "Named": "std.compiler.ActionSummary"
-                }
-              }
-            }
-          ],
-          "representation": {
-            "Record": [
-              {
-                "name": "declared_bound",
-                "ty": {
-                  "Option": {
-                    "Named": "std.compiler.EffectRowInfo"
-                  }
-                }
-              },
-              {
-                "name": "escaping",
-                "ty": {
-                  "Option": {
-                    "Named": "std.compiler.EffectRowInfo"
-                  }
-                }
-              },
-              {
-                "name": "requested",
-                "ty": {
-                  "Option": {
-                    "Named": "std.compiler.ActionSummary"
-                  }
-                }
-              },
-              {
-                "name": "default_handled",
-                "ty": {
-                  "Option": {
-                    "Named": "std.compiler.ActionSummary"
-                  }
-                }
-              }
-            ]
-          },
-          "runtime_role": null
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "compiler",
-        "EffectSummary"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Type": {
-          "canonical_type": null,
           "code_role": "GenericOwnerInfo",
           "construction": "IntrinsicOnly",
           "derivable": false,
@@ -2022,613 +922,6 @@
         "std",
         "compiler",
         "GenericOwnerInfo"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Type": {
-          "canonical_type": null,
-          "code_role": null,
-          "construction": "Public",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Struct",
-          "name": "GenericParameterInfo",
-          "params": [],
-          "projected_fields": [
-            {
-              "name": "owner",
-              "ty": {
-                "Named": "std.compiler.GenericOwnerInfo"
-              }
-            },
-            {
-              "name": "position",
-              "ty": {
-                "Primitive": "USize"
-              }
-            },
-            {
-              "name": "name",
-              "ty": {
-                "Primitive": "String"
-              }
-            },
-            {
-              "name": "kind",
-              "ty": {
-                "Primitive": "String"
-              }
-            },
-            {
-              "name": "bounds",
-              "ty": {
-                "Array": {
-                  "Named": "std.compiler.SpecInfo"
-                }
-              }
-            }
-          ],
-          "representation": {
-            "Record": [
-              {
-                "name": "owner",
-                "ty": {
-                  "Named": "std.compiler.GenericOwnerInfo"
-                }
-              },
-              {
-                "name": "position",
-                "ty": {
-                  "Primitive": "USize"
-                }
-              },
-              {
-                "name": "name",
-                "ty": {
-                  "Primitive": "String"
-                }
-              },
-              {
-                "name": "kind",
-                "ty": {
-                  "Primitive": "String"
-                }
-              },
-              {
-                "name": "bounds",
-                "ty": {
-                  "Array": {
-                    "Named": "std.compiler.SpecInfo"
-                  }
-                }
-              }
-            ]
-          },
-          "runtime_role": null
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "compiler",
-        "GenericParameterInfo"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Type": {
-          "canonical_type": null,
-          "code_role": null,
-          "construction": "Public",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Struct",
-          "name": "ModuleOriginInfo",
-          "params": [],
-          "projected_fields": [
-            {
-              "name": "module",
-              "ty": {
-                "Array": {
-                  "Primitive": "String"
-                }
-              }
-            },
-            {
-              "name": "package",
-              "ty": {
-                "Primitive": "String"
-              }
-            }
-          ],
-          "representation": {
-            "Record": [
-              {
-                "name": "module",
-                "ty": {
-                  "Array": {
-                    "Primitive": "String"
-                  }
-                }
-              },
-              {
-                "name": "package",
-                "ty": {
-                  "Primitive": "String"
-                }
-              }
-            ]
-          },
-          "runtime_role": null
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "compiler",
-        "ModuleOriginInfo"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Type": {
-          "canonical_type": null,
-          "code_role": null,
-          "construction": "Public",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Struct",
-          "name": "ParameterInfo",
-          "params": [],
-          "projected_fields": [
-            {
-              "name": "name",
-              "ty": {
-                "Option": {
-                  "Primitive": "String"
-                }
-              }
-            },
-            {
-              "name": "ty",
-              "ty": {
-                "Named": "std.compiler.TypeInfo"
-              }
-            }
-          ],
-          "representation": {
-            "Record": [
-              {
-                "name": "name",
-                "ty": {
-                  "Option": {
-                    "Primitive": "String"
-                  }
-                }
-              },
-              {
-                "name": "ty",
-                "ty": {
-                  "Named": "std.compiler.TypeInfo"
-                }
-              }
-            ]
-          },
-          "runtime_role": null
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "compiler",
-        "ParameterInfo"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Type": {
-          "canonical_type": null,
-          "code_role": null,
-          "construction": "Public",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Struct",
-          "name": "ParseError",
-          "params": [],
-          "projected_fields": [],
-          "representation": {
-            "Record": [
-              {
-                "name": "diagnostics",
-                "ty": {
-                  "Array": {
-                    "Named": "std.compiler.DiagnosticRecord"
-                  }
-                }
-              }
-            ]
-          },
-          "runtime_role": null
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "compiler",
-        "ParseError"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Type": {
-          "canonical_type": null,
-          "code_role": null,
-          "construction": "Public",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Struct",
-          "name": "RelatedLocation",
-          "params": [],
-          "projected_fields": [],
-          "representation": {
-            "Record": [
-              {
-                "name": "location",
-                "ty": {
-                  "Named": "std.compiler.DiagnosticLocation"
-                }
-              },
-              {
-                "name": "message",
-                "ty": {
-                  "Primitive": "String"
-                }
-              }
-            ]
-          },
-          "runtime_role": null
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "compiler",
-        "RelatedLocation"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Type": {
-          "canonical_type": null,
-          "code_role": null,
-          "construction": "Public",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Struct",
-          "name": "RevisionInfo",
-          "params": [],
-          "projected_fields": [
-            {
-              "name": "key",
-              "ty": {
-                "Primitive": "String"
-              }
-            },
-            {
-              "name": "content",
-              "ty": {
-                "Primitive": "String"
-              }
-            },
-            {
-              "name": "parent",
-              "ty": {
-                "Option": {
-                  "Primitive": "String"
-                }
-              }
-            }
-          ],
-          "representation": {
-            "Record": [
-              {
-                "name": "key",
-                "ty": {
-                  "Primitive": "String"
-                }
-              },
-              {
-                "name": "content",
-                "ty": {
-                  "Primitive": "String"
-                }
-              },
-              {
-                "name": "parent",
-                "ty": {
-                  "Option": {
-                    "Primitive": "String"
-                  }
-                }
-              }
-            ]
-          },
-          "runtime_role": null
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "compiler",
-        "RevisionInfo"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Type": {
-          "canonical_type": null,
-          "code_role": null,
-          "construction": "Public",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Struct",
-          "name": "RuntimeCheckInfo",
-          "params": [],
-          "projected_fields": [
-            {
-              "name": "kind",
-              "ty": {
-                "Primitive": "String"
-              }
-            },
-            {
-              "name": "location",
-              "ty": {
-                "Option": {
-                  "Named": "std.compiler.DiagnosticLocation"
-                }
-              }
-            },
-            {
-              "name": "spec",
-              "ty": {
-                "Option": {
-                  "Named": "std.compiler.DefinitionId"
-                }
-              }
-            }
-          ],
-          "representation": {
-            "Record": [
-              {
-                "name": "kind",
-                "ty": {
-                  "Primitive": "String"
-                }
-              },
-              {
-                "name": "location",
-                "ty": {
-                  "Option": {
-                    "Named": "std.compiler.DiagnosticLocation"
-                  }
-                }
-              },
-              {
-                "name": "spec",
-                "ty": {
-                  "Option": {
-                    "Named": "std.compiler.DefinitionId"
-                  }
-                }
-              }
-            ]
-          },
-          "runtime_role": null
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "compiler",
-        "RuntimeCheckInfo"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Type": {
-          "canonical_type": null,
-          "code_role": null,
-          "construction": "Public",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Struct",
-          "name": "SignatureInfo",
-          "params": [],
-          "projected_fields": [
-            {
-              "name": "generics",
-              "ty": {
-                "Array": {
-                  "Named": "std.compiler.GenericParameterInfo"
-                }
-              }
-            },
-            {
-              "name": "parameters",
-              "ty": {
-                "Array": {
-                  "Named": "std.compiler.ParameterInfo"
-                }
-              }
-            },
-            {
-              "name": "output",
-              "ty": {
-                "Named": "std.compiler.TypeInfo"
-              }
-            },
-            {
-              "name": "declared_output",
-              "ty": {
-                "Option": {
-                  "Named": "std.compiler.TypeInfo"
-                }
-              }
-            },
-            {
-              "name": "effects",
-              "ty": {
-                "Option": {
-                  "Named": "std.compiler.EffectRowInfo"
-                }
-              }
-            }
-          ],
-          "representation": {
-            "Record": [
-              {
-                "name": "generics",
-                "ty": {
-                  "Array": {
-                    "Named": "std.compiler.GenericParameterInfo"
-                  }
-                }
-              },
-              {
-                "name": "parameters",
-                "ty": {
-                  "Array": {
-                    "Named": "std.compiler.ParameterInfo"
-                  }
-                }
-              },
-              {
-                "name": "output",
-                "ty": {
-                  "Named": "std.compiler.TypeInfo"
-                }
-              },
-              {
-                "name": "declared_output",
-                "ty": {
-                  "Option": {
-                    "Named": "std.compiler.TypeInfo"
-                  }
-                }
-              },
-              {
-                "name": "effects",
-                "ty": {
-                  "Option": {
-                    "Named": "std.compiler.EffectRowInfo"
-                  }
-                }
-              }
-            ]
-          },
-          "runtime_role": null
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "compiler",
-        "SignatureInfo"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Type": {
-          "canonical_type": null,
-          "code_role": null,
-          "construction": "Public",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Struct",
-          "name": "SpecInfo",
-          "params": [],
-          "projected_fields": [
-            {
-              "name": "definition",
-              "ty": {
-                "Option": {
-                  "Named": "std.compiler.DefinitionId"
-                }
-              }
-            },
-            {
-              "name": "arguments",
-              "ty": {
-                "Array": {
-                  "Named": "std.compiler.TypeInfo"
-                }
-              }
-            },
-            {
-              "name": "trace",
-              "ty": {
-                "Option": {
-                  "Named": "std.compiler.TraceConstraintInfo"
-                }
-              }
-            }
-          ],
-          "representation": {
-            "Record": [
-              {
-                "name": "definition",
-                "ty": {
-                  "Option": {
-                    "Named": "std.compiler.DefinitionId"
-                  }
-                }
-              },
-              {
-                "name": "arguments",
-                "ty": {
-                  "Array": {
-                    "Named": "std.compiler.TypeInfo"
-                  }
-                }
-              },
-              {
-                "name": "trace",
-                "ty": {
-                  "Option": {
-                    "Named": "std.compiler.TraceConstraintInfo"
-                  }
-                }
-              }
-            ]
-          },
-          "runtime_role": null
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "compiler",
-        "SpecInfo"
       ],
       "primitive": null
     },
@@ -2816,51 +1109,94 @@
     },
     {
       "declaration": {
-        "Type": {
-          "canonical_type": null,
-          "code_role": null,
-          "construction": "Public",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Struct",
-          "name": "ViolatedConstraint",
-          "params": [],
-          "projected_fields": [],
-          "representation": {
-            "Record": [
-              {
-                "name": "kind",
-                "ty": {
-                  "Primitive": "String"
-                }
-              },
-              {
-                "name": "owner",
-                "ty": {
-                  "Option": {
-                    "Named": "std.compiler.DefinitionId"
-                  }
-                }
-              },
-              {
-                "name": "message",
-                "ty": {
-                  "Primitive": "String"
-                }
-              }
-            ]
+        "Flow": {
+          "name": "format",
+          "output": {
+            "Primitive": "String"
           },
-          "runtime_role": null
+          "params": [
+            {
+              "Named": "std.compiler.SyntaxBlock"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
         }
       },
       "enum_owner": null,
-      "kind": "Type",
+      "kind": "Flow",
       "path": [
         "std",
         "compiler",
-        "ViolatedConstraint"
+        "format"
       ],
-      "primitive": null
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 1201,
+        "latent_effect": "None",
+        "lowering": "None",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "compiler",
+          "format"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "parse_body",
+          "output": {
+            "Result": {
+              "err": {
+                "Named": "std.compiler.ParseError"
+              },
+              "ok": {
+                "Named": "std.compiler.SyntaxBlock"
+              }
+            }
+          },
+          "params": [
+            {
+              "Primitive": "String"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "compiler",
+        "parse_body"
+      ],
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 1200,
+        "latent_effect": "None",
+        "lowering": "None",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "compiler",
+          "parse_body"
+        ],
+        "runtime_requirement": "None"
+      }
     },
     {
       "declaration": {
@@ -6146,6 +4482,851 @@
         "std",
         "fs",
         "FsStat"
+      ]
+    },
+    {
+      "fields": [
+        {
+          "name": "source",
+          "ty": {
+            "Primitive": "String"
+          }
+        },
+        {
+          "name": "revision",
+          "ty": {
+            "Primitive": "String"
+          }
+        },
+        {
+          "name": "byte_start",
+          "ty": {
+            "Primitive": "USize"
+          }
+        },
+        {
+          "name": "byte_end",
+          "ty": {
+            "Primitive": "USize"
+          }
+        }
+      ],
+      "path": [
+        "std",
+        "compiler",
+        "DiagnosticLocation"
+      ]
+    },
+    {
+      "fields": [
+        {
+          "name": "location",
+          "ty": {
+            "Named": "std.compiler.DiagnosticLocation"
+          }
+        },
+        {
+          "name": "message",
+          "ty": {
+            "Primitive": "String"
+          }
+        }
+      ],
+      "path": [
+        "std",
+        "compiler",
+        "RelatedLocation"
+      ]
+    },
+    {
+      "fields": [
+        {
+          "name": "expected",
+          "ty": {
+            "Option": {
+              "Named": "std.compiler.DescriptorDetail"
+            }
+          }
+        },
+        {
+          "name": "actual",
+          "ty": {
+            "Option": {
+              "Named": "std.compiler.DescriptorDetail"
+            }
+          }
+        },
+        {
+          "name": "constraint",
+          "ty": {
+            "Option": {
+              "Named": "std.compiler.ViolatedConstraint"
+            }
+          }
+        },
+        {
+          "name": "related",
+          "ty": {
+            "Array": {
+              "Named": "std.compiler.RelatedLocation"
+            }
+          }
+        },
+        {
+          "name": "analysis_path",
+          "ty": {
+            "Array": {
+              "Named": "std.compiler.AnalysisStep"
+            }
+          }
+        },
+        {
+          "name": "trace_witness",
+          "ty": {
+            "Option": {
+              "Named": "std.compiler.TraceWitness"
+            }
+          }
+        }
+      ],
+      "path": [
+        "std",
+        "compiler",
+        "DiagnosticDetails"
+      ]
+    },
+    {
+      "fields": [
+        {
+          "name": "kind",
+          "ty": {
+            "Primitive": "String"
+          }
+        },
+        {
+          "name": "owner",
+          "ty": {
+            "Option": {
+              "Named": "std.compiler.DefinitionId"
+            }
+          }
+        },
+        {
+          "name": "message",
+          "ty": {
+            "Primitive": "String"
+          }
+        }
+      ],
+      "path": [
+        "std",
+        "compiler",
+        "ViolatedConstraint"
+      ]
+    },
+    {
+      "fields": [
+        {
+          "name": "callable",
+          "ty": {
+            "Named": "std.compiler.CallableId"
+          }
+        },
+        {
+          "name": "location",
+          "ty": {
+            "Option": {
+              "Named": "std.compiler.DiagnosticLocation"
+            }
+          }
+        },
+        {
+          "name": "message",
+          "ty": {
+            "Primitive": "String"
+          }
+        }
+      ],
+      "path": [
+        "std",
+        "compiler",
+        "AnalysisStep"
+      ]
+    },
+    {
+      "fields": [
+        {
+          "name": "code",
+          "ty": {
+            "Primitive": "String"
+          }
+        },
+        {
+          "name": "severity",
+          "ty": {
+            "Primitive": "String"
+          }
+        },
+        {
+          "name": "message",
+          "ty": {
+            "Primitive": "String"
+          }
+        },
+        {
+          "name": "location",
+          "ty": {
+            "Option": {
+              "Named": "std.compiler.DiagnosticLocation"
+            }
+          }
+        },
+        {
+          "name": "details",
+          "ty": {
+            "Option": {
+              "Named": "std.compiler.DiagnosticDetails"
+            }
+          }
+        }
+      ],
+      "path": [
+        "std",
+        "compiler",
+        "DiagnosticRecord"
+      ]
+    },
+    {
+      "fields": [
+        {
+          "name": "diagnostics",
+          "ty": {
+            "Array": {
+              "Named": "std.compiler.DiagnosticRecord"
+            }
+          }
+        }
+      ],
+      "path": [
+        "std",
+        "compiler",
+        "ParseError"
+      ]
+    },
+    {
+      "fields": [
+        {
+          "name": "name",
+          "ty": {
+            "Option": {
+              "Primitive": "String"
+            }
+          }
+        },
+        {
+          "name": "value",
+          "ty": {
+            "Named": "std.compiler.StaticValueInfo"
+          }
+        }
+      ],
+      "path": [
+        "std",
+        "compiler",
+        "AnnotationArgumentInfo"
+      ]
+    },
+    {
+      "fields": [
+        {
+          "name": "path",
+          "ty": {
+            "Array": {
+              "Primitive": "String"
+            }
+          }
+        },
+        {
+          "name": "arguments",
+          "ty": {
+            "Array": {
+              "Named": "std.compiler.AnnotationArgumentInfo"
+            }
+          }
+        }
+      ],
+      "path": [
+        "std",
+        "compiler",
+        "AnnotationInfo"
+      ]
+    },
+    {
+      "fields": [
+        {
+          "name": "definition",
+          "ty": {
+            "Option": {
+              "Named": "std.compiler.DefinitionId"
+            }
+          }
+        },
+        {
+          "name": "arguments",
+          "ty": {
+            "Array": {
+              "Named": "std.compiler.TypeInfo"
+            }
+          }
+        },
+        {
+          "name": "trace",
+          "ty": {
+            "Option": {
+              "Named": "std.compiler.TraceConstraintInfo"
+            }
+          }
+        }
+      ],
+      "path": [
+        "std",
+        "compiler",
+        "SpecInfo"
+      ]
+    },
+    {
+      "fields": [
+        {
+          "name": "owner",
+          "ty": {
+            "Named": "std.compiler.GenericOwnerInfo"
+          }
+        },
+        {
+          "name": "position",
+          "ty": {
+            "Primitive": "USize"
+          }
+        },
+        {
+          "name": "name",
+          "ty": {
+            "Primitive": "String"
+          }
+        },
+        {
+          "name": "kind",
+          "ty": {
+            "Primitive": "String"
+          }
+        },
+        {
+          "name": "bounds",
+          "ty": {
+            "Array": {
+              "Named": "std.compiler.SpecInfo"
+            }
+          }
+        }
+      ],
+      "path": [
+        "std",
+        "compiler",
+        "GenericParameterInfo"
+      ]
+    },
+    {
+      "fields": [
+        {
+          "name": "name",
+          "ty": {
+            "Option": {
+              "Primitive": "String"
+            }
+          }
+        },
+        {
+          "name": "ty",
+          "ty": {
+            "Named": "std.compiler.TypeInfo"
+          }
+        }
+      ],
+      "path": [
+        "std",
+        "compiler",
+        "ParameterInfo"
+      ]
+    },
+    {
+      "fields": [
+        {
+          "name": "generics",
+          "ty": {
+            "Array": {
+              "Named": "std.compiler.GenericParameterInfo"
+            }
+          }
+        },
+        {
+          "name": "parameters",
+          "ty": {
+            "Array": {
+              "Named": "std.compiler.ParameterInfo"
+            }
+          }
+        },
+        {
+          "name": "output",
+          "ty": {
+            "Named": "std.compiler.TypeInfo"
+          }
+        },
+        {
+          "name": "declared_output",
+          "ty": {
+            "Option": {
+              "Named": "std.compiler.TypeInfo"
+            }
+          }
+        },
+        {
+          "name": "effects",
+          "ty": {
+            "Option": {
+              "Named": "std.compiler.EffectRowInfo"
+            }
+          }
+        }
+      ],
+      "path": [
+        "std",
+        "compiler",
+        "SignatureInfo"
+      ]
+    },
+    {
+      "fields": [
+        {
+          "name": "key",
+          "ty": {
+            "Primitive": "String"
+          }
+        },
+        {
+          "name": "content",
+          "ty": {
+            "Primitive": "String"
+          }
+        },
+        {
+          "name": "parent",
+          "ty": {
+            "Option": {
+              "Primitive": "String"
+            }
+          }
+        }
+      ],
+      "path": [
+        "std",
+        "compiler",
+        "RevisionInfo"
+      ]
+    },
+    {
+      "fields": [
+        {
+          "name": "module",
+          "ty": {
+            "Array": {
+              "Primitive": "String"
+            }
+          }
+        },
+        {
+          "name": "package",
+          "ty": {
+            "Primitive": "String"
+          }
+        }
+      ],
+      "path": [
+        "std",
+        "compiler",
+        "ModuleOriginInfo"
+      ]
+    },
+    {
+      "fields": [
+        {
+          "name": "path",
+          "ty": {
+            "Array": {
+              "Primitive": "String"
+            }
+          }
+        },
+        {
+          "name": "definition",
+          "ty": {
+            "Named": "std.compiler.DefinitionId"
+          }
+        }
+      ],
+      "path": [
+        "std",
+        "compiler",
+        "DefinitionBindingInfo"
+      ]
+    },
+    {
+      "fields": [
+        {
+          "name": "import_root",
+          "ty": {
+            "Primitive": "String"
+          }
+        },
+        {
+          "name": "fingerprint",
+          "ty": {
+            "Primitive": "String"
+          }
+        }
+      ],
+      "path": [
+        "std",
+        "compiler",
+        "DependencyArtifactInfo"
+      ]
+    },
+    {
+      "fields": [
+        {
+          "name": "environment",
+          "ty": {
+            "Primitive": "String"
+          }
+        },
+        {
+          "name": "lexical_owner",
+          "ty": {
+            "Named": "std.compiler.DefinitionId"
+          }
+        },
+        {
+          "name": "standard_package",
+          "ty": {
+            "Primitive": "String"
+          }
+        },
+        {
+          "name": "modules",
+          "ty": {
+            "Array": {
+              "Named": "std.compiler.ModuleOriginInfo"
+            }
+          }
+        },
+        {
+          "name": "bindings",
+          "ty": {
+            "Array": {
+              "Named": "std.compiler.DefinitionBindingInfo"
+            }
+          }
+        },
+        {
+          "name": "artifacts",
+          "ty": {
+            "Array": {
+              "Named": "std.compiler.DependencyArtifactInfo"
+            }
+          }
+        }
+      ],
+      "path": [
+        "std",
+        "compiler",
+        "DependencyInfo"
+      ]
+    },
+    {
+      "fields": [
+        {
+          "name": "declared_bound",
+          "ty": {
+            "Option": {
+              "Named": "std.compiler.EffectRowInfo"
+            }
+          }
+        },
+        {
+          "name": "escaping",
+          "ty": {
+            "Option": {
+              "Named": "std.compiler.EffectRowInfo"
+            }
+          }
+        },
+        {
+          "name": "requested",
+          "ty": {
+            "Option": {
+              "Named": "std.compiler.ActionSummary"
+            }
+          }
+        },
+        {
+          "name": "default_handled",
+          "ty": {
+            "Option": {
+              "Named": "std.compiler.ActionSummary"
+            }
+          }
+        }
+      ],
+      "path": [
+        "std",
+        "compiler",
+        "EffectSummary"
+      ]
+    },
+    {
+      "fields": [
+        {
+          "name": "kind",
+          "ty": {
+            "Primitive": "String"
+          }
+        },
+        {
+          "name": "location",
+          "ty": {
+            "Option": {
+              "Named": "std.compiler.DiagnosticLocation"
+            }
+          }
+        },
+        {
+          "name": "spec",
+          "ty": {
+            "Option": {
+              "Named": "std.compiler.DefinitionId"
+            }
+          }
+        }
+      ],
+      "path": [
+        "std",
+        "compiler",
+        "RuntimeCheckInfo"
+      ]
+    },
+    {
+      "fields": [
+        {
+          "name": "schema",
+          "ty": {
+            "Primitive": "String"
+          }
+        },
+        {
+          "name": "identity",
+          "ty": {
+            "Named": "std.compiler.DefinitionId"
+          }
+        },
+        {
+          "name": "old_revision",
+          "ty": {
+            "Named": "std.compiler.RevisionInfo"
+          }
+        },
+        {
+          "name": "new_revision",
+          "ty": {
+            "Named": "std.compiler.RevisionInfo"
+          }
+        },
+        {
+          "name": "old_body_available",
+          "ty": {
+            "Primitive": "Bool"
+          }
+        },
+        {
+          "name": "new_body_available",
+          "ty": {
+            "Primitive": "Bool"
+          }
+        },
+        {
+          "name": "body_changed",
+          "ty": {
+            "Option": {
+              "Primitive": "Bool"
+            }
+          }
+        },
+        {
+          "name": "signature_changed",
+          "ty": {
+            "Primitive": "Bool"
+          }
+        },
+        {
+          "name": "dependencies_changed",
+          "ty": {
+            "Primitive": "Bool"
+          }
+        },
+        {
+          "name": "declared_bound_changed",
+          "ty": {
+            "Primitive": "Bool"
+          }
+        },
+        {
+          "name": "escaping_changed",
+          "ty": {
+            "Option": {
+              "Primitive": "Bool"
+            }
+          }
+        },
+        {
+          "name": "requested_changed",
+          "ty": {
+            "Option": {
+              "Primitive": "Bool"
+            }
+          }
+        },
+        {
+          "name": "default_handled_changed",
+          "ty": {
+            "Option": {
+              "Primitive": "Bool"
+            }
+          }
+        },
+        {
+          "name": "determinism_changed",
+          "ty": {
+            "Option": {
+              "Primitive": "Bool"
+            }
+          }
+        },
+        {
+          "name": "trace_changed",
+          "ty": {
+            "Option": {
+              "Primitive": "Bool"
+            }
+          }
+        }
+      ],
+      "path": [
+        "std",
+        "compiler",
+        "ChangeReport"
+      ]
+    },
+    {
+      "fields": [
+        {
+          "name": "status",
+          "ty": {
+            "Primitive": "String"
+          }
+        },
+        {
+          "name": "diagnostics",
+          "ty": {
+            "Array": {
+              "Named": "std.compiler.DiagnosticRecord"
+            }
+          }
+        },
+        {
+          "name": "revision",
+          "ty": {
+            "Named": "std.compiler.RevisionInfo"
+          }
+        },
+        {
+          "name": "dependencies",
+          "ty": {
+            "Named": "std.compiler.DependencyInfo"
+          }
+        },
+        {
+          "name": "snapshot_fingerprint",
+          "ty": {
+            "Primitive": "String"
+          }
+        },
+        {
+          "name": "effects",
+          "ty": {
+            "Named": "std.compiler.EffectSummary"
+          }
+        },
+        {
+          "name": "determinism",
+          "ty": {
+            "Option": {
+              "Named": "std.compiler.Determinism"
+            }
+          }
+        },
+        {
+          "name": "trace",
+          "ty": {
+            "Option": {
+              "Named": "std.compiler.TraceSummary"
+            }
+          }
+        },
+        {
+          "name": "runtime_checks",
+          "ty": {
+            "Array": {
+              "Named": "std.compiler.RuntimeCheckInfo"
+            }
+          }
+        }
+      ],
+      "path": [
+        "std",
+        "compiler",
+        "CheckReport"
+      ]
+    },
+    {
+      "fields": [
+        {
+          "name": "kind",
+          "ty": {
+            "Primitive": "String"
+          }
+        },
+        {
+          "name": "diagnostics",
+          "ty": {
+            "Array": {
+              "Named": "std.compiler.DiagnosticRecord"
+            }
+          }
+        }
+      ],
+      "path": [
+        "std",
+        "compiler",
+        "CompileError"
       ]
     }
   ],

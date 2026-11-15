@@ -309,7 +309,7 @@ dependencies = [
 
 [[package]]
 name = "etas_std"
-version = "0.2.20"
+version = "0.2.21"
 dependencies = [
  "blake3",
  "etas_code",

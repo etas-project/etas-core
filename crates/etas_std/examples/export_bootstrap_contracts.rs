@@ -47,6 +47,8 @@ fn main() {
         "std.effects.actions.Fs.atomic_replace",
         "std.codec.text.utf8_encode",
         "std.codec.text.utf8_decode",
+        "std.compiler.parse_body",
+        "std.compiler.format",
     ]
     .into_iter()
     .map(str::to_owned)
@@ -56,7 +58,7 @@ fn main() {
             || (symbol
                 .qualified_path
                 .starts_with(&["std".into(), "compiler".into()])
-                && matches!(symbol.decl, StdDecl::Type(_)))
+                && matches!(symbol.decl, StdDecl::Type(ref ty) if ty.code_role.is_some()))
             || matches!(symbol.decl, StdDecl::Effect(ref effect) if effect.core)
             || symbol.kind == StdSymbolKind::Requirement
         {
@@ -126,6 +128,32 @@ fn main() {
                 })
         })
         .collect::<Vec<_>>();
+    let mut native_record_references = vec![serde_json::json!({
+        "path": ["std", "fs", "FsStat"],
+        "fields": [
+            {"name": "is_file", "ty": {"Primitive": "Bool"}},
+            {"name": "is_dir", "ty": {"Primitive": "Bool"}},
+            {"name": "len", "ty": {"Primitive": "U64"}},
+        ],
+    })];
+    // Compiler report payload layouts are ABI constraints, not public declarations.
+    for symbol in registry.symbols() {
+        if !symbol
+            .qualified_path
+            .starts_with(&["std".into(), "compiler".into()])
+        {
+            continue;
+        }
+        if let StdDecl::Type(ty) = &symbol.decl
+            && ty.code_role.is_none()
+            && let Some(etas_std::StdType::Record(fields)) = &ty.representation
+        {
+            native_record_references.push(serde_json::json!({
+                "path": symbol.qualified_path,
+                "fields": fields,
+            }));
+        }
+    }
     println!(
         "{}",
         serde_json::to_string_pretty(&serde_json::json!({
@@ -153,14 +181,7 @@ fn main() {
                 "required_payload_variants": {},
             }],
             "native_opaque_references": [{"path": ["std", "fs", "IOError"]}],
-            "native_record_references": [{
-                "path": ["std", "fs", "FsStat"],
-                "fields": [
-                    {"name": "is_file", "ty": {"Primitive": "Bool"}},
-                    {"name": "is_dir", "ty": {"Primitive": "Bool"}},
-                    {"name": "len", "ty": {"Primitive": "U64"}},
-                ],
-            }],
+            "native_record_references": native_record_references,
             "implementations": [],
         }))
         .unwrap()
