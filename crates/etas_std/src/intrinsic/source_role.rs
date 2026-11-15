@@ -1,5 +1,6 @@
 use crate::{
-    RuntimeTypeRole, StdGenericParam, StdGenericParamKind, StdSymbolKind, TypeDecl, TypeDeclKind,
+    CodeTypeRole, RuntimeTypeRole, StdGenericParam, StdGenericParamKind, StdSymbolKind, TypeDecl,
+    TypeDeclKind,
 };
 
 /// Compiler identities and minimum execution ABI for declarations owned by std
@@ -25,10 +26,24 @@ pub enum StdSourceRole {
     Range,
     Slice,
     Iter,
+    CompilerActionSummary,
+    CompilerAgentId,
+    CompilerCallableId,
+    CompilerDefinitionId,
+    CompilerDescriptorDetail,
+    CompilerDeterminism,
+    CompilerEffectRowInfo,
+    CompilerGenericOwnerInfo,
+    CompilerStaticValueInfo,
+    CompilerToolRef,
+    CompilerTraceConstraintInfo,
+    CompilerTraceSummary,
+    CompilerTraceWitness,
+    CompilerTypeInfo,
 }
 
 impl StdSourceRole {
-    pub const ALL: [Self; 19] = [
+    pub const ALL: [Self; 33] = [
         Self::Index,
         Self::Region,
         Self::WorkspacePath,
@@ -48,6 +63,20 @@ impl StdSourceRole {
         Self::Range,
         Self::Slice,
         Self::Iter,
+        Self::CompilerActionSummary,
+        Self::CompilerAgentId,
+        Self::CompilerCallableId,
+        Self::CompilerDefinitionId,
+        Self::CompilerDescriptorDetail,
+        Self::CompilerDeterminism,
+        Self::CompilerEffectRowInfo,
+        Self::CompilerGenericOwnerInfo,
+        Self::CompilerStaticValueInfo,
+        Self::CompilerToolRef,
+        Self::CompilerTraceConstraintInfo,
+        Self::CompilerTraceSummary,
+        Self::CompilerTraceWitness,
+        Self::CompilerTypeInfo,
     ];
 
     pub fn path(self) -> &'static str {
@@ -71,6 +100,20 @@ impl StdSourceRole {
             Self::Range => "std.collections.Range",
             Self::Slice => "std.collections.Slice",
             Self::Iter => "std.collections.Iter",
+            Self::CompilerActionSummary => "std.compiler.ActionSummary",
+            Self::CompilerAgentId => "std.compiler.AgentId",
+            Self::CompilerCallableId => "std.compiler.CallableId",
+            Self::CompilerDefinitionId => "std.compiler.DefinitionId",
+            Self::CompilerDescriptorDetail => "std.compiler.DescriptorDetail",
+            Self::CompilerDeterminism => "std.compiler.Determinism",
+            Self::CompilerEffectRowInfo => "std.compiler.EffectRowInfo",
+            Self::CompilerGenericOwnerInfo => "std.compiler.GenericOwnerInfo",
+            Self::CompilerStaticValueInfo => "std.compiler.StaticValueInfo",
+            Self::CompilerToolRef => "std.compiler.ToolRef",
+            Self::CompilerTraceConstraintInfo => "std.compiler.TraceConstraintInfo",
+            Self::CompilerTraceSummary => "std.compiler.TraceSummary",
+            Self::CompilerTraceWitness => "std.compiler.TraceWitness",
+            Self::CompilerTypeInfo => "std.compiler.TypeInfo",
         }
     }
 
@@ -81,7 +124,23 @@ impl StdSourceRole {
     pub fn parameter_kinds(self) -> &'static [StdGenericParamKind] {
         use StdGenericParamKind::{EffectRow, Type};
         match self {
-            Self::Index | Self::Region | Self::Scheduler => &[],
+            Self::Index
+            | Self::Region
+            | Self::Scheduler
+            | Self::CompilerActionSummary
+            | Self::CompilerAgentId
+            | Self::CompilerCallableId
+            | Self::CompilerDefinitionId
+            | Self::CompilerDescriptorDetail
+            | Self::CompilerDeterminism
+            | Self::CompilerEffectRowInfo
+            | Self::CompilerGenericOwnerInfo
+            | Self::CompilerStaticValueInfo
+            | Self::CompilerToolRef
+            | Self::CompilerTraceConstraintInfo
+            | Self::CompilerTraceSummary
+            | Self::CompilerTraceWitness
+            | Self::CompilerTypeInfo => &[],
             Self::WorkspacePath
             | Self::Option
             | Self::Some
@@ -120,6 +179,26 @@ impl StdSourceRole {
         }
     }
 
+    pub fn code_role(self) -> Option<CodeTypeRole> {
+        match self {
+            Self::CompilerActionSummary => Some(CodeTypeRole::ActionSummary),
+            Self::CompilerAgentId => Some(CodeTypeRole::AgentId),
+            Self::CompilerCallableId => Some(CodeTypeRole::CallableId),
+            Self::CompilerDefinitionId => Some(CodeTypeRole::DefinitionId),
+            Self::CompilerDescriptorDetail => Some(CodeTypeRole::DescriptorDetail),
+            Self::CompilerDeterminism => Some(CodeTypeRole::Determinism),
+            Self::CompilerEffectRowInfo => Some(CodeTypeRole::EffectRowInfo),
+            Self::CompilerGenericOwnerInfo => Some(CodeTypeRole::GenericOwnerInfo),
+            Self::CompilerStaticValueInfo => Some(CodeTypeRole::StaticValueInfo),
+            Self::CompilerToolRef => Some(CodeTypeRole::ToolRef),
+            Self::CompilerTraceConstraintInfo => Some(CodeTypeRole::TraceConstraintInfo),
+            Self::CompilerTraceSummary => Some(CodeTypeRole::TraceSummary),
+            Self::CompilerTraceWitness => Some(CodeTypeRole::TraceWitness),
+            Self::CompilerTypeInfo => Some(CodeTypeRole::TypeInfo),
+            _ => None,
+        }
+    }
+
     pub fn symbol_kind(self) -> StdSymbolKind {
         match self {
             Self::Some | Self::None | Self::Ok | Self::Err => StdSymbolKind::Constructor,
@@ -128,31 +207,36 @@ impl StdSourceRole {
     }
 
     pub fn is_bodyless_type(self) -> bool {
-        matches!(
-            self,
-            Self::WorkspacePath
-                | Self::Task
-                | Self::Scheduler
-                | Self::Continuation
-                | Self::Array
-                | Self::List
-                | Self::Map
-                | Self::Set
-                | Self::Range
-                | Self::Slice
-                | Self::Iter
-        )
+        self.code_role().is_some()
+            || matches!(
+                self,
+                Self::WorkspacePath
+                    | Self::Task
+                    | Self::Scheduler
+                    | Self::Continuation
+                    | Self::Array
+                    | Self::List
+                    | Self::Map
+                    | Self::Set
+                    | Self::Range
+                    | Self::Slice
+                    | Self::Iter
+            )
     }
 
     /// Make a query view from source-owned parameters and the execution ABI.
     pub fn declaration(self, parameters: Vec<StdGenericParam>) -> TypeDecl {
         let kind = match self {
+            role if role.code_role().is_some() => TypeDeclKind::Struct,
             role if role.is_spec() => TypeDeclKind::Spec,
             role if role.is_bodyless_type() => TypeDeclKind::Support,
             _ => TypeDeclKind::Enum,
         };
         let name = self.path().rsplit('.').next().unwrap();
         let declaration = TypeDecl::generic_params(name, parameters, kind);
+        if let Some(role) = self.code_role() {
+            return declaration.code_role(role).intrinsic_only();
+        }
         if self == Self::Iter {
             return declaration.iterable_elements(0).intrinsic_only();
         }

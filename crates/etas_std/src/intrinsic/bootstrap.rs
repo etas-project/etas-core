@@ -42,12 +42,13 @@ pub fn compiler_contract_identity() -> String {
             role.path(),
             role.parameter_kinds(),
             role.runtime_role(),
+            role.code_role(),
             (0..role.parameter_kinds().len())
                 .map(|index| role.parameter_bounds(index))
                 .collect::<Vec<_>>(),
         )
     });
-    hash.update(&serde_json::to_vec(&(1, roles)).expect("compiler role ABI"));
+    hash.update(&serde_json::to_vec(&(2, roles.as_slice())).expect("compiler role ABI"));
     format!("blake3:{}", hash.finalize().to_hex())
 }
 
@@ -160,6 +161,7 @@ mod tests {
                         .collect::<Vec<_>>(),
                     role.parameter_kinds()
                 );
+                assert_eq!(declaration.code_role, role.code_role());
                 assert_eq!(contract.kind, role.symbol_kind());
                 assert!(contract.intrinsic.is_none());
             } else {

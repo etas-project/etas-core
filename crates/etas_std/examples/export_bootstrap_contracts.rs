@@ -62,7 +62,9 @@ fn main() {
             || matches!(symbol.decl, StdDecl::Effect(ref effect) if effect.core)
             || symbol.kind == StdSymbolKind::Requirement
         {
-            paths.insert(symbol.qualified_path.join("."));
+            if etas_std::StdSourceRole::from_path(&symbol.qualified_path.join(".")).is_none() {
+                paths.insert(symbol.qualified_path.join("."));
+            }
         }
     }
     // Native enum payloads are part of the compiler ABI, including limits.
