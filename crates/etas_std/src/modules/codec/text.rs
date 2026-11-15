@@ -54,8 +54,8 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         builder,
         module,
         "utf8_decode",
-        &["bytes", "MalformedInput"],
-        "Result[string, TextCodecError]",
+        &["bytes", "std.codec.text.MalformedInput"],
+        "Result[string, std.codec.text.TextCodecError]",
         intrinsic::pure::TEXT_UTF8_DECODE,
         "Decode UTF-8 bytes with explicit malformed-input behavior.",
     );

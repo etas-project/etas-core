@@ -16,6 +16,176 @@
     {
       "declaration": {
         "Flow": {
+          "name": "len",
+          "output": {
+            "Primitive": "USize"
+          },
+          "params": [
+            {
+              "Primitive": "Bytes"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "bytes",
+        "len"
+      ],
+      "primitive": {
+        "dispatch": "PureKernel",
+        "id": 8,
+        "latent_effect": "None",
+        "lowering": "PureBuiltin",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "bytes",
+          "len"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "from_u32",
+          "output": {
+            "Option": {
+              "Primitive": "Char"
+            }
+          },
+          "params": [
+            {
+              "Primitive": "U32"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "char",
+        "from_u32"
+      ],
+      "primitive": {
+        "dispatch": "PureKernel",
+        "id": 156,
+        "latent_effect": "None",
+        "lowering": "PureBuiltin",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "char",
+          "from_u32"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "is_alphabetic",
+          "output": {
+            "Primitive": "Bool"
+          },
+          "params": [
+            {
+              "Primitive": "Char"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "char",
+        "is_alphabetic"
+      ],
+      "primitive": {
+        "dispatch": "PureKernel",
+        "id": 151,
+        "latent_effect": "None",
+        "lowering": "PureBuiltin",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "char",
+          "is_alphabetic"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "is_alphanumeric",
+          "output": {
+            "Primitive": "Bool"
+          },
+          "params": [
+            {
+              "Primitive": "Char"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "char",
+        "is_alphanumeric"
+      ],
+      "primitive": {
+        "dispatch": "PureKernel",
+        "id": 152,
+        "latent_effect": "None",
+        "lowering": "PureBuiltin",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "char",
+          "is_alphanumeric"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
           "name": "is_whitespace",
           "output": {
             "Primitive": "Bool"
@@ -51,6 +221,102 @@
           "std",
           "char",
           "is_whitespace"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "to_u32",
+          "output": {
+            "Primitive": "U32"
+          },
+          "params": [
+            {
+              "Primitive": "Char"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "char",
+        "to_u32"
+      ],
+      "primitive": {
+        "dispatch": "PureKernel",
+        "id": 155,
+        "latent_effect": "None",
+        "lowering": "PureBuiltin",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "char",
+          "to_u32"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "utf8_decode",
+          "output": {
+            "Result": {
+              "err": {
+                "Named": "std.codec.text.TextCodecError"
+              },
+              "ok": {
+                "Primitive": "String"
+              }
+            }
+          },
+          "params": [
+            {
+              "Primitive": "Bytes"
+            },
+            {
+              "Named": "std.codec.text.MalformedInput"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "codec",
+        "text",
+        "utf8_decode"
+      ],
+      "primitive": {
+        "dispatch": "PureKernel",
+        "id": 29,
+        "latent_effect": "None",
+        "lowering": "PureBuiltin",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "codec",
+          "text",
+          "utf8_decode"
         ],
         "runtime_requirement": "None"
       }
@@ -5818,6 +6084,31 @@
         ]
       },
       "required_unit_variants": []
+    },
+    {
+      "path": [
+        "std",
+        "codec",
+        "text",
+        "MalformedInput"
+      ],
+      "required_payload_variants": {},
+      "required_unit_variants": [
+        "Strict",
+        "Replace"
+      ]
+    },
+    {
+      "path": [
+        "std",
+        "codec",
+        "text",
+        "TextCodecError"
+      ],
+      "required_payload_variants": {},
+      "required_unit_variants": [
+        "InvalidUtf8"
+      ]
     }
   ],
   "native_opaque_references": [

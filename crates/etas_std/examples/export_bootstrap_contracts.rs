@@ -6,6 +6,11 @@ fn main() {
     let mut paths = [
         "std.core.abort",
         "std.char.is_whitespace",
+        "std.char.is_alphabetic",
+        "std.char.is_alphanumeric",
+        "std.char.to_u32",
+        "std.char.from_u32",
+        "std.bytes.len",
         "std.runtime.error.raise",
         "std.runtime.checkpoint",
         "std.runtime.budget.Money",
@@ -41,6 +46,7 @@ fn main() {
         "std.effects.actions.Fs.stat",
         "std.effects.actions.Fs.atomic_replace",
         "std.codec.text.utf8_encode",
+        "std.codec.text.utf8_decode",
     ]
     .into_iter()
     .map(str::to_owned)
@@ -137,6 +143,14 @@ fn main() {
                 "path": ["std", "fs", "ListLimitError"],
                 "required_unit_variants": [],
                 "required_payload_variants": {"LimitExceeded": ["USize", "USize"]},
+            }, {
+                "path": ["std", "codec", "text", "MalformedInput"],
+                "required_unit_variants": ["Strict", "Replace"],
+                "required_payload_variants": {},
+            }, {
+                "path": ["std", "codec", "text", "TextCodecError"],
+                "required_unit_variants": ["InvalidUtf8"],
+                "required_payload_variants": {},
             }],
             "native_opaque_references": [{"path": ["std", "fs", "IOError"]}],
             "native_record_references": [{
