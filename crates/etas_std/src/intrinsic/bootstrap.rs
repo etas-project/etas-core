@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use super::StdSourceRole;
 use crate::{
     IntrinsicDescriptor, StdDecl, StdImplFact, StdRegistry, StdRegistryBuilder, StdRegistryVersion,
     StdSymbolKind,
@@ -30,10 +31,18 @@ struct Contract {
 
 /// Content identity of the exact compiler/host contract set used by a build.
 pub fn compiler_contract_identity() -> String {
-    format!(
-        "blake3:{}",
-        blake3::hash(include_bytes!("bootstrap-contracts.json")).to_hex()
-    )
+    let mut hash = blake3::Hasher::new();
+    hash.update(include_bytes!("bootstrap-contracts.json"));
+    let roles = StdSourceRole::ALL.map(|role| {
+        (
+            role,
+            role.path(),
+            role.parameter_kinds(),
+            role.runtime_role(),
+        )
+    });
+    hash.update(&serde_json::to_vec(&(1, roles)).expect("compiler role ABI"));
+    format!("blake3:{}", hash.finalize().to_hex())
 }
 
 /// Construct only the explicit compiler/host ABI. Public std interfaces are
@@ -69,6 +78,27 @@ pub fn compiler_contract_registry() -> StdRegistry {
         };
         symbols.insert(contract.path, symbol);
     }
+    // These are compiler type constructors, not a second public std API. The
+    // checked source supplies their actual parameter names and declarations.
+    for role in StdSourceRole::ALL {
+        let path = role
+            .path()
+            .split('.')
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        let (name, parent) = path.split_last().unwrap();
+        let module = *modules.entry(parent.to_vec()).or_insert_with(|| {
+            builder.module(&parent.iter().map(String::as_str).collect::<Vec<_>>(), "")
+        });
+        let symbol = builder.symbol(
+            module,
+            name,
+            role.symbol_kind(),
+            StdDecl::Type(role.predeclaration()),
+            "",
+        );
+        symbols.insert(path, symbol);
+    }
     for (alias, target) in contracts.aliases {
         let (name, parent) = alias.split_last().expect("contract alias");
         let module = *modules.entry(parent.to_vec()).or_insert_with(|| {
@@ -103,8 +133,24 @@ mod tests {
         );
         for contract in kernel.symbols() {
             let native = legacy.lookup_qualified(&contract.qualified_path).unwrap();
-            assert_eq!(contract.decl, native.decl);
-            assert_eq!(contract.intrinsic, native.intrinsic);
+            if let Some(role) = StdSourceRole::from_path(&contract.qualified_path.join(".")) {
+                let StdDecl::Type(declaration) = &contract.decl else {
+                    unreachable!()
+                };
+                assert_eq!(
+                    declaration
+                        .params
+                        .iter()
+                        .map(|p| p.kind)
+                        .collect::<Vec<_>>(),
+                    role.parameter_kinds()
+                );
+                assert_eq!(contract.kind, role.symbol_kind());
+                assert!(contract.intrinsic.is_none());
+            } else {
+                assert_eq!(contract.decl, native.decl);
+                assert_eq!(contract.intrinsic, native.intrinsic);
+            }
         }
         assert!(kernel.lookup_qualified(&["std", "text", "chars"]).is_some());
         assert!(kernel.lookup_qualified(&["std", "text", "join"]).is_none());

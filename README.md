@@ -149,6 +149,17 @@ query view is part of loading the checked source bundle. The transitional
 compiler/host contract catalog still needs a minimality audit; disabling the
 complete legacy registry factory alone does not finish std source ownership.
 
+`StdSourceRole` lists the compiler identities and minimum ABI for Index,
+Option/Result and their constructor aliases, Task, Scheduler and Continuation.
+The role checker reads this ABI directly, without looking up a copied public
+declaration in the registry. It enforces parameter kinds and executable value
+shapes; source declarations supply the parameter names. The compiler generates
+temporary query predeclarations with internal parameter names, and the installed
+query takes its public parameters from the checked bundle. These ten roles and
+their four constructor primitives are absent from the static bootstrap catalog.
+The remaining catalog has 124 transitional contracts and 21 primitives; its
+prelude references to compiler roles remain part of the migration work.
+
 Native-backed flows can own their public declaration in Etas source:
 
 ```etas

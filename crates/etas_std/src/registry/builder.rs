@@ -52,12 +52,13 @@ impl StdRegistryBuilder {
             .filter(|symbol| symbol.qualified_path == path)
         {
             assert!(
-                matches!(
+                (matches!(
                     original.implementation,
                     Some(StdImplementationRef::Primitive { .. })
-                ) && (matches!(original.decl, StdDecl::Flow(_))
+                ) && matches!(original.decl, StdDecl::Flow(_)))
                     || (original.kind == StdSymbolKind::Constructor
-                        && matches!(original.decl, StdDecl::Type(_)))),
+                        && matches!(original.decl, StdDecl::Type(_))
+                        && crate::StdSourceRole::from_path(&path.join(".")).is_some()),
                 "source flow can replace a native flow contract only"
             );
             let id = original.id;

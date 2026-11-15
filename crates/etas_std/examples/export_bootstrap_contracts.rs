@@ -4,7 +4,6 @@ use std::collections::BTreeSet;
 fn main() {
     let registry = etas_std::standard_registry();
     let mut paths = [
-        "std.core.Index",
         "std.core.abort",
         "std.char.is_whitespace",
         "std.runtime.error.raise",
@@ -20,12 +19,6 @@ fn main() {
         "std.collections.Iter",
         "std.collections.array_get",
         "std.collections.array_push",
-        "std.option.Option",
-        "std.option.Some",
-        "std.option.None",
-        "std.result.Result",
-        "std.result.Ok",
-        "std.result.Err",
         "std.text.TextError",
         "std.text.char_count",
         "std.text.chars",
@@ -33,9 +26,6 @@ fn main() {
         "std.text.parse_usize",
         "std.text.uppercase",
         "std.text.lowercase",
-        "std.task.Task",
-        "std.task.Scheduler",
-        "std.task.Continuation",
         "std.task.run",
         "std.task.Async",
         "std.task.actions.Async.yield",
@@ -88,10 +78,18 @@ fn main() {
                 .unwrap_or_else(|| panic!("missing {path}"))
         })
         .collect::<Vec<_>>();
-    let ids = selected
+    let mut ids = selected
         .iter()
         .map(|symbol| symbol.id)
         .collect::<BTreeSet<_>>();
+    // Keep transitional prelude references to compiler roles, but never copy
+    // their public declarations or constructor primitives into this catalog.
+    ids.extend(etas_std::StdSourceRole::ALL.into_iter().map(|role| {
+        registry
+            .lookup_qualified(&role.path().split('.').collect::<Vec<_>>())
+            .unwrap()
+            .id
+    }));
     let contracts = selected.into_iter().map(|symbol| serde_json::json!({
         "path": symbol.qualified_path,
         "kind": symbol.kind,

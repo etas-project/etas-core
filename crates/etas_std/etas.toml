@@ -1,6 +1,6 @@
 [package]
 name = "std"
-version = "0.2.11"
+version = "0.2.12"
 edition = "2026"
 
 [source]

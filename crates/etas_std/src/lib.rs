@@ -23,7 +23,7 @@ pub use intrinsic::{
     StdCollectionIntrinsic, StdCollectionKind, StdCollectionOperation, StdIntrinsicId,
     StdTaskIntrinsic, intrinsic_completion_semantics, intrinsic_static_string_semantics,
 };
-pub use intrinsic::{compiler_contract_identity, compiler_contract_registry};
+pub use intrinsic::{StdSourceRole, compiler_contract_identity, compiler_contract_registry};
 pub use library::{StdLibrarySource, standard_library_source, standard_library_sources};
 pub use metadata::{CompletionMetadata, DocsMetadata, StdManifest, TextCompatibilityDescriptor};
 pub use modules::effects::is_standard_effect_reference;
