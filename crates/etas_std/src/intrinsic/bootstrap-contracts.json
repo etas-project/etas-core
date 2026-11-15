@@ -4712,6 +4712,54 @@
     },
     {
       "declaration": {
+        "Flow": {
+          "name": "checkpoint",
+          "output": {
+            "Primitive": "Unit"
+          },
+          "params": [
+            {
+              "Var": "T"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "T"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "runtime",
+        "checkpoint"
+      ],
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 1001,
+        "latent_effect": "None",
+        "lowering": "RuntimeCall",
+        "memory_access": "None",
+        "purity": "Runtime",
+        "qualified_path": [
+          "std",
+          "runtime",
+          "checkpoint"
+        ],
+        "runtime_requirement": "Checkpoint"
+      }
+    },
+    {
+      "declaration": {
         "EffectAction": {
           "compiler_role": null,
           "default_handler_effect_tail": null,

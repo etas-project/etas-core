@@ -7,6 +7,7 @@ fn main() {
         "std.core.abort",
         "std.char.is_whitespace",
         "std.runtime.error.raise",
+        "std.runtime.checkpoint",
         "std.runtime.budget.Money",
         "std.runtime.time.Duration",
         "std.runtime.limits.Limit",
