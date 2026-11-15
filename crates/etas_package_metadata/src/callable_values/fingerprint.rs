@@ -19,7 +19,7 @@ struct Encoder(blake3::Hasher);
 impl Encoder {
     fn new() -> Self {
         Self(blake3::Hasher::new_derive_key(
-            "etas.metadata.callable-value-input.v6",
+            "etas.metadata.callable-value-input.v7",
         ))
     }
     fn byte(&mut self, value: u8) {
@@ -141,6 +141,7 @@ impl Encoder {
                     self.path(&ty.path);
                     self.number(ty.children.len());
                     self.number(ty.fields.len());
+                    self.number(ty.projected_fields.len());
                     self.number(ty.bounds.len());
                     self.option(ty.effects.is_some());
                     self.option(ty.produced_effects.is_some());
@@ -150,6 +151,7 @@ impl Encoder {
                     if let Some(row) = &ty.effects {
                         pending.push(Task::Row(row));
                     }
+                    pending.extend(ty.projected_fields.iter().rev().map(Task::Field));
                     pending.extend(ty.fields.iter().rev().map(Task::Field));
                     pending.extend(ty.children.iter().rev().map(Task::Type));
                     pending.extend(ty.bounds.iter().rev().map(Task::Bound));

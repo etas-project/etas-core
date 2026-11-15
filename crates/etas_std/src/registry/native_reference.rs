@@ -74,3 +74,29 @@ impl StdNativeRecordReference {
                     if fields.len() == self.fields.len() && self.fields.iter().all(|field| fields.contains(field))))
     }
 }
+
+/// Getter outputs of a compiler-managed object. Source owns the declarations;
+/// these are the field types returned by the existing runtime projection rules.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, etas_core::RetainedSize)]
+pub struct StdNativeProjectionReference {
+    pub path: Vec<String>,
+    pub fields: Vec<crate::StdRecordField>,
+}
+
+impl StdNativeProjectionReference {
+    pub(crate) fn matches_declaration(&self, declaration: &crate::StdDecl) -> bool {
+        let Some(role) = crate::StdSourceRole::from_path(&self.path.join("."))
+            .filter(|role| role.is_projected_type())
+        else {
+            return false;
+        };
+        matches!(declaration, crate::StdDecl::Type(declaration)
+            if declaration.kind == crate::TypeDeclKind::Struct
+                && declaration.code_role == role.code_role()
+                && declaration.representation.is_none()
+                && declaration.construction == crate::StdTypeConstruction::IntrinsicOnly
+                && declaration.params.iter().map(|p| p.kind).eq(role.parameter_kinds().iter().copied())
+                && declaration.projected_fields.len() == self.fields.len()
+                && self.fields.iter().all(|field| declaration.projected_fields.contains(field)))
+    }
+}

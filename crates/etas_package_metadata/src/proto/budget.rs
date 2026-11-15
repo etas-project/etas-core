@@ -492,7 +492,7 @@ impl ModelGraphValidator {
         for child in &ty.children {
             self.ty(child, depth + 1)?;
         }
-        for field in &ty.fields {
+        for field in ty.fields.iter().chain(&ty.projected_fields) {
             self.ty(&field.ty, depth + 1)?;
         }
         if let Some(effects) = &ty.effects {
@@ -984,7 +984,7 @@ impl ProtoGraphValidator {
         for child in &ty.children {
             self.ty(child, depth + 1)?;
         }
-        for field in &ty.fields {
+        for field in ty.fields.iter().chain(&ty.projected_fields) {
             if let Some(field_ty) = field.ty.as_ref() {
                 self.ty(field_ty, depth + 1)?;
             }

@@ -40,10 +40,13 @@ pub enum StdSourceRole {
     CompilerTraceSummary,
     CompilerTraceWitness,
     CompilerTypeInfo,
+    CompilerAgentDef,
+    CompilerCallableDef,
+    CompilerSyntaxBlock,
 }
 
 impl StdSourceRole {
-    pub const ALL: [Self; 33] = [
+    pub const ALL: [Self; 36] = [
         Self::Index,
         Self::Region,
         Self::WorkspacePath,
@@ -77,6 +80,9 @@ impl StdSourceRole {
         Self::CompilerTraceSummary,
         Self::CompilerTraceWitness,
         Self::CompilerTypeInfo,
+        Self::CompilerAgentDef,
+        Self::CompilerCallableDef,
+        Self::CompilerSyntaxBlock,
     ];
 
     pub fn path(self) -> &'static str {
@@ -114,6 +120,9 @@ impl StdSourceRole {
             Self::CompilerTraceSummary => "std.compiler.TraceSummary",
             Self::CompilerTraceWitness => "std.compiler.TraceWitness",
             Self::CompilerTypeInfo => "std.compiler.TypeInfo",
+            Self::CompilerAgentDef => "std.compiler.AgentDef",
+            Self::CompilerCallableDef => "std.compiler.CallableDef",
+            Self::CompilerSyntaxBlock => "std.compiler.SyntaxBlock",
         }
     }
 
@@ -140,7 +149,8 @@ impl StdSourceRole {
             | Self::CompilerTraceConstraintInfo
             | Self::CompilerTraceSummary
             | Self::CompilerTraceWitness
-            | Self::CompilerTypeInfo => &[],
+            | Self::CompilerTypeInfo
+            | Self::CompilerSyntaxBlock => &[],
             Self::WorkspacePath
             | Self::Option
             | Self::Some
@@ -151,7 +161,9 @@ impl StdSourceRole {
             | Self::Set
             | Self::Range
             | Self::Slice
-            | Self::Iter => &[Type],
+            | Self::Iter
+            | Self::CompilerAgentDef
+            | Self::CompilerCallableDef => &[Type],
             Self::Result | Self::Ok | Self::Err | Self::Map => &[Type, Type],
             Self::Task => &[Type, EffectRow],
         }
@@ -195,6 +207,9 @@ impl StdSourceRole {
             Self::CompilerTraceSummary => Some(CodeTypeRole::TraceSummary),
             Self::CompilerTraceWitness => Some(CodeTypeRole::TraceWitness),
             Self::CompilerTypeInfo => Some(CodeTypeRole::TypeInfo),
+            Self::CompilerAgentDef => Some(CodeTypeRole::AgentDefinition),
+            Self::CompilerCallableDef => Some(CodeTypeRole::CallableDefinition),
+            Self::CompilerSyntaxBlock => Some(CodeTypeRole::SyntaxBlock),
             _ => None,
         }
     }
@@ -207,7 +222,7 @@ impl StdSourceRole {
     }
 
     pub fn is_bodyless_type(self) -> bool {
-        self.code_role().is_some()
+        (self.code_role().is_some() && !self.is_projected_type())
             || matches!(
                 self,
                 Self::WorkspacePath
@@ -222,6 +237,13 @@ impl StdSourceRole {
                     | Self::Slice
                     | Self::Iter
             )
+    }
+
+    pub fn is_projected_type(self) -> bool {
+        matches!(
+            self,
+            Self::CompilerAgentDef | Self::CompilerCallableDef | Self::CompilerSyntaxBlock
+        )
     }
 
     /// Make a query view from source-owned parameters and the execution ABI.

@@ -156,7 +156,7 @@ fn validate_parts(
                     work.extend(bound.args.iter().map(Part::Type));
                 }
                 let mut fields = BTreeSet::new();
-                for field in &ty.fields {
+                for field in ty.fields.iter().chain(&ty.projected_fields) {
                     if field.name.is_empty() || !fields.insert(&field.name) {
                         return Err(invalid(
                             "callable value record field is empty or duplicated",

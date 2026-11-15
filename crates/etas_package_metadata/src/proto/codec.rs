@@ -1642,6 +1642,11 @@ fn type_to_proto(ty: &Type) -> ProtoType {
         path: ty.path.clone(),
         children: ty.children.iter().map(type_to_proto).collect(),
         fields: ty.fields.iter().map(type_field_to_proto).collect(),
+        projected_fields: ty
+            .projected_fields
+            .iter()
+            .map(type_field_to_proto)
+            .collect(),
         effects: ty.effects.as_ref().map(effect_row_to_proto),
         produced_effects: ty.produced_effects.as_ref().map(effect_row_to_proto),
         bounds: ty.bounds.iter().map(spec_bound_to_proto).collect(),
@@ -1666,6 +1671,11 @@ fn type_from_proto_with_budget(
         .collect::<Result<Vec<_>, _>>()?;
     let fields = ty
         .fields
+        .into_iter()
+        .map(|field| type_field_from_proto_with_budget(field, depth + 1, budget))
+        .collect::<Result<Vec<_>, _>>()?;
+    let projected_fields = ty
+        .projected_fields
         .into_iter()
         .map(|field| type_field_from_proto_with_budget(field, depth + 1, budget))
         .collect::<Result<Vec<_>, _>>()?;
@@ -1711,6 +1721,7 @@ fn type_from_proto_with_budget(
         path: ty.path,
         children,
         fields,
+        projected_fields,
         effects,
         produced_effects,
         bounds,

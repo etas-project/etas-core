@@ -14,7 +14,7 @@ use crate::{
     StdImplementationRef, StdIntrinsicId,
 };
 
-const SCHEMA: u32 = 5;
+const SCHEMA: u32 = 6;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StdRegistryImage {
@@ -36,6 +36,7 @@ pub struct StdRegistryImage {
     native_enum_references: BTreeMap<String, super::StdNativeEnumReference>,
     native_opaque_references: BTreeMap<String, super::StdNativeOpaqueReference>,
     native_record_references: BTreeMap<String, super::StdNativeRecordReference>,
+    native_projection_references: BTreeMap<String, super::StdNativeProjectionReference>,
 }
 
 impl StdRegistryImage {
@@ -67,6 +68,16 @@ impl StdRegistryImage {
                         "checked source record disagrees with its native ABI reference",
                     ));
                 }
+            }
+        }
+        for reference in registry.native_projection_references() {
+            if let Some(owner) = registry.lookup_qualified(&reference.path)
+                && registry.declaration_key(owner.id).is_some()
+                && !reference.matches_declaration(&owner.decl)
+            {
+                return Err(invalid(
+                    "checked source projections disagree with their native getter ABI",
+                ));
             }
         }
         if registry.symbols().any(|symbol| {
@@ -101,6 +112,7 @@ impl StdRegistryImage {
             native_enum_references: registry.native_enum_references.clone(),
             native_opaque_references: registry.native_opaque_references.clone(),
             native_record_references: registry.native_record_references.clone(),
+            native_projection_references: registry.native_projection_references.clone(),
         })
     }
 
@@ -125,6 +137,7 @@ impl StdRegistryImage {
             native_enum_references: self.native_enum_references,
             native_opaque_references: self.native_opaque_references,
             native_record_references: self.native_record_references,
+            native_projection_references: self.native_projection_references,
         };
         for (index, module) in registry.modules.iter().enumerate() {
             if module.id.0 as usize != index {

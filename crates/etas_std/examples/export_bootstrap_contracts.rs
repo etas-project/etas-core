@@ -156,6 +156,19 @@ fn main() {
             }));
         }
     }
+    let native_projection_references = registry
+        .symbols()
+        .filter_map(|symbol| {
+            let StdDecl::Type(ty) = &symbol.decl else {
+                return None;
+            };
+            (ty.code_role.is_some() && !ty.projected_fields.is_empty()).then(|| {
+                serde_json::json!({
+                    "path": symbol.qualified_path, "fields": ty.projected_fields,
+                })
+            })
+        })
+        .collect::<Vec<_>>();
     println!(
         "{}",
         serde_json::to_string_pretty(&serde_json::json!({
@@ -184,6 +197,7 @@ fn main() {
             }],
             "native_opaque_references": [{"path": ["std", "fs", "IOError"]}],
             "native_record_references": native_record_references,
+            "native_projection_references": native_projection_references,
             "implementations": [],
         }))
         .unwrap()

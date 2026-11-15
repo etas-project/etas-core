@@ -14,7 +14,8 @@ mod validation;
 mod value_role;
 pub use image::StdRegistryImage;
 pub use native_reference::{
-    StdNativeEnumReference, StdNativeOpaqueReference, StdNativeRecordReference,
+    StdNativeEnumReference, StdNativeOpaqueReference, StdNativeProjectionReference,
+    StdNativeRecordReference,
 };
 
 pub use builder::StdRegistryBuilder;
@@ -46,6 +47,7 @@ pub struct StdRegistry {
     native_enum_references: BTreeMap<String, StdNativeEnumReference>,
     native_opaque_references: BTreeMap<String, StdNativeOpaqueReference>,
     native_record_references: BTreeMap<String, StdNativeRecordReference>,
+    native_projection_references: BTreeMap<String, StdNativeProjectionReference>,
 }
 
 impl StdRegistry {
@@ -142,6 +144,29 @@ impl StdRegistry {
                 return Err(StdRegistryValidationError {
                     symbol: reference.path.join("."),
                     reason: "native ABI reference has no matching checked source record".into(),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    pub fn native_projection_references(
+        &self,
+    ) -> impl Iterator<Item = &StdNativeProjectionReference> {
+        self.native_projection_references.values()
+    }
+
+    pub fn validate_resolved_native_projection_references(
+        &self,
+    ) -> Result<(), StdRegistryValidationError> {
+        for reference in self.native_projection_references() {
+            if !self
+                .lookup_qualified(&reference.path)
+                .is_some_and(|owner| reference.matches_declaration(&owner.decl))
+            {
+                return Err(StdRegistryValidationError {
+                    symbol: reference.path.join("."),
+                    reason: "native getter ABI has no matching checked source projections".into(),
                 });
             }
         }

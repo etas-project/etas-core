@@ -298,6 +298,9 @@ pub struct Type {
     pub path: Vec<String>,
     pub children: Vec<Type>,
     pub fields: Vec<TypeField>,
+    /// Source-declared getters on an opaque nominal, separate from storage layout.
+    #[serde(default)]
+    pub projected_fields: Vec<TypeField>,
     pub effects: Option<EffectRow>,
     pub produced_effects: Option<EffectRow>,
     pub bounds: Vec<SpecBound>,

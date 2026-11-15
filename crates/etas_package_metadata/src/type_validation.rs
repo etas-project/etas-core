@@ -46,11 +46,23 @@ pub(crate) fn validate_type_shape(ty: &Type) -> Result<(), MetadataArtifactError
         path,
         children,
         fields,
+        projected_fields,
         effects,
         produced_effects,
         bounds,
         ..
     } = ty;
+    if !projected_fields.is_empty() {
+        if kind != TypeKind::Nominal || !children.is_empty() {
+            return Err(invalid("projected fields require an opaque nominal type"));
+        }
+        let mut names = std::collections::BTreeSet::new();
+        for field in projected_fields {
+            if field.name.is_empty() || !names.insert(&field.name) {
+                return Err(invalid("projected fields require unique nonempty names"));
+            }
+        }
+    }
     if kind == TypeKind::Parameter {
         let Some(parameter) = &ty.parameter else {
             return Err(invalid(

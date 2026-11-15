@@ -521,244 +521,6 @@
     },
     {
       "declaration": {
-        "Type": {
-          "canonical_type": null,
-          "code_role": "AgentDefinition",
-          "construction": "IntrinsicOnly",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Struct",
-          "name": "AgentDef",
-          "params": [
-            {
-              "bounds": [],
-              "kind": "Type",
-              "name": "A"
-            }
-          ],
-          "projected_fields": [
-            {
-              "name": "body",
-              "ty": {
-                "Option": {
-                  "Named": "std.compiler.SyntaxBlock"
-                }
-              }
-            },
-            {
-              "name": "effects",
-              "ty": {
-                "Named": "std.compiler.EffectSummary"
-              }
-            },
-            {
-              "name": "determinism",
-              "ty": {
-                "Option": {
-                  "Named": "std.compiler.Determinism"
-                }
-              }
-            },
-            {
-              "name": "trace",
-              "ty": {
-                "Option": {
-                  "Named": "std.compiler.TraceSummary"
-                }
-              }
-            },
-            {
-              "name": "revision",
-              "ty": {
-                "Named": "std.compiler.RevisionInfo"
-              }
-            },
-            {
-              "name": "dependencies",
-              "ty": {
-                "Named": "std.compiler.DependencyInfo"
-              }
-            },
-            {
-              "name": "signature",
-              "ty": {
-                "Option": {
-                  "Named": "std.compiler.SignatureInfo"
-                }
-              }
-            },
-            {
-              "name": "identity",
-              "ty": {
-                "Named": "std.compiler.AgentId"
-              }
-            },
-            {
-              "name": "annotations",
-              "ty": {
-                "Array": {
-                  "Named": "std.compiler.AnnotationInfo"
-                }
-              }
-            },
-            {
-              "name": "tools",
-              "ty": {
-                "Array": {
-                  "Named": "std.compiler.ToolRef"
-                }
-              }
-            },
-            {
-              "name": "specs",
-              "ty": {
-                "Array": {
-                  "Named": "std.compiler.SpecInfo"
-                }
-              }
-            },
-            {
-              "name": "methods",
-              "ty": {
-                "Array": {
-                  "Named": "std.compiler.CallableDef"
-                }
-              }
-            }
-          ],
-          "representation": null,
-          "runtime_role": null
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "compiler",
-        "AgentDef"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Type": {
-          "canonical_type": null,
-          "code_role": "CallableDefinition",
-          "construction": "IntrinsicOnly",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Struct",
-          "name": "CallableDef",
-          "params": [
-            {
-              "bounds": [],
-              "kind": "Type",
-              "name": "F"
-            }
-          ],
-          "projected_fields": [
-            {
-              "name": "body",
-              "ty": {
-                "Option": {
-                  "Named": "std.compiler.SyntaxBlock"
-                }
-              }
-            },
-            {
-              "name": "effects",
-              "ty": {
-                "Named": "std.compiler.EffectSummary"
-              }
-            },
-            {
-              "name": "determinism",
-              "ty": {
-                "Option": {
-                  "Named": "std.compiler.Determinism"
-                }
-              }
-            },
-            {
-              "name": "trace",
-              "ty": {
-                "Option": {
-                  "Named": "std.compiler.TraceSummary"
-                }
-              }
-            },
-            {
-              "name": "revision",
-              "ty": {
-                "Named": "std.compiler.RevisionInfo"
-              }
-            },
-            {
-              "name": "dependencies",
-              "ty": {
-                "Named": "std.compiler.DependencyInfo"
-              }
-            },
-            {
-              "name": "id",
-              "ty": {
-                "Named": "std.compiler.CallableId"
-              }
-            },
-            {
-              "name": "signature",
-              "ty": {
-                "Named": "std.compiler.SignatureInfo"
-              }
-            }
-          ],
-          "representation": null,
-          "runtime_role": null
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "compiler",
-        "CallableDef"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Type": {
-          "canonical_type": null,
-          "code_role": "SyntaxBlock",
-          "construction": "IntrinsicOnly",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Struct",
-          "name": "SyntaxBlock",
-          "params": [],
-          "projected_fields": [
-            {
-              "name": "text",
-              "ty": {
-                "Primitive": "String"
-              }
-            }
-          ],
-          "representation": null,
-          "runtime_role": null
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "compiler",
-        "SyntaxBlock"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
         "Flow": {
           "name": "format",
           "output": {
@@ -4103,6 +3865,183 @@
         "std",
         "fs",
         "IOError"
+      ]
+    }
+  ],
+  "native_projection_references": [
+    {
+      "fields": [
+        {
+          "name": "body",
+          "ty": {
+            "Option": {
+              "Named": "std.compiler.SyntaxBlock"
+            }
+          }
+        },
+        {
+          "name": "effects",
+          "ty": {
+            "Named": "std.compiler.EffectSummary"
+          }
+        },
+        {
+          "name": "determinism",
+          "ty": {
+            "Option": {
+              "Named": "std.compiler.Determinism"
+            }
+          }
+        },
+        {
+          "name": "trace",
+          "ty": {
+            "Option": {
+              "Named": "std.compiler.TraceSummary"
+            }
+          }
+        },
+        {
+          "name": "revision",
+          "ty": {
+            "Named": "std.compiler.RevisionInfo"
+          }
+        },
+        {
+          "name": "dependencies",
+          "ty": {
+            "Named": "std.compiler.DependencyInfo"
+          }
+        },
+        {
+          "name": "signature",
+          "ty": {
+            "Option": {
+              "Named": "std.compiler.SignatureInfo"
+            }
+          }
+        },
+        {
+          "name": "identity",
+          "ty": {
+            "Named": "std.compiler.AgentId"
+          }
+        },
+        {
+          "name": "annotations",
+          "ty": {
+            "Array": {
+              "Named": "std.compiler.AnnotationInfo"
+            }
+          }
+        },
+        {
+          "name": "tools",
+          "ty": {
+            "Array": {
+              "Named": "std.compiler.ToolRef"
+            }
+          }
+        },
+        {
+          "name": "specs",
+          "ty": {
+            "Array": {
+              "Named": "std.compiler.SpecInfo"
+            }
+          }
+        },
+        {
+          "name": "methods",
+          "ty": {
+            "Array": {
+              "Named": "std.compiler.CallableDef"
+            }
+          }
+        }
+      ],
+      "path": [
+        "std",
+        "compiler",
+        "AgentDef"
+      ]
+    },
+    {
+      "fields": [
+        {
+          "name": "body",
+          "ty": {
+            "Option": {
+              "Named": "std.compiler.SyntaxBlock"
+            }
+          }
+        },
+        {
+          "name": "effects",
+          "ty": {
+            "Named": "std.compiler.EffectSummary"
+          }
+        },
+        {
+          "name": "determinism",
+          "ty": {
+            "Option": {
+              "Named": "std.compiler.Determinism"
+            }
+          }
+        },
+        {
+          "name": "trace",
+          "ty": {
+            "Option": {
+              "Named": "std.compiler.TraceSummary"
+            }
+          }
+        },
+        {
+          "name": "revision",
+          "ty": {
+            "Named": "std.compiler.RevisionInfo"
+          }
+        },
+        {
+          "name": "dependencies",
+          "ty": {
+            "Named": "std.compiler.DependencyInfo"
+          }
+        },
+        {
+          "name": "id",
+          "ty": {
+            "Named": "std.compiler.CallableId"
+          }
+        },
+        {
+          "name": "signature",
+          "ty": {
+            "Named": "std.compiler.SignatureInfo"
+          }
+        }
+      ],
+      "path": [
+        "std",
+        "compiler",
+        "CallableDef"
+      ]
+    },
+    {
+      "fields": [
+        {
+          "name": "text",
+          "ty": {
+            "Primitive": "String"
+          }
+        }
+      ],
+      "path": [
+        "std",
+        "compiler",
+        "SyntaxBlock"
       ]
     }
   ],

@@ -111,6 +111,22 @@ impl StdRegistryBuilder {
         declaration.params = parameters;
     }
 
+    /// Projected fields come from the checked source role declaration.
+    pub fn source_type_projected_fields(
+        &mut self,
+        symbol: StdSymbolId,
+        fields: Vec<crate::StdRecordField>,
+    ) {
+        let StdDecl::Type(declaration) = &mut self.registry.symbols[symbol.0 as usize]
+            .as_mut()
+            .unwrap()
+            .decl
+        else {
+            unreachable!("checked source type role");
+        };
+        declaration.projected_fields = fields;
+    }
+
     pub fn named_enum_fields(&mut self, constructor: StdSymbolId, names: Vec<String>) {
         assert!(
             self.registry
@@ -409,6 +425,17 @@ impl StdRegistryBuilder {
             .native_record_references
             .insert(reference.path.join("."), reference);
         assert!(previous.is_none(), "duplicate native record ABI reference");
+    }
+
+    pub fn native_projection_reference(&mut self, reference: super::StdNativeProjectionReference) {
+        let previous = self
+            .registry
+            .native_projection_references
+            .insert(reference.path.join("."), reference);
+        assert!(
+            previous.is_none(),
+            "duplicate native projection ABI reference"
+        );
     }
 
     /// Replace a bootstrap spec's implementations with its checked bundle facts.

@@ -524,6 +524,8 @@ pub struct ProtoType {
     pub bounds: Vec<ProtoSpecBound>,
     #[prost(message, optional, tag = "9")]
     pub parameter: Option<ProtoGenericTypeParameter>,
+    #[prost(message, repeated, tag = "10")]
+    pub projected_fields: Vec<ProtoTypeField>,
 }
 
 #[derive(Clone, PartialEq, Message)]

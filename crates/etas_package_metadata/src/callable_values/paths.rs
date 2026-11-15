@@ -157,7 +157,12 @@ fn remap_parts(
                     ty.path = remap(CallableValuePathKind::Type, &ty.path);
                 }
                 work.extend(ty.children.iter_mut().map(Part::Type));
-                work.extend(ty.fields.iter_mut().map(|field| Part::Type(&mut field.ty)));
+                work.extend(
+                    ty.fields
+                        .iter_mut()
+                        .chain(&mut ty.projected_fields)
+                        .map(|field| Part::Type(&mut field.ty)),
+                );
                 work.extend(
                     ty.effects
                         .iter_mut()
