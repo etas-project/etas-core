@@ -1,5 +1,7 @@
 module std.effects;
 
+import std.fs.{Region, WorkspacePath, FsStat};
+
 // Rust binds execution tags and host capabilities; source owns declarations.
 
 @std.role("std.effects.Agentic")
@@ -27,7 +29,15 @@ public effect Time;
 public effect Human;
 
 @std.role("std.effects.Error")
-public effect Error<Failure>;
+public effect Error<Failure> {
+    action raise<E>(error: E) -> never;
+}
 
 @std.role("std.effects.Fs")
-public effect Fs extends FileIO;
+public effect Fs extends FileIO {
+    action read<R ~ Region>(path: WorkspacePath<R>) -> bytes;
+    action write<R ~ Region>(path: WorkspacePath<R>) -> unit;
+    action list<R ~ Region>(path: WorkspacePath<R>) -> List<WorkspacePath<R>>;
+    action stat<R ~ Region>(path: WorkspacePath<R>) -> FsStat;
+    action atomic_replace<R ~ Region>(path: WorkspacePath<R>) -> unit;
+}

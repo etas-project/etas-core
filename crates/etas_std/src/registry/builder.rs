@@ -94,6 +94,31 @@ impl StdRegistryBuilder {
         self.bind_declaration(symbol, definition);
     }
 
+    /// Publish checked source request types and selectors. Stable dispatch,
+    /// permissions and default-handler effects remain execution contracts.
+    pub fn source_action_signature(
+        &mut self,
+        symbol: StdSymbolId,
+        parameters: Vec<crate::StdGenericParam>,
+        selectors: Vec<crate::EffectActionArgKind>,
+        selector_names: Vec<String>,
+        inputs: Vec<crate::StdType>,
+        output: crate::StdType,
+    ) {
+        let StdDecl::EffectAction(action) = &mut self.registry.symbols[symbol.0 as usize]
+            .as_mut()
+            .unwrap()
+            .decl
+        else {
+            unreachable!("checked native action binding");
+        };
+        action.type_params = parameters;
+        action.effect_args = selectors;
+        action.selector_param_names = selector_names;
+        action.params = inputs;
+        action.output = output;
+    }
+
     pub fn module(&mut self, path: &[&str], summary: &str) -> StdModuleId {
         let id = StdModuleId(self.registry.modules().count() as u32);
         self.registry.push_module(StdModule {
