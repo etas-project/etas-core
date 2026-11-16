@@ -12,7 +12,11 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         module,
         "Money",
         StdSymbolKind::Type,
-        StdDecl::Type(TypeDecl::generic("Money", &[], TypeDeclKind::Support)),
+        StdDecl::Type(
+            TypeDecl::generic("Money", &[], TypeDeclKind::Support)
+                .runtime_role(crate::RuntimeTypeRole::Money)
+                .intrinsic_only(),
+        ),
         "Money support type for budgets and limits.",
     );
     builder.symbol_with_intrinsic(

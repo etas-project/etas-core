@@ -8,6 +8,8 @@ use crate::{
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 pub enum StdSourceRole {
     Primitive(StdPrimitiveType),
+    Limit,
+    Money,
     Index,
     Region,
     WorkspacePath,
@@ -58,7 +60,9 @@ pub enum StdSourceRole {
 }
 
 impl StdSourceRole {
-    pub const ALL: [Self; 67] = [
+    pub const ALL: [Self; 69] = [
+        Self::Money,
+        Self::Limit,
         Self::Primitive(StdPrimitiveType::Bool),
         Self::Primitive(StdPrimitiveType::Bytes),
         Self::Primitive(StdPrimitiveType::Char),
@@ -150,6 +154,8 @@ impl StdSourceRole {
             Self::Primitive(StdPrimitiveType::U8) => "std.core.u8",
             Self::Primitive(StdPrimitiveType::Unit) => "std.core.unit",
             Self::Primitive(StdPrimitiveType::USize) => "std.core.usize",
+            Self::Limit => "std.runtime.limits.Limit",
+            Self::Money => "std.runtime.budget.Money",
             Self::Index => "std.core.Index",
             Self::Region => "std.fs.Region",
             Self::WorkspacePath => "std.fs.WorkspacePath",
@@ -208,6 +214,8 @@ impl StdSourceRole {
         use StdGenericParamKind::{EffectRow, Type};
         match self {
             Self::Primitive(_)
+            | Self::Limit
+            | Self::Money
             | Self::Index
             | Self::Region
             | Self::Scheduler
@@ -269,6 +277,8 @@ impl StdSourceRole {
 
     pub fn runtime_role(self) -> Option<RuntimeTypeRole> {
         match self {
+            Self::Limit => Some(RuntimeTypeRole::Limit),
+            Self::Money => Some(RuntimeTypeRole::Money),
             Self::WorkspacePath => Some(RuntimeTypeRole::WorkspacePath),
             Self::Task => Some(RuntimeTypeRole::Task),
             Self::Scheduler => Some(RuntimeTypeRole::Scheduler),
@@ -313,7 +323,8 @@ impl StdSourceRole {
             || (self.code_role().is_some() && !self.is_projected_type())
             || matches!(
                 self,
-                Self::WorkspacePath
+                Self::Money
+                    | Self::WorkspacePath
                     | Self::Task
                     | Self::Scheduler
                     | Self::Continuation
@@ -394,8 +405,8 @@ impl StdSourceRole {
             return declaration.iterable_elements(0).intrinsic_only();
         }
         match self.runtime_role() {
-            Some(RuntimeTypeRole::WorkspacePath) => {
-                declaration.runtime_role(RuntimeTypeRole::WorkspacePath)
+            Some(role @ (RuntimeTypeRole::WorkspacePath | RuntimeTypeRole::Limit)) => {
+                declaration.runtime_role(role)
             }
             Some(role) => declaration.runtime_role(role).intrinsic_only(),
             None => declaration,

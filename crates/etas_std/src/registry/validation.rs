@@ -402,6 +402,12 @@ fn validate_source_declarations(registry: &StdRegistry) -> Result<(), StdRegistr
             StdDecl::Flow(_) => DefinitionKind::Flow,
             StdDecl::Effect(_) => DefinitionKind::Effect,
             StdDecl::Value(_) => DefinitionKind::Value,
+            StdDecl::Requirement(requirement)
+                if matches!(requirement.semantics, crate::RequirementSemantics::Limit(_))
+                    && symbol.intrinsic.is_some() =>
+            {
+                DefinitionKind::Flow
+            }
             _ => return Err(invalid("unsupported source declaration identity")),
         };
         if key.kind() != kind

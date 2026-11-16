@@ -1982,29 +1982,47 @@
     },
     {
       "declaration": {
-        "Type": {
-          "canonical_type": null,
-          "code_role": null,
-          "construction": "Public",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Support",
-          "name": "Money",
-          "params": [],
-          "projected_fields": [],
-          "representation": null,
-          "runtime_role": null
+        "Flow": {
+          "name": "usd",
+          "output": {
+            "Named": "Money"
+          },
+          "params": [
+            {
+              "Primitive": "F64"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
         }
       },
       "enum_owner": null,
-      "kind": "Type",
+      "kind": "Flow",
       "path": [
         "std",
         "runtime",
         "budget",
-        "Money"
+        "usd"
       ],
-      "primitive": null
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 1004,
+        "latent_effect": "None",
+        "lowering": "RuntimeCall",
+        "memory_access": "None",
+        "purity": "Runtime",
+        "qualified_path": [
+          "std",
+          "runtime",
+          "budget",
+          "usd"
+        ],
+        "runtime_requirement": "None"
+      }
     },
     {
       "declaration": {
@@ -2295,284 +2313,6 @@
     },
     {
       "declaration": {
-        "Type": {
-          "canonical_type": null,
-          "code_role": null,
-          "construction": "Public",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Enum",
-          "name": "Limit",
-          "params": [],
-          "projected_fields": [],
-          "representation": null,
-          "runtime_role": "Limit"
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "runtime",
-        "limits",
-        "Limit"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Flow": {
-          "name": "Attempts",
-          "output": {
-            "Named": "std.runtime.limits.Limit"
-          },
-          "params": [
-            {
-              "Primitive": "USize"
-            }
-          ],
-          "public_effect_tail": null,
-          "public_effects": [],
-          "requested_action_tail": null,
-          "requested_actions": [],
-          "source_method": null,
-          "type_params": []
-        }
-      },
-      "enum_owner": [
-        "std",
-        "runtime",
-        "limits",
-        "Limit"
-      ],
-      "kind": "Constructor",
-      "path": [
-        "std",
-        "runtime",
-        "limits",
-        "Limit",
-        "Attempts"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Flow": {
-          "name": "Concurrency",
-          "output": {
-            "Named": "std.runtime.limits.Limit"
-          },
-          "params": [
-            {
-              "Primitive": "USize"
-            }
-          ],
-          "public_effect_tail": null,
-          "public_effects": [],
-          "requested_action_tail": null,
-          "requested_actions": [],
-          "source_method": null,
-          "type_params": []
-        }
-      },
-      "enum_owner": [
-        "std",
-        "runtime",
-        "limits",
-        "Limit"
-      ],
-      "kind": "Constructor",
-      "path": [
-        "std",
-        "runtime",
-        "limits",
-        "Limit",
-        "Concurrency"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Flow": {
-          "name": "ContextTokens",
-          "output": {
-            "Named": "std.runtime.limits.Limit"
-          },
-          "params": [
-            {
-              "Primitive": "USize"
-            }
-          ],
-          "public_effect_tail": null,
-          "public_effects": [],
-          "requested_action_tail": null,
-          "requested_actions": [],
-          "source_method": null,
-          "type_params": []
-        }
-      },
-      "enum_owner": [
-        "std",
-        "runtime",
-        "limits",
-        "Limit"
-      ],
-      "kind": "Constructor",
-      "path": [
-        "std",
-        "runtime",
-        "limits",
-        "Limit",
-        "ContextTokens"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Flow": {
-          "name": "Cost",
-          "output": {
-            "Named": "std.runtime.limits.Limit"
-          },
-          "params": [
-            {
-              "Named": "Money"
-            }
-          ],
-          "public_effect_tail": null,
-          "public_effects": [],
-          "requested_action_tail": null,
-          "requested_actions": [],
-          "source_method": null,
-          "type_params": []
-        }
-      },
-      "enum_owner": [
-        "std",
-        "runtime",
-        "limits",
-        "Limit"
-      ],
-      "kind": "Constructor",
-      "path": [
-        "std",
-        "runtime",
-        "limits",
-        "Limit",
-        "Cost"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Flow": {
-          "name": "Iterations",
-          "output": {
-            "Named": "std.runtime.limits.Limit"
-          },
-          "params": [
-            {
-              "Primitive": "USize"
-            }
-          ],
-          "public_effect_tail": null,
-          "public_effects": [],
-          "requested_action_tail": null,
-          "requested_actions": [],
-          "source_method": null,
-          "type_params": []
-        }
-      },
-      "enum_owner": [
-        "std",
-        "runtime",
-        "limits",
-        "Limit"
-      ],
-      "kind": "Constructor",
-      "path": [
-        "std",
-        "runtime",
-        "limits",
-        "Limit",
-        "Iterations"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Flow": {
-          "name": "Tokens",
-          "output": {
-            "Named": "std.runtime.limits.Limit"
-          },
-          "params": [
-            {
-              "Primitive": "USize"
-            }
-          ],
-          "public_effect_tail": null,
-          "public_effects": [],
-          "requested_action_tail": null,
-          "requested_actions": [],
-          "source_method": null,
-          "type_params": []
-        }
-      },
-      "enum_owner": [
-        "std",
-        "runtime",
-        "limits",
-        "Limit"
-      ],
-      "kind": "Constructor",
-      "path": [
-        "std",
-        "runtime",
-        "limits",
-        "Limit",
-        "Tokens"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
-        "Flow": {
-          "name": "WallTime",
-          "output": {
-            "Named": "std.runtime.limits.Limit"
-          },
-          "params": [
-            {
-              "Named": "Duration"
-            }
-          ],
-          "public_effect_tail": null,
-          "public_effects": [],
-          "requested_action_tail": null,
-          "requested_actions": [],
-          "source_method": null,
-          "type_params": []
-        }
-      },
-      "enum_owner": [
-        "std",
-        "runtime",
-        "limits",
-        "Limit"
-      ],
-      "kind": "Constructor",
-      "path": [
-        "std",
-        "runtime",
-        "limits",
-        "Limit",
-        "WallTime"
-      ],
-      "primitive": null
-    },
-    {
-      "declaration": {
         "Requirement": {
           "kind": "Limit",
           "name": "Tokens",
@@ -2648,32 +2388,6 @@
         ],
         "runtime_requirement": "None"
       }
-    },
-    {
-      "declaration": {
-        "Type": {
-          "canonical_type": null,
-          "code_role": null,
-          "construction": "Public",
-          "derivable": false,
-          "iterable_item": null,
-          "kind": "Support",
-          "name": "Duration",
-          "params": [],
-          "projected_fields": [],
-          "representation": null,
-          "runtime_role": null
-        }
-      },
-      "enum_owner": null,
-      "kind": "Type",
-      "path": [
-        "std",
-        "runtime",
-        "time",
-        "Duration"
-      ],
-      "primitive": null
     },
     {
       "declaration": {
@@ -3126,6 +2840,14 @@
         "std",
         "fs",
         "IOError"
+      ]
+    },
+    {
+      "path": [
+        "std",
+        "runtime",
+        "time",
+        "Duration"
       ]
     }
   ],

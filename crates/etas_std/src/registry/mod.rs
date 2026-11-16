@@ -94,7 +94,17 @@ impl StdRegistry {
     }
 
     pub fn native_opaque_reference(&self, path: &str) -> Option<&StdNativeOpaqueReference> {
-        self.native_opaque_references.get(path)
+        self.native_opaque_references.get(path).or_else(|| {
+            if path.contains('.') {
+                return None;
+            }
+            let mut matches = self
+                .native_opaque_references
+                .values()
+                .filter(|reference| reference.path.last().is_some_and(|name| name == path));
+            let matched = matches.next()?;
+            matches.next().is_none().then_some(matched)
+        })
     }
 
     pub fn validate_resolved_native_opaque_references(

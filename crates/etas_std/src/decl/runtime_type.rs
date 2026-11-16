@@ -36,6 +36,7 @@ pub enum RuntimeTypeRole {
     Task,
     Scheduler,
     Continuation,
+    Money,
 }
 
 #[derive(
@@ -111,7 +112,11 @@ impl RuntimeTypeRole {
             && representation
             && (!matches!(
                 self,
-                Self::CommandResult | Self::Task | Self::Scheduler | Self::Continuation
+                Self::CommandResult
+                    | Self::Task
+                    | Self::Scheduler
+                    | Self::Continuation
+                    | Self::Money
             ) || declaration.construction == super::StdTypeConstruction::IntrinsicOnly)
     }
 

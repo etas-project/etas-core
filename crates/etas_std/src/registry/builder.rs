@@ -78,6 +78,22 @@ impl StdRegistryBuilder {
         )
     }
 
+    /// Publish a checked source signature while retaining the compiler's limit
+    /// semantic tag and the validated primitive execution binding.
+    pub fn source_requirement(
+        &mut self,
+        symbol: StdSymbolId,
+        parameters: Vec<crate::StdType>,
+        definition: etas_code::DefinitionKey,
+    ) {
+        let entry = self.registry.symbols[symbol.0 as usize].as_mut().unwrap();
+        let StdDecl::Requirement(declaration) = &mut entry.decl else {
+            panic!("source requirement must bind an existing compiler contract");
+        };
+        declaration.params = parameters;
+        self.bind_declaration(symbol, definition);
+    }
+
     pub fn module(&mut self, path: &[&str], summary: &str) -> StdModuleId {
         let id = StdModuleId(self.registry.modules().count() as u32);
         self.registry.push_module(StdModule {
