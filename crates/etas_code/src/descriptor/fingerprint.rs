@@ -262,6 +262,11 @@ impl DescriptorGraph {
                         encoder.tag(3);
                         encoder.fingerprint(subject.fingerprint());
                     }
+                    GenericOwner::Action { effect, name } => {
+                        encoder.tag(4);
+                        encoder.fingerprint(effect.fingerprint());
+                        encoder.bytes(name.as_bytes());
+                    }
                 }
                 encoder.number(u64::from(binder.position));
                 if !binder.owner.alpha_scoped() {

@@ -49,6 +49,10 @@ pub(super) fn validate_generic_owner(
             header_budget::key(owner.subject.as_ref(), budget)?;
             header_budget::key(owner.selected_spec.as_ref(), budget)
         }
+        Some(Kind::Action(owner)) => {
+            budget.charge(1, "generic action owner")?;
+            header_budget::key(owner.effect.as_ref(), budget)
+        }
         None => Err(invalid("type parameter has no generic owner")),
     }
 }
@@ -69,6 +73,7 @@ pub(super) fn validate_model_generic_owner(
                 + units(owner.subject())
                 + owner.selected_spec().map_or(0, units)
         }
+        GenericOwner::Action { effect, .. } => 1 + units(effect),
     };
     budget.charge(count, "generic type parameter owner")
 }
@@ -187,6 +192,15 @@ pub(super) fn to_proto(set: &DefinitionDescriptorSet) -> ProtoDescriptorGraph {
     let input = &set.graph;
     ProtoDescriptorGraph {
         version: match &set.headers {
+            _ if input.binders.iter().any(|binder| {
+                matches!(
+                    binder.owner,
+                    etas_code::descriptor::GenericOwner::Action { .. }
+                )
+            }) =>
+            {
+                14
+            }
             _ if has_option_observations(input) => 13,
             _ if has_result_observations(input) => 12,
             _ if input.types.iter().any(|ty| match ty {
@@ -313,8 +327,18 @@ pub(super) fn from_proto(
             | (11, _)
             | (12, _)
             | (13, _)
+            | (14, _)
     ) {
         return Err(invalid("unsupported descriptor graph schema"));
+    }
+    let has_action_binders = input.binders.iter().any(|binder| {
+        matches!(
+            binder.owner.as_ref().and_then(|owner| owner.kind.as_ref()),
+            Some(schema::generic_owner::Kind::Action(_))
+        )
+    });
+    if has_action_binders != (input.version == 14) {
+        return Err(invalid("action binders require their descriptor schema"));
     }
     let has_callable_definition = input.types.iter().any(|ty| {
         matches!(&ty.kind, Some(schema::ty::Kind::Builtin(builtin)) if builtin.constructor == 23)
@@ -357,7 +381,7 @@ pub(super) fn from_proto(
             "implementation binders require their descriptor schema",
         ));
     }
-    if (has_callable_definition && !matches!(input.version, 8..=13))
+    if (has_callable_definition && !matches!(input.version, 8..=14))
         || (input.version == 8 && !has_callable_definition)
     {
         return Err(invalid(
@@ -365,7 +389,7 @@ pub(super) fn from_proto(
         ));
     }
     if (matches!(input.version, 5..=7)
-        || (matches!(input.version, 8..=13)
+        || (matches!(input.version, 8..=14)
             && input.headers.as_ref().is_some_and(|headers| {
                 headers
                     .agents
@@ -388,7 +412,7 @@ pub(super) fn from_proto(
         .as_ref()
         .and_then(|headers| headers.snapshots.as_ref())
         .is_some_and(|snapshots| !snapshots.flows.is_empty());
-    if (has_flows && !matches!(input.version, 6..=13)) || (input.version == 6 && !has_flows) {
+    if (has_flows && !matches!(input.version, 6..=14)) || (input.version == 6 && !has_flows) {
         return Err(invalid(
             "flow snapshot coordinates require their descriptor schema",
         ));
@@ -398,7 +422,7 @@ pub(super) fn from_proto(
         .as_ref()
         .and_then(|headers| headers.snapshots.as_ref())
         .is_some_and(|snapshots| !snapshots.methods.is_empty());
-    if (has_methods && !matches!(input.version, 7..=13)) || (input.version == 7 && !has_methods) {
+    if (has_methods && !matches!(input.version, 7..=14)) || (input.version == 7 && !has_methods) {
         return Err(invalid(
             "method snapshot coordinates require their descriptor schema",
         ));
@@ -442,7 +466,8 @@ pub(super) fn from_proto(
     };
     if (has_result_observations(&input) && version < 12)
         || (version == 12 && !has_result_observations(&input))
-        || has_option_observations(&input) != (version == 13)
+        || (has_option_observations(&input) && version < 13)
+        || (version == 13 && !has_option_observations(&input))
     {
         return Err(invalid(
             "Option/Result observations require their descriptor schema",

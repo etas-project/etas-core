@@ -124,6 +124,16 @@ fn validate_inner(
             GenericOwner::Implementation(implementation) => {
                 validator.implementation(implementation)?
             }
+            GenericOwner::Action { effect, name } => {
+                validator.identity(effect)?;
+                validator.name(node, name)?;
+                if effect.kind() != DefinitionKind::Effect {
+                    return Err(DescriptorError::Invalid {
+                        node,
+                        reason: "action generic owner is not an effect",
+                    });
+                }
+            }
         }
         let unique_identity = binder_identities.insert((&binder.owner, binder.position));
         let unique_name =

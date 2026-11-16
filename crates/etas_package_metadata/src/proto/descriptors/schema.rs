@@ -494,7 +494,7 @@ pub struct Implementation {
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct GenericOwner {
-    #[prost(oneof = "generic_owner::Kind", tags = "1, 2, 3, 4")]
+    #[prost(oneof = "generic_owner::Kind", tags = "1, 2, 3, 4, 5")]
     pub kind: Option<generic_owner::Kind>,
 }
 pub mod generic_owner {
@@ -508,7 +508,16 @@ pub mod generic_owner {
         Implementation(super::Implementation),
         #[prost(message, tag = "4")]
         ImplementationPattern(super::ProtoDefinitionKey),
+        #[prost(message, tag = "5")]
+        Action(super::ActionOwner),
     }
+}
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct ActionOwner {
+    #[prost(message, optional, tag = "1")]
+    pub effect: Option<ProtoDefinitionKey>,
+    #[prost(string, tag = "2")]
+    pub name: String,
 }
 pub mod callable {
     #[derive(Clone, PartialEq, prost::Oneof)]

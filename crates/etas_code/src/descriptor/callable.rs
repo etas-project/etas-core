@@ -35,6 +35,11 @@ pub enum GenericOwner {
     Implementation(ImplementationKey),
     /// Header-local binders, before its implementation identity is computed.
     ImplementationPattern(DefinitionKey),
+    /// Signature binders of an action, separate from its static selectors.
+    Action {
+        effect: DefinitionKey,
+        name: String,
+    },
 }
 
 impl GenericOwner {
@@ -50,6 +55,9 @@ impl GenericOwner {
             ),
             Self::Method(_) | Self::Implementation(_) => true,
             Self::ImplementationPattern(_) => false,
+            Self::Action { effect, name } => {
+                effect.kind() == crate::DefinitionKind::Effect && !name.is_empty()
+            }
         }
     }
 
@@ -61,6 +69,12 @@ impl GenericOwner {
             Self::Method(owner) => (1, owner.fingerprint()),
             Self::Implementation(owner) => (2, owner.fingerprint()),
             Self::ImplementationPattern(owner) => (3, owner.fingerprint()),
+            Self::Action { effect, name } => {
+                encoder.tag(4);
+                encoder.fingerprint(effect.fingerprint());
+                encoder.bytes(name.as_bytes());
+                return encoder.finish();
+            }
         };
         encoder.tag(kind);
         encoder.fingerprint(identity);

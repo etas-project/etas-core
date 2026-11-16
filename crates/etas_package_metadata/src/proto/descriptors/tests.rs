@@ -11,7 +11,7 @@ mod header_tests;
 mod snapshot_tests;
 
 #[test]
-fn implementation_binders_survive_binary_descriptor_roundtrip() {
+fn generic_binders_survive_binary_descriptor_roundtrip() {
     let subject = key("Container", DefinitionKind::Type);
     let implementation = ImplementationKey::new(
         subject.package(),
@@ -24,13 +24,17 @@ fn implementation_binders_survive_binary_descriptor_roundtrip() {
     let method = MethodId::new(implementation.clone(), "replace".into()).unwrap();
     let set = DefinitionDescriptorSet {
         graph: DescriptorGraphInput {
-            types: (0..3)
+            types: (0..4)
                 .map(|id| TypeInfo::Parameter(GenericParameterRef(id)))
                 .collect(),
             binders: [
                 GenericOwner::Implementation(implementation),
                 GenericOwner::Method(method),
                 GenericOwner::ImplementationPattern(subject),
+                GenericOwner::Action {
+                    effect: key("Query", DefinitionKind::Effect),
+                    name: "value".into(),
+                },
             ]
             .into_iter()
             .map(|owner| GenericParameterInfo {
@@ -47,7 +51,7 @@ fn implementation_binders_survive_binary_descriptor_roundtrip() {
         headers: None,
     };
     let wire = to_proto(&set);
-    assert_eq!(wire.version, 10);
+    assert_eq!(wire.version, 14);
     let bytes = wire.encode_to_vec();
     assert_eq!(
         from_proto(ProtoDescriptorGraph::decode(bytes.as_slice()).unwrap()).unwrap(),

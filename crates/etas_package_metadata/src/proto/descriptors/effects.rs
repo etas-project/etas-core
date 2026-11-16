@@ -119,6 +119,10 @@ pub(super) fn encode_owner(owner: &GenericOwner) -> p::GenericOwner {
         GenericOwner::ImplementationPattern(subject) => {
             p::generic_owner::Kind::ImplementationPattern(encode_key(subject))
         }
+        GenericOwner::Action { effect, name } => p::generic_owner::Kind::Action(p::ActionOwner {
+            effect: Some(encode_key(effect)),
+            name: name.clone(),
+        }),
     };
     p::GenericOwner { kind: Some(kind) }
 }
@@ -153,6 +157,10 @@ pub(super) fn decode_owner(owner: p::GenericOwner) -> Result<GenericOwner, Error
         p::generic_owner::Kind::ImplementationPattern(subject) => {
             GenericOwner::ImplementationPattern(decode_key(subject)?)
         }
+        p::generic_owner::Kind::Action(owner) => GenericOwner::Action {
+            effect: decode_key(required(owner.effect, "action generic effect owner")?)?,
+            name: owner.name,
+        },
     })
 }
 

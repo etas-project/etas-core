@@ -241,7 +241,7 @@ dependencies = [
 
 [[package]]
 name = "etas_code"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "blake3",
  "etas_core",
@@ -297,7 +297,7 @@ dependencies = [
 
 [[package]]
 name = "etas_package_metadata"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "blake3",
  "etas_code",
