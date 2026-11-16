@@ -3,6 +3,7 @@ module std.codec.text;
 public import std.codec.text.MalformedInput.{Strict, Replace};
 public import std.codec.text.TextCodecError.InvalidUtf8;
 
+
 public enum MalformedInput { Strict, Replace, }
 public enum TextCodecError { InvalidUtf8, }
 

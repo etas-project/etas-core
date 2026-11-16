@@ -13,7 +13,7 @@ public enum ContextPolicy {
 
 // Session support type.
 @std.role("std.agent.session.Conversation")
-public type Conversation = { session: std.agent.session.SessionId, messages: std.collections.Array<std.agent.message.Message<std.json.JsonValue>>, summary: std.option.Option<std.agent.session.SessionPublishedContext>, cursor: std.option.Option<string> };
+public type Conversation = { session: std.option.Option<std.agent.session.SessionId>, messages: std.collections.Array<std.agent.message.Message<std.json.JsonValue>>, summary: std.option.Option<std.agent.session.SessionPublishedContext>, cursor: std.option.Option<string> };
 
 // Retain session history for a number of days.
 @std.binding("std.agent.session.Days")

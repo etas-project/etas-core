@@ -13,6 +13,9 @@ impl ModelGraphValidator {
     ) -> Result<(), MetadataArtifactError> {
         self.budget.enter(depth, "callable evidence")?;
         target.validate_shape().map_err(invalid)?;
+        if let CallableRequestTarget::AgentTools(context) = target {
+            return self.ty(context, depth + 1);
+        }
         let CallableRequestTarget::SpecMethod(invocation) = target else {
             return Ok(());
         };
@@ -52,6 +55,7 @@ impl ProtoGraphValidator {
             .as_ref()
             .ok_or_else(|| invalid("callable evidence has no kind"))?
         {
+            Target::AgentTools(context) => self.ty(context, depth + 1)?,
             Target::Parameter(parameter) => {
                 if parameter.is_empty() {
                     return Err(invalid("callable request parameter is empty"));

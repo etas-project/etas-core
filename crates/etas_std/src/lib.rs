@@ -30,7 +30,7 @@ pub use modules::effects::is_standard_effect_reference;
 pub use modules::standard_registry;
 pub use registry::{
     StdModule, StdModuleId, StdNamespace, StdNativeEnumReference, StdNativeOpaqueReference,
-    StdNativeProjectionReference, StdNativeRecordReference, StdPrelude, StdRegistry,
-    StdRegistryBuilder, StdRegistryImage, StdRegistryValidationError, StdRegistryVersion,
-    StdSymbol, StdSymbolId, StdSymbolKind, StdSymbolRef,
+    StdNativeProjectionReference, StdNativeRecordReference, StdNativeTypeReference, StdPrelude,
+    StdRegistry, StdRegistryBuilder, StdRegistryImage, StdRegistryValidationError,
+    StdRegistryVersion, StdSymbol, StdSymbolId, StdSymbolKind, StdSymbolRef,
 };

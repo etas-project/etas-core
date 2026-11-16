@@ -67,7 +67,7 @@ impl Remapper<'_> {
                     }
                 }
             }
-            TypeInfo::Primitive(_) => {}
+            TypeInfo::Primitive(_) | TypeInfo::AgentContext(_) => {}
             TypeInfo::Builtin { arguments, .. } | TypeInfo::Tuple(arguments) => {
                 for ty in arguments {
                     self.type_ref(ty)?;

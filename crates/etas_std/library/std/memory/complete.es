@@ -1,9 +1,12 @@
 module std.memory;
 
+public import std.memory.WriteCondition.Any;
+public import std.memory.WriteCondition.Exists;
+public import std.memory.WriteCondition.Missing;
+
 // Public declarations migrated from the legacy API inventory.
 // Maintained as Etas source; native bindings retain existing execution during migration.
 
-public import std.memory.WriteCondition.Any;
 
 // Closed storage outcome.
 public enum ConfirmedOutcome<R, N> {
@@ -11,7 +14,6 @@ public enum ConfirmedOutcome<R, N> {
     NotCommitted(std.memory.StorageOperationRef, N),
 }
 
-public import std.memory.WriteCondition.Exists;
 
 // Typed persistent memory conflict information.
 public type MemoryConflict = { expected: std.option.Option<std.memory.MemoryVersion>, actual: std.option.Option<std.memory.MemoryVersion>, current_value: std.option.Option<std.json.JsonValue> };
@@ -65,7 +67,6 @@ public enum MemoryWriteRejection {
 // Typed storage receipt evidence.
 public type MemoryWriteTarget<K> = { region: string, store: std.collections.Array<string>, schema_fingerprint: std.option.Option<string>, key: K };
 
-public import std.memory.WriteCondition.Missing;
 
 // Closed storage outcome.
 public enum ReconcileResult<R, N> {

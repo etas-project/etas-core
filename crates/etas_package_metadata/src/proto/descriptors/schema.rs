@@ -368,7 +368,10 @@ pub struct Task {
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct Type {
-    #[prost(oneof = "ty::Kind", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13")]
+    #[prost(
+        oneof = "ty::Kind",
+        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14"
+    )]
     pub kind: Option<ty::Kind>,
 }
 pub mod ty {
@@ -400,6 +403,8 @@ pub mod ty {
         Existential(super::Existential),
         #[prost(message, tag = "13")]
         Task(super::Task),
+        #[prost(message, tag = "14")]
+        AgentContext(super::Method),
     }
 }
 
@@ -419,7 +424,7 @@ pub struct EffectTarget {
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct StaticArg {
-    #[prost(oneof = "static_arg::Kind", tags = "1, 2, 3, 4, 5, 6")]
+    #[prost(oneof = "static_arg::Kind", tags = "1, 2, 3, 4, 5, 6, 7")]
     pub kind: Option<static_arg::Kind>,
 }
 pub mod static_arg {
@@ -437,7 +442,17 @@ pub mod static_arg {
         Wildcard(bool),
         #[prost(message, tag = "6")]
         Callable(super::Callable),
+        #[prost(message, tag = "7")]
+        ResourceProjection(super::ResourceProjection),
     }
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct ResourceProjection {
+    #[prost(message, optional, tag = "1")]
+    pub root: Option<ProtoDefinitionKey>,
+    #[prost(string, repeated, tag = "2")]
+    pub fields: Vec<String>,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]

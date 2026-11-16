@@ -6,7 +6,8 @@ import std.fs.{Region, WorkspacePath, FsStat};
 
 @std.role("std.effects.Agentic")
 public effect Agentic {
-    action infer<C: Agent, O>(arg0: std.agent.prompt.Prompt, arg1: std.agent.schema.Schema<O>) -> O;
+    action infer<C, O>(arg0: std.agent.prompt.Prompt, arg1: std.agent.schema.Schema<O>) -> O;
+    action step<C, O>(conversation: std.agent.session.Conversation, schema: std.agent.schema.Schema<O>) -> std.agent.StepResult<C, O>;
 }
 
 @std.role("std.effects.Network")

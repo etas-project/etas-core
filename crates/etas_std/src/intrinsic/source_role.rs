@@ -38,7 +38,6 @@ pub enum StdSourceRole {
     CompilerEffectRowInfo,
     CompilerGenericOwnerInfo,
     CompilerStaticValueInfo,
-    CompilerToolRef,
     CompilerTraceConstraintInfo,
     CompilerTraceSummary,
     CompilerTraceWitness,
@@ -58,10 +57,50 @@ pub enum StdSourceRole {
     EffectError,
     EffectFs,
     EffectAsync,
+    NativeMessage,
+    NativeProvenance,
+    NativePrompt,
+    NativePromptEncode,
+    NativePromptPart,
+    NativeModelResponse,
+    NativeSchema,
+    NativeContextPolicy,
+    NativeConversation,
+    NativeRetentionPolicy,
+    NativeSessionConfig,
+    NativeSessionId,
+    NativeDeque,
+    NativeEmptinessInput,
+    NativeLengthInput,
+    NativeOrderedMap,
+    NativeOrderedSet,
+    NativePriorityQueue,
+    NativeQueue,
+    NativeStack,
+    EffectApproval,
+    EffectBrowser,
+    EffectClock,
+    EffectCode,
+    EffectNet,
+    EffectStream,
+    EffectTls,
+    NativeCommand,
+    NativeCommandResult,
+    NativeJsonValue,
+    NativeMemoryRegion,
+    NativeMemorySelection,
+    NativeMemoryWriteIntent,
+    NativeStore,
+    NativePublic,
+    NativeSanitized,
+    NativeSecret,
+    NativeTrusted,
+    NativeUntrusted,
+    NativeByteStream,
 }
 
 impl StdSourceRole {
-    pub const ALL: [Self; 70] = [
+    pub const ALL: [Self; 109] = [
         Self::Money,
         Self::Limit,
         Self::Primitive(StdPrimitiveType::Bool),
@@ -112,7 +151,6 @@ impl StdSourceRole {
         Self::CompilerEffectRowInfo,
         Self::CompilerGenericOwnerInfo,
         Self::CompilerStaticValueInfo,
-        Self::CompilerToolRef,
         Self::CompilerTraceConstraintInfo,
         Self::CompilerTraceSummary,
         Self::CompilerTraceWitness,
@@ -132,6 +170,46 @@ impl StdSourceRole {
         Self::EffectError,
         Self::EffectFs,
         Self::EffectAsync,
+        Self::NativeMessage,
+        Self::NativeProvenance,
+        Self::NativePrompt,
+        Self::NativePromptEncode,
+        Self::NativePromptPart,
+        Self::NativeModelResponse,
+        Self::NativeSchema,
+        Self::NativeContextPolicy,
+        Self::NativeConversation,
+        Self::NativeRetentionPolicy,
+        Self::NativeSessionConfig,
+        Self::NativeSessionId,
+        Self::NativeDeque,
+        Self::NativeEmptinessInput,
+        Self::NativeLengthInput,
+        Self::NativeOrderedMap,
+        Self::NativeOrderedSet,
+        Self::NativePriorityQueue,
+        Self::NativeQueue,
+        Self::NativeStack,
+        Self::EffectApproval,
+        Self::EffectBrowser,
+        Self::EffectClock,
+        Self::EffectCode,
+        Self::EffectNet,
+        Self::EffectStream,
+        Self::EffectTls,
+        Self::NativeCommand,
+        Self::NativeCommandResult,
+        Self::NativeJsonValue,
+        Self::NativeMemoryRegion,
+        Self::NativeMemorySelection,
+        Self::NativeMemoryWriteIntent,
+        Self::NativeStore,
+        Self::NativePublic,
+        Self::NativeSanitized,
+        Self::NativeSecret,
+        Self::NativeTrusted,
+        Self::NativeUntrusted,
+        Self::NativeByteStream,
     ];
 
     pub fn path(self) -> &'static str {
@@ -186,7 +264,6 @@ impl StdSourceRole {
             Self::CompilerEffectRowInfo => "std.compiler.EffectRowInfo",
             Self::CompilerGenericOwnerInfo => "std.compiler.GenericOwnerInfo",
             Self::CompilerStaticValueInfo => "std.compiler.StaticValueInfo",
-            Self::CompilerToolRef => "std.compiler.ToolRef",
             Self::CompilerTraceConstraintInfo => "std.compiler.TraceConstraintInfo",
             Self::CompilerTraceSummary => "std.compiler.TraceSummary",
             Self::CompilerTraceWitness => "std.compiler.TraceWitness",
@@ -206,6 +283,46 @@ impl StdSourceRole {
             Self::EffectError => "std.effects.Error",
             Self::EffectFs => "std.effects.Fs",
             Self::EffectAsync => "std.task.Async",
+            Self::NativeMessage => "std.agent.message.Message",
+            Self::NativeProvenance => "std.agent.message.Provenance",
+            Self::NativePrompt => "std.agent.prompt.Prompt",
+            Self::NativePromptEncode => "std.agent.prompt.PromptEncode",
+            Self::NativePromptPart => "std.agent.prompt.PromptPart",
+            Self::NativeModelResponse => "std.agent.schema.ModelResponse",
+            Self::NativeSchema => "std.agent.schema.Schema",
+            Self::NativeContextPolicy => "std.agent.session.ContextPolicy",
+            Self::NativeConversation => "std.agent.session.Conversation",
+            Self::NativeRetentionPolicy => "std.agent.session.RetentionPolicy",
+            Self::NativeSessionConfig => "std.agent.session.SessionConfig",
+            Self::NativeSessionId => "std.agent.session.SessionId",
+            Self::NativeDeque => "std.collections.Deque",
+            Self::NativeEmptinessInput => "std.collections.EmptinessInput",
+            Self::NativeLengthInput => "std.collections.LengthInput",
+            Self::NativeOrderedMap => "std.collections.OrderedMap",
+            Self::NativeOrderedSet => "std.collections.OrderedSet",
+            Self::NativePriorityQueue => "std.collections.PriorityQueue",
+            Self::NativeQueue => "std.collections.Queue",
+            Self::NativeStack => "std.collections.Stack",
+            Self::EffectApproval => "std.effects.Approval",
+            Self::EffectBrowser => "std.effects.Browser",
+            Self::EffectClock => "std.effects.Clock",
+            Self::EffectCode => "std.effects.Code",
+            Self::EffectNet => "std.effects.Net",
+            Self::EffectStream => "std.effects.Stream",
+            Self::EffectTls => "std.effects.Tls",
+            Self::NativeCommand => "std.host.command.Command",
+            Self::NativeCommandResult => "std.host.command.CommandResult",
+            Self::NativeJsonValue => "std.json.JsonValue",
+            Self::NativeMemoryRegion => "std.memory.MemoryRegion",
+            Self::NativeMemorySelection => "std.memory.MemorySelection",
+            Self::NativeMemoryWriteIntent => "std.memory.MemoryWriteIntent",
+            Self::NativeStore => "std.memory.Store",
+            Self::NativePublic => "std.security.trust.Public",
+            Self::NativeSanitized => "std.security.trust.Sanitized",
+            Self::NativeSecret => "std.security.trust.Secret",
+            Self::NativeTrusted => "std.security.trust.Trusted",
+            Self::NativeUntrusted => "std.security.trust.Untrusted",
+            Self::NativeByteStream => "std.stream.ByteStream",
         }
     }
 
@@ -216,6 +333,47 @@ impl StdSourceRole {
     pub fn parameter_kinds(self) -> &'static [StdGenericParamKind] {
         use StdGenericParamKind::{EffectRow, Type};
         match self {
+            Self::NativeMessage => &[Type],
+            Self::NativeProvenance => &[],
+            Self::NativePrompt => &[],
+            Self::NativePromptEncode => &[],
+            Self::NativePromptPart => &[],
+            Self::NativeModelResponse => &[],
+            Self::NativeSchema => &[Type],
+            Self::NativeContextPolicy => &[],
+            Self::NativeConversation => &[],
+            Self::NativeRetentionPolicy => &[],
+            Self::NativeSessionConfig => &[],
+            Self::NativeSessionId => &[],
+            Self::NativeDeque => &[Type],
+            Self::NativeEmptinessInput => &[],
+            Self::NativeLengthInput => &[],
+            Self::NativeOrderedMap => &[Type, Type],
+            Self::NativeOrderedSet => &[Type],
+            Self::NativePriorityQueue => &[Type, Type],
+            Self::NativeQueue => &[Type],
+            Self::NativeStack => &[Type],
+            Self::EffectApproval => &[],
+            Self::EffectBrowser => &[],
+            Self::EffectClock => &[],
+            Self::EffectCode => &[],
+            Self::EffectNet => &[],
+            Self::EffectStream => &[],
+            Self::EffectTls => &[],
+            Self::NativeCommand => &[],
+            Self::NativeCommandResult => &[],
+            Self::NativeJsonValue => &[],
+            Self::NativeMemoryRegion => &[Type],
+            Self::NativeMemorySelection => &[Type],
+            Self::NativeMemoryWriteIntent => &[Type, Type],
+            Self::NativeStore => &[Type, Type],
+            Self::NativePublic => &[Type],
+            Self::NativeSanitized => &[Type],
+            Self::NativeSecret => &[Type],
+            Self::NativeTrusted => &[Type],
+            Self::NativeUntrusted => &[Type],
+            Self::NativeByteStream => &[],
+
             Self::Primitive(_)
             | Self::Limit
             | Self::Money
@@ -231,7 +389,6 @@ impl StdSourceRole {
             | Self::CompilerEffectRowInfo
             | Self::CompilerGenericOwnerInfo
             | Self::CompilerStaticValueInfo
-            | Self::CompilerToolRef
             | Self::CompilerTraceConstraintInfo
             | Self::CompilerTraceSummary
             | Self::CompilerTraceWitness
@@ -268,7 +425,10 @@ impl StdSourceRole {
     }
 
     pub fn is_spec(self) -> bool {
-        matches!(self, Self::Index | Self::Region)
+        matches!(
+            self,
+            Self::Index | Self::Region | Self::NativePromptEncode | Self::NativeByteStream
+        )
     }
 
     pub fn parameter_bounds(self, index: usize) -> Vec<crate::StdSpecRef> {
@@ -281,6 +441,23 @@ impl StdSourceRole {
 
     pub fn runtime_role(self) -> Option<RuntimeTypeRole> {
         match self {
+            Self::NativeProvenance => Some(RuntimeTypeRole::Provenance),
+            Self::NativeModelResponse => Some(RuntimeTypeRole::ModelResponse),
+            Self::NativeContextPolicy => Some(RuntimeTypeRole::ContextPolicy),
+            Self::NativeConversation => Some(RuntimeTypeRole::Conversation),
+            Self::NativeRetentionPolicy => Some(RuntimeTypeRole::RetentionPolicy),
+            Self::NativeSessionConfig => Some(RuntimeTypeRole::SessionConfig),
+            Self::NativeSessionId => Some(RuntimeTypeRole::SessionId),
+            Self::NativeDeque => Some(RuntimeTypeRole::Deque),
+            Self::NativeOrderedMap => Some(RuntimeTypeRole::OrderedMap),
+            Self::NativeOrderedSet => Some(RuntimeTypeRole::OrderedSet),
+            Self::NativePriorityQueue => Some(RuntimeTypeRole::PriorityQueue),
+            Self::NativeQueue => Some(RuntimeTypeRole::Queue),
+            Self::NativeStack => Some(RuntimeTypeRole::Stack),
+            Self::NativeCommand => Some(RuntimeTypeRole::Command),
+            Self::NativeCommandResult => Some(RuntimeTypeRole::CommandResult),
+            Self::NativeJsonValue => Some(RuntimeTypeRole::JsonValue),
+            Self::NativeMemoryWriteIntent => Some(RuntimeTypeRole::MemoryWriteIntent),
             Self::Limit => Some(RuntimeTypeRole::Limit),
             Self::Money => Some(RuntimeTypeRole::Money),
             Self::WorkspacePath => Some(RuntimeTypeRole::WorkspacePath),
@@ -302,7 +479,6 @@ impl StdSourceRole {
             Self::CompilerEffectRowInfo => Some(CodeTypeRole::EffectRowInfo),
             Self::CompilerGenericOwnerInfo => Some(CodeTypeRole::GenericOwnerInfo),
             Self::CompilerStaticValueInfo => Some(CodeTypeRole::StaticValueInfo),
-            Self::CompilerToolRef => Some(CodeTypeRole::ToolRef),
             Self::CompilerTraceConstraintInfo => Some(CodeTypeRole::TraceConstraintInfo),
             Self::CompilerTraceSummary => Some(CodeTypeRole::TraceSummary),
             Self::CompilerTraceWitness => Some(CodeTypeRole::TraceWitness),
@@ -327,7 +503,30 @@ impl StdSourceRole {
             || (self.code_role().is_some() && !self.is_projected_type())
             || matches!(
                 self,
-                Self::Money
+                Self::NativeProvenance
+                    | Self::NativePrompt
+                    | Self::NativePromptPart
+                    | Self::NativeModelResponse
+                    | Self::NativeSchema
+                    | Self::NativeDeque
+                    | Self::NativeEmptinessInput
+                    | Self::NativeLengthInput
+                    | Self::NativeOrderedMap
+                    | Self::NativeOrderedSet
+                    | Self::NativePriorityQueue
+                    | Self::NativeQueue
+                    | Self::NativeStack
+                    | Self::NativeCommand
+                    | Self::NativeMemoryRegion
+                    | Self::NativeMemorySelection
+                    | Self::NativeMemoryWriteIntent
+                    | Self::NativeStore
+                    | Self::NativePublic
+                    | Self::NativeSanitized
+                    | Self::NativeSecret
+                    | Self::NativeTrusted
+                    | Self::NativeUntrusted
+                    | Self::Money
                     | Self::WorkspacePath
                     | Self::Task
                     | Self::Scheduler
@@ -342,6 +541,17 @@ impl StdSourceRole {
             )
     }
 
+    /// Representations belong to the checked source, including runtime records.
+    pub fn is_represented_type(self) -> bool {
+        matches!(
+            self,
+            Self::NativeMessage
+                | Self::NativeConversation
+                | Self::NativeSessionConfig
+                | Self::NativeSessionId
+        )
+    }
+
     pub fn primitive_type(self) -> Option<StdPrimitiveType> {
         match self {
             Self::Primitive(primitive) => Some(primitive),
@@ -352,7 +562,10 @@ impl StdSourceRole {
     pub fn is_projected_type(self) -> bool {
         matches!(
             self,
-            Self::CompilerAgentDef | Self::CompilerCallableDef | Self::CompilerSyntaxBlock
+            Self::CompilerAgentDef
+                | Self::CompilerCallableDef
+                | Self::CompilerSyntaxBlock
+                | Self::NativeCommandResult
         )
     }
 
@@ -373,6 +586,14 @@ impl StdSourceRole {
             Self::EffectHuman => (10, true, R::HostAuthority),
             Self::EffectFs => (25, false, R::FileIO),
             Self::EffectAsync => (28, true, R::TaskScheduler),
+            Self::EffectApproval => (5, false, R::Approval),
+            Self::EffectBrowser => (26, false, R::Network),
+            Self::EffectClock => (21, false, R::Time),
+            Self::EffectCode => (27, false, R::Compiler),
+            Self::EffectNet => (22, false, R::Network),
+            Self::EffectStream => (23, false, R::Network),
+            Self::EffectTls => (24, false, R::Network),
+
             _ => return None,
         })
     }
@@ -386,7 +607,7 @@ impl StdSourceRole {
                 core,
                 stable_id: Some(stable_id),
                 runtime_requirement: Some(runtime_requirement),
-                high_impact_ack: false,
+                high_impact_ack: self == Self::EffectApproval,
             });
         }
         crate::StdDecl::Type(self.declaration(parameters))
@@ -398,11 +619,39 @@ impl StdSourceRole {
             Self::Primitive(_) => TypeDeclKind::Primitive,
             role if role.code_role().is_some() => TypeDeclKind::Struct,
             role if role.is_spec() => TypeDeclKind::Spec,
-            role if role.is_bodyless_type() => TypeDeclKind::Support,
+            Self::NativeCommandResult => TypeDeclKind::Support,
+            Self::NativePublic
+            | Self::NativeSanitized
+            | Self::NativeSecret
+            | Self::NativeTrusted
+            | Self::NativeUntrusted => TypeDeclKind::Wrapper,
+            role if role.is_bodyless_type() || role.is_represented_type() => TypeDeclKind::Support,
             _ => TypeDeclKind::Enum,
         };
         let name = self.path().rsplit('.').next().unwrap();
-        let declaration = TypeDecl::generic_params(name, parameters, kind);
+        let mut declaration = TypeDecl::generic_params(name, parameters, kind);
+        let parameter =
+            |index: usize| Box::new(crate::StdType::Var(declaration.params[index].name.clone()));
+        declaration.canonical_type = match self {
+            Self::NativePrompt => Some(crate::StdType::Prompt),
+            Self::NativePromptPart => Some(crate::StdType::PromptPart),
+            Self::NativeMessage => Some(crate::StdType::Message(parameter(0))),
+            Self::NativeSchema => Some(crate::StdType::Schema(parameter(0))),
+            Self::NativeMemoryRegion => Some(crate::StdType::MemoryRegion(parameter(0))),
+            Self::NativeMemorySelection => Some(crate::StdType::MemorySelection(parameter(0))),
+            Self::NativeStore => Some(crate::StdType::Store {
+                key: parameter(0),
+                value: parameter(1),
+            }),
+            Self::NativeLengthInput => Some(crate::StdType::Support(
+                crate::StdSupportConstraint::LengthInput,
+            )),
+            Self::NativeEmptinessInput => Some(crate::StdType::Support(
+                crate::StdSupportConstraint::EmptinessInput,
+            )),
+            _ => None,
+        };
+        declaration.derivable = self == Self::NativeSchema;
         if let Some(role) = self.code_role() {
             return declaration.code_role(role).intrinsic_only();
         }

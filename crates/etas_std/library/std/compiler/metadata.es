@@ -1,5 +1,7 @@
 module std.compiler;
 
+public import std.agent.ToolRef;
+
 // Opaque compiler metadata is descriptive data. The role controls its native
 // value representation and keeps construction inside the compiler.
 
@@ -30,8 +32,6 @@ public type GenericOwnerInfo;
 @std.role("std.compiler.StaticValueInfo")
 public type StaticValueInfo;
 
-@std.role("std.compiler.ToolRef")
-public type ToolRef;
 
 @std.role("std.compiler.TraceConstraintInfo")
 public type TraceConstraintInfo;

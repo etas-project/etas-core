@@ -9,7 +9,6 @@ pub(super) fn register(builder: &mut StdRegistryBuilder, module: crate::StdModul
         ("AgentId", crate::CodeTypeRole::AgentId),
         ("TypeInfo", crate::CodeTypeRole::TypeInfo),
         ("GenericOwnerInfo", crate::CodeTypeRole::GenericOwnerInfo),
-        ("ToolRef", crate::CodeTypeRole::ToolRef),
         ("StaticValueInfo", crate::CodeTypeRole::StaticValueInfo),
         (
             "TraceConstraintInfo",

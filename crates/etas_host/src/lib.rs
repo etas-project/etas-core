@@ -56,11 +56,12 @@ pub use memory::{
     MemoryVersion, SqliteMemoryClient, StoreRef, WriteCondition,
 };
 pub use model::{
-    AnthropicProtocolAdapter, AnthropicProviderRequest, AnthropicProviderResponse, ModelClient,
-    ModelContent, ModelCostUsage, ModelMessage, ModelName, ModelOptions, ModelOutput,
-    ModelProviderCapabilities, ModelProviderId, ModelRequest, ModelResponse, ModelRole,
-    ModelToolCall, ModelToolChoice, ModelUsage, OmlxRequestOptions, OpenAiProtocolAdapter,
-    OpenAiProviderRequest, OpenAiProviderResponse, OpenAiTypedOutputEncoding,
+    AnthropicProtocolAdapter, AnthropicProviderRequest, AnthropicProviderResponse, ModelAction,
+    ModelAttemptPolicy, ModelClient, ModelContent, ModelCostUsage, ModelMessage, ModelName,
+    ModelOptions, ModelOutput, ModelProviderCapabilities, ModelProviderId, ModelRequest,
+    ModelResponse, ModelRole, ModelTermination, ModelToolCall, ModelToolChoice, ModelUsage,
+    OmlxRequestOptions, OpenAiProtocolAdapter, OpenAiProviderRequest, OpenAiProviderResponse,
+    OpenAiTypedOutputEncoding,
 };
 pub use network::{
     LocalTcpClient, TcpClient, TcpConnectOperation, TcpConnectRequest, TcpConnectResponse,

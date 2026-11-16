@@ -51,7 +51,7 @@ pub(super) fn references(
                     }
                 }
             }
-            TypeInfo::Primitive(_) => {}
+            TypeInfo::Primitive(_) | TypeInfo::AgentContext(_) => {}
             TypeInfo::Builtin { arguments, .. } => {
                 for argument in arguments {
                     visit(DescriptorNode::Type(*argument));

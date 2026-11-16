@@ -241,7 +241,7 @@ dependencies = [
 
 [[package]]
 name = "etas_code"
-version = "0.2.5"
+version = "0.3.0"
 dependencies = [
  "blake3",
  "etas_core",
@@ -261,7 +261,7 @@ dependencies = [
 
 [[package]]
 name = "etas_host"
-version = "0.1.9"
+version = "0.2.0"
 dependencies = [
  "blake3",
  "cap-fs-ext",
@@ -297,7 +297,7 @@ dependencies = [
 
 [[package]]
 name = "etas_package_metadata"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "blake3",
  "etas_code",

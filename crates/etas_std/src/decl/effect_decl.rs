@@ -106,6 +106,7 @@ pub struct EffectActionDecl {
 )]
 pub enum CompilerActionRole {
     AgentInference,
+    AgentStep,
     TaskYield,
     TaskAwait,
 }

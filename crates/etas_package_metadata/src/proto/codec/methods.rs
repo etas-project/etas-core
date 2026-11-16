@@ -90,7 +90,7 @@ pub(super) fn from_proto(
     Ok(method)
 }
 
-fn trace_to_proto(requirement: &MethodTraceRequirement) -> ProtoMethodTraceRequirement {
+pub(super) fn trace_to_proto(requirement: &MethodTraceRequirement) -> ProtoMethodTraceRequirement {
     match requirement {
         MethodTraceRequirement::Clause(clause) => ProtoMethodTraceRequirement {
             clause: Some(trace_spec_clause_to_proto(clause)),
@@ -110,7 +110,7 @@ fn trace_to_proto(requirement: &MethodTraceRequirement) -> ProtoMethodTraceRequi
     }
 }
 
-fn trace_from_proto(
+pub(super) fn trace_from_proto(
     requirement: ProtoMethodTraceRequirement,
 ) -> Result<MethodTraceRequirement, MetadataArtifactError> {
     match (requirement.clause, requirement.reference, requirement.limit) {
@@ -123,7 +123,7 @@ fn trace_from_proto(
     }
 }
 
-fn limit_to_proto(limit: &MethodLimitRequirement) -> ProtoMethodLimitRequirement {
+pub(super) fn limit_to_proto(limit: &MethodLimitRequirement) -> ProtoMethodLimitRequirement {
     let (value_kind, amount, currency) = match &limit.value {
         None => ("", String::new(), String::new()),
         Some(MethodLimitValue::Count(value)) => ("count", value.to_string(), String::new()),
@@ -142,7 +142,7 @@ fn limit_to_proto(limit: &MethodLimitRequirement) -> ProtoMethodLimitRequirement
     }
 }
 
-fn limit_from_proto(
+pub(super) fn limit_from_proto(
     limit: ProtoMethodLimitRequirement,
 ) -> Result<MethodLimitRequirement, MetadataArtifactError> {
     let kind = match limit.kind.as_str() {

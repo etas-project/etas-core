@@ -1,5 +1,25 @@
 use serde::{Deserialize, Serialize};
 
+/// A nominal identity referenced by a native signature. Source owns its generic
+/// names, bounds, representation, constructors and exports. This import retains
+/// only the constructor category and parameter kinds needed before source checks.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, etas_core::RetainedSize)]
+pub struct StdNativeTypeReference {
+    pub path: Vec<String>,
+    pub parameters: Vec<crate::StdGenericParamKind>,
+    pub is_enum: bool,
+    pub opaque: bool,
+}
+
+impl StdNativeTypeReference {
+    pub(crate) fn matches_declaration(&self, declaration: &crate::StdDecl) -> bool {
+        matches!(declaration, crate::StdDecl::Type(declaration)
+            if (declaration.kind == crate::TypeDeclKind::Enum) == self.is_enum
+                && (!self.opaque || declaration.representation.is_none())
+                && declaration.params.iter().map(|p| p.kind).eq(self.parameters.iter().copied()))
+    }
+}
+
 /// A primitive's reference to an ordinary, source-owned error enum. The host
 /// requires only the variants and primitive payloads it produces; it does not
 /// define the enum's other variants,
@@ -91,8 +111,9 @@ impl StdNativeProjectionReference {
             return false;
         };
         matches!(declaration, crate::StdDecl::Type(declaration)
-            if declaration.kind == crate::TypeDeclKind::Struct
+            if declaration.kind == role.declaration(declaration.params.clone()).kind
                 && declaration.code_role == role.code_role()
+                && declaration.runtime_role == role.runtime_role()
                 && declaration.representation.is_none()
                 && declaration.construction == crate::StdTypeConstruction::IntrinsicOnly
                 && declaration.params.iter().map(|p| p.kind).eq(role.parameter_kinds().iter().copied())

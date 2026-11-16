@@ -56,7 +56,16 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                 if let Some(role) = declaration.runtime_role
                     && (!runtime_roles.insert(role)
                         || symbol.kind != StdSymbolKind::Type
-                        || !role.accepts_declaration(declaration))
+                        || !(role.accepts_declaration(declaration)
+                            || (registry.declaration_key(symbol.id).is_none()
+                                && crate::StdSourceRole::from_path(
+                                    &symbol.qualified_path.join("."),
+                                )
+                                .is_some_and(|source| {
+                                    source.runtime_role() == Some(role)
+                                        && *declaration
+                                            == source.declaration(declaration.params.clone())
+                                }))))
                 {
                     return Err(StdRegistryValidationError {
                         symbol: symbol.qualified_path.join("."),
@@ -282,21 +291,42 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                     signatures.push((&action.type_params, &action.params));
                     if let Some(role) = action.compiler_role {
                         let valid_shape = match role {
+                            crate::CompilerActionRole::AgentStep => {
+                                action.type_params
+                                    == [
+                                        crate::StdGenericParam::new("C"),
+                                        crate::StdGenericParam::new("O"),
+                                    ]
+                                    && action.params
+                                        == [
+                                            StdType::parse("std.agent.session.Conversation"),
+                                            StdType::parse("Schema[O]"),
+                                        ]
+                                    && action.output == StdType::parse("std.agent.StepResult[C, O]")
+                                    && action.effect_args
+                                        == [EffectActionArgKind::Type, EffectActionArgKind::Type]
+                                    && action.selector_param_names == ["C", "O"]
+                                    && action.runtime_requirement
+                                        == Some(crate::StdRuntimeRequirement::Agentic)
+                            }
                             crate::CompilerActionRole::AgentInference => {
-                                action.type_params.len() == 1
-                                    && action.type_params[0].kind == StdGenericParamKind::Type
+                                action.type_params.len() == 2
+                                    && action.type_params.iter().all(|parameter| {
+                                        parameter.kind == StdGenericParamKind::Type
+                                    })
                                     && action.params.len() == 2
                                     && action.params[0] == StdType::Prompt
                                     && action.params[1]
                                         == StdType::Schema(Box::new(action.output.clone()))
-                                    && matches!(&action.output, StdType::Var(name) if *name == action.type_params[0].name)
+                                    && matches!(&action.output, StdType::Var(name) if *name == action.type_params[1].name)
                                     && matches!(
                                         action.effect_args.as_slice(),
-                                        [
-                                            EffectActionArgKind::StaticResourcePath { ty },
-                                            EffectActionArgKind::Type
-                                        ] if ty == "Agent"
+                                        [EffectActionArgKind::Type, EffectActionArgKind::Type]
                                     )
+                                    && action.selector_param_names.iter().eq(action
+                                        .type_params
+                                        .iter()
+                                        .map(|parameter| &parameter.name))
                                     && action.runtime_requirement
                                         == Some(crate::StdRuntimeRequirement::Agentic)
                             }
@@ -338,7 +368,8 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                         } && action.stable_id.is_some();
                         if !action_roles.insert(role) || !valid_shape {
                             let reason = match role {
-                                crate::CompilerActionRole::AgentInference => {
+                                crate::CompilerActionRole::AgentInference
+                                | crate::CompilerActionRole::AgentStep => {
                                     "agent inference role requires a unique action with Prompt/Schema<O> ABI and callable/output selectors"
                                 }
                                 crate::CompilerActionRole::TaskYield
@@ -1092,6 +1123,12 @@ fn validate_named_type(
         declaration
     };
     let Some(declaration) = declaration else {
+        if registry
+            .native_type_reference(name)
+            .is_some_and(|reference| reference.parameters.len() == arity)
+        {
+            return Ok(());
+        }
         if arity == 0
             && (registry.native_enum_reference(name).is_some()
                 || registry.native_opaque_reference(name).is_some()
@@ -1258,6 +1295,11 @@ fn validate_effect_ref(
                 }
                 if let StdStaticArg::Path(path) = arg
                     && registry.lookup_qualified(path).is_none()
+                    && !(matches!(
+                        expected,
+                        EffectActionArgKind::StaticResourcePath { ty } if ty == "Agent"
+                    ) && path.len() == 1
+                        && generics.contains(path[0].as_str()))
                 {
                     return invalid(
                         owner_name.clone(),

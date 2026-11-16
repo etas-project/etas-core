@@ -10,7 +10,14 @@ public enum JsonError {
 
 // Structured JSON value support type.
 @std.role("std.json.JsonValue")
-public type JsonValue;
+public enum JsonValue {
+    Null,
+    Bool(bool),
+    Number(f64),
+    String(string),
+    Array(std.collections.Array<JsonValue>),
+    Object(std.collections.Map<string, JsonValue>),
+}
 
 // Parse JSON into a structured value or return a JSON error.
 @std.binding("std.json.parse")

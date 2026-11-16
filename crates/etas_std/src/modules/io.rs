@@ -107,6 +107,27 @@ pub fn register(builder: &mut StdRegistryBuilder) {
         module,
         &["std", "io"],
         IntrinsicFlowRegistration {
+            name: "eprint",
+            type_params: &[],
+            params: &["string"],
+            output: "unit",
+            public_effects: &[StdEffectRef::typed(
+                &["Error"],
+                StdType::parse("std.io.IOError"),
+            )],
+            requested_actions: &[StdEffectRef::new(&["Console", "stderr_write"])],
+            intrinsic_id: intrinsic::runtime::IO_EPRINT,
+            summary: "Write error text without a trailing newline through the future runtime boundary.",
+            purity: IntrinsicPurity::Runtime,
+            dispatch: IntrinsicDispatch::Runtime,
+            lowering: LoweringHint::RuntimeCall,
+        },
+    );
+    register_intrinsic_flow(
+        builder,
+        module,
+        &["std", "io"],
+        IntrinsicFlowRegistration {
             name: "eprintln",
             type_params: &[],
             params: &["string"],

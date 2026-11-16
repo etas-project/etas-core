@@ -16,5 +16,10 @@ public flow println(text: string) -> unit ![Error<IOError>] {
     print(text + "\n");
 }
 
-@std.binding("std.io.eprintln")
-public flow eprintln(text: string) -> unit ![Error<IOError>] {}
+public flow eprintln(text: string) -> unit ![Error<IOError>] {
+    eprint(text + "\n");
+}
+
+// Standard error without an implicit newline, as specified by Standard IO.
+@std.binding("std.io.eprint")
+public flow eprint(text: string) -> unit ![Error<IOError>] {}

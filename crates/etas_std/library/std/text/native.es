@@ -12,10 +12,7 @@ public flow char_count(value: string) -> usize ![] {
 }
 
 public flow is_empty(value: string) -> bool ![] {
-    for scalar in chars(value) limit Iterations(18446744073709551615) {
-        return false;
-    }
-    return true;
+    return len(value) == 0;
 }
 
 public flow trim_start(value: string) -> string ![] {

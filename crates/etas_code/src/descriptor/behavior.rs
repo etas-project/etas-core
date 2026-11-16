@@ -31,6 +31,10 @@ pub enum EffectTargetInfo {
 pub enum StaticEffectArgInfo {
     Type(TypeInfoRef),
     Resource(DefinitionKey),
+    ResourceProjection {
+        root: DefinitionKey,
+        fields: Vec<String>,
+    },
     Callable(CallableId),
     String(String),
     Integer(String),

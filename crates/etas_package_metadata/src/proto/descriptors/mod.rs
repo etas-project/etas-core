@@ -192,6 +192,18 @@ pub(super) fn to_proto(set: &DefinitionDescriptorSet) -> ProtoDescriptorGraph {
     let input = &set.graph;
     ProtoDescriptorGraph {
         version: match &set.headers {
+            _ if input
+                .types
+                .iter()
+                .any(|ty| matches!(ty, etas_code::descriptor::TypeInfo::AgentContext(_)))
+                || set
+                    .headers
+                    .as_ref()
+                    .and_then(|headers| headers.snapshots.as_ref())
+                    .is_some_and(|snapshots| !snapshots.tools.is_empty()) =>
+            {
+                15
+            }
             _ if input.binders.iter().any(|binder| {
                 matches!(
                     binder.owner,
@@ -328,6 +340,7 @@ pub(super) fn from_proto(
             | (12, _)
             | (13, _)
             | (14, _)
+            | (15, _)
     ) {
         return Err(invalid("unsupported descriptor graph schema"));
     }
@@ -337,7 +350,7 @@ pub(super) fn from_proto(
             Some(schema::generic_owner::Kind::Action(_))
         )
     });
-    if has_action_binders != (input.version == 14) {
+    if (has_action_binders && input.version < 14) || (input.version == 14 && !has_action_binders) {
         return Err(invalid("action binders require their descriptor schema"));
     }
     let has_callable_definition = input.types.iter().any(|ty| {
@@ -381,7 +394,7 @@ pub(super) fn from_proto(
             "implementation binders require their descriptor schema",
         ));
     }
-    if (has_callable_definition && !matches!(input.version, 8..=14))
+    if (has_callable_definition && !matches!(input.version, 8..=15))
         || (input.version == 8 && !has_callable_definition)
     {
         return Err(invalid(
@@ -389,7 +402,7 @@ pub(super) fn from_proto(
         ));
     }
     if (matches!(input.version, 5..=7)
-        || (matches!(input.version, 8..=14)
+        || (matches!(input.version, 8..=15)
             && input.headers.as_ref().is_some_and(|headers| {
                 headers
                     .agents
@@ -412,7 +425,7 @@ pub(super) fn from_proto(
         .as_ref()
         .and_then(|headers| headers.snapshots.as_ref())
         .is_some_and(|snapshots| !snapshots.flows.is_empty());
-    if (has_flows && !matches!(input.version, 6..=14)) || (input.version == 6 && !has_flows) {
+    if (has_flows && !matches!(input.version, 6..=15)) || (input.version == 6 && !has_flows) {
         return Err(invalid(
             "flow snapshot coordinates require their descriptor schema",
         ));
@@ -422,9 +435,23 @@ pub(super) fn from_proto(
         .as_ref()
         .and_then(|headers| headers.snapshots.as_ref())
         .is_some_and(|snapshots| !snapshots.methods.is_empty());
-    if (has_methods && !matches!(input.version, 7..=14)) || (input.version == 7 && !has_methods) {
+    if (has_methods && !matches!(input.version, 7..=15)) || (input.version == 7 && !has_methods) {
         return Err(invalid(
             "method snapshot coordinates require their descriptor schema",
+        ));
+    }
+    let has_tools = input
+        .headers
+        .as_ref()
+        .and_then(|headers| headers.snapshots.as_ref())
+        .is_some_and(|snapshots| !snapshots.tools.is_empty());
+    let has_agent_context = input
+        .types
+        .iter()
+        .any(|ty| matches!(ty.kind, Some(schema::ty::Kind::AgentContext(_))));
+    if (has_tools || has_agent_context) != (input.version == 15) {
+        return Err(invalid(
+            "agent contexts and tool snapshots require their descriptor schema",
         ));
     }
     let declarations = input

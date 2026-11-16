@@ -14,7 +14,7 @@ use crate::{
     StdImplementationRef, StdIntrinsicId,
 };
 
-const SCHEMA: u32 = 6;
+const SCHEMA: u32 = 7;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StdRegistryImage {
@@ -37,15 +37,30 @@ pub struct StdRegistryImage {
     native_opaque_references: BTreeMap<String, super::StdNativeOpaqueReference>,
     native_record_references: BTreeMap<String, super::StdNativeRecordReference>,
     native_projection_references: BTreeMap<String, super::StdNativeProjectionReference>,
+    native_type_references: BTreeMap<String, super::StdNativeTypeReference>,
 }
 
 impl StdRegistryImage {
     pub fn capture(registry: &StdRegistry) -> Result<Self, StdRegistryValidationError> {
         registry.validate()?;
+        for reference in registry.native_type_references() {
+            if let Some(owner) = registry.lookup_qualified(&reference.path)
+                && !reference.matches_declaration(&owner.decl)
+            {
+                return Err(invalid(
+                    "checked source type disagrees with its native constructor import",
+                ));
+            }
+        }
         for reference in registry.native_enum_references() {
             let Some(owner) = registry.lookup_qualified(&reference.path) else {
                 continue;
             };
+            if registry.declaration_key(owner.id).is_none()
+                && crate::StdSourceRole::from_path(&reference.path.join(".")).is_some()
+            {
+                continue; // The checked source publishes this role's constructors.
+            }
             if !reference.matches_owner(registry, owner) {
                 return Err(invalid(
                     "checked source enum disagrees with its native ABI reference",
@@ -113,6 +128,7 @@ impl StdRegistryImage {
             native_opaque_references: registry.native_opaque_references.clone(),
             native_record_references: registry.native_record_references.clone(),
             native_projection_references: registry.native_projection_references.clone(),
+            native_type_references: registry.native_type_references.clone(),
         })
     }
 
@@ -138,6 +154,7 @@ impl StdRegistryImage {
             native_opaque_references: self.native_opaque_references,
             native_record_references: self.native_record_references,
             native_projection_references: self.native_projection_references,
+            native_type_references: self.native_type_references,
         };
         for (index, module) in registry.modules.iter().enumerate() {
             if module.id.0 as usize != index {

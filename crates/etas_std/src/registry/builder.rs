@@ -165,13 +165,16 @@ impl StdRegistryBuilder {
         symbol: StdSymbolId,
         parameters: Vec<crate::StdGenericParam>,
     ) {
-        let declaration = &mut self.registry.symbols[symbol.0 as usize]
+        let source = self.registry.symbols[symbol.0 as usize]
             .as_mut()
-            .expect("source role symbol")
-            .decl;
-        let StdDecl::Type(declaration) = declaration else {
+            .expect("source role symbol");
+        let role = crate::StdSourceRole::from_path(&source.qualified_path.join("."));
+        let StdDecl::Type(declaration) = &mut source.decl else {
             panic!("checked source type role");
         };
+        if let Some(role) = role {
+            declaration.canonical_type = role.declaration(parameters.clone()).canonical_type;
+        }
         declaration.params = parameters;
     }
 
@@ -191,6 +194,22 @@ impl StdRegistryBuilder {
         };
         declaration.params = parameters;
         declaration.extends = extends;
+    }
+
+    /// Projected fields come from the checked source role declaration.
+    pub fn source_type_representation(
+        &mut self,
+        symbol: StdSymbolId,
+        representation: crate::StdType,
+    ) {
+        let StdDecl::Type(declaration) = &mut self.registry.symbols[symbol.0 as usize]
+            .as_mut()
+            .unwrap()
+            .decl
+        else {
+            unreachable!("checked source type role");
+        };
+        declaration.representation = Some(representation);
     }
 
     /// Projected fields come from the checked source role declaration.
@@ -491,6 +510,17 @@ impl StdRegistryBuilder {
             .native_enum_references
             .insert(reference.path.join("."), reference);
         assert!(previous.is_none(), "duplicate native enum ABI reference");
+    }
+
+    pub fn native_type_reference(&mut self, reference: super::StdNativeTypeReference) {
+        let previous = self
+            .registry
+            .native_type_references
+            .insert(reference.path.join("."), reference);
+        assert!(
+            previous.is_none(),
+            "duplicate native type identity reference"
+        );
     }
 
     pub fn native_opaque_reference(&mut self, reference: super::StdNativeOpaqueReference) {

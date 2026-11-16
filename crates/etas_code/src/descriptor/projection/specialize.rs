@@ -394,6 +394,13 @@ fn effect_text_bytes(effect: &EffectInfo) -> Result<usize, DescriptorError> {
     for arg in &effect.arguments {
         let added = match arg {
             StaticEffectArgInfo::Resource(key) => identity(key),
+            StaticEffectArgInfo::ResourceProjection { root, fields } => {
+                identity(root).and_then(|size| {
+                    fields
+                        .iter()
+                        .try_fold(size, |size, field| size.checked_add(field.len()))
+                })
+            }
             StaticEffectArgInfo::Callable(id) => callable(id),
             StaticEffectArgInfo::String(value) | StaticEffectArgInfo::Integer(value) => {
                 Some(value.len())

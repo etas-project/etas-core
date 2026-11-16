@@ -3,6 +3,8 @@ use crate::{MetadataArtifactError, model::*};
 use super::schema as proto;
 
 mod callable_values;
+mod default_behavior;
+pub(crate) use default_behavior::validate as validate_default_behavior;
 mod request_templates;
 mod spec_invocations;
 pub(crate) use callable_values::validate as validate_callable_values;
@@ -322,6 +324,9 @@ impl ModelGraphValidator {
                 self.callable_values(graph)?;
             }
             if let Some(effects) = &summary.default_handler_effects {
+                if let Some(behavior) = &effects.behavior {
+                    self.default_behavior(behavior, 0)?;
+                }
                 self.effect_row(&effects.direct_effects, 0)?;
                 self.effect_row(&effects.default_actions, 0)?;
                 for handler in &effects.handlers {
@@ -480,6 +485,9 @@ impl ModelGraphValidator {
     fn ty(&mut self, ty: &Type, depth: usize) -> Result<(), MetadataArtifactError> {
         self.budget.enter(depth, "type graph")?;
         crate::type_validation::validate_type_shape(ty)?;
+        if let Some(method) = &ty.agent_context {
+            super::descriptors::validate_model_method_identity(method, &mut self.budget)?;
+        }
         if let Some(parameter) = &ty.parameter {
             super::descriptors::validate_model_generic_owner(&parameter.owner, &mut self.budget)?;
             if let Some(bindings) = &self.parameter_bindings {
@@ -539,6 +547,15 @@ impl ModelGraphValidator {
     ) -> Result<(), MetadataArtifactError> {
         self.budget.enter(depth, "action trace")?;
         match trace {
+            ActionTrace::DefaultHandler { guards, body } => {
+                if guards.is_empty() {
+                    return Err(invalid("default handler trace requires checked guards"));
+                }
+                for guard in guards {
+                    self.effect_ref(guard, depth + 1)?;
+                }
+                self.action_trace(body, depth + 1)?;
+            }
             ActionTrace::Event(event) => self.effect_ref(&event.action, depth + 1)?,
             ActionTrace::Seq(children) => {
                 for child in children {
@@ -828,6 +845,9 @@ impl ProtoGraphValidator {
                 self.callable_values(graph)?;
             }
             if let Some(effects) = &summary.default_handler_effects {
+                if let Some(behavior) = &effects.behavior {
+                    self.default_behavior(behavior, 0)?;
+                }
                 for row in [&effects.direct_effects, &effects.default_actions]
                     .into_iter()
                     .flatten()
@@ -971,6 +991,9 @@ impl ProtoGraphValidator {
 
     fn ty(&mut self, ty: &proto::ProtoType, depth: usize) -> Result<(), MetadataArtifactError> {
         self.budget.enter(depth, "type graph")?;
+        if let Some(method) = &ty.agent_context {
+            super::descriptors::validate_method_identity(method, &mut self.budget)?;
+        }
         if let Some(owner) = ty
             .parameter
             .as_ref()
@@ -1104,6 +1127,11 @@ pub(super) fn validate_proto_action_trace_shape(
         !trace.parameter_calls.is_empty(),
     );
     match kind {
+        K::DefaultHandler
+            if !event && !parameter && !parameter_calls && actions && trace.children.len() == 1 =>
+        {
+            Ok(())
+        }
         K::Empty if !event && !parameter && !children && !actions && !parameter_calls => Ok(()),
         K::Event if event && !parameter && !children && !actions && !parameter_calls => Ok(()),
         K::ParameterCall if !event && parameter && !children && !actions && !parameter_calls => {

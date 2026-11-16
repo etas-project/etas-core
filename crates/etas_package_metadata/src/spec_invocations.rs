@@ -5,6 +5,7 @@ use crate::{CallableValueGraph, EffectRow, Type};
 )]
 pub enum CallableRequestTarget {
     Parameter(String),
+    AgentTools(Box<Type>),
     SpecMethod(Box<SpecMethodInvocation>),
 }
 
@@ -71,6 +72,8 @@ impl CallableRequestTarget {
                 Err("callable request parameter is empty".into())
             }
             Self::Parameter(_) => Ok(()),
+            Self::AgentTools(context) => crate::type_validation::validate_type_shape(context)
+                .map_err(|error| error.to_string()),
             Self::SpecMethod(invocation) => {
                 if invocation.spec.is_empty()
                     || invocation.spec.iter().any(String::is_empty)

@@ -15,6 +15,8 @@ struct ContractSet {
     schema: u32,
     compatibility: StdRegistryVersion,
     contracts: Vec<Contract>,
+    #[serde(default)]
+    native_type_references: Vec<crate::StdNativeTypeReference>,
     native_enum_references: Vec<crate::StdNativeEnumReference>,
     native_opaque_references: Vec<crate::StdNativeOpaqueReference>,
     native_record_references: Vec<crate::StdNativeRecordReference>,
@@ -31,6 +33,12 @@ struct Contract {
     declaration: StdDecl,
     primitive: Option<IntrinsicDescriptor>,
     enum_owner: Option<Vec<String>>,
+    #[serde(default)]
+    flow_overloads: Vec<crate::FlowDecl>,
+    #[serde(default)]
+    action_overloads: Vec<crate::EffectActionDecl>,
+    #[serde(default)]
+    memory_place_result_argument: Option<usize>,
 }
 
 /// Content identity of the exact compiler/host contract set used by a build.
@@ -46,12 +54,22 @@ pub fn compiler_contract_identity() -> String {
             role.primitive_type(),
             role.code_role(),
             role.effect_execution(),
+            role.query_declaration(Vec::from_iter(
+                role.parameter_kinds()
+                    .iter()
+                    .enumerate()
+                    .map(|(index, kind)| crate::StdGenericParam {
+                        name: format!("$role{index}"),
+                        kind: *kind,
+                        bounds: role.parameter_bounds(index),
+                    }),
+            )),
             (0..role.parameter_kinds().len())
                 .map(|index| role.parameter_bounds(index))
                 .collect::<Vec<_>>(),
         )
     });
-    hash.update(&serde_json::to_vec(&(5, roles.as_slice())).expect("compiler role ABI"));
+    hash.update(&serde_json::to_vec(&(6, roles.as_slice())).expect("compiler role ABI"));
     format!("blake3:{}", hash.finalize().to_hex())
 }
 
@@ -60,8 +78,11 @@ pub fn compiler_contract_identity() -> String {
 pub fn compiler_contract_registry() -> StdRegistry {
     let contracts: ContractSet = serde_json::from_str(include_str!("bootstrap-contracts.json"))
         .expect("compiled bootstrap contracts");
-    assert_eq!(contracts.schema, 1, "bootstrap contract schema");
+    assert_eq!(contracts.schema, 2, "bootstrap contract schema");
     let mut builder = StdRegistryBuilder::new(contracts.compatibility);
+    for reference in contracts.native_type_references {
+        builder.native_type_reference(reference);
+    }
     for reference in contracts.native_enum_references {
         builder.native_enum_reference(reference);
     }
@@ -98,6 +119,21 @@ pub fn compiler_contract_registry() -> StdRegistry {
                 contract.primitive,
             )
         };
+        for overload in contract.flow_overloads {
+            builder
+                .flow_overload(symbol, overload)
+                .expect("compiled flow overload ABI");
+        }
+        for overload in contract.action_overloads {
+            builder
+                .action_overload(symbol, overload)
+                .expect("compiled action overload ABI");
+        }
+        if let Some(argument) = contract.memory_place_result_argument {
+            builder
+                .memory_place_result(symbol, argument)
+                .expect("compiled memory place ABI");
+        }
         symbols.insert(contract.path, symbol);
     }
     // These are compiler type constructors, not a second public std API. The

@@ -1,13 +1,29 @@
 module std.http.codec;
 
+public import std.http.codec.HttpCodecFailureKind.ConflictingContentLength;
+public import std.http.codec.HttpCodecFailureKind.ConflictingMessageFraming;
+public import std.http.codec.HttpCodecFailureKind.ForbiddenResponseBody;
+public import std.http.codec.HttpCodecFailureKind.InvalidChunkExtension;
+public import std.http.codec.HttpCodecFailureKind.InvalidChunkSize;
+public import std.http.codec.HttpCodecFailureKind.InvalidChunkTerminator;
+public import std.http.codec.HttpCodecFailureKind.InvalidContentLength;
+public import std.http.codec.HttpCodecFailureKind.InvalidHeader;
+public import std.http.codec.HttpCodecFailureKind.InvalidLineEnding;
+public import std.http.codec.HttpCodecFailureKind.InvalidStatusCode;
+public import std.http.codec.HttpCodecFailureKind.InvalidStatusLine;
+public import std.http.codec.HttpCodecFailureKind.InvalidTrailer;
+public import std.http.codec.HttpCodecFailureKind.LimitExceeded;
+public import std.http.codec.HttpCodecError.MalformedMessage;
+public import std.http.codec.HttpCodecFailureKind.UnexpectedEof;
+public import std.http.codec.HttpCodecFailureKind.UnsupportedHttpVersion;
+public import std.http.codec.HttpCodecFailureKind.UnsupportedTransferEncoding;
+public import std.http.codec.HttpDecodeStep.{NeedMore, Complete, Malformed};
+
 // Public declarations migrated from the legacy API inventory.
 // Maintained as Etas source; native bindings retain existing execution during migration.
 
-public import std.http.codec.HttpCodecFailureKind.ConflictingContentLength;
 
-public import std.http.codec.HttpCodecFailureKind.ConflictingMessageFraming;
 
-public import std.http.codec.HttpCodecFailureKind.ForbiddenResponseBody;
 
 // HTTP codec support type.
 public enum HttpCodecError {
@@ -56,33 +72,19 @@ public type HttpWireResponse = { head: std.http.codec.HttpWireResponseHead, body
 // HTTP codec support type.
 public type HttpWireResponseHead = { version: string, status: i32, reason: string, headers: std.collections.List<std.http.codec.HttpHeader> };
 
-public import std.http.codec.HttpCodecFailureKind.InvalidChunkExtension;
 
-public import std.http.codec.HttpCodecFailureKind.InvalidChunkSize;
 
-public import std.http.codec.HttpCodecFailureKind.InvalidChunkTerminator;
 
-public import std.http.codec.HttpCodecFailureKind.InvalidContentLength;
 
-public import std.http.codec.HttpCodecFailureKind.InvalidHeader;
 
-public import std.http.codec.HttpCodecFailureKind.InvalidLineEnding;
 
-public import std.http.codec.HttpCodecFailureKind.InvalidStatusCode;
 
-public import std.http.codec.HttpCodecFailureKind.InvalidStatusLine;
 
-public import std.http.codec.HttpCodecFailureKind.InvalidTrailer;
 
-public import std.http.codec.HttpCodecFailureKind.LimitExceeded;
 
-public import std.http.codec.HttpCodecError.MalformedMessage;
 
-public import std.http.codec.HttpCodecFailureKind.UnexpectedEof;
 
-public import std.http.codec.HttpCodecFailureKind.UnsupportedHttpVersion;
 
-public import std.http.codec.HttpCodecFailureKind.UnsupportedTransferEncoding;
 
 // Decode one chunk size and validate extensions within a byte limit including CRLF, without consuming data.
 @std.binding("std.http.codec.decode_chunk_size_line_prefix")
@@ -111,5 +113,3 @@ public flow decode_response_incremental(arg0: bytes, arg1: bool) -> std.http.cod
 // Encode a structured HTTP request head/body into bytes.
 @std.binding("std.http.codec.encode_request")
 public flow encode_request(arg0: std.http.codec.HttpWireRequest) -> std.result.Result<bytes, std.http.codec.HttpCodecError> ![] {}
-
-public import std.http.codec.HttpDecodeStep.{NeedMore, Complete, Malformed};

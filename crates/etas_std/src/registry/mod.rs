@@ -15,7 +15,7 @@ mod value_role;
 pub use image::StdRegistryImage;
 pub use native_reference::{
     StdNativeEnumReference, StdNativeOpaqueReference, StdNativeProjectionReference,
-    StdNativeRecordReference,
+    StdNativeRecordReference, StdNativeTypeReference,
 };
 
 pub use builder::StdRegistryBuilder;
@@ -48,9 +48,45 @@ pub struct StdRegistry {
     native_opaque_references: BTreeMap<String, StdNativeOpaqueReference>,
     native_record_references: BTreeMap<String, StdNativeRecordReference>,
     native_projection_references: BTreeMap<String, StdNativeProjectionReference>,
+    native_type_references: BTreeMap<String, StdNativeTypeReference>,
 }
 
 impl StdRegistry {
+    pub fn native_type_references(&self) -> impl Iterator<Item = &StdNativeTypeReference> {
+        self.native_type_references.values()
+    }
+
+    pub fn native_type_reference(&self, path: &str) -> Option<&StdNativeTypeReference> {
+        self.native_type_references.get(path).or_else(|| {
+            if path.contains('.') {
+                return None;
+            }
+            let mut matches = self
+                .native_type_references
+                .values()
+                .filter(|reference| reference.path.last().is_some_and(|name| name == path));
+            let matched = matches.next()?;
+            matches.next().is_none().then_some(matched)
+        })
+    }
+
+    pub fn validate_resolved_native_type_references(
+        &self,
+    ) -> Result<(), StdRegistryValidationError> {
+        for reference in self.native_type_references() {
+            if !self
+                .lookup_qualified(&reference.path)
+                .is_some_and(|owner| reference.matches_declaration(&owner.decl))
+            {
+                return Err(StdRegistryValidationError {
+                    symbol: reference.path.join("."),
+                    reason: "native signature has no matching checked source type constructor"
+                        .into(),
+                });
+            }
+        }
+        Ok(())
+    }
     pub fn new(version: StdRegistryVersion) -> Self {
         Self {
             version,
