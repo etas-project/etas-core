@@ -2545,6 +2545,237 @@
     {
       "declaration": {
         "Flow": {
+          "name": "park",
+          "output": {
+            "Primitive": "Never"
+          },
+          "params": [
+            {
+              "Named": "std.task.Scheduler"
+            },
+            {
+              "Task": {
+                "effects": {
+                  "effects": [],
+                  "tail": "E"
+                },
+                "output": {
+                  "Var": "T"
+                }
+              }
+            },
+            {
+              "NamedApplied": {
+                "args": [
+                  {
+                    "Var": "T"
+                  }
+                ],
+                "name": "std.task.Continuation"
+              }
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": {
+            "kind": "ValueMethod",
+            "name": "park",
+            "operation": "Call",
+            "owner_type_params": [],
+            "receiver": {
+              "Named": "std.task.Scheduler"
+            }
+          },
+          "type_params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "T"
+            },
+            {
+              "bounds": [],
+              "kind": "EffectRow",
+              "name": "E"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "task",
+        "scheduler",
+        "park"
+      ],
+      "primitive": {
+        "dispatch": "LoweringOnly",
+        "id": 1404,
+        "latent_effect": "None",
+        "lowering": {
+          "Task": "Park"
+        },
+        "memory_access": "None",
+        "purity": "Runtime",
+        "qualified_path": [
+          "std",
+          "task",
+          "scheduler",
+          "park"
+        ],
+        "runtime_requirement": "TaskScheduler"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "requeue",
+          "output": {
+            "Primitive": "Never"
+          },
+          "params": [
+            {
+              "Named": "std.task.Scheduler"
+            },
+            {
+              "NamedApplied": {
+                "args": [
+                  {
+                    "Var": "T"
+                  }
+                ],
+                "name": "std.task.Continuation"
+              }
+            },
+            {
+              "Var": "T"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": {
+            "kind": "ValueMethod",
+            "name": "requeue",
+            "operation": "Call",
+            "owner_type_params": [],
+            "receiver": {
+              "Named": "std.task.Scheduler"
+            }
+          },
+          "type_params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "T"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "task",
+        "scheduler",
+        "requeue"
+      ],
+      "primitive": {
+        "dispatch": "LoweringOnly",
+        "id": 1403,
+        "latent_effect": "None",
+        "lowering": {
+          "Task": "Requeue"
+        },
+        "memory_access": "None",
+        "purity": "Runtime",
+        "qualified_path": [
+          "std",
+          "task",
+          "scheduler",
+          "requeue"
+        ],
+        "runtime_requirement": "TaskScheduler"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "start",
+          "output": {
+            "Task": {
+              "effects": {
+                "effects": [],
+                "tail": "E"
+              },
+              "output": {
+                "Var": "T"
+              }
+            }
+          },
+          "params": [
+            {
+              "Function": {
+                "effects": {
+                  "effects": [],
+                  "tail": "E"
+                },
+                "input": [],
+                "output": {
+                  "Var": "T"
+                }
+              }
+            }
+          ],
+          "public_effect_tail": "E",
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "T"
+            },
+            {
+              "bounds": [],
+              "kind": "EffectRow",
+              "name": "E"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "task",
+        "start"
+      ],
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 1401,
+        "latent_effect": "None",
+        "lowering": {
+          "Task": "Start"
+        },
+        "memory_access": "None",
+        "purity": "Runtime",
+        "qualified_path": [
+          "std",
+          "task",
+          "start"
+        ],
+        "runtime_requirement": "TaskScheduler"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
           "name": "chars",
           "output": {
             "NamedApplied": {

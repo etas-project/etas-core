@@ -78,8 +78,22 @@ impl StdRegistryBuilder {
         )
     }
 
-    /// Publish a checked source signature while retaining the compiler's limit
-    /// semantic tag and the validated primitive execution binding.
+    /// Publish a checked source signature with its validated primitive binding.
+    pub fn source_primitive_flow(
+        &mut self,
+        symbol: StdSymbolId,
+        declaration: crate::FlowDecl,
+        definition: etas_code::DefinitionKey,
+    ) {
+        let entry = self.registry.symbols[symbol.0 as usize].as_mut().unwrap();
+        assert!(
+            matches!(entry.decl, StdDecl::Flow(_)) && entry.intrinsic.is_some(),
+            "checked native flow binding"
+        );
+        entry.decl = StdDecl::Flow(declaration);
+        self.bind_declaration(symbol, definition);
+    }
+
     pub fn source_requirement(
         &mut self,
         symbol: StdSymbolId,
@@ -112,6 +126,15 @@ impl StdRegistryBuilder {
         else {
             unreachable!("checked native action binding");
         };
+        // The host rule names its row by binder position; source owns spelling.
+        if let Some(tail) = &action.default_handler_effect_tail {
+            let index = action
+                .type_params
+                .iter()
+                .position(|parameter| &parameter.name == tail)
+                .expect("validated native default-handler effect binder");
+            action.default_handler_effect_tail = Some(parameters[index].name.clone());
+        }
         action.type_params = parameters;
         action.effect_args = selectors;
         action.selector_param_names = selector_names;

@@ -1178,6 +1178,21 @@ fn validate_effect_ref(
 
     match kind {
         EffectReferenceKind::Effect => {
+            // Source rows can name one action as well as its entire owner effect.
+            if registry
+                .lookup_qualified(&effect.path)
+                .is_some_and(|symbol| matches!(symbol.decl, StdDecl::EffectAction(_)))
+            {
+                return validate_effect_ref(
+                    registry,
+                    logical_effects,
+                    owner,
+                    effect,
+                    EffectReferenceKind::Action,
+                    generics,
+                    effect_generics,
+                );
+            }
             let name = effect.path.join(".");
             let Some(declaration) = logical_effects.effect(&name) else {
                 return invalid(owner_name, format!("unknown effect `{name}`"));
