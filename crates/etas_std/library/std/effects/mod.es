@@ -13,6 +13,14 @@ public effect Network;
 @std.role("std.effects.FileIO")
 public effect FileIO;
 
+@std.role("std.effects.Console")
+public effect Console extends FileIO {
+    action stdin_read_line() -> string;
+    action stdin_read_all() -> string;
+    action stdout_write(text: string) -> unit;
+    action stderr_write(text: string) -> unit;
+}
+
 @std.role("std.effects.Command")
 public effect Command;
 

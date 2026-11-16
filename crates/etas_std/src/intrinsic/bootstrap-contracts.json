@@ -657,6 +657,138 @@
         "EffectAction": {
           "compiler_role": null,
           "default_handler_effect_tail": null,
+          "default_handler_effects": null,
+          "effect_args": [],
+          "high_impact_ack": false,
+          "name": "stderr_write",
+          "output": {
+            "Primitive": "Unit"
+          },
+          "owner": "Console",
+          "params": [
+            {
+              "Primitive": "String"
+            }
+          ],
+          "runtime_requirement": "Console",
+          "selector_param_names": [],
+          "stable_id": 19,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "kind": "EffectAction",
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Console",
+        "stderr_write"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": null,
+          "effect_args": [],
+          "high_impact_ack": false,
+          "name": "stdin_read_all",
+          "output": {
+            "Primitive": "String"
+          },
+          "owner": "Console",
+          "params": [],
+          "runtime_requirement": "Console",
+          "selector_param_names": [],
+          "stable_id": 17,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "kind": "EffectAction",
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Console",
+        "stdin_read_all"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": null,
+          "effect_args": [],
+          "high_impact_ack": false,
+          "name": "stdin_read_line",
+          "output": {
+            "Primitive": "String"
+          },
+          "owner": "Console",
+          "params": [],
+          "runtime_requirement": "Console",
+          "selector_param_names": [],
+          "stable_id": 16,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "kind": "EffectAction",
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Console",
+        "stdin_read_line"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": null,
+          "effect_args": [],
+          "high_impact_ack": false,
+          "name": "stdout_write",
+          "output": {
+            "Primitive": "Unit"
+          },
+          "owner": "Console",
+          "params": [
+            {
+              "Primitive": "String"
+            }
+          ],
+          "runtime_requirement": "Console",
+          "selector_param_names": [],
+          "stable_id": 18,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "kind": "EffectAction",
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Console",
+        "stdout_write"
+      ],
+      "primitive": null
+    },
+    {
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
           "default_handler_effects": [
             {
               "args": [
@@ -1983,6 +2115,250 @@
     {
       "declaration": {
         "Flow": {
+          "name": "eprintln",
+          "output": {
+            "Primitive": "Unit"
+          },
+          "params": [
+            {
+              "Primitive": "String"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.io.IOError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "requested_action_tail": null,
+          "requested_actions": [
+            {
+              "args": [],
+              "path": [
+                "Console",
+                "stderr_write"
+              ]
+            }
+          ],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "io",
+        "eprintln"
+      ],
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 1009,
+        "latent_effect": "None",
+        "lowering": "RuntimeCall",
+        "memory_access": "None",
+        "purity": "Runtime",
+        "qualified_path": [
+          "std",
+          "io",
+          "eprintln"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "print",
+          "output": {
+            "Primitive": "Unit"
+          },
+          "params": [
+            {
+              "Primitive": "String"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.io.IOError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "requested_action_tail": null,
+          "requested_actions": [
+            {
+              "args": [],
+              "path": [
+                "Console",
+                "stdout_write"
+              ]
+            }
+          ],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "io",
+        "print"
+      ],
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 1007,
+        "latent_effect": "None",
+        "lowering": "RuntimeCall",
+        "memory_access": "None",
+        "purity": "Runtime",
+        "qualified_path": [
+          "std",
+          "io",
+          "print"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "read_all",
+          "output": {
+            "Primitive": "String"
+          },
+          "params": [],
+          "public_effect_tail": null,
+          "public_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.io.IOError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "requested_action_tail": null,
+          "requested_actions": [
+            {
+              "args": [],
+              "path": [
+                "Console",
+                "stdin_read_all"
+              ]
+            }
+          ],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "io",
+        "read_all"
+      ],
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 1005,
+        "latent_effect": "None",
+        "lowering": "RuntimeCall",
+        "memory_access": "None",
+        "purity": "Runtime",
+        "qualified_path": [
+          "std",
+          "io",
+          "read_all"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
+          "name": "read_line",
+          "output": {
+            "Primitive": "String"
+          },
+          "params": [],
+          "public_effect_tail": null,
+          "public_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.io.IOError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "requested_action_tail": null,
+          "requested_actions": [
+            {
+              "args": [],
+              "path": [
+                "Console",
+                "stdin_read_line"
+              ]
+            }
+          ],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "kind": "Flow",
+      "path": [
+        "std",
+        "io",
+        "read_line"
+      ],
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 1006,
+        "latent_effect": "None",
+        "lowering": "RuntimeCall",
+        "memory_access": "None",
+        "purity": "Runtime",
+        "qualified_path": [
+          "std",
+          "io",
+          "read_line"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "declaration": {
+        "Flow": {
           "name": "usd",
           "output": {
             "Named": "Money"
@@ -3070,6 +3446,13 @@
       "path": [
         "std",
         "fs",
+        "IOError"
+      ]
+    },
+    {
+      "path": [
+        "std",
+        "io",
         "IOError"
       ]
     },
@@ -4182,6 +4565,14 @@
         "runtime",
         "limits",
         "Concurrency"
+      ]
+    ],
+    [
+      "Console",
+      [
+        "std",
+        "effects",
+        "Console"
       ]
     ],
     [

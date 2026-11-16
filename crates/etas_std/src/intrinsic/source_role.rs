@@ -49,6 +49,7 @@ pub enum StdSourceRole {
     EffectAgentic,
     EffectNetwork,
     EffectFileIO,
+    EffectConsole,
     EffectCommand,
     EffectMemory,
     EffectSecret,
@@ -60,7 +61,7 @@ pub enum StdSourceRole {
 }
 
 impl StdSourceRole {
-    pub const ALL: [Self; 69] = [
+    pub const ALL: [Self; 70] = [
         Self::Money,
         Self::Limit,
         Self::Primitive(StdPrimitiveType::Bool),
@@ -122,6 +123,7 @@ impl StdSourceRole {
         Self::EffectAgentic,
         Self::EffectNetwork,
         Self::EffectFileIO,
+        Self::EffectConsole,
         Self::EffectCommand,
         Self::EffectMemory,
         Self::EffectSecret,
@@ -195,6 +197,7 @@ impl StdSourceRole {
             Self::EffectAgentic => "std.effects.Agentic",
             Self::EffectNetwork => "std.effects.Network",
             Self::EffectFileIO => "std.effects.FileIO",
+            Self::EffectConsole => "std.effects.Console",
             Self::EffectCommand => "std.effects.Command",
             Self::EffectMemory => "std.effects.Memory",
             Self::EffectSecret => "std.effects.Secret",
@@ -237,6 +240,7 @@ impl StdSourceRole {
             | Self::EffectAgentic
             | Self::EffectNetwork
             | Self::EffectFileIO
+            | Self::EffectConsole
             | Self::EffectCommand
             | Self::EffectMemory
             | Self::EffectSecret
@@ -360,6 +364,7 @@ impl StdSourceRole {
             Self::EffectAgentic => (0, true, R::Agentic),
             Self::EffectNetwork => (1, true, R::Network),
             Self::EffectFileIO => (2, true, R::FileIO),
+            Self::EffectConsole => (9, false, R::Console),
             Self::EffectCommand => (3, true, R::Command),
             Self::EffectMemory => (4, true, R::DurableMemory),
             Self::EffectSecret => (6, true, R::SecretAccess),
