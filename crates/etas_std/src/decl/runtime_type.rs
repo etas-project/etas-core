@@ -36,9 +36,12 @@ pub enum RuntimeTypeRole {
     Task,
     Scheduler,
     Continuation,
+    Money,
 }
 
-#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub enum RuntimeFieldRole {
     CommandExitCode,
     CommandStdout,
@@ -64,7 +67,9 @@ impl RuntimeTypeRole {
 
     pub(crate) fn accepts_declaration(self, declaration: &super::TypeDecl) -> bool {
         let kind = match self {
-            Self::ContextPolicy | Self::RetentionPolicy | Self::Limit => super::TypeDeclKind::Enum,
+            Self::ContextPolicy | Self::RetentionPolicy | Self::Limit | Self::JsonValue => {
+                super::TypeDeclKind::Enum
+            }
             _ => super::TypeDeclKind::Support,
         };
         let representation = match self {

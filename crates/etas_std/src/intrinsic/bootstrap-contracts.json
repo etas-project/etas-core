@@ -1,0 +1,2778 @@
+{
+  "compatibility": {
+    "contract": "phase1",
+    "text": {
+      "primitive_abi": "etas.std.text.primitive-abi.v1",
+      "public_contract": "etas.std.text.contract.v1",
+      "source_implementation": "etas.std.text.source.v1",
+      "target_usize_bits": 64,
+      "unicode_algorithm": "etas.std.text.unicode.v1",
+      "unicode_data_fingerprint": "7c74aebf116629b6",
+      "unicode_version": "17.0.0"
+    }
+  },
+  "contracts": [
+    {
+      "action_overloads": [],
+      "declaration": {
+        "Flow": {
+          "name": "abort",
+          "output": {
+            "Primitive": "Never"
+          },
+          "params": [
+            {
+              "Primitive": "String"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "Flow",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "core",
+        "abort"
+      ],
+      "primitive": {
+        "dispatch": "PureKernel",
+        "id": 1,
+        "latent_effect": "None",
+        "lowering": "PureBuiltin",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "core",
+          "abort"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": "AgentInference",
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [],
+          "effect_args": [
+            "Type",
+            "Type"
+          ],
+          "high_impact_ack": false,
+          "name": "infer",
+          "output": {
+            "Var": "O"
+          },
+          "owner": "Agentic",
+          "params": [
+            "Prompt",
+            {
+              "Schema": {
+                "Var": "O"
+              }
+            }
+          ],
+          "runtime_requirement": "Agentic",
+          "selector_param_names": [
+            "C",
+            "O"
+          ],
+          "stable_id": 88,
+          "type_params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "C"
+            },
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "O"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Agentic",
+        "infer"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": "AgentStep",
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [],
+          "effect_args": [
+            "Type",
+            "Type"
+          ],
+          "high_impact_ack": false,
+          "name": "step",
+          "output": {
+            "NamedApplied": {
+              "args": [
+                {
+                  "Var": "C"
+                },
+                {
+                  "Var": "O"
+                }
+              ],
+              "name": "std.agent.StepResult"
+            }
+          },
+          "owner": "Agentic",
+          "params": [
+            {
+              "Named": "std.agent.session.Conversation"
+            },
+            {
+              "Schema": {
+                "Var": "O"
+              }
+            }
+          ],
+          "runtime_requirement": "Agentic",
+          "selector_param_names": [
+            "C",
+            "O"
+          ],
+          "stable_id": 150,
+          "type_params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "C"
+            },
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "O"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Agentic",
+        "step"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": null,
+          "effect_args": [],
+          "high_impact_ack": true,
+          "name": "request",
+          "output": {
+            "Named": "ApprovalDecision"
+          },
+          "owner": "Approval",
+          "params": [
+            {
+              "Named": "ApprovalRequest"
+            }
+          ],
+          "runtime_requirement": "Approval",
+          "selector_param_names": [],
+          "stable_id": 32,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Approval",
+        "request"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.browser.protocol.BrowserError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "effect_args": [
+            {
+              "StaticResourcePath": {
+                "ty": "std.browser.protocol.BrowserProfile"
+              }
+            }
+          ],
+          "high_impact_ack": false,
+          "name": "attach",
+          "output": {
+            "Named": "BrowserSession"
+          },
+          "owner": "Browser",
+          "params": [
+            {
+              "Named": "BrowserProfile"
+            }
+          ],
+          "runtime_requirement": "Browser",
+          "selector_param_names": [
+            ""
+          ],
+          "stable_id": 141,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Browser",
+        "attach"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.browser.protocol.BrowserError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "effect_args": [
+            {
+              "StaticResourcePath": {
+                "ty": "std.browser.protocol.BrowserSession"
+              }
+            }
+          ],
+          "high_impact_ack": false,
+          "name": "close",
+          "output": {
+            "Primitive": "Unit"
+          },
+          "owner": "Browser",
+          "params": [
+            {
+              "Named": "BrowserSession"
+            }
+          ],
+          "runtime_requirement": "Browser",
+          "selector_param_names": [
+            ""
+          ],
+          "stable_id": 144,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Browser",
+        "close"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.browser.protocol.BrowserError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "effect_args": [
+            {
+              "StaticResourcePath": {
+                "ty": "std.browser.protocol.BrowserSession"
+              }
+            }
+          ],
+          "high_impact_ack": false,
+          "name": "recv",
+          "output": {
+            "Named": "BrowserMessage"
+          },
+          "owner": "Browser",
+          "params": [
+            {
+              "Named": "BrowserSession"
+            }
+          ],
+          "runtime_requirement": "Browser",
+          "selector_param_names": [
+            ""
+          ],
+          "stable_id": 143,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Browser",
+        "recv"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.browser.protocol.BrowserError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "effect_args": [
+            {
+              "StaticResourcePath": {
+                "ty": "std.browser.protocol.BrowserSession"
+              }
+            }
+          ],
+          "high_impact_ack": false,
+          "name": "screenshot",
+          "output": {
+            "Named": "BrowserScreenshot"
+          },
+          "owner": "Browser",
+          "params": [
+            {
+              "Named": "BrowserSession"
+            }
+          ],
+          "runtime_requirement": "Browser",
+          "selector_param_names": [
+            ""
+          ],
+          "stable_id": 145,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Browser",
+        "screenshot"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.browser.protocol.BrowserError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "effect_args": [
+            {
+              "StaticResourcePath": {
+                "ty": "std.browser.protocol.BrowserSession"
+              }
+            }
+          ],
+          "high_impact_ack": false,
+          "name": "send",
+          "output": {
+            "Primitive": "Unit"
+          },
+          "owner": "Browser",
+          "params": [
+            {
+              "Named": "BrowserSession"
+            }
+          ],
+          "runtime_requirement": "Browser",
+          "selector_param_names": [
+            ""
+          ],
+          "stable_id": 142,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Browser",
+        "send"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": null,
+          "effect_args": [],
+          "high_impact_ack": false,
+          "name": "now",
+          "output": {
+            "Named": "Time"
+          },
+          "owner": "Clock",
+          "params": [],
+          "runtime_requirement": "Time",
+          "selector_param_names": [],
+          "stable_id": 119,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Clock",
+        "now"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": null,
+          "effect_args": [],
+          "high_impact_ack": false,
+          "name": "sleep",
+          "output": {
+            "Primitive": "Unit"
+          },
+          "owner": "Clock",
+          "params": [
+            {
+              "Named": "std.runtime.time.Duration"
+            }
+          ],
+          "runtime_requirement": "Time",
+          "selector_param_names": [],
+          "stable_id": 120,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Clock",
+        "sleep"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [
+        {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.compiler.CompileError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "effect_args": [],
+          "high_impact_ack": false,
+          "name": "check",
+          "output": {
+            "Named": "std.compiler.CheckReport"
+          },
+          "owner": "Code",
+          "params": [
+            {
+              "NamedApplied": {
+                "args": [
+                  {
+                    "Var": "F"
+                  }
+                ],
+                "name": "std.compiler.CallableDef"
+              }
+            }
+          ],
+          "runtime_requirement": "Compiler",
+          "selector_param_names": [],
+          "stable_id": 146,
+          "type_params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "F"
+            }
+          ]
+        }
+      ],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.compiler.CompileError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "effect_args": [],
+          "high_impact_ack": false,
+          "name": "check",
+          "output": {
+            "Named": "std.compiler.CheckReport"
+          },
+          "owner": "Code",
+          "params": [
+            {
+              "NamedApplied": {
+                "args": [
+                  {
+                    "Var": "A"
+                  }
+                ],
+                "name": "std.compiler.AgentDef"
+              }
+            }
+          ],
+          "runtime_requirement": "Compiler",
+          "selector_param_names": [],
+          "stable_id": 146,
+          "type_params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "A"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Code",
+        "check"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [
+        {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.compiler.CompileError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "effect_args": [],
+          "high_impact_ack": false,
+          "name": "compile",
+          "output": {
+            "Var": "F"
+          },
+          "owner": "Code",
+          "params": [
+            {
+              "NamedApplied": {
+                "args": [
+                  {
+                    "Var": "F"
+                  }
+                ],
+                "name": "std.compiler.CallableDef"
+              }
+            }
+          ],
+          "runtime_requirement": "Compiler",
+          "selector_param_names": [],
+          "stable_id": 147,
+          "type_params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "F"
+            }
+          ]
+        }
+      ],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.compiler.CompileError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "effect_args": [],
+          "high_impact_ack": false,
+          "name": "compile",
+          "output": {
+            "Var": "A"
+          },
+          "owner": "Code",
+          "params": [
+            {
+              "NamedApplied": {
+                "args": [
+                  {
+                    "Var": "A"
+                  }
+                ],
+                "name": "std.compiler.AgentDef"
+              }
+            }
+          ],
+          "runtime_requirement": "Compiler",
+          "selector_param_names": [],
+          "stable_id": 147,
+          "type_params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "A"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Code",
+        "compile"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": null,
+          "effect_args": [
+            {
+              "StaticResourcePath": {
+                "ty": "std.host.command.CommandHandle"
+              }
+            }
+          ],
+          "high_impact_ack": false,
+          "name": "read",
+          "output": {
+            "Named": "CommandEvent"
+          },
+          "owner": "Command",
+          "params": [
+            {
+              "Named": "CommandHandle"
+            }
+          ],
+          "runtime_requirement": "Command",
+          "selector_param_names": [
+            ""
+          ],
+          "stable_id": 153,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Command",
+        "read"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": null,
+          "effect_args": [
+            {
+              "StaticResourcePath": {
+                "ty": "std.host.sandbox.SandboxProfile"
+              }
+            }
+          ],
+          "high_impact_ack": true,
+          "name": "reconnect",
+          "output": {
+            "Named": "CommandHandle"
+          },
+          "owner": "Command",
+          "params": [
+            {
+              "Primitive": "String"
+            }
+          ],
+          "runtime_requirement": "Command",
+          "selector_param_names": [
+            ""
+          ],
+          "stable_id": 152,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Command",
+        "reconnect"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": null,
+          "effect_args": [
+            {
+              "StaticResourcePath": {
+                "ty": "std.host.sandbox.SandboxProfile"
+              }
+            }
+          ],
+          "high_impact_ack": true,
+          "name": "run",
+          "output": {
+            "Named": "CommandResult"
+          },
+          "owner": "Command",
+          "params": [
+            {
+              "Named": "Command"
+            }
+          ],
+          "runtime_requirement": "Command",
+          "selector_param_names": [
+            ""
+          ],
+          "stable_id": 83,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Command",
+        "run"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": null,
+          "effect_args": [
+            {
+              "StaticResourcePath": {
+                "ty": "std.host.sandbox.SandboxProfile"
+              }
+            }
+          ],
+          "high_impact_ack": true,
+          "name": "start",
+          "output": {
+            "Named": "CommandHandle"
+          },
+          "owner": "Command",
+          "params": [
+            {
+              "Named": "Command"
+            }
+          ],
+          "runtime_requirement": "Command",
+          "selector_param_names": [
+            ""
+          ],
+          "stable_id": 151,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Command",
+        "start"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": null,
+          "effect_args": [
+            {
+              "StaticResourcePath": {
+                "ty": "std.host.command.CommandHandle"
+              }
+            }
+          ],
+          "high_impact_ack": true,
+          "name": "stop",
+          "output": {
+            "Named": "CommandEvent"
+          },
+          "owner": "Command",
+          "params": [
+            {
+              "Named": "CommandHandle"
+            }
+          ],
+          "runtime_requirement": "Command",
+          "selector_param_names": [
+            ""
+          ],
+          "stable_id": 155,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Command",
+        "stop"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": null,
+          "effect_args": [
+            {
+              "StaticResourcePath": {
+                "ty": "std.host.command.CommandHandle"
+              }
+            }
+          ],
+          "high_impact_ack": true,
+          "name": "write",
+          "output": {
+            "Primitive": "Unit"
+          },
+          "owner": "Command",
+          "params": [
+            {
+              "Named": "CommandHandle"
+            }
+          ],
+          "runtime_requirement": "Command",
+          "selector_param_names": [
+            ""
+          ],
+          "stable_id": 154,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Command",
+        "write"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": null,
+          "effect_args": [],
+          "high_impact_ack": false,
+          "name": "stderr_write",
+          "output": {
+            "Primitive": "Unit"
+          },
+          "owner": "Console",
+          "params": [
+            {
+              "Primitive": "String"
+            }
+          ],
+          "runtime_requirement": "Console",
+          "selector_param_names": [],
+          "stable_id": 19,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Console",
+        "stderr_write"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": null,
+          "effect_args": [],
+          "high_impact_ack": false,
+          "name": "stdin_read_all",
+          "output": {
+            "Primitive": "String"
+          },
+          "owner": "Console",
+          "params": [],
+          "runtime_requirement": "Console",
+          "selector_param_names": [],
+          "stable_id": 17,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Console",
+        "stdin_read_all"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": null,
+          "effect_args": [],
+          "high_impact_ack": false,
+          "name": "stdin_read_line",
+          "output": {
+            "Primitive": "String"
+          },
+          "owner": "Console",
+          "params": [],
+          "runtime_requirement": "Console",
+          "selector_param_names": [],
+          "stable_id": 16,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Console",
+        "stdin_read_line"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": null,
+          "effect_args": [],
+          "high_impact_ack": false,
+          "name": "stdout_write",
+          "output": {
+            "Primitive": "Unit"
+          },
+          "owner": "Console",
+          "params": [
+            {
+              "Primitive": "String"
+            }
+          ],
+          "runtime_requirement": "Console",
+          "selector_param_names": [],
+          "stable_id": 18,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Console",
+        "stdout_write"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.fs.IOError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "effect_args": [
+            "Type"
+          ],
+          "high_impact_ack": true,
+          "name": "atomic_replace",
+          "output": {
+            "Primitive": "Unit"
+          },
+          "owner": "Fs",
+          "params": [
+            {
+              "NamedApplied": {
+                "args": [
+                  {
+                    "Var": "R"
+                  }
+                ],
+                "name": "WorkspacePath"
+              }
+            },
+            {
+              "Primitive": "Bytes"
+            }
+          ],
+          "runtime_requirement": "FileIO",
+          "selector_param_names": [
+            "R"
+          ],
+          "stable_id": 140,
+          "type_params": [
+            {
+              "bounds": [
+                {
+                  "args": [],
+                  "path": [
+                    "std",
+                    "fs",
+                    "Region"
+                  ]
+                }
+              ],
+              "kind": "Type",
+              "name": "R"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Fs",
+        "atomic_replace"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.fs.IOError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "effect_args": [
+            "Type"
+          ],
+          "high_impact_ack": false,
+          "name": "list",
+          "output": {
+            "Result": {
+              "err": {
+                "Named": "std.fs.ListLimitError"
+              },
+              "ok": {
+                "List": {
+                  "NamedApplied": {
+                    "args": [
+                      {
+                        "Var": "R"
+                      }
+                    ],
+                    "name": "WorkspacePath"
+                  }
+                }
+              }
+            }
+          },
+          "owner": "Fs",
+          "params": [
+            {
+              "NamedApplied": {
+                "args": [
+                  {
+                    "Var": "R"
+                  }
+                ],
+                "name": "WorkspacePath"
+              }
+            },
+            {
+              "Option": {
+                "Tuple": [
+                  {
+                    "Primitive": "USize"
+                  },
+                  {
+                    "Primitive": "USize"
+                  }
+                ]
+              }
+            }
+          ],
+          "runtime_requirement": "FileIO",
+          "selector_param_names": [
+            "R"
+          ],
+          "stable_id": 138,
+          "type_params": [
+            {
+              "bounds": [
+                {
+                  "args": [],
+                  "path": [
+                    "std",
+                    "fs",
+                    "Region"
+                  ]
+                }
+              ],
+              "kind": "Type",
+              "name": "R"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Fs",
+        "list"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.fs.IOError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "effect_args": [
+            "Type"
+          ],
+          "high_impact_ack": false,
+          "name": "read",
+          "output": {
+            "Result": {
+              "err": {
+                "Named": "std.fs.ReadLimitError"
+              },
+              "ok": {
+                "Primitive": "Bytes"
+              }
+            }
+          },
+          "owner": "Fs",
+          "params": [
+            {
+              "NamedApplied": {
+                "args": [
+                  {
+                    "Var": "R"
+                  }
+                ],
+                "name": "WorkspacePath"
+              }
+            },
+            {
+              "Option": {
+                "Primitive": "USize"
+              }
+            }
+          ],
+          "runtime_requirement": "FileIO",
+          "selector_param_names": [
+            "R"
+          ],
+          "stable_id": 136,
+          "type_params": [
+            {
+              "bounds": [
+                {
+                  "args": [],
+                  "path": [
+                    "std",
+                    "fs",
+                    "Region"
+                  ]
+                }
+              ],
+              "kind": "Type",
+              "name": "R"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Fs",
+        "read"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.fs.IOError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "effect_args": [
+            "Type"
+          ],
+          "high_impact_ack": false,
+          "name": "stat",
+          "output": {
+            "Named": "FsStat"
+          },
+          "owner": "Fs",
+          "params": [
+            {
+              "NamedApplied": {
+                "args": [
+                  {
+                    "Var": "R"
+                  }
+                ],
+                "name": "WorkspacePath"
+              }
+            }
+          ],
+          "runtime_requirement": "FileIO",
+          "selector_param_names": [
+            "R"
+          ],
+          "stable_id": 139,
+          "type_params": [
+            {
+              "bounds": [
+                {
+                  "args": [],
+                  "path": [
+                    "std",
+                    "fs",
+                    "Region"
+                  ]
+                }
+              ],
+              "kind": "Type",
+              "name": "R"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Fs",
+        "stat"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.fs.IOError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "effect_args": [
+            "Type"
+          ],
+          "high_impact_ack": true,
+          "name": "write",
+          "output": {
+            "Primitive": "Unit"
+          },
+          "owner": "Fs",
+          "params": [
+            {
+              "NamedApplied": {
+                "args": [
+                  {
+                    "Var": "R"
+                  }
+                ],
+                "name": "WorkspacePath"
+              }
+            },
+            {
+              "Primitive": "Bytes"
+            }
+          ],
+          "runtime_requirement": "FileIO",
+          "selector_param_names": [
+            "R"
+          ],
+          "stable_id": 137,
+          "type_params": [
+            {
+              "bounds": [
+                {
+                  "args": [],
+                  "path": [
+                    "std",
+                    "fs",
+                    "Region"
+                  ]
+                }
+              ],
+              "kind": "Type",
+              "name": "R"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Fs",
+        "write"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": null,
+          "effect_args": [
+            "MemoryPlace"
+          ],
+          "high_impact_ack": false,
+          "name": "read",
+          "output": {
+            "Primitive": "Unit"
+          },
+          "owner": "Memory",
+          "params": [
+            {
+              "MemoryRegion": {
+                "Var": "R"
+              }
+            }
+          ],
+          "runtime_requirement": "DurableMemory",
+          "selector_param_names": [
+            ""
+          ],
+          "stable_id": 0,
+          "type_params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "R"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Memory",
+        "read"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": null,
+          "effect_args": [
+            "MemoryPlace"
+          ],
+          "high_impact_ack": true,
+          "name": "write",
+          "output": {
+            "Primitive": "Unit"
+          },
+          "owner": "Memory",
+          "params": [
+            {
+              "MemoryRegion": {
+                "Var": "R"
+              }
+            }
+          ],
+          "runtime_requirement": "DurableMemory",
+          "selector_param_names": [
+            ""
+          ],
+          "stable_id": 1,
+          "type_params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "R"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Memory",
+        "write"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.net.tcp.NetworkError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "effect_args": [
+            "StringPattern",
+            "StringPattern"
+          ],
+          "high_impact_ack": false,
+          "name": "tcp_connect",
+          "output": {
+            "Named": "std.net.tcp.TcpStream"
+          },
+          "owner": "Net",
+          "params": [
+            {
+              "Named": "std.net.tcp.Host"
+            },
+            {
+              "Named": "std.net.tcp.Port"
+            }
+          ],
+          "runtime_requirement": "Tcp",
+          "selector_param_names": [
+            "",
+            ""
+          ],
+          "stable_id": 130,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Net",
+        "tcp_connect"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.secret.SecretError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "effect_args": [
+            "Type"
+          ],
+          "high_impact_ack": true,
+          "name": "read",
+          "output": {
+            "NamedApplied": {
+              "args": [
+                {
+                  "Var": "K"
+                }
+              ],
+              "name": "std.secret.SecretValue"
+            }
+          },
+          "owner": "Secret",
+          "params": [
+            {
+              "NamedApplied": {
+                "args": [
+                  {
+                    "Var": "K"
+                  }
+                ],
+                "name": "SecretKey"
+              }
+            }
+          ],
+          "runtime_requirement": "SecretAccess",
+          "selector_param_names": [
+            "K"
+          ],
+          "stable_id": 85,
+          "type_params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "K"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Secret",
+        "read"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": null,
+          "effect_args": [
+            "Type"
+          ],
+          "high_impact_ack": true,
+          "name": "use",
+          "output": {
+            "Primitive": "Unit"
+          },
+          "owner": "Secret",
+          "params": [
+            {
+              "NamedApplied": {
+                "args": [
+                  {
+                    "Var": "K"
+                  }
+                ],
+                "name": "std.secret.SecretValue"
+              }
+            }
+          ],
+          "runtime_requirement": "SecretAccess",
+          "selector_param_names": [
+            "K"
+          ],
+          "stable_id": 86,
+          "type_params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "K"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Secret",
+        "use"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.stream.StreamError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "effect_args": [
+            "Type"
+          ],
+          "high_impact_ack": false,
+          "name": "close",
+          "output": {
+            "Primitive": "Unit"
+          },
+          "owner": "Stream",
+          "params": [
+            {
+              "Var": "S"
+            }
+          ],
+          "runtime_requirement": "Stream",
+          "selector_param_names": [
+            "S"
+          ],
+          "stable_id": 134,
+          "type_params": [
+            {
+              "bounds": [
+                {
+                  "args": [],
+                  "path": [
+                    "std",
+                    "stream",
+                    "ByteStream"
+                  ]
+                }
+              ],
+              "kind": "Type",
+              "name": "S"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Stream",
+        "close"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.stream.StreamError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "effect_args": [
+            "Type"
+          ],
+          "high_impact_ack": false,
+          "name": "flush",
+          "output": {
+            "Primitive": "Unit"
+          },
+          "owner": "Stream",
+          "params": [
+            {
+              "Var": "S"
+            }
+          ],
+          "runtime_requirement": "Stream",
+          "selector_param_names": [
+            "S"
+          ],
+          "stable_id": 133,
+          "type_params": [
+            {
+              "bounds": [
+                {
+                  "args": [],
+                  "path": [
+                    "std",
+                    "stream",
+                    "ByteStream"
+                  ]
+                }
+              ],
+              "kind": "Type",
+              "name": "S"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Stream",
+        "flush"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.stream.StreamError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "effect_args": [
+            "Type"
+          ],
+          "high_impact_ack": false,
+          "name": "read",
+          "output": {
+            "Named": "std.stream.StreamRead"
+          },
+          "owner": "Stream",
+          "params": [
+            {
+              "Var": "S"
+            }
+          ],
+          "runtime_requirement": "Stream",
+          "selector_param_names": [
+            "S"
+          ],
+          "stable_id": 131,
+          "type_params": [
+            {
+              "bounds": [
+                {
+                  "args": [],
+                  "path": [
+                    "std",
+                    "stream",
+                    "ByteStream"
+                  ]
+                }
+              ],
+              "kind": "Type",
+              "name": "S"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Stream",
+        "read"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.stream.StreamError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "effect_args": [
+            "Type"
+          ],
+          "high_impact_ack": false,
+          "name": "write",
+          "output": {
+            "Primitive": "Unit"
+          },
+          "owner": "Stream",
+          "params": [
+            {
+              "Var": "S"
+            }
+          ],
+          "runtime_requirement": "Stream",
+          "selector_param_names": [
+            "S"
+          ],
+          "stable_id": 132,
+          "type_params": [
+            {
+              "bounds": [
+                {
+                  "args": [],
+                  "path": [
+                    "std",
+                    "stream",
+                    "ByteStream"
+                  ]
+                }
+              ],
+              "kind": "Type",
+              "name": "S"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Stream",
+        "write"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [
+            {
+              "args": [
+                {
+                  "Type": {
+                    "Named": "std.tls.TlsError"
+                  }
+                }
+              ],
+              "path": [
+                "Error"
+              ]
+            }
+          ],
+          "effect_args": [
+            "StringPattern"
+          ],
+          "high_impact_ack": false,
+          "name": "handshake",
+          "output": {
+            "Named": "std.tls.TlsStream"
+          },
+          "owner": "Tls",
+          "params": [
+            {
+              "Named": "std.tls.Host"
+            }
+          ],
+          "runtime_requirement": "Tls",
+          "selector_param_names": [
+            ""
+          ],
+          "stable_id": 135,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "effects",
+        "actions",
+        "Tls",
+        "handshake"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "Flow": {
+          "name": "checkpoint",
+          "output": {
+            "Primitive": "Unit"
+          },
+          "params": [
+            {
+              "Var": "T"
+            }
+          ],
+          "public_effect_tail": null,
+          "public_effects": [],
+          "requested_action_tail": null,
+          "requested_actions": [],
+          "source_method": null,
+          "type_params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "T"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "Flow",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "runtime",
+        "checkpoint"
+      ],
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 1001,
+        "latent_effect": "None",
+        "lowering": "RuntimeCall",
+        "memory_access": "None",
+        "purity": "Runtime",
+        "qualified_path": [
+          "std",
+          "runtime",
+          "checkpoint"
+        ],
+        "runtime_requirement": "Checkpoint"
+      }
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": null,
+          "default_handler_effect_tail": null,
+          "default_handler_effects": null,
+          "effect_args": [
+            "Type"
+          ],
+          "high_impact_ack": false,
+          "name": "raise",
+          "output": {
+            "Primitive": "Never"
+          },
+          "owner": "Error",
+          "params": [
+            {
+              "Var": "E"
+            }
+          ],
+          "runtime_requirement": null,
+          "selector_param_names": [
+            "E"
+          ],
+          "stable_id": 33,
+          "type_params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "E"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "runtime",
+        "error",
+        "raise"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "Requirement": {
+          "kind": "Limit",
+          "name": "Attempts",
+          "params": [
+            {
+              "Primitive": "USize"
+            }
+          ],
+          "semantics": {
+            "Limit": "Attempts"
+          }
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "Requirement",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "runtime",
+        "limits",
+        "Attempts"
+      ],
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 55,
+        "latent_effect": "None",
+        "lowering": "RuntimeCall",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "runtime",
+          "limits",
+          "Attempts"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "Requirement": {
+          "kind": "Limit",
+          "name": "Concurrency",
+          "params": [
+            {
+              "Primitive": "USize"
+            }
+          ],
+          "semantics": {
+            "Limit": "Concurrency"
+          }
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "Requirement",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "runtime",
+        "limits",
+        "Concurrency"
+      ],
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 157,
+        "latent_effect": "None",
+        "lowering": "RuntimeCall",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "runtime",
+          "limits",
+          "Concurrency"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "Requirement": {
+          "kind": "Limit",
+          "name": "ContextTokens",
+          "params": [
+            {
+              "Primitive": "USize"
+            }
+          ],
+          "semantics": {
+            "Limit": "ContextTokens"
+          }
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "Requirement",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "runtime",
+        "limits",
+        "ContextTokens"
+      ],
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 52,
+        "latent_effect": "None",
+        "lowering": "RuntimeCall",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "runtime",
+          "limits",
+          "ContextTokens"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "Requirement": {
+          "kind": "Limit",
+          "name": "Cost",
+          "params": [
+            {
+              "Named": "Money"
+            }
+          ],
+          "semantics": {
+            "Limit": "Cost"
+          }
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "Requirement",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "runtime",
+        "limits",
+        "Cost"
+      ],
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 53,
+        "latent_effect": "None",
+        "lowering": "RuntimeCall",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "runtime",
+          "limits",
+          "Cost"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "Requirement": {
+          "kind": "Limit",
+          "name": "Iterations",
+          "params": [
+            {
+              "Primitive": "USize"
+            }
+          ],
+          "semantics": {
+            "Limit": "Iterations"
+          }
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "Requirement",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "runtime",
+        "limits",
+        "Iterations"
+      ],
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 50,
+        "latent_effect": "None",
+        "lowering": "RuntimeCall",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "runtime",
+          "limits",
+          "Iterations"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "Requirement": {
+          "kind": "Limit",
+          "name": "Tokens",
+          "params": [
+            {
+              "Primitive": "USize"
+            }
+          ],
+          "semantics": {
+            "Limit": "Tokens"
+          }
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "Requirement",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "runtime",
+        "limits",
+        "Tokens"
+      ],
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 51,
+        "latent_effect": "None",
+        "lowering": "RuntimeCall",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "runtime",
+          "limits",
+          "Tokens"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "Requirement": {
+          "kind": "Limit",
+          "name": "WallTime",
+          "params": [
+            {
+              "Named": "Duration"
+            }
+          ],
+          "semantics": {
+            "Limit": "WallTime"
+          }
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "Requirement",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "runtime",
+        "limits",
+        "WallTime"
+      ],
+      "primitive": {
+        "dispatch": "Runtime",
+        "id": 54,
+        "latent_effect": "None",
+        "lowering": "RuntimeCall",
+        "memory_access": "None",
+        "purity": "Pure",
+        "qualified_path": [
+          "std",
+          "runtime",
+          "limits",
+          "WallTime"
+        ],
+        "runtime_requirement": "None"
+      }
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": "TaskAwait",
+          "default_handler_effect_tail": "E",
+          "default_handler_effects": [],
+          "effect_args": [],
+          "high_impact_ack": false,
+          "name": "await",
+          "output": {
+            "Var": "T"
+          },
+          "owner": "Async",
+          "params": [
+            {
+              "Task": {
+                "effects": {
+                  "effects": [],
+                  "tail": "E"
+                },
+                "output": {
+                  "Var": "T"
+                }
+              }
+            }
+          ],
+          "runtime_requirement": "TaskScheduler",
+          "selector_param_names": [],
+          "stable_id": 149,
+          "type_params": [
+            {
+              "bounds": [],
+              "kind": "Type",
+              "name": "T"
+            },
+            {
+              "bounds": [],
+              "kind": "EffectRow",
+              "name": "E"
+            }
+          ]
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "task",
+        "actions",
+        "Async",
+        "await"
+      ],
+      "primitive": null
+    },
+    {
+      "action_overloads": [],
+      "declaration": {
+        "EffectAction": {
+          "compiler_role": "TaskYield",
+          "default_handler_effect_tail": null,
+          "default_handler_effects": [],
+          "effect_args": [],
+          "high_impact_ack": false,
+          "name": "yield",
+          "output": {
+            "Primitive": "Unit"
+          },
+          "owner": "Async",
+          "params": [],
+          "runtime_requirement": "TaskScheduler",
+          "selector_param_names": [],
+          "stable_id": 148,
+          "type_params": []
+        }
+      },
+      "enum_owner": null,
+      "flow_overloads": [],
+      "kind": "EffectAction",
+      "memory_place_result_argument": null,
+      "path": [
+        "std",
+        "task",
+        "actions",
+        "Async",
+        "yield"
+      ],
+      "primitive": null
+    }
+  ],
+  "schema": 3
+}

@@ -1,13 +1,24 @@
 use super::StdType;
 
-#[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub struct StdEffectRef {
     pub path: Vec<String>,
     pub args: Vec<StdStaticArg>,
 }
 
 /// A standard-library effect row. `tail` names an `effect` generic binder.
-#[derive(serde::Serialize, Clone, Debug, Default, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    etas_core::RetainedSize,
+)]
 pub struct StdEffectRowExpr {
     pub effects: Vec<StdEffectRef>,
     pub tail: Option<String>,
@@ -36,7 +47,9 @@ impl StdEffectRowExpr {
     }
 }
 
-#[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub enum StdStaticArg {
     Type(StdType),
     Path(Vec<String>),

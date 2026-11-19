@@ -38,5 +38,6 @@ cargo test -p etas_core
 
 - [Core design](docs/architect/phase1-core-design.md)
 - [Repository boundaries](docs/architect/repository-boundary.md)
+- [Standard library source implementation](docs/std-source-declarations.md)
 
 [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE)

@@ -1,7 +1,9 @@
 use super::StdIntrinsicId;
 use crate::intrinsic;
 
-#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub enum IntrinsicStaticStringSemantics {
     StringTransform {
         argument: usize,
@@ -9,7 +11,9 @@ pub enum IntrinsicStaticStringSemantics {
     },
 }
 
-#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub enum StaticStringTransform {
     Trim,
     Lowercase,

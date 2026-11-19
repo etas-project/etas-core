@@ -15,6 +15,12 @@ pub(super) fn encode_effect(effect: &EffectInfo) -> p::Effect {
                     StaticEffectArgInfo::Resource(key) => {
                         p::static_arg::Kind::Resource(encode_key(key))
                     }
+                    StaticEffectArgInfo::ResourceProjection { root, fields } => {
+                        p::static_arg::Kind::ResourceProjection(p::ResourceProjection {
+                            root: Some(encode_key(root)),
+                            fields: fields.clone(),
+                        })
+                    }
                     StaticEffectArgInfo::String(value) => {
                         p::static_arg::Kind::String(value.clone())
                     }
@@ -55,6 +61,15 @@ pub(super) fn decode_effect(effect: p::Effect) -> Result<EffectInfo, Error> {
                     p::static_arg::Kind::Type(ty) => StaticEffectArgInfo::Type(TypeInfoRef(ty)),
                     p::static_arg::Kind::Resource(key) => {
                         StaticEffectArgInfo::Resource(decode_key(key)?)
+                    }
+                    p::static_arg::Kind::ResourceProjection(projection) => {
+                        StaticEffectArgInfo::ResourceProjection {
+                            root: decode_key(required(
+                                projection.root,
+                                "resource projection root",
+                            )?)?,
+                            fields: projection.fields,
+                        }
                     }
                     p::static_arg::Kind::String(value) => StaticEffectArgInfo::String(value),
                     p::static_arg::Kind::Integer(value) => StaticEffectArgInfo::Integer(value),
@@ -119,6 +134,19 @@ pub(super) fn encode_owner(owner: &GenericOwner) -> p::GenericOwner {
         GenericOwner::ImplementationPattern(subject) => {
             p::generic_owner::Kind::ImplementationPattern(encode_key(subject))
         }
+        GenericOwner::Action { effect, name } => p::generic_owner::Kind::Action(p::ActionOwner {
+            effect: Some(encode_key(effect)),
+            name: name.clone(),
+        }),
+        GenericOwner::ActionOverload {
+            effect,
+            name,
+            signature,
+        } => p::generic_owner::Kind::ActionOverload(p::ActionOverloadOwner {
+            effect: Some(encode_key(effect)),
+            name: name.clone(),
+            signature: signature.as_bytes().to_vec(),
+        }),
     };
     p::GenericOwner { kind: Some(kind) }
 }
@@ -153,6 +181,20 @@ pub(super) fn decode_owner(owner: p::GenericOwner) -> Result<GenericOwner, Error
         p::generic_owner::Kind::ImplementationPattern(subject) => {
             GenericOwner::ImplementationPattern(decode_key(subject)?)
         }
+        p::generic_owner::Kind::Action(owner) => GenericOwner::Action {
+            effect: decode_key(required(owner.effect, "action generic effect owner")?)?,
+            name: owner.name,
+        },
+        p::generic_owner::Kind::ActionOverload(owner) => GenericOwner::ActionOverload {
+            effect: decode_key(required(owner.effect, "action overload effect owner")?)?,
+            name: owner.name,
+            signature: etas_code::CodeFingerprint::from_bytes(
+                owner
+                    .signature
+                    .try_into()
+                    .map_err(|_| invalid("invalid action overload input fingerprint"))?,
+            ),
+        },
     })
 }
 

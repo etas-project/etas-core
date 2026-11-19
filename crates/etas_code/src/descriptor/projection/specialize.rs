@@ -238,6 +238,32 @@ fn callback_has_closed_action_row(
     let Some(parameter) = owner.parameters.get(call.position as usize) else {
         return Ok(false);
     };
+    if !call.projection.is_empty() {
+        let projected = crate::descriptor::value_projection::ProjectedType::resolve(
+            types,
+            DescriptorNode::Type(call.signature),
+            parameter.ty,
+            &call.projection,
+            limits,
+            work,
+        )?;
+        let callback = projected.signature(types, DescriptorNode::Type(call.signature))?;
+        let Some(row) = callback.effects.and_then(|id| rows.get(id.0 as usize)) else {
+            return Ok(false);
+        };
+        *work = work.saturating_add(row.effects.len());
+        if *work > limits.max_edges {
+            return Err(DescriptorError::Limit {
+                resource: "edges",
+                limit: limits.max_edges,
+            });
+        }
+        return Ok(row.tail.is_none()
+            && row
+                .effects
+                .iter()
+                .all(|effect| matches!(effect.target, EffectTargetInfo::Action { .. })));
+    }
     let mut ty = parameter.ty;
     let mut seen = BTreeSet::new();
     loop {
@@ -394,6 +420,13 @@ fn effect_text_bytes(effect: &EffectInfo) -> Result<usize, DescriptorError> {
     for arg in &effect.arguments {
         let added = match arg {
             StaticEffectArgInfo::Resource(key) => identity(key),
+            StaticEffectArgInfo::ResourceProjection { root, fields } => {
+                identity(root).and_then(|size| {
+                    fields
+                        .iter()
+                        .try_fold(size, |size, field| size.checked_add(field.len()))
+                })
+            }
             StaticEffectArgInfo::Callable(id) => callable(id),
             StaticEffectArgInfo::String(value) | StaticEffectArgInfo::Integer(value) => {
                 Some(value.len())
@@ -467,6 +500,7 @@ mod tests {
                     TypeInfo::Function(SignatureInfo {
                         generics: vec![GenericParameterRef(0), GenericParameterRef(1)],
                         parameters: vec![ParameterInfo {
+                            default: None,
                             name: Some("value".into()),
                             ty: TypeInfoRef(0),
                         }],
@@ -516,6 +550,7 @@ mod tests {
         let owner = SignatureInfo {
             generics: vec![GenericParameterRef(0)],
             parameters: vec![ParameterInfo {
+                default: None,
                 name: Some("callback".into()),
                 ty: TypeInfoRef(1),
             }],
@@ -524,6 +559,7 @@ mod tests {
             effects: Some(EffectRowInfoRef(0)),
         };
         let call = crate::descriptor::ParameterCallInfo {
+            projection: Vec::new(),
             callable: crate::CallableId::declaration(identity.clone()).unwrap(),
             signature: TypeInfoRef(2),
             position: 0,
@@ -763,6 +799,7 @@ mod tests {
         input.types.push(TypeInfo::Function(SignatureInfo {
             generics: vec![GenericParameterRef(2)],
             parameters: vec![ParameterInfo {
+                default: None,
                 name: None,
                 ty: TypeInfoRef(5),
             }],

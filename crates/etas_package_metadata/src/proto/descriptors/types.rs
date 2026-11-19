@@ -64,7 +64,9 @@ enum_codec!(
     Secret = 20,
     Public = 21,
     Sanitized = 22,
-    CallableDefinition = 23
+    CallableDefinition = 23,
+    SchedulerHandle = 24,
+    Continuation = 25
 );
 
 fn refs(values: &[TypeInfoRef]) -> Vec<u32> {
@@ -95,6 +97,7 @@ fn decode_fields(fields: p::Fields) -> Vec<FieldInfo> {
 pub(super) fn encode(ty: &TypeInfo) -> p::Type {
     use p::ty::Kind as K;
     let kind = match ty {
+        TypeInfo::AgentContext(method) => K::AgentContext(super::identities::encode_method(method)),
         TypeInfo::Existential { bounds } => K::Existential(p::Existential {
             bounds: bounds.iter().map(super::effects::encode_spec).collect(),
         }),
@@ -170,6 +173,7 @@ pub(super) fn encode(ty: &TypeInfo) -> p::Type {
                 .parameters
                 .iter()
                 .map(|parameter| p::Parameter {
+                    default: parameter.default.as_ref().map(super::defaults::encode),
                     name: parameter.name.clone(),
                     ty: parameter.ty.0,
                 })
@@ -212,6 +216,9 @@ fn declaration(
 pub(super) fn decode(ty: p::Type) -> Result<TypeInfo, Error> {
     use p::ty::Kind as K;
     Ok(match required(ty.kind, "type kind")? {
+        K::AgentContext(method) => {
+            TypeInfo::AgentContext(super::identities::decode_method(method)?)
+        }
         K::Existential(value) => TypeInfo::Existential {
             bounds: value
                 .bounds
@@ -304,11 +311,14 @@ pub(super) fn decode(ty: p::Type) -> Result<TypeInfo, Error> {
             parameters: value
                 .parameters
                 .into_iter()
-                .map(|parameter| ParameterInfo {
-                    name: parameter.name,
-                    ty: TypeInfoRef(parameter.ty),
+                .map(|parameter| {
+                    Ok(ParameterInfo {
+                        default: parameter.default.map(super::defaults::decode).transpose()?,
+                        name: parameter.name,
+                        ty: TypeInfoRef(parameter.ty),
+                    })
                 })
-                .collect(),
+                .collect::<Result<_, Error>>()?,
             output: TypeInfoRef(value.output),
             declared_output: value.declared_output.map(TypeInfoRef),
             effects: value.effects.map(EffectRowInfoRef),

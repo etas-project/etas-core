@@ -372,25 +372,31 @@ impl ByteStreamStore {
             .stream_slot(handle)
             .await
             .ok_or_else(|| unknown_stream(handle))?;
-        let registration = match operation.register_work() {
+        let registration = match operation.register_resource() {
             Ok(registration) => registration,
             Err(error) => {
                 slot.cancellation.cancel();
                 slot.finish_close().await;
+                self.streams.write().await.remove(handle.token());
                 return Err(error);
             }
         };
         if let Err(error) = registration.begin_dispatch() {
             slot.cancellation.cancel();
             slot.finish_close().await;
+            self.streams.write().await.remove(handle.token());
             registration.complete(crate::execution::ExternalOutcome::NotDispatched, vec![])?;
             return Err(error);
         }
         let context = registration.context().clone();
+        let request_signal = operation.signal().clone();
         let streams = self.streams.clone();
         let token = handle.token().to_owned();
         tokio::spawn(async move {
-            let release = context.signal().release_requested().await;
+            let release = tokio::select! {
+                release = context.signal().release_requested() => release,
+                cancelled = request_signal.cancelled() => cancelled.map(|_| ()),
+            };
             slot.cancellation.cancel();
             slot.finish_close().await;
             streams.write().await.remove(&token);

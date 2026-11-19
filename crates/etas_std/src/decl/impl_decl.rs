@@ -1,6 +1,8 @@
 use super::{StdSpecRef, StdType};
 
-#[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub struct StdImplFact {
     pub self_type: StdType,
     pub spec: StdSpecRef,

@@ -100,7 +100,6 @@ fn compiler_descriptor_types_are_opaque_and_have_unique_registry_roles() {
         ("AgentId", CodeTypeRole::AgentId),
         ("TypeInfo", CodeTypeRole::TypeInfo),
         ("GenericOwnerInfo", CodeTypeRole::GenericOwnerInfo),
-        ("ToolRef", CodeTypeRole::ToolRef),
         ("StaticValueInfo", CodeTypeRole::StaticValueInfo),
         ("TraceConstraintInfo", CodeTypeRole::TraceConstraintInfo),
     ] {
@@ -114,6 +113,21 @@ fn compiler_descriptor_types_are_opaque_and_have_unique_registry_roles() {
         assert_eq!(ty.construction, StdTypeConstruction::IntrinsicOnly);
         assert!(ty.representation.is_none());
     }
+    let tool = registry
+        .lookup_qualified(&["std", "agent", "ToolRef"])
+        .unwrap();
+    let compiler_tool = registry
+        .lookup_qualified(&["std", "compiler", "ToolRef"])
+        .unwrap();
+    assert_eq!(compiler_tool.id, tool.id);
+    let StdDecl::Type(ty) = &tool.decl else {
+        panic!("tool reference type");
+    };
+    assert_eq!(ty.construction, StdTypeConstruction::Public);
+    assert!(matches!(
+        ty.representation,
+        Some(etas_std::StdType::Record(_))
+    ));
 }
 
 #[test]
@@ -172,21 +186,64 @@ fn contextual_inference_is_backed_by_a_unique_checked_standard_action_role() {
             StdDecl::EffectAction(action)
                 if action.compiler_role == Some(etas_std::CompilerActionRole::AgentInference) =>
             {
-                Some(action)
+                Some((symbol.id, action))
             }
             _ => None,
         })
         .collect::<Vec<_>>();
     assert_eq!(actions.len(), 1);
-    let action = actions[0];
+    let (action_id, action) = actions[0];
     assert_eq!(action.params[0], etas_std::StdType::Prompt);
     assert_eq!(
         action.params[1],
         etas_std::StdType::Schema(Box::new(action.output.clone()))
     );
-    assert_eq!(action.type_params.len(), 1);
+    assert_eq!(action.type_params.len(), 2);
     assert_eq!(action.effect_args.len(), 2);
     assert_eq!(action.selector_param_names, ["C", "O"]);
+
+    let mut source = StdRegistryBuilder::from_registry(registry.clone());
+    source.source_action_signature(
+        action_id,
+        etas_std::EffectActionDecl {
+            params: vec![
+                etas_std::StdType::Named("std.agent.prompt.Prompt".into()),
+                etas_std::StdType::NamedApplied {
+                    name: "std.agent.schema.Schema".into(),
+                    args: vec![action.output.clone()],
+                },
+            ],
+            ..action.clone()
+        },
+    );
+    let awaiting = registry
+        .lookup_qualified(&["std", "task", "actions", "Async", "await"])
+        .unwrap();
+    let StdDecl::EffectAction(await_action) = &awaiting.decl else {
+        panic!("await action");
+    };
+    source.source_action_signature(
+        awaiting.id,
+        etas_std::EffectActionDecl {
+            params: vec![etas_std::StdType::NamedApplied {
+                name: "std.task.Task".into(),
+                args: vec![
+                    await_action.output.clone(),
+                    etas_std::StdType::Handler {
+                        handled: etas_std::StdEffectRowExpr::param("E"),
+                        produced: None,
+                        result: None,
+                    },
+                ],
+            }],
+            default_handler_effects: Some(Vec::new()),
+            default_handler_effect_tail: Some("E".into()),
+            ..await_action.clone()
+        },
+    );
+    source
+        .try_finish()
+        .expect("source-owned compiler action ABIs");
 
     let mut builder = StdRegistryBuilder::new(StdRegistryVersion::phase1());
     let module = builder.module(&["std", "invalid"], "invalid compiler action");

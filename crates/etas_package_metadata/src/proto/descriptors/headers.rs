@@ -15,6 +15,10 @@ pub(super) fn encode(headers: &DefinitionHeaders) -> p::Headers {
                     id: Some(encode_callable(&callable.id)),
                     signature: callable.signature.0,
                     analysis: Some(p::Analysis {
+                        suspension: callable.analysis.suspension.map(|value| p::Suspension {
+                            may_suspend: value.may_suspend,
+                            unknown: value.unknown,
+                        }),
                         declared_bound: effects.declared_bound.map(|r| r.0),
                         escaping: effects.escaping.map(|r| r.0),
                         requested: effects.requested.map(|r| r.0),
@@ -82,6 +86,10 @@ pub(super) fn decode(headers: p::Headers) -> Result<DefinitionHeaders, Error> {
                     id: decode_callable(required(callable.id, "callable header identity")?)?,
                     signature: TypeInfoRef(callable.signature),
                     analysis: CallableAnalysisInfo {
+                        suspension: analysis.suspension.map(|value| SuspensionInfo {
+                            may_suspend: value.may_suspend,
+                            unknown: value.unknown,
+                        }),
                         effects: EffectSummaryInfo {
                             declared_bound: analysis.declared_bound.map(EffectRowInfoRef),
                             escaping: analysis.escaping.map(EffectRowInfoRef),

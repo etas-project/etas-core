@@ -1,6 +1,8 @@
 use super::{StdEffectRef, StdGenericParam, StdType};
 
-#[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub struct FlowDecl {
     pub name: String,
     pub type_params: Vec<StdGenericParam>,
@@ -15,7 +17,9 @@ pub struct FlowDecl {
     pub source_method: Option<FlowSourceMethod>,
 }
 
-#[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub struct FlowSourceMethod {
     pub receiver: StdType,
     pub name: String,
@@ -44,7 +48,9 @@ pub enum FlowSourceMethodOperation {
     CheckedMessageCast,
 }
 
-#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub enum FlowSourceMethodKind {
     TypeMember,
     ValueMethod,

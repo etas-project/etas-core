@@ -93,6 +93,7 @@ pub(super) fn validate(
             .agents
             .iter()
             .chain(&snapshots.flows)
+            .chain(&snapshots.tools)
             .chain(&snapshots.methods)
         {
             if let Some(body) = seen.get(&snapshot.revision.definition)

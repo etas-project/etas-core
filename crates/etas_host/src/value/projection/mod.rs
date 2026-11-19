@@ -5,7 +5,7 @@ use crate::{HostError, HostJsonValue, HostValue};
 
 mod materialize;
 pub(crate) mod text;
-pub use materialize::project_to_host_value;
+pub use materialize::{project_to_host_value, project_to_host_value_bounded};
 
 pub enum HostScalar<'a> {
     Unit,

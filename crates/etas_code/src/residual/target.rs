@@ -21,7 +21,18 @@ use super::{
 const TARGET_SCHEMA_VERSION: u32 = 1;
 
 /// Plan component families an engine can execute.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, etas_core::RetainedSize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    etas_core::RetainedSize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub enum ResidualComponentKind {
     ActionPredicate,
     TraceAlternatives,
@@ -29,7 +40,18 @@ pub enum ResidualComponentKind {
 }
 
 /// Normalized semantic event phases a governed action passes through.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, etas_core::RetainedSize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    etas_core::RetainedSize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub enum ResidualEventPhase {
     /// Checked before dispatch, for every source/default/forwarded/std/agent
     /// and tool path, before any governed side effect.
@@ -39,7 +61,18 @@ pub enum ResidualEventPhase {
 }
 
 /// Evidence the engine can supply to the shared monitor kernel.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, etas_core::RetainedSize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    etas_core::RetainedSize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub enum ResidualEvidenceKind {
     /// A provider-authenticated accepted outcome of a prior guard action,
     /// correlated by scope, invocation, attempt and ordering.
@@ -47,7 +80,18 @@ pub enum ResidualEvidenceKind {
 }
 
 /// Terminal paths at which an active scope's monitor is checked.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, etas_core::RetainedSize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    etas_core::RetainedSize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub enum ResidualScopeExitKind {
     Return,
     NonLocalReturn,
@@ -69,7 +113,18 @@ impl ResidualScopeExitKind {
 }
 
 /// Monitor-state persistence across suspension, which is never scope exit.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, etas_core::RetainedSize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    etas_core::RetainedSize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub enum ResidualSuspensionKind {
     HostAwait,
     CheckpointRestore,
@@ -84,7 +139,9 @@ impl ResidualSuspensionKind {
     ];
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize, serde::Serialize, serde::Deserialize,
+)]
 pub struct ResidualTargetLimits {
     pub max_obligations_per_plan: usize,
     pub max_alternatives: usize,
@@ -102,7 +159,9 @@ impl ResidualTargetLimits {
 }
 
 /// Implemented residual semantics of one execution target.
-#[derive(Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, etas_core::RetainedSize, serde::Serialize, serde::Deserialize,
+)]
 pub struct ResidualTargetCapabilities {
     /// Stable identity and semantic version of the engine's residual kernel.
     pub engine: String,

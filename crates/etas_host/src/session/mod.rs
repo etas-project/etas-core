@@ -20,7 +20,9 @@ pub use context::{
     SessionContextPublication, SessionContextReceipt, SessionContextRejection, SessionHistoryFence,
     SessionPublishedContext, context_operation_ref, session_context_result_value,
 };
-pub use history_value::{published_context_value, session_history_page_value};
+pub use history_value::{
+    published_context_value, session_history_page_value, session_history_selection_value,
+};
 pub use in_memory::InMemorySessionClient;
 pub use maintenance::{
     RetentionProgress, SessionMaintenanceClient, SessionMaintenanceOperation,
@@ -33,6 +35,7 @@ pub use protocol::{
     SessionMessageRole, SessionOperation, SessionRef, SessionRequest, SessionResponse,
     SessionResult, SessionSummary,
 };
+pub use retention::session_timestamp_millis;
 pub use sqlite::SqliteSessionClient;
 pub use value::{
     MessageEnvelope, message_envelope_from_host_value, message_envelope_to_host_value,

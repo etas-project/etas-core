@@ -13,6 +13,7 @@ use super::{super::DescriptorError, DefinitionHeaders};
 pub struct DefinitionSnapshots {
     pub agents: Vec<DefinitionSnapshotInfo>,
     pub flows: Vec<DefinitionSnapshotInfo>,
+    pub tools: Vec<DefinitionSnapshotInfo>,
     pub methods: Vec<DefinitionSnapshotInfo>,
 }
 
@@ -116,7 +117,12 @@ pub(super) fn validate(
             header
                 .id
                 .as_declaration()
-                .filter(|identity| identity.kind() == crate::DefinitionKind::Flow)
+                .filter(|identity| {
+                    matches!(
+                        identity.kind(),
+                        crate::DefinitionKind::Flow | crate::DefinitionKind::Tool
+                    )
+                })
                 .map(|identity| (identity, header))
         })
         .collect::<BTreeMap<_, _>>();
@@ -130,13 +136,21 @@ pub(super) fn validate(
                 .iter()
                 .map(|snapshot| (crate::DefinitionKind::Flow, snapshot)),
         )
+        .chain(
+            snapshots
+                .tools
+                .iter()
+                .map(|snapshot| (crate::DefinitionKind::Tool, snapshot)),
+        )
     {
         if let Some(context) = snapshot.generic_environment_context
-            && (kind != crate::DefinitionKind::Flow
-                || DefinitionSnapshotInfo::generic_environment_fingerprint(
-                    context,
-                    snapshot.revision.contract,
-                ) != snapshot.revision.environment)
+            && (!matches!(
+                kind,
+                crate::DefinitionKind::Flow | crate::DefinitionKind::Tool
+            ) || DefinitionSnapshotInfo::generic_environment_fingerprint(
+                context,
+                snapshot.revision.contract,
+            ) != snapshot.revision.environment)
         {
             return Err(invalid(
                 "generic environment context does not match the revision",
@@ -234,8 +248,12 @@ pub(super) fn validate(
     if !snapshots.methods.is_empty() && seen_methods != methods {
         return Err(invalid("method snapshots omit a callable header"));
     }
-    if snapshots.agents.len() != agents.len() || snapshots.flows.len() != flows.len() {
-        return Err(invalid("definition snapshots omit an agent or flow header"));
+    if snapshots.agents.len() != agents.len()
+        || snapshots.flows.len() + snapshots.tools.len() != flows.len()
+    {
+        return Err(invalid(
+            "definition snapshots omit an agent or callable header",
+        ));
     }
     Ok(())
 }

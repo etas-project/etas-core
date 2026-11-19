@@ -10,10 +10,10 @@ pub use decl::{
     CodeTypeRole, CompilerActionRole, EffectActionArgKind, EffectActionDecl, EffectDecl, FlowDecl,
     FlowSourceMethod, FlowSourceMethodKind, FlowSourceMethodOperation, RequirementDecl,
     RequirementKind, RequirementSemantics, RuntimeField, RuntimeFieldRole, RuntimeTypeRole,
-    StdDecl, StdEffectRef, StdEffectRowExpr, StdGenericParam, StdGenericParamKind, StdImplFact,
-    StdImplementationDeterminism, StdImplementationRef, StdIterableItem, StdLibrarySourceId,
-    StdLimitKind, StdPrimitiveType, StdRecordField, StdRuntimeRequirement, StdSpecRef,
-    StdStaticArg, StdSupportConstraint, StdTrustWrapper, StdType, StdTypeConstruction,
+    StdBodyBinding, StdDecl, StdEffectRef, StdEffectRowExpr, StdGenericParam, StdGenericParamKind,
+    StdImplFact, StdImplementationDeterminism, StdImplementationRef, StdIterableItem,
+    StdLibrarySourceId, StdLimitKind, StdPrimitiveType, StdRecordField, StdRuntimeRequirement,
+    StdSpecRef, StdStaticArg, StdSupportConstraint, StdTrustWrapper, StdType, StdTypeConstruction,
     StdValueRole, ToolDecl, TypeDecl, TypeDeclKind, ValueDecl,
 };
 pub use intrinsic::{
@@ -23,11 +23,17 @@ pub use intrinsic::{
     StdCollectionIntrinsic, StdCollectionKind, StdCollectionOperation, StdIntrinsicId,
     StdTaskIntrinsic, intrinsic_completion_semantics, intrinsic_static_string_semantics,
 };
+pub use intrinsic::{
+    StdExecutionRole, StdSourceRole, compiler_contract_identity, compiler_contract_registry,
+};
 pub use library::{StdLibrarySource, standard_library_source, standard_library_sources};
 pub use metadata::{CompletionMetadata, DocsMetadata, StdManifest, TextCompatibilityDescriptor};
+pub use modules::effects::is_standard_effect_reference;
 pub use modules::standard_registry;
 pub use registry::{
-    StdModule, StdModuleId, StdNamespace, StdPrelude, StdRegistry, StdRegistryBuilder,
+    StdModule, StdModuleId, StdNamespace, StdNativeEnumReference, StdNativeOpaqueReference,
+    StdNativeProjectionReference, StdNativeRecordReference, StdNativeTypeReference,
+    StdParameterInterface, StdPrelude, StdRegistry, StdRegistryBuilder, StdRegistryImage,
     StdRegistryValidationError, StdRegistryVersion, StdSymbol, StdSymbolId, StdSymbolKind,
-    StdSymbolRef,
+    StdSymbolRef, StdSymbolVisibility,
 };

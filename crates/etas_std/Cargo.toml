@@ -1,13 +1,18 @@
 [package]
 name = "etas_std"
-version = "0.2.1"
+version = "0.4.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+# Acceptance builds make any legacy factory dependency fail immediately.
+forbid-legacy-registry = []
+
 [dependencies]
 etas_core.workspace = true
+etas_code.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 blake3.workspace = true

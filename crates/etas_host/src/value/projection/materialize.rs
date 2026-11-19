@@ -1,23 +1,64 @@
 use super::*;
 
 pub fn project_to_host_value(value: &impl HostValueProjection) -> Result<HostValue, HostError> {
-    value.project(ValueBuilder)
+    value.project(ValueBuilder {
+        budget: None,
+        depth: 0,
+    })
 }
 
-struct ValueBuilder;
+/// Charge the neutral value budget before allocating projected fields/payloads.
+pub fn project_to_host_value_bounded(
+    value: &impl HostValueProjection,
+    budget: &mut crate::ValueBudget<'_>,
+) -> Result<HostValue, HostError> {
+    value.project(ValueBuilder {
+        budget: Some(budget),
+        depth: 0,
+    })
+}
 
-impl HostValueVisitor for ValueBuilder {
+struct ValueBuilder<'a, 'limits> {
+    budget: Option<&'a mut crate::ValueBudget<'limits>>,
+    depth: usize,
+}
+
+impl<'limits> ValueBuilder<'_, 'limits> {
+    fn charge(&mut self, bytes: usize) -> Result<(), HostError> {
+        if let Some(budget) = &mut self.budget {
+            budget.add(self.depth, bytes)?;
+        }
+        Ok(())
+    }
+
+    fn child(&mut self) -> ValueBuilder<'_, 'limits> {
+        ValueBuilder {
+            budget: self.budget.as_deref_mut(),
+            depth: self.depth + 1,
+        }
+    }
+}
+
+impl HostValueVisitor for ValueBuilder<'_, '_> {
     type Output = HostValue;
 
     fn text<'a>(
-        self,
+        mut self,
         byte_len: usize,
         chunks: impl IntoIterator<Item = &'a str>,
     ) -> Result<Self::Output, HostError> {
+        self.charge(std::mem::size_of::<HostValue>())?;
+        self.charge(byte_len)?;
         text::materialize(byte_len, chunks).map(HostValue::String)
     }
 
-    fn scalar(self, value: HostScalar<'_>) -> Result<Self::Output, HostError> {
+    fn scalar(mut self, value: HostScalar<'_>) -> Result<Self::Output, HostError> {
+        self.charge(std::mem::size_of::<HostValue>())?;
+        match &value {
+            HostScalar::String(value) => self.charge(value.len())?,
+            HostScalar::Bytes(value) => self.charge(value.len())?,
+            _ => {}
+        }
         Ok(match value {
             HostScalar::Unit => HostValue::Unit,
             HostScalar::Bool(v) => HostValue::Bool(v),
@@ -30,98 +71,121 @@ impl HostValueVisitor for ValueBuilder {
     }
 
     fn list<P: HostValueProjection>(
-        self,
+        mut self,
         values: impl IntoIterator<Item = P>,
     ) -> Result<Self::Output, HostError> {
-        values
-            .into_iter()
-            .map(|v| v.project(Self))
-            .collect::<Result<_, _>>()
-            .map(HostValue::List)
+        self.charge(std::mem::size_of::<HostValue>())?;
+        let mut output = Vec::new();
+        for value in values {
+            output.push(value.project(self.child())?);
+        }
+        Ok(HostValue::List(output))
     }
 
     fn map<P: HostValueProjection>(
-        self,
+        mut self,
         entries: impl IntoIterator<Item = (P, P)>,
     ) -> Result<Self::Output, HostError> {
-        entries
-            .into_iter()
-            .map(|(k, v)| Ok((k.project(Self)?, v.project(Self)?)))
-            .collect::<Result<_, _>>()
-            .map(HostValue::Map)
+        self.charge(std::mem::size_of::<HostValue>())?;
+        let mut output = Vec::new();
+        for (key, value) in entries {
+            output.push((key.project(self.child())?, value.project(self.child())?));
+        }
+        Ok(HostValue::Map(output))
     }
 
     fn record<'a, P: HostValueProjection>(
-        self,
+        mut self,
         fields: impl IntoIterator<Item = (&'a str, P)>,
     ) -> Result<Self::Output, HostError> {
-        fields
-            .into_iter()
-            .map(|(k, v)| Ok((k.to_owned(), v.project(Self)?)))
-            .collect::<Result<_, _>>()
-            .map(HostValue::Record)
+        self.charge(std::mem::size_of::<HostValue>())?;
+        let mut output = Vec::new();
+        for (name, value) in fields {
+            self.charge(name.len())?;
+            output.push((name.to_owned(), value.project(self.child())?));
+        }
+        Ok(HostValue::Record(output))
     }
 
     fn variant<P: HostValueProjection>(
-        self,
+        mut self,
         name: &str,
         fields: impl IntoIterator<Item = P>,
     ) -> Result<Self::Output, HostError> {
+        self.charge(std::mem::size_of::<HostValue>())?;
+        self.charge(name.len())?;
+        let mut output = Vec::new();
+        for value in fields {
+            output.push(value.project(self.child())?);
+        }
         Ok(HostValue::Variant {
             name: name.to_owned(),
-            fields: fields
-                .into_iter()
-                .map(|v| v.project(Self))
-                .collect::<Result<_, _>>()?,
+            fields: output,
         })
     }
 
-    fn json<P: HostJsonProjection>(self, value: &P) -> Result<Self::Output, HostError> {
-        value.project_json(JsonBuilder).map(HostValue::Json)
+    fn json<P: HostJsonProjection>(mut self, value: &P) -> Result<Self::Output, HostError> {
+        self.charge(std::mem::size_of::<HostValue>())?;
+        value
+            .project_json(JsonBuilder(self.child()))
+            .map(HostValue::Json)
     }
 }
 
-struct JsonBuilder;
+struct JsonBuilder<'a, 'limits>(ValueBuilder<'a, 'limits>);
 
-impl HostJsonVisitor for JsonBuilder {
+impl HostJsonVisitor for JsonBuilder<'_, '_> {
     type Output = HostJsonValue;
     fn text<'a>(
-        self,
+        mut self,
         byte_len: usize,
         chunks: impl IntoIterator<Item = &'a str>,
     ) -> Result<Self::Output, HostError> {
+        self.0.charge(std::mem::size_of::<HostJsonValue>())?;
+        self.0.charge(byte_len)?;
         text::materialize(byte_len, chunks).map(HostJsonValue::String)
     }
-    fn null(self) -> Result<Self::Output, HostError> {
+    fn null(mut self) -> Result<Self::Output, HostError> {
+        self.0.charge(std::mem::size_of::<HostJsonValue>())?;
         Ok(HostJsonValue::Null)
     }
-    fn boolean(self, value: bool) -> Result<Self::Output, HostError> {
+    fn boolean(mut self, value: bool) -> Result<Self::Output, HostError> {
+        self.0.charge(std::mem::size_of::<HostJsonValue>())?;
         Ok(HostJsonValue::Bool(value))
     }
-    fn number(self, value: f64) -> Result<Self::Output, HostError> {
+    fn number(mut self, value: f64) -> Result<Self::Output, HostError> {
+        self.0.charge(std::mem::size_of::<HostJsonValue>())?;
         Ok(HostJsonValue::Number(value))
     }
-    fn string(self, value: &str) -> Result<Self::Output, HostError> {
+    fn string(mut self, value: &str) -> Result<Self::Output, HostError> {
+        self.0.charge(std::mem::size_of::<HostJsonValue>())?;
+        self.0.charge(value.len())?;
         Ok(HostJsonValue::String(value.to_owned()))
     }
     fn array<P: HostJsonProjection>(
-        self,
+        mut self,
         values: impl IntoIterator<Item = P>,
     ) -> Result<Self::Output, HostError> {
-        values
-            .into_iter()
-            .map(|v| v.project_json(Self))
-            .collect::<Result<_, _>>()
-            .map(HostJsonValue::Array)
+        self.0.charge(std::mem::size_of::<HostJsonValue>())?;
+        let mut output = Vec::new();
+        for value in values {
+            output.push(value.project_json(JsonBuilder(self.0.child()))?);
+        }
+        Ok(HostJsonValue::Array(output))
     }
     fn object<'a, P: HostJsonProjection>(
-        self,
+        mut self,
         fields: impl IntoIterator<Item = (&'a str, P)>,
     ) -> Result<Self::Output, HostError> {
-        fields
-            .into_iter()
-            .map(|(k, v)| Ok((k.to_owned(), v.project_json(Self)?)))
-            .collect::<Result<_, _>>()
-            .map(HostJsonValue::Object)
+        self.0.charge(std::mem::size_of::<HostJsonValue>())?;
+        let mut output = Vec::new();
+        for (name, value) in fields {
+            self.0.charge(name.len())?;
+            output.push((
+                name.to_owned(),
+                value.project_json(JsonBuilder(self.0.child()))?,
+            ));
+        }
+        Ok(HostJsonValue::Object(output))
     }
 }

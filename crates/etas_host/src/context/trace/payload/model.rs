@@ -7,7 +7,8 @@ use super::{HostTraceRequest, option, record, schema, tool_ref, tool_schema};
 
 impl HostTraceRequest for ModelRequest {
     fn trace_payload(&self) -> HostTracePayload {
-        HostTracePayload::new("model", "Agentic.infer")
+        let action = self.action.qualified_name();
+        HostTracePayload::new("model", action)
             .with_field(
                 "provider",
                 option(
@@ -91,6 +92,10 @@ impl HostTraceRequest for ToolRequest {
 
 fn message(message: &ModelMessage) -> HostValue {
     record([
+        (
+            "provider_data",
+            HostValue::Record(message.provider_data.clone()),
+        ),
         (
             "role",
             HostValue::String(role_name(message.role).to_owned()),

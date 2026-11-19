@@ -1,3 +1,9 @@
+mod bootstrap;
+pub use bootstrap::{compiler_contract_identity, compiler_contract_registry};
+mod source_role;
+pub use source_role::StdSourceRole;
+mod execution_role;
+pub use execution_role::StdExecutionRole;
 mod collection;
 mod completion;
 pub use collection::{StdCollectionIntrinsic, StdCollectionKind, StdCollectionOperation};

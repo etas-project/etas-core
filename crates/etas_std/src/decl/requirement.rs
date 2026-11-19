@@ -1,6 +1,8 @@
 use super::StdType;
 
-#[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub struct RequirementDecl {
     pub name: String,
     pub params: Vec<StdType>,
@@ -28,7 +30,9 @@ impl RequirementDecl {
     }
 }
 
-#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub enum RequirementKind {
     Policy,
     Schema,
@@ -37,14 +41,26 @@ pub enum RequirementKind {
     Predicate,
 }
 
-#[derive(serde::Serialize, Clone, Copy, Debug, Default, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    etas_core::RetainedSize,
+)]
 pub enum RequirementSemantics {
     #[default]
     None,
     Limit(StdLimitKind),
 }
 
-#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub enum StdLimitKind {
     Iterations,
     Tokens,

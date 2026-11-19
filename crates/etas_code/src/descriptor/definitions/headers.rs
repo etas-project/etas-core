@@ -226,12 +226,14 @@ pub(super) fn measure(
                 .agents
                 .len()
                 .saturating_add(snapshots.flows.len())
+                .saturating_add(snapshots.tools.len())
                 .saturating_add(snapshots.methods.len()),
         )?;
         for snapshot in snapshots
             .agents
             .iter()
             .chain(&snapshots.flows)
+            .chain(&snapshots.tools)
             .chain(&snapshots.methods)
         {
             budget.key(&snapshot.identity)?;
@@ -273,14 +275,12 @@ pub(super) fn validate(
     input: &DescriptorGraphInput,
     declarations: &[DefinitionTypeBinding],
 ) -> Result<(), DescriptorError> {
-    if headers
-        .snapshots
-        .as_ref()
-        .is_some_and(|snapshots| !snapshots.flows.is_empty() || !snapshots.methods.is_empty())
-        && headers
-            .agents
-            .iter()
-            .any(|agent| agent.method_info.is_none())
+    if headers.snapshots.as_ref().is_some_and(|snapshots| {
+        !snapshots.flows.is_empty() || !snapshots.tools.is_empty() || !snapshots.methods.is_empty()
+    }) && headers
+        .agents
+        .iter()
+        .any(|agent| agent.method_info.is_none())
     {
         return Err(invalid(
             "flow snapshot schema omits agent method selection metadata",

@@ -42,6 +42,8 @@ pub struct CallableHeader {
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct Analysis {
+    #[prost(message, optional, tag = "9")]
+    pub suspension: Option<Suspension>,
     #[prost(uint32, optional, tag = "1")]
     pub declared_bound: Option<u32>,
     #[prost(uint32, optional, tag = "2")]
@@ -58,6 +60,14 @@ pub struct Analysis {
     pub outcomes: Option<u32>,
     #[prost(uint32, optional, tag = "8")]
     pub independent_determinism: Option<u32>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct Suspension {
+    #[prost(bool, tag = "1")]
+    pub may_suspend: bool,
+    #[prost(bool, tag = "2")]
+    pub unknown: bool,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
@@ -328,10 +338,24 @@ pub struct Applied {
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct Parameter {
+    #[prost(message, optional, tag = "3")]
+    pub default: Option<ParameterDefault>,
     #[prost(string, optional, tag = "1")]
     pub name: Option<String>,
     #[prost(uint32, tag = "2")]
     pub ty: u32,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct ParameterDefault {
+    #[prost(message, optional, tag = "1")]
+    pub owner: Option<GenericOwner>,
+    #[prost(string, optional, tag = "2")]
+    pub spec_method: Option<String>,
+    #[prost(uint32, tag = "3")]
+    pub parameter: u32,
+    #[prost(bytes = "vec", tag = "4")]
+    pub revision: Vec<u8>,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
@@ -368,7 +392,10 @@ pub struct Task {
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct Type {
-    #[prost(oneof = "ty::Kind", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13")]
+    #[prost(
+        oneof = "ty::Kind",
+        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14"
+    )]
     pub kind: Option<ty::Kind>,
 }
 pub mod ty {
@@ -400,6 +427,8 @@ pub mod ty {
         Existential(super::Existential),
         #[prost(message, tag = "13")]
         Task(super::Task),
+        #[prost(message, tag = "14")]
+        AgentContext(super::Method),
     }
 }
 
@@ -419,7 +448,7 @@ pub struct EffectTarget {
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct StaticArg {
-    #[prost(oneof = "static_arg::Kind", tags = "1, 2, 3, 4, 5, 6")]
+    #[prost(oneof = "static_arg::Kind", tags = "1, 2, 3, 4, 5, 6, 7")]
     pub kind: Option<static_arg::Kind>,
 }
 pub mod static_arg {
@@ -437,7 +466,17 @@ pub mod static_arg {
         Wildcard(bool),
         #[prost(message, tag = "6")]
         Callable(super::Callable),
+        #[prost(message, tag = "7")]
+        ResourceProjection(super::ResourceProjection),
     }
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct ResourceProjection {
+    #[prost(message, optional, tag = "1")]
+    pub root: Option<ProtoDefinitionKey>,
+    #[prost(string, repeated, tag = "2")]
+    pub fields: Vec<String>,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
@@ -494,7 +533,7 @@ pub struct Implementation {
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct GenericOwner {
-    #[prost(oneof = "generic_owner::Kind", tags = "1, 2, 3, 4")]
+    #[prost(oneof = "generic_owner::Kind", tags = "1, 2, 3, 4, 5, 6")]
     pub kind: Option<generic_owner::Kind>,
 }
 pub mod generic_owner {
@@ -508,7 +547,27 @@ pub mod generic_owner {
         Implementation(super::Implementation),
         #[prost(message, tag = "4")]
         ImplementationPattern(super::ProtoDefinitionKey),
+        #[prost(message, tag = "5")]
+        Action(super::ActionOwner),
+        #[prost(message, tag = "6")]
+        ActionOverload(super::ActionOverloadOwner),
     }
+}
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct ActionOwner {
+    #[prost(message, optional, tag = "1")]
+    pub effect: Option<ProtoDefinitionKey>,
+    #[prost(string, tag = "2")]
+    pub name: String,
+}
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct ActionOverloadOwner {
+    #[prost(message, optional, tag = "1")]
+    pub effect: Option<ProtoDefinitionKey>,
+    #[prost(string, tag = "2")]
+    pub name: String,
+    #[prost(bytes = "vec", tag = "3")]
+    pub signature: Vec<u8>,
 }
 pub mod callable {
     #[derive(Clone, PartialEq, prost::Oneof)]
@@ -554,6 +613,18 @@ pub struct ParameterCall {
     pub arguments: Option<ParameterArguments>,
     #[prost(message, optional, tag = "5")]
     pub handlers: Option<ParameterHandlerScopes>,
+    #[prost(message, repeated, tag = "6")]
+    pub projection: Vec<ValueProjectionStep>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct ValueProjectionStep {
+    #[prost(uint32, tag = "1")]
+    pub kind: u32,
+    #[prost(string, tag = "2")]
+    pub name: String,
+    #[prost(uint32, tag = "3")]
+    pub position: u32,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
@@ -630,7 +701,7 @@ pub struct ParameterInteger {
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct Observation {
-    #[prost(oneof = "observation::Kind", tags = "1, 2, 3, 4")]
+    #[prost(oneof = "observation::Kind", tags = "1, 2, 3, 4, 5, 6")]
     pub kind: Option<observation::Kind>,
 }
 pub mod observation {
@@ -644,6 +715,10 @@ pub mod observation {
         Bool(bool),
         #[prost(message, tag = "4")]
         Variant(super::VariantObservation),
+        #[prost(bool, tag = "5")]
+        Result(bool),
+        #[prost(bool, tag = "6")]
+        Option(bool),
     }
 }
 

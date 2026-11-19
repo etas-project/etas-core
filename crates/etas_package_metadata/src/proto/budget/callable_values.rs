@@ -35,6 +35,21 @@ impl ModelGraphValidator {
     ) -> Result<(), MetadataArtifactError> {
         self.budget.enter(depth, "callable value graph")?;
         self.budget
+            .charge(graph.parameter_projections.len(), "parameter projections")?;
+        for path in &graph.parameter_projections {
+            self.budget
+                .enter(depth + path.len(), "parameter projection")?;
+            self.budget
+                .charge(path.len(), "parameter projection steps")?;
+        }
+
+        for projection in &graph.source_projections {
+            self.budget.charge(
+                1 + projection.path.len() + projection.sources.as_ref().map_or(0, Vec::len),
+                "returned value projections",
+            )?;
+        }
+        self.budget
             .charge(graph.sources.len(), "callable return sources")?;
         for object in &graph.objects {
             self.budget.enter(depth + 1, "object value evidence")?;
@@ -53,6 +68,9 @@ impl ModelGraphValidator {
             }
         }
         for node in &graph.values {
+            if let Some(behavior) = &node.default_handler_effects.behavior {
+                self.default_behavior(behavior, depth + 1)?;
+            }
             self.budget.enter(depth + 1, "callable value")?;
             self.residual_references(&node.residual_checks)?;
             if let Some(requests) = &node.handler_requests {
@@ -72,6 +90,12 @@ impl ModelGraphValidator {
                 node.returned_sources.as_ref().map_or(0, Vec::len),
                 "callable return sources",
             )?;
+            for projection in &node.returned_projections {
+                self.budget.charge(
+                    1 + projection.path.len() + projection.sources.as_ref().map_or(0, Vec::len),
+                    "returned value projections",
+                )?;
+            }
             for generic in &node.generic_params {
                 self.generic_param_at_depth(generic, depth + 1)?;
             }
@@ -124,6 +148,25 @@ impl ProtoGraphValidator {
     ) -> Result<(), MetadataArtifactError> {
         self.budget.enter(depth, "callable value graph")?;
         self.budget
+            .charge(graph.parameter_projections.len(), "parameter projections")?;
+        for path in &graph.parameter_projections {
+            self.budget
+                .enter(depth + path.steps.len(), "parameter projection")?;
+            self.budget
+                .charge(path.steps.len(), "parameter projection steps")?;
+        }
+
+        for projection in &graph.source_projections {
+            self.budget.charge(
+                1 + projection.path.len()
+                    + projection
+                        .sources
+                        .as_ref()
+                        .map_or(0, |sources| sources.sources.len()),
+                "returned value projections",
+            )?;
+        }
+        self.budget
             .charge(graph.sources.len(), "callable return sources")?;
         for object in &graph.objects {
             self.budget.enter(depth + 1, "object value evidence")?;
@@ -170,6 +213,16 @@ impl ProtoGraphValidator {
                     .map_or(0, |sources| sources.sources.len()),
                 "callable return sources",
             )?;
+            for projection in &node.returned_projections {
+                self.budget.charge(
+                    1 + projection.path.len()
+                        + projection
+                            .sources
+                            .as_ref()
+                            .map_or(0, |sources| sources.sources.len()),
+                    "returned value projections",
+                )?;
+            }
             for generic in &node.generic_params {
                 self.generic_param_at_depth(generic, depth + 1)?;
             }
@@ -187,6 +240,9 @@ impl ProtoGraphValidator {
                 self.effect_row(row, depth + 1)?;
             }
             if let Some(defaults) = &node.default_handler_effects {
+                if let Some(behavior) = &defaults.behavior {
+                    self.default_behavior(behavior, depth + 1)?;
+                }
                 for row in [&defaults.direct_effects, &defaults.default_actions]
                     .into_iter()
                     .flatten()

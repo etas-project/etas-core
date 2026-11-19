@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque, hash_map::RandomState},
     ffi::OsString,
     hash::BuildHasher,
@@ -76,6 +77,17 @@ impl<T: ?Sized> RetainedSize for &T {
 impl RetainedSize for String {
     fn visit_retained<'a>(&'a self, visitor: &mut MemoryVisitor<'a>) {
         visitor.allocation(self.as_ptr() as usize, 1, self.capacity());
+    }
+}
+
+impl<T: ToOwned + ?Sized> RetainedSize for Cow<'_, T>
+where
+    T::Owned: RetainedSize,
+{
+    fn visit_retained<'a>(&'a self, visitor: &mut MemoryVisitor<'a>) {
+        if let Cow::Owned(value) = self {
+            visitor.enqueue(value);
+        }
     }
 }
 

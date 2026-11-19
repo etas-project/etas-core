@@ -4,6 +4,7 @@ fn method() -> SpecMethod {
     SpecMethod {
         name: "encode".into(),
         path: vec!["library".into(), "SnapshotEncoder".into(), "encode".into()],
+        updating_receiver: false,
         receiver_param: Some(0),
         signature: Some(CallableSignature {
             path: vec!["library".into(), "SnapshotEncoder".into(), "encode".into()],
@@ -29,11 +30,14 @@ fn method() -> SpecMethod {
 
 #[test]
 fn receiver_binding_roundtrips_by_declared_parameter_identity() {
-    let original = method();
-    let bytes = spec_method_to_proto(&original).encode_to_vec();
-    let decoded =
-        spec_method_from_proto(ProtoSpecMethod::decode(bytes.as_slice()).unwrap()).unwrap();
-    assert_eq!(original, decoded);
+    for updating_receiver in [false, true] {
+        let mut original = method();
+        original.updating_receiver = updating_receiver;
+        let bytes = spec_method_to_proto(&original).encode_to_vec();
+        let decoded =
+            spec_method_from_proto(ProtoSpecMethod::decode(bytes.as_slice()).unwrap()).unwrap();
+        assert_eq!(original, decoded);
+    }
 }
 
 #[test]

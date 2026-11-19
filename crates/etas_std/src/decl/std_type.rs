@@ -1,4 +1,6 @@
-#[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub enum StdType {
     Primitive(StdPrimitiveType),
     Var(String),
@@ -48,15 +50,27 @@ pub enum StdType {
         args: Vec<StdType>,
     },
     Record(Vec<StdRecordField>),
+    Handler {
+        handled: super::StdEffectRowExpr,
+        produced: Option<super::StdEffectRowExpr>,
+        result: Option<Box<StdType>>,
+    },
+    Existential {
+        bounds: Vec<super::StdSpecRef>,
+    },
 }
 
-#[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub struct StdRecordField {
     pub name: String,
     pub ty: StdType,
 }
 
-#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub enum StdTrustWrapper {
     Trusted,
     Untrusted,
@@ -74,14 +88,27 @@ impl StdRecordField {
     }
 }
 
-#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub enum StdSupportConstraint {
     Index,
     LengthInput,
     EmptinessInput,
 }
 
-#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    etas_core::RetainedSize,
+)]
 pub enum StdPrimitiveType {
     Bool,
     I8,

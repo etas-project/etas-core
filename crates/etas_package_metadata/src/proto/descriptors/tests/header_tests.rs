@@ -33,6 +33,7 @@ pub(super) fn with_headers() -> DefinitionDescriptorSet {
     set.graph.types.push(TypeInfo::Function(SignatureInfo {
         generics: vec![],
         parameters: vec![ParameterInfo {
+            default: None,
             name: Some("input".into()),
             ty: TypeInfoRef(2),
         }],
@@ -116,6 +117,7 @@ pub(super) fn with_headers() -> DefinitionDescriptorSet {
         ],
     };
     let analysis = CallableAnalysisInfo {
+        suspension: None,
         effects: EffectSummaryInfo {
             declared_bound: Some(EffectRowInfoRef(0)),
             escaping: Some(EffectRowInfoRef(0)),
@@ -188,10 +190,16 @@ pub(super) fn with_headers() -> DefinitionDescriptorSet {
 
 #[test]
 fn agent_and_method_headers_roundtrip_with_exact_analysis_and_static_metadata() {
-    let set = with_headers();
+    let mut set = with_headers();
+    set.headers.as_mut().unwrap().callables[0]
+        .analysis
+        .suspension = Some(SuspensionInfo {
+        may_suspend: true,
+        unknown: false,
+    });
     set.validate(limits()).unwrap();
     let wire = to_proto(&set);
-    assert_eq!(wire.version, 2);
+    assert_eq!(wire.version, 16);
     let decoded =
         from_proto(ProtoDescriptorGraph::decode(wire.encode_to_vec().as_slice()).unwrap()).unwrap();
     assert_eq!(decoded, set);

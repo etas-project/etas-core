@@ -12,7 +12,7 @@ use crate::MetadataArtifactError;
 
 pub const PACKAGE_METADATA_FILE: &str = ".etas/package.etasmeta";
 pub const MAGIC: &[u8; 8] = b"ETASMETA";
-pub const ARTIFACT_SCHEMA_VERSION: u32 = 47;
+pub const ARTIFACT_SCHEMA_VERSION: u32 = 68;
 pub const COMPRESSION_ZSTD: u8 = 1;
 const SECTION_TABLE_ENTRY_SIZE: usize = 2 + 1 + 8 + 8 + 8 + 32;
 pub const MAX_METADATA_ARTIFACT_SIZE: usize = 64 * 1024 * 1024;
@@ -20,7 +20,11 @@ pub const MAX_METADATA_HEADER_SIZE: usize = 64 * 1024;
 pub const MAX_METADATA_SECTION_COUNT: usize = 64;
 pub const MAX_METADATA_COMPRESSED_SECTION_SIZE: usize = 32 * 1024 * 1024;
 pub const MAX_METADATA_UNCOMPRESSED_SECTION_SIZE: usize = 64 * 1024 * 1024;
-pub const MAX_METADATA_TOTAL_UNCOMPRESSED_SIZE: usize = 128 * 1024 * 1024;
+// Checked bodies include the complete library and its private implementation
+// graph. Public interface sections retain their smaller per-section limit.
+const MAX_METADATA_LIBRARY_BODIES_SIZE: usize = 512 * 1024 * 1024;
+pub const MAX_METADATA_TOTAL_UNCOMPRESSED_SIZE: usize =
+    MAX_METADATA_LIBRARY_BODIES_SIZE + 128 * 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u16)]
@@ -34,9 +38,18 @@ pub enum MetadataSectionKind {
     StdContracts = 7,
     PackageGraph = 8,
     PublicSymbols = 9,
+    /// Compiler-owned checked body graph, paired with the public package data.
+    LibraryBodies = 10,
 }
 
 impl MetadataSectionKind {
+    fn uncompressed_size_limit(self) -> usize {
+        match self {
+            Self::LibraryBodies => MAX_METADATA_LIBRARY_BODIES_SIZE,
+            _ => MAX_METADATA_UNCOMPRESSED_SECTION_SIZE,
+        }
+    }
+
     pub fn from_u16(value: u16) -> Result<Self, MetadataArtifactError> {
         match value {
             1 => Ok(Self::Exports),
@@ -48,6 +61,7 @@ impl MetadataSectionKind {
             7 => Ok(Self::StdContracts),
             8 => Ok(Self::PackageGraph),
             9 => Ok(Self::PublicSymbols),
+            10 => Ok(Self::LibraryBodies),
             _ => Err(MetadataArtifactError::invalid(
                 PACKAGE_METADATA_FILE,
                 format!("package metadata artifact has unknown section kind `{value}`"),
@@ -94,10 +108,12 @@ pub fn section_from_message<M: Message>(
     kind: MetadataSectionKind,
     message: M,
 ) -> Result<EncodedMetadataSection, MetadataArtifactError> {
-    if message.encoded_len() > MAX_METADATA_UNCOMPRESSED_SECTION_SIZE {
+    let size = message.encoded_len();
+    let limit = kind.uncompressed_size_limit();
+    if size > limit {
         return Err(MetadataArtifactError::invalid(
             PACKAGE_METADATA_FILE,
-            format!("metadata section {kind:?} exceeds the size limit"),
+            format!("metadata section {kind:?} has {size} bytes; maximum is {limit}"),
         ));
     }
     Ok(EncodedMetadataSection {
@@ -135,10 +151,15 @@ pub fn encode_metadata_artifact(
     }
     let mut total_uncompressed = 0usize;
     for section in &sections {
-        if section.payload.len() > MAX_METADATA_UNCOMPRESSED_SECTION_SIZE {
+        let limit = section.kind.uncompressed_size_limit();
+        if section.payload.len() > limit {
             return Err(MetadataArtifactError::invalid(
                 PACKAGE_METADATA_FILE,
-                format!("metadata section {:?} exceeds the size limit", section.kind),
+                format!(
+                    "metadata section {:?} has {} bytes; maximum is {limit}",
+                    section.kind,
+                    section.payload.len()
+                ),
             ));
         }
         total_uncompressed = total_uncompressed
@@ -173,8 +194,9 @@ pub fn encode_metadata_artifact(
             return Err(MetadataArtifactError::invalid(
                 PACKAGE_METADATA_FILE,
                 format!(
-                    "compressed metadata section {:?} exceeds the size limit",
-                    section.kind
+                    "compressed metadata section {:?} has {} bytes; maximum is {MAX_METADATA_COMPRESSED_SECTION_SIZE}",
+                    section.kind,
+                    compressed.len()
                 ),
             ));
         }
@@ -260,7 +282,7 @@ pub fn decode_metadata_artifact(
             )
         })?;
         if compressed_len > MAX_METADATA_COMPRESSED_SECTION_SIZE
-            || uncompressed_len > MAX_METADATA_UNCOMPRESSED_SECTION_SIZE
+            || uncompressed_len > entry.kind.uncompressed_size_limit()
         {
             return Err(MetadataArtifactError::invalid(
                 path,
@@ -353,6 +375,19 @@ pub fn source_payload_checksum(
     collect_files(source_root, &mut files)?;
     files.sort();
     hash_files(package_root, &files)
+}
+
+/// Hash the exact package-relative source bytes already captured by a compiler.
+pub fn source_payload_checksum_for_entries<'a>(
+    entries: impl IntoIterator<Item = (&'a Path, &'a [u8])>,
+) -> String {
+    let mut entries = entries.into_iter().collect::<Vec<_>>();
+    entries.sort_unstable_by_key(|(path, _)| *path);
+    let mut hasher = blake3::Hasher::new();
+    for (path, bytes) in entries {
+        hash_source_entry(&mut hasher, path, bytes);
+    }
+    format!("blake3:{}", hasher.finalize().to_hex())
 }
 
 pub fn file_checksum(path: &Path) -> Result<String, MetadataArtifactError> {
@@ -537,16 +572,20 @@ fn hash_files(package_root: &Path, files: &[PathBuf]) -> Result<String, Metadata
     let mut hasher = blake3::Hasher::new();
     for file in files {
         let relative = file.strip_prefix(package_root).unwrap_or(file);
-        hasher.update(relative.to_string_lossy().as_bytes());
-        hasher.update(&[0]);
         let bytes = fs::read(file).map_err(|source| MetadataArtifactError::Io {
             path: file.clone(),
             message: source.to_string(),
         })?;
-        hasher.update(&bytes);
-        hasher.update(&[0]);
+        hash_source_entry(&mut hasher, relative, &bytes);
     }
     Ok(format!("blake3:{}", hasher.finalize().to_hex()))
+}
+
+fn hash_source_entry(hasher: &mut blake3::Hasher, path: &Path, bytes: &[u8]) {
+    hasher.update(path.to_string_lossy().as_bytes());
+    hasher.update(&[0]);
+    hasher.update(bytes);
+    hasher.update(&[0]);
 }
 
 fn unique_temp_path(parent: &Path, prefix: &str) -> PathBuf {

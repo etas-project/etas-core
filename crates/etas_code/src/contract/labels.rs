@@ -11,6 +11,10 @@ use crate::{CallableId, CodeFingerprint, DefinitionKey};
 pub enum CanonicalSelector {
     Type(CodeFingerprint),
     Resource(DefinitionKey),
+    ResourceProjection {
+        root: DefinitionKey,
+        fields: Vec<String>,
+    },
     Callable(CallableId),
     String(String),
     Integer(String),
@@ -73,6 +77,7 @@ pub enum TraceLabel {
     ParameterCall {
         callable: CallableId,
         position: u32,
+        projection: Vec<crate::descriptor::ValueProjectionStep>,
         signature: CodeFingerprint,
         arguments: Option<Vec<ParameterArgumentInfo>>,
         handlers: Option<Vec<HandlerScopeLabel>>,
@@ -88,6 +93,7 @@ pub enum TraceLabel {
     ParameterNonReturn {
         callable: CallableId,
         position: u32,
+        projection: Vec<crate::descriptor::ValueProjectionStep>,
         signature: CodeFingerprint,
         arguments: Option<Vec<ParameterArgumentInfo>>,
         handlers: Option<Vec<HandlerScopeLabel>>,
@@ -131,6 +137,11 @@ impl TraceLabel {
             effect.arguments.iter().fold(target, |work, arg| {
                 work.saturating_add(match arg {
                     CanonicalSelector::Resource(key) => key_work(key),
+                    CanonicalSelector::ResourceProjection { root, fields } => {
+                        fields.iter().fold(key_work(root), |work, field| {
+                            work.saturating_add(field.len()).saturating_add(1)
+                        })
+                    }
                     CanonicalSelector::Callable(id) => callable_work(id),
                     CanonicalSelector::String(value) | CanonicalSelector::Integer(value) => {
                         value.len().saturating_add(1)
@@ -154,16 +165,31 @@ impl TraceLabel {
             Self::Action(effect) => effect_work(effect),
             Self::ParameterCall {
                 callable,
+                projection,
                 arguments,
                 handlers,
                 ..
             }
             | Self::ParameterNonReturn {
                 callable,
+                projection,
                 arguments,
                 handlers,
                 ..
             } => callable_work(callable)
+                .saturating_add(
+                    projection
+                        .iter()
+                        .map(|step| match step {
+                            crate::descriptor::ValueProjectionStep::Field(name)
+                            | crate::descriptor::ValueProjectionStep::VariantPayload {
+                                variant: name,
+                                ..
+                            } => 1 + name.len(),
+                            _ => 1,
+                        })
+                        .sum::<usize>(),
+                )
                 .saturating_add(arguments.as_ref().map_or(1, Vec::len))
                 .saturating_add(handlers_work(handlers)),
             Self::Returned {
@@ -247,6 +273,7 @@ pub(super) fn outcome_label(
         CallableOutcomeInfo::ParameterNonReturn(call) => TraceLabel::ParameterNonReturn {
             callable: call.callable.clone(),
             position: call.position,
+            projection: call.projection.clone(),
             signature: graph.type_fingerprint(call.signature)?,
             arguments: call.arguments.clone(),
             handlers: handler_scope_labels(graph, call)?,
@@ -304,6 +331,12 @@ pub fn canonical_effect(
                     CanonicalSelector::Type(graph.type_fingerprint(*ty)?)
                 }
                 StaticEffectArgInfo::Resource(key) => CanonicalSelector::Resource(key.clone()),
+                StaticEffectArgInfo::ResourceProjection { root, fields } => {
+                    CanonicalSelector::ResourceProjection {
+                        root: root.clone(),
+                        fields: fields.clone(),
+                    }
+                }
                 StaticEffectArgInfo::Callable(id) => CanonicalSelector::Callable(id.clone()),
                 StaticEffectArgInfo::String(value) => CanonicalSelector::String(value.clone()),
                 StaticEffectArgInfo::Integer(value) => CanonicalSelector::Integer(value.clone()),

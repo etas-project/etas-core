@@ -44,6 +44,9 @@ pub enum StdBaselineImplementation {
     Primitive {
         binding: u32,
     },
+    Artifact {
+        callable: Value,
+    },
     Source {
         definition: String,
         source_path: String,
@@ -114,6 +117,14 @@ impl StdMigrationBaseline {
                             binding: intrinsic.0,
                         }
                     }
+                    StdImplementationRef::Artifact { .. } => StdBaselineImplementation::Artifact {
+                        callable: data(
+                            &registry
+                                .body_binding(symbol.id)
+                                .expect("validated body binding")
+                                .callable,
+                        ),
+                    },
                     StdImplementationRef::Source {
                         target,
                         optimized_intrinsic,

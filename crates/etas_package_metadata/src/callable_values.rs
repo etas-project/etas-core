@@ -18,7 +18,11 @@ fn validate_request_target(
 ) -> Result<(), crate::MetadataArtifactError> {
     target.validate_shape().map_err(|reason| invalid(&reason))?;
     match target {
-        crate::CallableRequestTarget::Parameter(label) => {
+        crate::CallableRequestTarget::AgentTools(_) => {}
+        crate::CallableRequestTarget::Parameter(label)
+        | crate::CallableRequestTarget::ParameterProjection {
+            parameter: label, ..
+        } => {
             if !labels.contains(label.as_str()) {
                 return Err(invalid("callable request has an unbound parameter"));
             }
@@ -77,6 +81,9 @@ pub enum CallableValueScope {
 pub struct CallableValueParameter {
     pub scope: CallableValueScope,
     pub position: u32,
+    /// An artifact-local path in CallableValueGraph.parameter_projections.
+    #[serde(default)]
+    pub projection: Option<u32>,
 }
 
 #[derive(
@@ -112,7 +119,11 @@ pub enum CallableValueSource {
     etas_core::RetainedSize,
 )]
 pub struct CallableValueGraph {
+    #[serde(default)]
+    pub parameter_projections: Vec<Vec<etas_code::descriptor::ValueProjectionStep>>,
     pub sources: Vec<CallableValueSource>,
+    /// Positions in the containing declaration's returned aggregate.
+    pub source_projections: Vec<CallableReturnedProjection>,
     pub values: Vec<CallableValueNode>,
     pub objects: Vec<ExistentialValueNode>,
 }
@@ -157,6 +168,16 @@ pub struct CallableValueNode {
     pub parameter_bindings: Vec<CallableValueParameterBinding>,
     pub action_trace: ActionTrace,
     pub returned_sources: Option<Vec<CallableValueSource>>,
+    pub returned_projections: Vec<CallableReturnedProjection>,
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub struct CallableReturnedProjection {
+    pub path: Vec<etas_code::descriptor::ValueProjectionStep>,
+    /// None is unavailable evidence; Some([]) is a checked empty payload.
+    pub sources: Option<Vec<CallableValueSource>>,
 }
 
 pub(crate) fn validate_residual_references(
@@ -178,6 +199,103 @@ pub(crate) fn validate_residual_references(
 }
 
 impl CallableValueGraph {
+    /// Remove projection allocation order from the portable representation.
+    pub fn canonicalize_parameter_projections(
+        &mut self,
+    ) -> Result<(), crate::MetadataArtifactError> {
+        let previous = std::mem::take(&mut self.parameter_projections);
+        self.parameter_projections = previous
+            .iter()
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        let positions = self
+            .parameter_projections
+            .iter()
+            .enumerate()
+            .map(|(index, path)| (path, index as u32))
+            .collect::<std::collections::BTreeMap<_, _>>();
+        let remap =
+            |parameter: &mut CallableValueParameter| -> Result<(), crate::MetadataArtifactError> {
+                if let Some(index) = parameter.projection {
+                    let path = previous.get(index as usize).ok_or_else(|| {
+                        invalid("callable parameter projection reference is out of range")
+                    })?;
+                    parameter.projection = Some(positions[path]);
+                }
+                Ok(())
+            };
+        let source =
+            |source: &mut CallableValueSource| -> Result<(), crate::MetadataArtifactError> {
+                if let CallableValueSource::Parameter(parameter) = source {
+                    remap(parameter)?;
+                }
+                Ok(())
+            };
+        for value in &mut self.sources {
+            source(value)?;
+        }
+        for projection in &mut self.source_projections {
+            for value in projection.sources.iter_mut().flatten() {
+                source(value)?;
+            }
+        }
+        for value in &mut self.values {
+            for binding in &mut value.parameter_bindings {
+                remap(&mut binding.parameter)?;
+            }
+            value.parameter_bindings.sort_by(|left, right| {
+                left.parameter
+                    .cmp(&right.parameter)
+                    .then(left.label.cmp(&right.label))
+            });
+            for value in value.returned_sources.iter_mut().flatten() {
+                source(value)?;
+            }
+            for projection in &mut value.returned_projections {
+                for value in projection.sources.iter_mut().flatten() {
+                    source(value)?;
+                }
+            }
+        }
+        for object in &mut self.objects {
+            for value in &mut object.payload_sources {
+                source(value)?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn parameter_references(&self) -> std::collections::BTreeSet<CallableValueParameter> {
+        let mut parameters = std::collections::BTreeSet::new();
+        let mut sources = self.sources.iter().collect::<Vec<_>>();
+        for projection in &self.source_projections {
+            sources.extend(projection.sources.iter().flatten());
+        }
+        for value in &self.values {
+            parameters.extend(
+                value
+                    .parameter_bindings
+                    .iter()
+                    .map(|binding| binding.parameter),
+            );
+            sources.extend(value.returned_sources.iter().flatten());
+            for projection in &value.returned_projections {
+                sources.extend(projection.sources.iter().flatten());
+            }
+        }
+        for object in &self.objects {
+            sources.extend(&object.payload_sources);
+        }
+        for source in sources {
+            if let CallableValueSource::Parameter(parameter) = source {
+                parameters.insert(*parameter);
+            }
+        }
+        parameters
+    }
+
     /// Validates identity references without recursively expanding the graph.
     /// The frontend supplies the checked root interface before using the graph.
     pub fn validate_references(
@@ -198,7 +316,27 @@ impl CallableValueGraph {
             ));
         }
         use std::collections::BTreeSet;
+        for path in &self.parameter_projections {
+            if path.is_empty() || path.len() > crate::MAX_METADATA_GRAPH_DEPTH {
+                return Err(invalid("callable parameter projection has invalid depth"));
+            }
+            for step in path {
+                if matches!(step, etas_code::descriptor::ValueProjectionStep::Field(name)
+                    | etas_code::descriptor::ValueProjectionStep::VariantPayload { variant: name, .. }
+                    if name.is_empty())
+                {
+                    return Err(invalid(
+                        "callable parameter projection has an empty field or variant",
+                    ));
+                }
+            }
+        }
         self.validate_sources(&self.sources, root)?;
+        self.validate_return_projections(
+            &self.source_projections,
+            root,
+            &BTreeSet::from([CallableValueScope::Root]),
+        )?;
         for source in &self.sources {
             self.validate_source_scope(*source, &BTreeSet::from([CallableValueScope::Root]))?;
         }
@@ -267,37 +405,89 @@ impl CallableValueGraph {
                 }
                 self.parameter(binding.parameter, root)?;
             }
+            // A node's callback evidence uses its checked binding interface,
+            // which includes lexical captures as well as invocation arguments.
+            let invocation_generics =
+                node.generic_bindings
+                    .iter()
+                    .map(|binding| match binding.scope {
+                        CallableValueScope::Root => root
+                            .and_then(|(_, kinds)| kinds.get(binding.position as usize).copied()),
+                        CallableValueScope::Value(index) => self.values[index as usize]
+                            .generic_params
+                            .get(binding.position as usize)
+                            .map(|parameter| parameter.kind),
+                    })
+                    .collect::<Option<Vec<_>>>();
+            let invocation_root = invocation_generics
+                .as_deref()
+                .map(|kinds| (node.parameter_bindings.len(), kinds));
             let mut trace = vec![&node.action_trace];
             if let Some(requests) = &node.handler_requests {
                 for parameter in &requests.parameters {
-                    validate_request_target(&parameter.parameter, &labels, root, depth)?;
+                    validate_request_target(&parameter.parameter, &labels, invocation_root, depth)?;
                 }
             }
             while let Some(part) = trace.pop() {
                 match part {
                     ActionTrace::ParameterCall { parameter } => {
-                        validate_request_target(parameter, &labels, root, depth)?
+                        validate_request_target(parameter, &labels, invocation_root, depth)?
                     }
                     ActionTrace::Widened {
                         parameter_calls, ..
                     } => {
                         for parameter in parameter_calls {
-                            validate_request_target(parameter, &labels, root, depth)?;
+                            validate_request_target(parameter, &labels, invocation_root, depth)?;
                         }
                     }
                     ActionTrace::Seq(parts) | ActionTrace::Choice(parts) => trace.extend(parts),
-                    ActionTrace::Repeat(part) => trace.push(part),
+                    ActionTrace::Repeat(part) | ActionTrace::DefaultHandler { body: part, .. } => {
+                        trace.push(part)
+                    }
                     _ => {}
                 }
             }
+            self.validate_return_projections(&node.returned_projections, root, &scopes)?;
             if let Some(sources) = &node.returned_sources {
-                self.validate_sources(sources, root)?;
+                // Some([]) is checked absence of a callable return payload.
+                if !sources.is_empty() {
+                    self.validate_sources(sources, root)?;
+                }
                 for source in sources {
                     self.validate_source_scope(*source, &scopes)?;
                 }
             }
         }
         self.validate_objects(root)?;
+        Ok(())
+    }
+
+    fn validate_return_projections(
+        &self,
+        projections: &[CallableReturnedProjection],
+        root: Option<(usize, &[crate::GenericParamKind])>,
+        scopes: &std::collections::BTreeSet<CallableValueScope>,
+    ) -> Result<(), crate::MetadataArtifactError> {
+        let mut previous_path = None;
+        for projection in projections {
+            if projection.path.is_empty()
+                    || projection.path.len() > crate::MAX_METADATA_GRAPH_DEPTH
+                    || previous_path.is_some_and(|path: &Vec<_>| path >= &projection.path)
+                    || projection.path.iter().any(|step| matches!(step,
+                        etas_code::descriptor::ValueProjectionStep::Field(name)
+                        | etas_code::descriptor::ValueProjectionStep::VariantPayload { variant: name, .. } if name.is_empty())) {
+                    return Err(invalid("returned-value projection paths must be checked, ordered and unique"));
+                }
+            previous_path = Some(&projection.path);
+            if let Some(sources) = &projection.sources {
+                if !sources.is_empty() {
+                    self.validate_sources(sources, root)?;
+                }
+                for source in sources {
+                    self.validate_source_scope(*source, scopes)?;
+                }
+            }
+        }
         Ok(())
     }
 
@@ -358,16 +548,31 @@ impl CallableValueGraph {
         parameter: CallableValueParameter,
         root: Option<(usize, &[crate::GenericParamKind])>,
     ) -> Result<(), crate::MetadataArtifactError> {
+        self.projection_path(parameter)?;
         let count = match parameter.scope {
             CallableValueScope::Root => root.map(|(count, _)| count),
             CallableValueScope::Value(index) => Some(self.value(index)?.params.len()),
         };
         if count.is_some_and(|count| parameter.position as usize >= count) {
-            return Err(invalid(
-                "returned callable parameter reference is not declared by its scope",
-            ));
+            return Err(invalid(&format!(
+                "returned callable parameter reference is not declared by its scope: {parameter:?}, declared count {count:?}",
+            )));
         }
         Ok(())
+    }
+
+    pub fn projection_path(
+        &self,
+        parameter: CallableValueParameter,
+    ) -> Result<&[etas_code::descriptor::ValueProjectionStep], crate::MetadataArtifactError> {
+        match parameter.projection {
+            None => Ok(&[]),
+            Some(index) => self
+                .parameter_projections
+                .get(index as usize)
+                .map(Vec::as_slice)
+                .ok_or_else(|| invalid("callable parameter projection reference is out of range")),
+        }
     }
 
     fn generic_parameter(

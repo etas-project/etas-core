@@ -2,6 +2,11 @@ use crate::{GenericParamKind, MetadataArtifactError, MethodReceiver, PublishedMe
 
 impl PublishedMethod {
     pub fn validate(&self) -> Result<(), MetadataArtifactError> {
+        if matches!(self.receiver, MethodReceiver::Updating { slot } if slot != 0) {
+            return Err(invalid(
+                "updating receiver must be the first method parameter",
+            ));
+        }
         let root = self.root()?;
         for limit in &self.requirements.limits {
             use crate::{MethodLimitKind as K, MethodLimitValue as V};
@@ -23,7 +28,7 @@ impl PublishedMethod {
                 "published method has an incomplete named parameter ABI",
             ));
         }
-        if let MethodReceiver::Value { slot } = self.receiver
+        if let MethodReceiver::Value { slot } | MethodReceiver::Updating { slot } = self.receiver
             && root.params.get(slot as usize) != Some(&self.self_type)
         {
             return Err(invalid(
@@ -46,7 +51,9 @@ impl PublishedMethod {
             .iter()
             .map(|param| param.kind)
             .collect::<Vec<_>>();
-        self.callable.validate_references(Some((0, &kinds)))
+        self.callable
+            .validate_references(Some((0, &kinds)))
+            .map_err(|error| invalid(&format!("published method {:?}: {error}", self.identity)))
     }
 }
 

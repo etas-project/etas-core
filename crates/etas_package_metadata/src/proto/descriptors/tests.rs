@@ -11,7 +11,7 @@ mod header_tests;
 mod snapshot_tests;
 
 #[test]
-fn implementation_binders_survive_binary_descriptor_roundtrip() {
+fn generic_binders_survive_binary_descriptor_roundtrip() {
     let subject = key("Container", DefinitionKind::Type);
     let implementation = ImplementationKey::new(
         subject.package(),
@@ -22,15 +22,24 @@ fn implementation_binders_survive_binary_descriptor_roundtrip() {
     )
     .unwrap();
     let method = MethodId::new(implementation.clone(), "replace".into()).unwrap();
-    let set = DefinitionDescriptorSet {
+    let mut set = DefinitionDescriptorSet {
         graph: DescriptorGraphInput {
-            types: (0..3)
+            types: (0..5)
                 .map(|id| TypeInfo::Parameter(GenericParameterRef(id)))
                 .collect(),
             binders: [
                 GenericOwner::Implementation(implementation),
                 GenericOwner::Method(method),
                 GenericOwner::ImplementationPattern(subject),
+                GenericOwner::Action {
+                    effect: key("Query", DefinitionKind::Effect),
+                    name: "value".into(),
+                },
+                GenericOwner::ActionOverload {
+                    effect: key("Query", DefinitionKind::Effect),
+                    name: "value".into(),
+                    signature: CodeFingerprint::from_bytes([11; 32]),
+                },
             ]
             .into_iter()
             .map(|owner| GenericParameterInfo {
@@ -46,8 +55,62 @@ fn implementation_binders_survive_binary_descriptor_roundtrip() {
         declarations: vec![],
         headers: None,
     };
+    let carrier = key("Carrier", DefinitionKind::Type);
+    set.graph.binders.extend([
+        GenericParameterInfo {
+            owner: GenericOwner::Declaration(carrier.clone()),
+            position: 0,
+            name: "T".into(),
+            kind: GenericParameterKind::Type,
+            bounds: vec![],
+        },
+        GenericParameterInfo {
+            owner: GenericOwner::Declaration(carrier.clone()),
+            position: 1,
+            name: "E".into(),
+            kind: GenericParameterKind::EffectRow,
+            bounds: vec![],
+        },
+    ]);
+    set.graph.rows.push(EffectRowInfo {
+        effects: vec![],
+        tail: None,
+    });
+    set.graph.types.extend([
+        TypeInfo::Nominal {
+            definition: carrier,
+            parameters: vec![GenericParameterRef(5), GenericParameterRef(6)],
+            representation: Some(TypeInfoRef(6)),
+        },
+        TypeInfo::Record(vec![FieldInfo {
+            name: "value".into(),
+            ty: TypeInfoRef(7),
+        }]),
+        TypeInfo::Parameter(GenericParameterRef(5)),
+        TypeInfo::Handler {
+            handled: EffectRowInfoRef(0),
+            produced: None,
+            result: None,
+        },
+        TypeInfo::Applied {
+            constructor: TypeInfoRef(5),
+            arguments: vec![TypeInfoRef(10), TypeInfoRef(8)],
+        },
+        TypeInfo::Primitive(PrimitiveInfo::I32),
+        TypeInfo::Function(SignatureInfo {
+            generics: vec![],
+            parameters: vec![],
+            output: TypeInfoRef(10),
+            declared_output: None,
+            effects: None,
+        }),
+        TypeInfo::Builtin {
+            constructor: BuiltinTypeInfo::CallableDefinition,
+            arguments: vec![TypeInfoRef(11)],
+        },
+    ]);
     let wire = to_proto(&set);
-    assert_eq!(wire.version, 10);
+    assert_eq!(wire.version, 19);
     let bytes = wire.encode_to_vec();
     assert_eq!(
         from_proto(ProtoDescriptorGraph::decode(bytes.as_slice()).unwrap()).unwrap(),
@@ -106,6 +169,19 @@ fn existential_descriptor_roundtrip_keeps_spec_identity_arguments_and_fingerprin
 #[test]
 fn parameter_nonreturn_survives_binary_trace_codec() {
     let call = ParameterCallInfo {
+        projection: vec![
+            ValueProjectionStep::Field("callbacks".into()),
+            ValueProjectionStep::TupleElement(1),
+            ValueProjectionStep::VariantPayload {
+                variant: "Some".into(),
+                position: 0,
+            },
+            ValueProjectionStep::SequenceElement,
+            ValueProjectionStep::ListHead,
+            ValueProjectionStep::ListTail,
+            ValueProjectionStep::MapKey,
+            ValueProjectionStep::MapValue,
+        ],
         handlers: Some(vec![]),
         callable: CallableId::declaration(key("visit", DefinitionKind::Flow)).unwrap(),
         signature: TypeInfoRef(4),
@@ -131,6 +207,7 @@ fn parameter_nonreturn_survives_binary_trace_codec() {
 #[test]
 fn parameter_integer_codec_rejects_non_128_bit_magnitude() {
     let original = TraceInfo::ParameterCall(ParameterCallInfo {
+        projection: Vec::new(),
         handlers: Some(vec![]),
         callable: CallableId::declaration(key("visit", DefinitionKind::Flow)).unwrap(),
         signature: TypeInfoRef(0),
@@ -156,6 +233,7 @@ fn parameter_integer_codec_rejects_non_128_bit_magnitude() {
 #[test]
 fn parameter_handler_scope_codec_rejects_unknown_scope_kind() {
     let original = TraceInfo::ParameterCall(ParameterCallInfo {
+        projection: Vec::new(),
         callable: CallableId::declaration(key("visit", DefinitionKind::Flow)).unwrap(),
         signature: TypeInfoRef(0),
         position: 0,
@@ -214,6 +292,7 @@ fn parameter_nonreturn_survives_full_package_artifact_roundtrip() {
     use crate::*;
     let flow = key("visit", DefinitionKind::Flow);
     let call = ParameterCallInfo {
+        projection: Vec::new(),
         handlers: Some(vec![ParameterHandlerScopeInfo::Handle {
             arms: vec![
                 ParameterHandlerArmInfo {
@@ -265,10 +344,12 @@ fn parameter_nonreturn_survives_full_package_artifact_roundtrip() {
                     generics: vec![],
                     parameters: vec![
                         ParameterInfo {
+                            default: None,
                             name: Some("f".into()),
                             ty: TypeInfoRef(1),
                         },
                         ParameterInfo {
+                            default: None,
                             name: Some("value".into()),
                             ty: TypeInfoRef(3),
                         },
@@ -281,10 +362,12 @@ fn parameter_nonreturn_survives_full_package_artifact_roundtrip() {
                     generics: vec![],
                     parameters: vec![
                         ParameterInfo {
+                            default: None,
                             name: Some("value".into()),
                             ty: TypeInfoRef(3),
                         },
                         ParameterInfo {
+                            default: None,
                             name: Some("boundary".into()),
                             ty: TypeInfoRef(4),
                         },
@@ -382,6 +465,7 @@ fn fixture() -> DefinitionDescriptorSet {
     )
     .unwrap();
     let call = ParameterCallInfo {
+        projection: Vec::new(),
         handlers: Some(vec![]),
         callable: CallableId::method(method.clone()),
         signature: TypeInfoRef(10),
@@ -462,6 +546,7 @@ fn fixture() -> DefinitionDescriptorSet {
                 TypeInfo::Function(SignatureInfo {
                     generics: vec![GenericParameterRef(1), GenericParameterRef(2)],
                     parameters: vec![ParameterInfo {
+                        default: None,
                         name: Some("value".into()),
                         ty: TypeInfoRef(13),
                     }],
@@ -550,6 +635,7 @@ fn fixture() -> DefinitionDescriptorSet {
                     parameter_calls: vec![
                         call,
                         ParameterCallInfo {
+                            projection: Vec::new(),
                             handlers: Some(vec![]),
                             callable: CallableId::declaration(flow.clone()).unwrap(),
                             signature: TypeInfoRef(10),
@@ -609,6 +695,52 @@ fn graph_protobuf_preserves_recursive_types_generic_identity_and_trace_placehold
 }
 
 #[test]
+fn option_and_result_tags_survive_portable_descriptors() {
+    for option in [false, true] {
+        let mut input = fixture();
+        let result = TypeInfoRef(input.graph.types.len() as u32);
+        input.graph.types.push(TypeInfo::Builtin {
+            constructor: if option {
+                BuiltinTypeInfo::Option
+            } else {
+                BuiltinTypeInfo::Result
+            },
+            arguments: if option {
+                vec![TypeInfoRef(0)]
+            } else {
+                vec![TypeInfoRef(0), TypeInfoRef(1)]
+            },
+        });
+        for tag in [true, false] {
+            input
+                .graph
+                .traces
+                .push(TraceInfo::Outcome(CallableOutcomeInfo::Returned {
+                    ty: result,
+                    observation: if option {
+                        ReturnObservationInfo::Option(tag)
+                    } else {
+                        ReturnObservationInfo::Result(tag)
+                    },
+                }));
+        }
+        input.validate(limits()).unwrap();
+        let wire = to_proto(&input);
+        assert_eq!(wire.version, if option { 13 } else { 12 });
+        let output =
+            from_proto(ProtoDescriptorGraph::decode(wire.encode_to_vec().as_slice()).unwrap())
+                .unwrap();
+        assert_eq!(input, output);
+        let end = output.graph.traces.len() as u32;
+        let graph = DescriptorGraph::new(output.graph, limits()).unwrap();
+        assert_ne!(
+            graph.trace_fingerprint(TraceInfoRef(end - 2)).unwrap(),
+            graph.trace_fingerprint(TraceInfoRef(end - 1)).unwrap()
+        );
+    }
+}
+
+#[test]
 fn every_primitive_and_compiler_constructor_has_a_stable_wire_mapping() {
     use BuiltinTypeInfo as B;
     use PrimitiveInfo as P;
@@ -657,6 +789,8 @@ fn every_primitive_and_compiler_constructor_has_a_stable_wire_mapping() {
         B::Secret,
         B::Public,
         B::Sanitized,
+        B::SchedulerHandle,
+        B::Continuation,
         B::CallableDefinition,
     ];
     let set = DefinitionDescriptorSet {
@@ -679,7 +813,7 @@ fn every_primitive_and_compiler_constructor_has_a_stable_wire_mapping() {
         declarations: vec![],
     };
     let wire = to_proto(&set);
-    assert_eq!(wire.version, 8);
+    assert_eq!(wire.version, 11);
     assert_eq!(from_proto(wire.clone()).unwrap(), set);
     let mut downgraded = wire;
     downgraded.version = 1;
@@ -842,7 +976,10 @@ fn package_graph_roundtrip_and_shared_descriptor_budget_use_the_production_codec
     let large = DefinitionDescriptorSet {
         headers: None,
         graph: DescriptorGraphInput {
-            types: vec![TypeInfo::Primitive(PrimitiveInfo::Unit); 50_000],
+            types: vec![
+                TypeInfo::Primitive(PrimitiveInfo::Unit);
+                crate::MAX_METADATA_GRAPH_NODES / 2 + 1
+            ],
             ..Default::default()
         },
         declarations: vec![],

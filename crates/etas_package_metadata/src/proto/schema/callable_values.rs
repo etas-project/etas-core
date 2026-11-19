@@ -6,12 +6,22 @@ use prost::Message;
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoCallableValueGraph {
+    #[prost(message, repeated, tag = "5")]
+    pub source_projections: Vec<ProtoCallableReturnedProjection>,
+    #[prost(message, repeated, tag = "4")]
+    pub parameter_projections: Vec<ProtoCallableParameterProjection>,
     #[prost(message, repeated, tag = "1")]
     pub sources: Vec<ProtoCallableValueSource>,
     #[prost(message, repeated, tag = "2")]
     pub values: Vec<ProtoCallableValueNode>,
     #[prost(message, repeated, tag = "3")]
     pub objects: Vec<ProtoExistentialValueNode>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoCallableParameterProjection {
+    #[prost(message, repeated, tag = "1")]
+    pub steps: Vec<super::super::descriptors::ProtoValueProjectionStep>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -80,6 +90,8 @@ pub struct ProtoCallableValueParameter {
     pub scope: Option<ProtoCallableValueScope>,
     #[prost(uint32, tag = "2")]
     pub position: u32,
+    #[prost(uint32, optional, tag = "3")]
+    pub projection: Option<u32>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -128,6 +140,8 @@ pub struct ProtoCallableValueGenericBinding {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoCallableValueNode {
+    #[prost(message, repeated, tag = "17")]
+    pub returned_projections: Vec<ProtoCallableReturnedProjection>,
     #[prost(message, optional, tag = "16")]
     pub residual_checks: Option<ProtoResidualReferenceSet>,
     #[prost(message, optional, tag = "15")]
@@ -160,6 +174,14 @@ pub struct ProtoCallableValueNode {
     pub action_trace: Option<ProtoActionTrace>,
     #[prost(message, optional, tag = "12")]
     pub returned_sources: Option<ProtoCallableValueSources>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoCallableReturnedProjection {
+    #[prost(message, repeated, tag = "1")]
+    pub path: Vec<super::super::descriptors::ProtoValueProjectionStep>,
+    #[prost(message, optional, tag = "2")]
+    pub sources: Option<ProtoCallableValueSources>,
 }
 
 #[derive(Clone, PartialEq, Message)]

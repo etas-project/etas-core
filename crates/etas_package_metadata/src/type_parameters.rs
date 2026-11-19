@@ -42,7 +42,10 @@ impl MetadataTypeParameters {
         } else {
             Err(MetadataArtifactError::invalid(
                 crate::PACKAGE_METADATA_FILE,
-                "type parameter reference has no declared type binder at its canonical owner and position",
+                format!(
+                    "type parameter reference has no declared type binder at {:?} position {}",
+                    parameter.owner, parameter.position
+                ),
             ))
         }
     }

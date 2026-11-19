@@ -28,6 +28,10 @@ pub struct CancelSignal {
 }
 
 impl CancelSignal {
+    pub(crate) fn parent_scope(&self) -> Result<Option<ExecutionScope>, HostError> {
+        self.scope.parent()
+    }
+
     pub(crate) async fn release_requested(&self) -> Result<(), HostError> {
         let mut changed = self.scope.subscribe();
         loop {

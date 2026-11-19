@@ -80,12 +80,14 @@ pub enum BuiltinTypeInfo {
     Sanitized,
     /// A checked `CallableDef<F>` role supplied by the standard registry.
     CallableDefinition,
+    SchedulerHandle,
+    Continuation,
 }
 
 impl BuiltinTypeInfo {
     pub const fn arity(self) -> usize {
         match self {
-            Self::Prompt | Self::PromptPart => 0,
+            Self::Prompt | Self::PromptPart | Self::SchedulerHandle => 0,
             Self::Map | Self::Result | Self::Store => 2,
             _ => 1,
         }
@@ -121,6 +123,7 @@ pub struct VariantInfo {
     Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
 )]
 pub enum TypeInfo {
+    AgentContext(crate::MethodId),
     Existential {
         bounds: Vec<super::SpecInfo>,
     },

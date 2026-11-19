@@ -137,6 +137,10 @@ impl DescriptorGraph {
             DescriptorNode::Type(reference) => {
                 encoder.tag(1);
                 match &self.data().types[reference.0 as usize] {
+                    TypeInfo::AgentContext(method) => {
+                        encoder.tag(14);
+                        encoder.fingerprint(method.fingerprint());
+                    }
                     TypeInfo::Existential { bounds } => {
                         encoder.tag(12);
                         encoder.number(bounds.len() as u64);
@@ -262,6 +266,21 @@ impl DescriptorGraph {
                         encoder.tag(3);
                         encoder.fingerprint(subject.fingerprint());
                     }
+                    GenericOwner::Action { effect, name } => {
+                        encoder.tag(4);
+                        encoder.fingerprint(effect.fingerprint());
+                        encoder.bytes(name.as_bytes());
+                    }
+                    GenericOwner::ActionOverload {
+                        effect,
+                        name,
+                        signature,
+                    } => {
+                        encoder.tag(5);
+                        encoder.fingerprint(effect.fingerprint());
+                        encoder.bytes(name.as_bytes());
+                        encoder.fingerprint(*signature);
+                    }
                 }
                 encoder.number(u64::from(binder.position));
                 if !binder.owner.alpha_scoped() {
@@ -308,6 +327,14 @@ impl DescriptorGraph {
                                         encoder.fingerprint(owner.fingerprint());
                                         encoder.bytes(name.as_bytes());
                                     }
+                                    ReturnObservationInfo::Result(value) => {
+                                        encoder.tag(4);
+                                        encoder.tag(u8::from(*value));
+                                    }
+                                    ReturnObservationInfo::Option(value) => {
+                                        encoder.tag(5);
+                                        encoder.tag(u8::from(*value));
+                                    }
                                 }
                             }
                         }
@@ -348,6 +375,33 @@ impl DescriptorGraph {
 fn encode_parameter_call(encoder: &mut CanonicalEncoder, call: &ParameterCallInfo) {
     encoder.fingerprint(call.callable.fingerprint());
     encoder.number(u64::from(call.position));
+    if !call.projection.is_empty() {
+        encoder.tag(2);
+        encoder.number(call.projection.len() as u64);
+        for step in &call.projection {
+            match step {
+                super::ValueProjectionStep::Field(name) => {
+                    encoder.tag(0);
+                    encoder.bytes(name.as_bytes());
+                }
+                super::ValueProjectionStep::TupleElement(position) => {
+                    encoder.tag(1);
+                    encoder.number(u64::from(*position));
+                }
+                super::ValueProjectionStep::VariantPayload { variant, position } => {
+                    encoder.tag(2);
+                    encoder.bytes(variant.as_bytes());
+                    encoder.number(u64::from(*position));
+                }
+                super::ValueProjectionStep::SequenceElement => encoder.tag(3),
+                super::ValueProjectionStep::ListHead => encoder.tag(4),
+                super::ValueProjectionStep::ListTail => encoder.tag(5),
+                super::ValueProjectionStep::MapKey => encoder.tag(6),
+                super::ValueProjectionStep::MapValue => encoder.tag(7),
+                super::ValueProjectionStep::CallResult => encoder.tag(8),
+            }
+        }
+    }
     match &call.arguments {
         None => encoder.tag(0),
         Some(arguments) => {
@@ -403,6 +457,14 @@ fn encode_parameter_call(encoder: &mut CanonicalEncoder, call: &ParameterCallInf
                                     encoder.fingerprint(owner.fingerprint());
                                     encoder.bytes(name.as_bytes());
                                 }
+                                super::ReturnObservationInfo::Result(value) => {
+                                    encoder.tag(4);
+                                    encoder.tag(u8::from(*value));
+                                }
+                                super::ReturnObservationInfo::Option(value) => {
+                                    encoder.tag(5);
+                                    encoder.tag(u8::from(*value));
+                                }
                             }
                         }
                     }
@@ -432,6 +494,11 @@ fn encode_effect(encoder: &mut CanonicalEncoder, effect: &EffectInfo) {
                 encoder.tag(2);
                 encoder.fingerprint(key.fingerprint());
             }
+            StaticEffectArgInfo::ResourceProjection { root, fields } => {
+                encoder.tag(7);
+                encoder.fingerprint(root.fingerprint());
+                encoder.path(fields);
+            }
             StaticEffectArgInfo::String(value) => {
                 encoder.tag(3);
                 encoder.bytes(value.as_bytes());
@@ -453,6 +520,13 @@ fn encode_signature(encoder: &mut CanonicalEncoder, signature: &SignatureInfo) {
     encoder.number(signature.generics.len() as u64);
     encoder.number(signature.parameters.len() as u64);
     for parameter in &signature.parameters {
+        match &parameter.default {
+            Some(default) => {
+                encoder.tag(1);
+                encoder.fingerprint(default.fingerprint());
+            }
+            None => encoder.tag(0),
+        }
         match &parameter.name {
             Some(name) => {
                 encoder.tag(1);
@@ -515,5 +589,7 @@ pub(crate) fn builtin_tag(constructor: BuiltinTypeInfo) -> u8 {
         BuiltinTypeInfo::Public => 20,
         BuiltinTypeInfo::Sanitized => 21,
         BuiltinTypeInfo::CallableDefinition => 22,
+        BuiltinTypeInfo::SchedulerHandle => 23,
+        BuiltinTypeInfo::Continuation => 24,
     }
 }

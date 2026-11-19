@@ -26,12 +26,22 @@ pub(super) fn validate(
     let StdDecl::Flow(flow) = &symbol.decl else {
         return Err(invalid("enum constructor must have a callable signature"));
     };
+    let native_owner = registry.declaration_key(owner.id).is_none();
+    let result_role = native_owner && owner.qualified_path == ["std", "result", "Result"];
+    let option_role = native_owner && owner.qualified_path == ["std", "option", "Option"];
+    if result_role && decl.params.len() != 2 {
+        return Err(invalid("Result role requires two type parameters"));
+    }
+    if option_role && decl.params.len() != 1 {
+        return Err(invalid("Option role requires one type parameter"));
+    }
     let mut expected_path = owner.qualified_path.clone();
     expected_path.push(flow.name.clone());
     if symbol.kind != StdSymbolKind::Constructor
         || symbol.module != owner.module
         || symbol.name != flow.name
         || symbol.qualified_path != expected_path
+        || symbol.visibility != owner.visibility
     {
         return Err(invalid(
             "enum constructor identity does not match its owner and declaration",
@@ -48,7 +58,14 @@ pub(super) fn validate(
         ));
     }
     let name = owner.qualified_path.join(".");
-    let output = if decl.params.is_empty() {
+    let output = if result_role {
+        StdType::Result {
+            ok: Box::new(StdType::Var(decl.params[0].name.clone())),
+            err: Box::new(StdType::Var(decl.params[1].name.clone())),
+        }
+    } else if option_role {
+        StdType::Option(Box::new(StdType::Var(decl.params[0].name.clone())))
+    } else if decl.params.is_empty() {
         StdType::Named(name)
     } else {
         StdType::NamedApplied {

@@ -1,6 +1,15 @@
 use crate::type_validation::{type_kind_to_wire, validate_type_shape};
 use prost::Message;
 mod callable_values;
+mod default_behavior;
+pub(crate) fn default_behavior_fingerprint(
+    value: &crate::DefaultBehavior,
+) -> etas_code::CodeFingerprint {
+    etas_code::CodeFingerprint::of_bytes(
+        "etas.metadata.default-behavior.v1",
+        &default_behavior::to_proto(value).encode_to_vec(),
+    )
+}
 mod methods;
 mod request_templates;
 pub(super) mod spec_invocations;
@@ -10,7 +19,7 @@ pub(crate) fn callable_value_graph_fingerprint(
     graph: &crate::CallableValueGraph,
 ) -> etas_code::CodeFingerprint {
     etas_code::CodeFingerprint::of_bytes(
-        "etas.metadata.callable-values.v14",
+        "etas.metadata.callable-values.v15",
         &callable_values::to_proto(graph).encode_to_vec(),
     )
 }
@@ -140,6 +149,7 @@ pub fn package_metadata_to_sections(
         || !type_contracts.trace_specs.is_empty()
         || !type_contracts.protocols.is_empty()
         || !type_contracts.methods.is_empty()
+        || !type_contracts.scoped_callbacks.is_empty()
     {
         sections.push(section_from_message(
             MetadataSectionKind::TypeContracts,
@@ -231,6 +241,11 @@ fn exports_section(metadata: &PackageMetadata) -> ProtoExportsSection {
 
 fn type_contracts_section(metadata: &PublicMetadata) -> ProtoTypeContractsSection {
     ProtoTypeContractsSection {
+        scoped_callbacks: metadata
+            .scoped_callbacks
+            .iter()
+            .map(scoped_callback_to_proto)
+            .collect(),
         types: metadata
             .types
             .iter()
@@ -742,6 +757,11 @@ fn external_export_from_proto(
 
 fn public_metadata_to_proto(metadata: &PublicMetadata) -> ProtoPublicMetadataSection {
     ProtoPublicMetadataSection {
+        scoped_callbacks: metadata
+            .scoped_callbacks
+            .iter()
+            .map(scoped_callback_to_proto)
+            .collect(),
         definition_descriptors: metadata
             .definition_descriptors
             .as_ref()
@@ -861,6 +881,16 @@ fn public_metadata_from_proto(
     metadata: ProtoPublicMetadataSection,
 ) -> Result<PublicMetadata, MetadataArtifactError> {
     let metadata = PublicMetadata {
+        scoped_callbacks: metadata
+            .scoped_callbacks
+            .into_iter()
+            .map(|value| {
+                Ok(crate::ScopedCallbackContract {
+                    target: callable_contract_target_from_proto(value.target)?,
+                    parameters: value.parameters,
+                })
+            })
+            .collect::<Result<_, MetadataArtifactError>>()?,
         definition_descriptors: metadata
             .definition_descriptors
             .map(super::descriptors::from_proto)
@@ -1165,6 +1195,15 @@ fn named_signature_from_proto(
 
 fn callable_signature_to_proto(signature: &CallableSignature) -> ProtoCallableSignature {
     ProtoCallableSignature {
+        definition: signature
+            .definition
+            .as_ref()
+            .map(super::descriptors::identities::encode_key),
+        parameter_defaults: signature
+            .parameter_defaults
+            .iter()
+            .map(super::parameter_defaults::encode)
+            .collect(),
         path: signature.path.clone(),
         generic_params: signature
             .generic_params
@@ -1183,6 +1222,15 @@ fn callable_signature_from_proto(
     signature: ProtoCallableSignature,
 ) -> Result<CallableSignature, MetadataArtifactError> {
     Ok(CallableSignature {
+        definition: signature
+            .definition
+            .map(super::descriptors::identities::decode_key)
+            .transpose()?,
+        parameter_defaults: signature
+            .parameter_defaults
+            .into_iter()
+            .map(super::parameter_defaults::decode)
+            .collect::<Result<_, _>>()?,
         path: required_path(signature.path, "callable signature path")?,
         generic_params: signature
             .generic_params
@@ -1257,6 +1305,7 @@ fn spec_method_to_proto(method: &SpecMethod) -> ProtoSpecMethod {
         name: method.name.clone(),
         path: method.path.clone(),
         signature: method.signature.as_ref().map(callable_signature_to_proto),
+        updating_receiver: method.updating_receiver,
         receiver_param: method.receiver_param,
     }
 }
@@ -1269,6 +1318,7 @@ fn spec_method_from_proto(method: ProtoSpecMethod) -> Result<SpecMethod, Metadat
             .signature
             .map(callable_signature_from_proto)
             .transpose()?,
+        updating_receiver: method.updating_receiver,
         receiver_param: method.receiver_param,
     };
     crate::spec_receivers::validate(&method)
@@ -1296,6 +1346,16 @@ fn spec_bound_from_proto(bound: ProtoSpecBound) -> Result<SpecBound, MetadataArt
 
 fn spec_impl_to_proto(implementation: &SpecImpl) -> ProtoSpecImpl {
     ProtoSpecImpl {
+        owner: implementation.owner.as_ref().map(|owner| {
+            super::descriptors::encode_generic_owner(
+                &etas_code::descriptor::GenericOwner::Implementation(owner.clone()),
+            )
+        }),
+        generic_params: implementation
+            .generic_params
+            .iter()
+            .map(generic_param_to_proto)
+            .collect(),
         self_type: Some(type_to_proto(&implementation.self_type)),
         spec: implementation.spec.clone(),
         args: implementation.args.iter().map(type_to_proto).collect(),
@@ -1309,6 +1369,22 @@ fn spec_impl_to_proto(implementation: &SpecImpl) -> ProtoSpecImpl {
 
 fn spec_impl_from_proto(implementation: ProtoSpecImpl) -> Result<SpecImpl, MetadataArtifactError> {
     Ok(SpecImpl {
+        owner: implementation
+            .owner
+            .map(
+                |owner| match super::descriptors::decode_generic_owner(owner)? {
+                    etas_code::descriptor::GenericOwner::Implementation(owner) => Ok(owner),
+                    _ => Err(invalid(
+                        "spec implementation has a different generic owner kind",
+                    )),
+                },
+            )
+            .transpose()?,
+        generic_params: implementation
+            .generic_params
+            .into_iter()
+            .map(generic_param_from_proto)
+            .collect::<Result<_, _>>()?,
         self_type: type_from_proto(required_message(
             implementation.self_type,
             "spec impl self type",
@@ -1440,6 +1516,13 @@ fn callable_contract_target_to_proto(
     }
 }
 
+fn scoped_callback_to_proto(value: &crate::ScopedCallbackContract) -> ProtoScopedCallbackContract {
+    ProtoScopedCallbackContract {
+        target: Some(callable_contract_target_to_proto(&value.target)),
+        parameters: value.parameters.clone(),
+    }
+}
+
 fn callable_contract_target_from_proto(
     target: Option<ProtoCallableContractTarget>,
 ) -> Result<crate::CallableContractTarget, MetadataArtifactError> {
@@ -1460,6 +1543,16 @@ fn callable_contract_target_from_proto(
 
 fn action_signature_to_proto(signature: &ActionSignature) -> ProtoActionSignature {
     ProtoActionSignature {
+        default_handler_effects: signature
+            .default_handler_effects
+            .as_ref()
+            .map(effect_row_to_proto),
+        param_names: signature.param_names.clone(),
+        parameter_defaults: signature
+            .parameter_defaults
+            .iter()
+            .map(super::parameter_defaults::encode)
+            .collect(),
         path: signature.path.clone(),
         generic_params: signature
             .generic_params
@@ -1488,6 +1581,16 @@ fn action_signature_from_proto(
     signature: ProtoActionSignature,
 ) -> Result<ActionSignature, MetadataArtifactError> {
     let signature = ActionSignature {
+        default_handler_effects: signature
+            .default_handler_effects
+            .map(effect_row_from_proto)
+            .transpose()?,
+        param_names: signature.param_names,
+        parameter_defaults: signature
+            .parameter_defaults
+            .into_iter()
+            .map(super::parameter_defaults::decode)
+            .collect::<Result<_, _>>()?,
         path: required_path(signature.path, "action signature path")?,
         generic_params: signature
             .generic_params
@@ -1631,6 +1734,10 @@ fn reject_unexpected_action_arg_ty(kind: &ProtoActionArgKind) -> Result<(), Meta
 fn type_to_proto(ty: &Type) -> ProtoType {
     ProtoType {
         kind: type_kind_to_wire(ty.kind).to_owned(),
+        agent_context: ty
+            .agent_context
+            .as_ref()
+            .map(super::descriptors::encode_method_identity),
         parameter: ty
             .parameter
             .as_ref()
@@ -1642,6 +1749,11 @@ fn type_to_proto(ty: &Type) -> ProtoType {
         path: ty.path.clone(),
         children: ty.children.iter().map(type_to_proto).collect(),
         fields: ty.fields.iter().map(type_field_to_proto).collect(),
+        projected_fields: ty
+            .projected_fields
+            .iter()
+            .map(type_field_to_proto)
+            .collect(),
         effects: ty.effects.as_ref().map(effect_row_to_proto),
         produced_effects: ty.produced_effects.as_ref().map(effect_row_to_proto),
         bounds: ty.bounds.iter().map(spec_bound_to_proto).collect(),
@@ -1666,6 +1778,11 @@ fn type_from_proto_with_budget(
         .collect::<Result<Vec<_>, _>>()?;
     let fields = ty
         .fields
+        .into_iter()
+        .map(|field| type_field_from_proto_with_budget(field, depth + 1, budget))
+        .collect::<Result<Vec<_>, _>>()?;
+    let projected_fields = ty
+        .projected_fields
         .into_iter()
         .map(|field| type_field_from_proto_with_budget(field, depth + 1, budget))
         .collect::<Result<Vec<_>, _>>()?;
@@ -1694,6 +1811,10 @@ fn type_from_proto_with_budget(
         .collect::<Result<Vec<_>, MetadataArtifactError>>()?;
     let ty = Type {
         kind,
+        agent_context: ty
+            .agent_context
+            .map(super::descriptors::decode_method_identity)
+            .transpose()?,
         parameter: ty
             .parameter
             .map(|parameter| {
@@ -1711,6 +1832,7 @@ fn type_from_proto_with_budget(
         path: ty.path,
         children,
         fields,
+        projected_fields,
         effects,
         produced_effects,
         bounds,
@@ -1875,6 +1997,10 @@ fn effect_metadata_from_proto(
 
 fn effect_summary_to_proto(summary: &EffectSummary) -> ProtoEffectSummary {
     ProtoEffectSummary {
+        definition: summary
+            .definition
+            .as_ref()
+            .map(super::descriptors::identities::encode_key),
         residual_checks: Some(callable_values::residual_to_proto(&summary.residual_checks)),
         behavior: summary
             .behavior
@@ -1909,6 +2035,10 @@ fn effect_summary_from_proto(
     summary: ProtoEffectSummary,
 ) -> Result<EffectSummary, MetadataArtifactError> {
     Ok(EffectSummary {
+        definition: summary
+            .definition
+            .map(super::descriptors::identities::decode_key)
+            .transpose()?,
         residual_checks: callable_values::residual_from_proto(
             summary
                 .residual_checks
@@ -1961,6 +2091,7 @@ fn effect_summary_from_proto(
 
 fn default_handler_effects_to_proto(effects: &DefaultHandlerEffects) -> ProtoDefaultHandlerEffects {
     ProtoDefaultHandlerEffects {
+        behavior: effects.behavior.as_ref().map(default_behavior::to_proto),
         direct_effects: Some(effect_row_to_proto(&effects.direct_effects)),
         default_actions: Some(effect_row_to_proto(&effects.default_actions)),
         handlers: effects
@@ -1978,6 +2109,10 @@ fn default_handler_effects_from_proto(
     effects: ProtoDefaultHandlerEffects,
 ) -> Result<DefaultHandlerEffects, MetadataArtifactError> {
     Ok(DefaultHandlerEffects {
+        behavior: effects
+            .behavior
+            .map(default_behavior::from_proto)
+            .transpose()?,
         direct_effects: effect_row_from_proto(
             effects
                 .direct_effects
@@ -2016,6 +2151,11 @@ fn action_trace_to_proto(trace: &ActionTrace) -> ProtoActionTrace {
     };
     match trace {
         ActionTrace::Empty => {}
+        ActionTrace::DefaultHandler { guards, body } => {
+            proto.kind = ProtoActionTraceKind::DefaultHandler as i32;
+            proto.actions = guards.iter().map(effect_ref_to_proto).collect();
+            proto.children.push(action_trace_to_proto(body));
+        }
         ActionTrace::Event(event) => {
             proto.kind = ProtoActionTraceKind::Event as i32;
             proto.event = Some(ProtoActionTraceEvent {
@@ -2074,6 +2214,24 @@ fn action_trace_from_proto_with_budget(
         .map_err(|_| invalid("effect summary action trace has unknown kind"))?;
     match kind {
         ProtoActionTraceKind::Empty => Ok(ActionTrace::Empty),
+        ProtoActionTraceKind::DefaultHandler => {
+            let [body] = trace
+                .children
+                .try_into()
+                .map_err(|_| invalid("default handler trace requires one body"))?;
+            Ok(ActionTrace::DefaultHandler {
+                guards: trace
+                    .actions
+                    .into_iter()
+                    .map(effect_ref_from_proto)
+                    .collect::<Result<_, _>>()?,
+                body: Box::new(action_trace_from_proto_with_budget(
+                    body,
+                    depth + 1,
+                    budget,
+                )?),
+            })
+        }
         ProtoActionTraceKind::Event => {
             let event = trace
                 .event
@@ -2496,6 +2654,7 @@ fn spec_kind_from_wire(value: &str) -> Result<SpecKind, MetadataArtifactError> {
 
 fn type_kind_from_wire(value: &str) -> Result<TypeKind, MetadataArtifactError> {
     match value {
+        "agent_context" => Ok(TypeKind::AgentContext),
         "existential" => Ok(TypeKind::Existential),
         "primitive" => Ok(TypeKind::Primitive),
         "var" => Ok(TypeKind::Var),
@@ -2972,6 +3131,7 @@ mod tests {
             handled_requested_actions: Some(ProtoEffectRow::default()),
             action_trace: Some(ProtoActionTrace::default()),
             default_handler_effects: Some(ProtoDefaultHandlerEffects {
+                behavior: None,
                 direct_effects: Some(ProtoEffectRow::default()),
                 default_actions: Some(ProtoEffectRow::default()),
                 handlers: vec![ProtoDefaultHandlerContribution {
@@ -3069,10 +3229,13 @@ mod tests {
             CallableValueGraph, CallableValueParameter, CallableValueScope, CallableValueSource,
         };
         let source = CallableValueSource::Parameter(CallableValueParameter {
+            projection: None,
             scope: CallableValueScope::Root,
             position: 0,
         });
         let valid = CallableValueGraph {
+            source_projections: Vec::new(),
+            parameter_projections: Vec::new(),
             objects: Vec::new(),
             sources: vec![source],
             values: vec![],
@@ -3096,6 +3259,8 @@ mod tests {
                 effect_summaries: vec![ProtoEffectSummary {
                     residual_checks: Some(callable_values::residual_to_proto(&[])),
                     returned_callables: Some(callable_values::to_proto(&CallableValueGraph {
+                        source_projections: Vec::new(),
+                        parameter_projections: Vec::new(),
                         objects: Vec::new(),
                         sources: sources.clone(),
                         values: vec![],
@@ -3112,6 +3277,8 @@ mod tests {
                 public_metadata: PublicMetadata {
                     effect_summaries: vec![EffectSummary {
                         returned_callables: Some(CallableValueGraph {
+                            source_projections: Vec::new(),
+                            parameter_projections: Vec::new(),
                             sources,
                             values: vec![],
                             objects: vec![],
@@ -3129,10 +3296,13 @@ mod tests {
         graph.public_metadata = Some(ProtoPublicMetadataSection {
             effect_summaries: vec![ProtoEffectSummary {
                 returned_callables: Some(callable_values::to_proto(&CallableValueGraph {
+                    source_projections: Vec::new(),
+                    parameter_projections: Vec::new(),
                     objects: Vec::new(),
                     sources: (0..=super::super::budget::MAX_METADATA_GRAPH_NODES)
                         .map(|position| {
                             CallableValueSource::Parameter(CallableValueParameter {
+                                projection: None,
                                 scope: CallableValueScope::Root,
                                 position: position as u32,
                             })

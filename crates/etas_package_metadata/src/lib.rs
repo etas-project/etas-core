@@ -1,6 +1,6 @@
 mod callable_contracts;
 mod callable_values;
-pub use callable_contracts::CallableContractTarget;
+pub use callable_contracts::{CallableContractTarget, ScopedCallbackContract};
 pub mod container;
 pub mod error;
 mod method;
@@ -22,7 +22,7 @@ pub use container::{
     MetadataSectionKind, PACKAGE_METADATA_FILE, blake3_hash, decode_metadata_artifact,
     encode_metadata_artifact, file_checksum, optional_file_checksum,
     package_metadata_artifact_path, section_from_message, source_payload_checksum,
-    validate_artifact_schema, write_metadata_artifact_file,
+    source_payload_checksum_for_entries, validate_artifact_schema, write_metadata_artifact_file,
 };
 pub use error::MetadataArtifactError;
 pub use model::*;
@@ -85,6 +85,28 @@ mod tests {
             etas_code::DefinitionKind::Spec,
         )
         .unwrap()
+    }
+
+    #[test]
+    fn library_bodies_share_the_package_container_without_changing_public_metadata() {
+        let metadata = sample_metadata();
+        let original = encode_sample(&metadata);
+        let path = Path::new("std.etasmeta");
+        let decoded = decode_metadata_artifact(path, &original).unwrap();
+        let mut sections = package_metadata_to_sections(&metadata).unwrap();
+        let body = b"checked library body graph".to_vec();
+        sections.push(EncodedMetadataSection {
+            kind: MetadataSectionKind::LibraryBodies,
+            payload: body.clone(),
+        });
+        let bytes = encode_metadata_artifact(&decoded.header, sections).unwrap();
+        let loaded = decode_metadata_artifact(path, &bytes).unwrap();
+        assert_eq!(
+            loaded.sections.get(&MetadataSectionKind::LibraryBodies),
+            Some(&body)
+        );
+        let (_, public) = package_metadata_from_artifact(path, &bytes).unwrap();
+        assert_eq!(public, metadata);
     }
 
     #[test]
@@ -156,9 +178,12 @@ mod tests {
             vec![reference.clone()];
         metadata.public_metadata.effect_summaries[0].returned_callables =
             Some(CallableValueGraph {
+                source_projections: Vec::new(),
+                parameter_projections: Vec::new(),
                 objects: Vec::new(),
                 sources: vec![CallableValueSource::Value(0)],
                 values: vec![CallableValueNode {
+                    returned_projections: Vec::new(),
                     residual_checks: vec![reference],
                     handler_requests: Some(Default::default()),
                     behavior: CallableValueBehavior {
@@ -409,6 +434,7 @@ mod tests {
             tail: None,
         };
         summary.default_handler_effects = Some(DefaultHandlerEffects {
+            behavior: None,
             direct_effects: EffectRow {
                 effects: Vec::new(),
                 tail: Some("E".into()),
@@ -633,6 +659,7 @@ mod tests {
                 args: Vec::new(),
             }],
         }];
+        action.param_names = vec!["stream".to_owned()];
         action.params = vec![Type {
             kind: TypeKind::Var,
             name: "S".to_owned(),
@@ -915,6 +942,8 @@ mod tests {
                 dependencies: Vec::new(),
                 public_metadata: PublicMetadata {
                     flows: vec![CallableSignature {
+                        definition: None,
+                        parameter_defaults: Vec::new(),
                         path: vec!["dep".to_owned(), "run".to_owned()],
                         generic_params: Vec::new(),
                         param_names: vec!["input".to_owned()],
@@ -1072,6 +1101,7 @@ mod tests {
                     ..Default::default()
                 }],
                 effect_summaries: vec![EffectSummary {
+                    definition: None,
                     residual_checks: vec![],
                     behavior: None,
                     handler_requests: None,
@@ -1139,6 +1169,9 @@ mod tests {
                     ]),
                 }],
                 actions: vec![ActionSignature {
+                    default_handler_effects: Some(EffectRow::default()),
+                    param_names: vec!["method".into(), "host".into(), "request".into()],
+                    parameter_defaults: Vec::new(),
                     path: vec![
                         "demo".to_owned(),
                         "EdkHttp".to_owned(),

@@ -1,12 +1,15 @@
 use super::std_type::StdType;
 
-#[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub struct TypeDecl {
     pub name: String,
     pub params: Vec<StdGenericParam>,
     pub kind: TypeDeclKind,
     pub representation: Option<StdType>,
-    /// Canonical compiler type for a support declaration, not nominal storage.
+    /// Structural compiler support template or checked source alias target;
+    /// never nominal storage.
     pub canonical_type: Option<StdType>,
     pub derivable: bool,
     pub iterable_item: Option<StdIterableItem>,
@@ -109,7 +112,9 @@ impl TypeDecl {
     }
 }
 
-#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub enum StdIterableItem {
     Element { parameter: usize },
     Entry { key: usize, value: usize },
@@ -125,14 +130,25 @@ impl StdIterableItem {
     }
 }
 
-#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub enum StdTypeConstruction {
     Public,
     IntrinsicOnly,
 }
 
 #[derive(
-    serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, etas_core::RetainedSize,
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    etas_core::RetainedSize,
 )]
 pub enum CodeTypeRole {
     AgentDefinition,
@@ -155,6 +171,57 @@ pub enum CodeTypeRole {
 }
 
 impl CodeTypeRole {
+    /// Compiler observations associated with source-owned data declarations.
+    /// This table contains identities only; shapes and generic binders come
+    /// from the selected std source bundle.
+    pub const ALL: [Self; 17] = [
+        Self::AgentDefinition,
+        Self::CallableDefinition,
+        Self::SyntaxBlock,
+        Self::AgentId,
+        Self::TypeInfo,
+        Self::GenericOwnerInfo,
+        Self::ToolRef,
+        Self::StaticValueInfo,
+        Self::TraceConstraintInfo,
+        Self::DefinitionId,
+        Self::CallableId,
+        Self::EffectRowInfo,
+        Self::ActionSummary,
+        Self::TraceSummary,
+        Self::Determinism,
+        Self::DescriptorDetail,
+        Self::TraceWitness,
+    ];
+
+    pub fn source_path(self) -> &'static str {
+        match self {
+            Self::AgentDefinition => "std.compiler.AgentDef",
+            Self::CallableDefinition => "std.compiler.CallableDef",
+            Self::SyntaxBlock => "std.compiler.SyntaxBlock",
+            Self::AgentId => "std.compiler.AgentId",
+            Self::TypeInfo => "std.compiler.TypeInfo",
+            Self::GenericOwnerInfo => "std.compiler.GenericOwnerInfo",
+            Self::ToolRef => "std.agent.ToolRef",
+            Self::StaticValueInfo => "std.compiler.StaticValueInfo",
+            Self::TraceConstraintInfo => "std.compiler.TraceConstraintInfo",
+            Self::DefinitionId => "std.compiler.DefinitionId",
+            Self::CallableId => "std.compiler.CallableId",
+            Self::EffectRowInfo => "std.compiler.EffectRowInfo",
+            Self::ActionSummary => "std.compiler.ActionSummary",
+            Self::TraceSummary => "std.compiler.TraceSummary",
+            Self::Determinism => "std.compiler.Determinism",
+            Self::DescriptorDetail => "std.compiler.DescriptorDetail",
+            Self::TraceWitness => "std.compiler.TraceWitness",
+        }
+    }
+
+    pub fn from_source_path(path: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|role| role.source_path() == path)
+    }
+
     pub fn type_parameter_count(self) -> usize {
         usize::from(matches!(
             self,
@@ -167,14 +234,26 @@ impl CodeTypeRole {
     }
 }
 
-#[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub struct StdGenericParam {
     pub name: String,
     pub kind: StdGenericParamKind,
     pub bounds: Vec<StdSpecRef>,
 }
 
-#[derive(serde::Serialize, Clone, Copy, Debug, Default, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    etas_core::RetainedSize,
+)]
 pub enum StdGenericParamKind {
     #[default]
     Type,
@@ -207,7 +286,9 @@ impl StdGenericParam {
     }
 }
 
-#[derive(serde::Serialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub struct StdSpecRef {
     pub path: Vec<String>,
     pub args: Vec<StdType>,
@@ -229,7 +310,9 @@ impl StdSpecRef {
     }
 }
 
-#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize,
+)]
 pub enum TypeDeclKind {
     Primitive,
     Struct,
@@ -237,4 +320,6 @@ pub enum TypeDeclKind {
     Wrapper,
     Support,
     Spec,
+    /// A non-nominal alias projected from a checked source declaration.
+    Alias,
 }

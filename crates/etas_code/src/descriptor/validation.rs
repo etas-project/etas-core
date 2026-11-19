@@ -1,4 +1,7 @@
-use std::{collections::BTreeSet, fmt};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt,
+};
 
 use super::traversal::{node_at, node_index, references, validate_expansion};
 use crate::{DefinitionKey, DefinitionKind};
@@ -124,6 +127,17 @@ fn validate_inner(
             GenericOwner::Implementation(implementation) => {
                 validator.implementation(implementation)?
             }
+            GenericOwner::Action { effect, name }
+            | GenericOwner::ActionOverload { effect, name, .. } => {
+                validator.identity(effect)?;
+                validator.name(node, name)?;
+                if effect.kind() != DefinitionKind::Effect {
+                    return Err(DescriptorError::Invalid {
+                        node,
+                        reason: "action generic owner is not an effect",
+                    });
+                }
+            }
         }
         let unique_identity = binder_identities.insert((&binder.owner, binder.position));
         let unique_name =
@@ -147,6 +161,13 @@ fn validate_inner(
     for (index, ty) in input.types.iter().enumerate() {
         let node = DescriptorNode::Type(TypeInfoRef(index as u32));
         match ty {
+            TypeInfo::AgentContext(method) => {
+                validator.kind(
+                    node,
+                    method.implementation().subject(),
+                    DefinitionKind::Agent,
+                )?;
+            }
             TypeInfo::Existential { bounds } => {
                 if bounds.is_empty() {
                     return Err(DescriptorError::Invalid {
@@ -206,8 +227,15 @@ fn validate_inner(
                 }
                 let mut seen = BTreeSet::new();
                 for parameter in parameters {
-                    validator.binder_kind(node, *parameter, GenericParameterKind::Type)?;
-                    let binder = &input.binders[parameter.0 as usize];
+                    let binder = input.binders.get(parameter.0 as usize).ok_or(
+                        DescriptorError::MissingReference {
+                            from: node,
+                            target: DescriptorNode::Binder(*parameter),
+                        },
+                    )?;
+                    // Represented source declarations retain both type and
+                    // Effect-row binders. Their uses are checked at type nodes
+                    // and row tails, independently of the representation.
                     if binder.owner != GenericOwner::Declaration(definition.clone())
                         || !seen.insert(*parameter)
                     {
@@ -253,6 +281,31 @@ fn validate_inner(
                         node,
                         reason: "applied type generic arity differs from its constructor",
                     });
+                }
+                for (parameter, argument) in parameters.iter().zip(arguments) {
+                    let binder = input.binders.get(parameter.0 as usize).ok_or(
+                        DescriptorError::MissingReference {
+                            from: node,
+                            target: DescriptorNode::Binder(*parameter),
+                        },
+                    )?;
+                    // Checked type applications encode an Effect argument as
+                    // a handled-row-only Handler, just as the type pipeline does.
+                    if binder.kind == GenericParameterKind::EffectRow
+                        && !matches!(
+                            input.types.get(argument.0 as usize),
+                            Some(TypeInfo::Handler {
+                                produced: None,
+                                result: None,
+                                ..
+                            })
+                        )
+                    {
+                        return Err(DescriptorError::Invalid {
+                            node,
+                            reason: "effect-row argument requires a checked row carrier",
+                        });
+                    }
                 }
             }
             TypeInfo::Function(signature) => validator.signature(node, signature)?,
@@ -388,42 +441,30 @@ fn validate_inner(
                     reason: "trace parameter call has no callable signature parameter",
                 });
             };
-            let mut parameter_type = parameter.ty;
-            let mut visited = BTreeSet::new();
-            let callback = loop {
-                validator.edge_count = validator.edge_count.saturating_add(1);
-                if validator.edge_count > limits.max_edges {
-                    return Err(DescriptorError::Limit {
-                        resource: "edges",
-                        limit: limits.max_edges,
-                    });
-                }
-                if !visited.insert(parameter_type) {
-                    return Err(DescriptorError::Invalid {
-                        node,
-                        reason: "trace parameter call has a cyclic callable alias",
-                    });
-                }
-                match input.types.get(parameter_type.0 as usize) {
-                    Some(TypeInfo::Function(callback)) => break callback,
-                    Some(TypeInfo::Alias { target, .. }) => parameter_type = *target,
-                    Some(TypeInfo::Builtin {
-                        constructor: super::BuiltinTypeInfo::CallableDefinition,
-                        arguments,
-                    }) if arguments.len() == 1 => parameter_type = arguments[0],
-                    Some(_) => {
-                        return Err(DescriptorError::Invalid {
-                            node,
-                            reason: "trace parameter call requires a checked callback function",
-                        });
+            for step in &call.projection {
+                match step {
+                    super::ValueProjectionStep::Field(name)
+                    | super::ValueProjectionStep::VariantPayload { variant: name, .. } => {
+                        validator.name(node, name)?
                     }
-                    None => {
-                        return Err(DescriptorError::MissingReference {
-                            from: node,
-                            target: DescriptorNode::Type(parameter_type),
-                        });
-                    }
+                    _ => {}
                 }
+            }
+            let mut projected = if call.projection.is_empty() {
+                None
+            } else {
+                Some(super::value_projection::ProjectedType::resolve(
+                    &input.types,
+                    node,
+                    parameter.ty,
+                    &call.projection,
+                    limits,
+                    &mut validator.edge_count,
+                )?)
+            };
+            let (callback, callback_bindings) = match &projected {
+                Some(projected) => (projected.signature(&input.types, node)?, BTreeMap::new()),
+                None => validator.callback_contract(node, parameter.ty)?,
             };
             if let Some(arguments) = &call.arguments {
                 if arguments.len() != callback.parameters.len() {
@@ -433,7 +474,20 @@ fn validate_inner(
                     });
                 }
                 for (argument, parameter) in arguments.iter().zip(&callback.parameters) {
-                    let actual = validator.scalar_argument_type(node, parameter.ty)?;
+                    let actual = match &mut projected {
+                        Some(projected) => projected.scalar(
+                            &input.types,
+                            node,
+                            parameter.ty,
+                            limits,
+                            &mut validator.edge_count,
+                        )?,
+                        None => validator.scalar_argument_type_with_bindings(
+                            node,
+                            parameter.ty,
+                            &callback_bindings,
+                        )?,
+                    };
                     let expected = match argument {
                         ParameterArgumentInfo::Bool(_) => PrimitiveInfo::Bool,
                         ParameterArgumentInfo::Input { position } => {
@@ -628,10 +682,134 @@ impl Validator<'_> {
         }
         Ok(())
     }
+    fn callback_contract(
+        &mut self,
+        node: DescriptorNode,
+        root: TypeInfoRef,
+    ) -> Result<(SignatureInfo, BTreeMap<GenericParameterRef, TypeInfoRef>), DescriptorError> {
+        let mut pending = vec![(root, BTreeMap::<GenericParameterRef, TypeInfoRef>::new())];
+        let mut seen = BTreeSet::new();
+        let mut contract = None;
+        while let Some((ty, bindings)) = pending.pop() {
+            self.edge_count = self.edge_count.saturating_add(1);
+            if self.edge_count > self.limits.max_edges {
+                return Err(DescriptorError::Limit {
+                    resource: "edges",
+                    limit: self.limits.max_edges,
+                });
+            }
+            if !seen.insert((ty, bindings.clone())) {
+                continue;
+            }
+            let target =
+                self.input
+                    .types
+                    .get(ty.0 as usize)
+                    .ok_or(DescriptorError::MissingReference {
+                        from: node,
+                        target: DescriptorNode::Type(ty),
+                    })?;
+            let children = match target {
+                TypeInfo::Function(signature) => {
+                    let candidate = (signature.clone(), bindings);
+                    match &contract {
+                        None => contract = Some(candidate),
+                        Some(previous) if previous == &candidate => {}
+                        Some(_) => {
+                            return Err(DescriptorError::Invalid {
+                                node,
+                                reason: "trace parameter aggregate has different callback signatures",
+                            });
+                        }
+                    }
+                    continue;
+                }
+                TypeInfo::Parameter(parameter) => {
+                    bindings.get(parameter).copied().into_iter().collect()
+                }
+                TypeInfo::Alias { target, .. } => vec![*target],
+                TypeInfo::Nominal { representation, .. } => {
+                    representation.iter().copied().collect()
+                }
+                TypeInfo::Applied {
+                    constructor,
+                    arguments,
+                } => {
+                    let parameters = match self.input.types.get(constructor.0 as usize) {
+                        Some(
+                            TypeInfo::Nominal { parameters, .. }
+                            | TypeInfo::Alias { parameters, .. }
+                            | TypeInfo::Enum { parameters, .. },
+                        ) => parameters,
+                        _ => {
+                            return Err(DescriptorError::Invalid {
+                                node,
+                                reason: "callback carrier has no checked constructor",
+                            });
+                        }
+                    };
+                    let mut applied = bindings.clone();
+                    for (parameter, argument) in parameters.iter().zip(arguments) {
+                        // Preserve outer substitutions when entering a recursive
+                        // declaration that reuses its own generic binders.
+                        let argument = match self.input.types.get(argument.0 as usize) {
+                            Some(TypeInfo::Parameter(outer)) => {
+                                bindings.get(outer).copied().unwrap_or(*argument)
+                            }
+                            _ => *argument,
+                        };
+                        applied.insert(*parameter, argument);
+                    }
+                    pending.push((*constructor, applied));
+                    continue;
+                }
+                TypeInfo::Record(fields) => fields.iter().map(|field| field.ty).collect(),
+                TypeInfo::Tuple(elements) => elements.clone(),
+                TypeInfo::Enum { variants, .. } => variants
+                    .iter()
+                    .flat_map(|variant| match &variant.payload {
+                        VariantPayloadInfo::None => vec![],
+                        VariantPayloadInfo::Positional(elements) => elements.clone(),
+                        VariantPayloadInfo::Named(fields) => {
+                            fields.iter().map(|field| field.ty).collect()
+                        }
+                    })
+                    .collect(),
+                TypeInfo::Builtin {
+                    constructor:
+                        super::BuiltinTypeInfo::CallableDefinition
+                        | super::BuiltinTypeInfo::Array
+                        | super::BuiltinTypeInfo::List
+                        | super::BuiltinTypeInfo::Set
+                        | super::BuiltinTypeInfo::Slice
+                        | super::BuiltinTypeInfo::Option
+                        | super::BuiltinTypeInfo::Map
+                        | super::BuiltinTypeInfo::Result,
+                    arguments,
+                } => arguments.clone(),
+                _ => vec![],
+            };
+            pending.extend(children.into_iter().map(|child| (child, bindings.clone())));
+        }
+        contract.ok_or(DescriptorError::Invalid {
+            node,
+            reason: "trace parameter call requires a checked callback function",
+        })
+    }
+
     fn scalar_argument_type(
         &mut self,
         node: DescriptorNode,
+        ty: TypeInfoRef,
+    ) -> Result<PrimitiveInfo, DescriptorError> {
+        self.scalar_argument_type_with_bindings(node, ty, &BTreeMap::new())
+    }
+
+    fn scalar_argument_type_with_bindings(
+        &mut self,
+        node: DescriptorNode,
         mut ty: TypeInfoRef,
+        bindings: &BTreeMap<GenericParameterRef, TypeInfoRef>,
     ) -> Result<PrimitiveInfo, DescriptorError> {
         let mut seen = BTreeSet::new();
         loop {
@@ -649,6 +827,9 @@ impl Validator<'_> {
                 });
             }
             match self.input.types.get(ty.0 as usize) {
+                Some(TypeInfo::Parameter(parameter)) if bindings.contains_key(parameter) => {
+                    ty = bindings[parameter]
+                }
                 Some(TypeInfo::Alias { target, .. }) => ty = *target,
                 Some(TypeInfo::Primitive(primitive))
                     if !matches!(
@@ -716,6 +897,14 @@ impl Validator<'_> {
                     }
                     break;
                 }
+                Some(TypeInfo::Builtin {
+                    constructor: super::BuiltinTypeInfo::Result,
+                    ..
+                }) if matches!(observation, ReturnObservationInfo::Result(_)) => return Ok(()),
+                Some(TypeInfo::Builtin {
+                    constructor: super::BuiltinTypeInfo::Option,
+                    ..
+                }) if matches!(observation, ReturnObservationInfo::Option(_)) => return Ok(()),
                 None => {
                     return Err(DescriptorError::MissingReference {
                         from: node,
@@ -743,6 +932,17 @@ impl Validator<'_> {
         for argument in &effect.arguments {
             match argument {
                 StaticEffectArgInfo::Resource(key) => self.identity(key)?,
+                StaticEffectArgInfo::ResourceProjection { root, fields } => {
+                    self.identity(root)?;
+                    if fields.is_empty() {
+                        return Err(DescriptorError::InvalidDescription {
+                            reason: "empty resource projection",
+                        });
+                    }
+                    for field in fields {
+                        self.name(node, field)?;
+                    }
+                }
                 StaticEffectArgInfo::Callable(id) => self.callable(node, id)?,
                 StaticEffectArgInfo::String(value) | StaticEffectArgInfo::Integer(value) => {
                     self.text(value)?
@@ -880,6 +1080,11 @@ impl Validator<'_> {
                 .filter_map(|parameter| parameter.name.as_deref()),
         )?;
         let mut generics = BTreeSet::new();
+        for parameter in &signature.parameters {
+            if let Some(default) = &parameter.default {
+                default.owner.validate()?;
+            }
+        }
         for generic in &signature.generics {
             if !generics.insert(*generic) {
                 return Err(DescriptorError::Invalid {

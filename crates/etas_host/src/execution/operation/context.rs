@@ -1,4 +1,4 @@
-use super::super::{CancelSignal, ScopeId};
+use super::super::{CancelSignal, ExecutionScope, ScopeId};
 use super::OperationId;
 use crate::{HostRequestId, TraceContext};
 
@@ -11,6 +11,7 @@ pub struct OperationContext {
     request: Option<HostRequestId>,
     trace: TraceContext,
     signal: CancelSignal,
+    resource_scope: Option<ExecutionScope>,
 }
 
 impl OperationContext {
@@ -18,6 +19,24 @@ impl OperationContext {
         self.signal
             .register_child(self.operation, self.request, self.trace.clone())
     }
+
+    /// Give resources returned by a request the lifetime of its enclosing scope.
+    /// Work performed to obtain those resources remains owned by the request.
+    pub fn retain_resources_in_parent_scope(mut self) -> Result<Self, crate::HostError> {
+        self.resource_scope = self.signal.parent_scope()?;
+        Ok(self)
+    }
+
+    pub(crate) fn register_resource(
+        &self,
+    ) -> Result<super::OperationRegistration, crate::HostError> {
+        self.signal.check()?;
+        match &self.resource_scope {
+            Some(scope) => scope.register(None, self.request, self.trace.clone()),
+            None => self.register_work(),
+        }
+    }
+
     /// Transfer backend work to an owned task. Dropping the receiver never drops
     /// the registration: it remains in the scope until the task actually settles.
     pub async fn supervise<T, F, Fut>(&self, job: F) -> Result<T, crate::HostError>
@@ -29,7 +48,8 @@ impl OperationContext {
         let registration =
             self.signal
                 .register_child(self.operation, self.request, self.trace.clone())?;
-        let context = registration.context().clone();
+        let mut context = registration.context().clone();
+        context.resource_scope.clone_from(&self.resource_scope);
         let task = tokio::spawn(async move {
             if let Err(error) = registration.begin_dispatch() {
                 registration.complete(super::ExternalOutcome::NotDispatched, vec![])?;
@@ -78,6 +98,7 @@ impl OperationContext {
             request,
             trace,
             signal,
+            resource_scope: None,
         }
     }
     pub fn scope(&self) -> ScopeId {

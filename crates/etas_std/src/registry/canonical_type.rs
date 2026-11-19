@@ -9,6 +9,27 @@ pub(super) fn validate(owner: &str, root: &StdType) -> Result<(), StdRegistryVal
     let mut pending = vec![root];
     while let Some(ty) = pending.pop() {
         match ty {
+            StdType::Existential { bounds } => {
+                pending.extend(bounds.iter().flat_map(|bound| &bound.args));
+            }
+            StdType::Handler {
+                handled,
+                produced,
+                result,
+            } => {
+                pending.extend(result.iter().map(|ty| ty.as_ref()));
+                for row in std::iter::once(handled).chain(produced.iter()) {
+                    pending.extend(
+                        row.effects
+                            .iter()
+                            .flat_map(|effect| &effect.args)
+                            .filter_map(|arg| match arg {
+                                crate::StdStaticArg::Type(ty) => Some(ty),
+                                _ => None,
+                            }),
+                    );
+                }
+            }
             StdType::Named(_) | StdType::NamedApplied { .. } => {
                 return Err(StdRegistryValidationError {
                     symbol: owner.into(),

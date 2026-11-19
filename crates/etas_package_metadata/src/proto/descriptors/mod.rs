@@ -1,6 +1,7 @@
 mod annotations;
 mod bodies;
 mod budget;
+mod defaults;
 mod effects;
 mod header_budget;
 mod headers;
@@ -22,6 +23,27 @@ pub(super) use budget::{validate_model, validate_wire};
 pub(super) use schema::GenericOwner as ProtoGenericOwner;
 pub(super) use schema::Graph as ProtoDescriptorGraph;
 pub(super) use schema::Method as ProtoMethodIdentity;
+pub(super) use schema::ParameterDefault as ProtoParameterDefaultReference;
+pub(super) use schema::ValueProjectionStep as ProtoValueProjectionStep;
+
+pub(super) fn encode_parameter_default(
+    reference: &etas_code::descriptor::ParameterDefaultInfo,
+) -> ProtoParameterDefaultReference {
+    defaults::encode(reference)
+}
+
+pub(super) fn decode_parameter_default(
+    reference: ProtoParameterDefaultReference,
+) -> Result<etas_code::descriptor::ParameterDefaultInfo, MetadataArtifactError> {
+    defaults::decode(reference)
+}
+
+pub(super) fn validate_parameter_default(
+    reference: &ProtoParameterDefaultReference,
+    budget: &mut super::budget::MetadataGraphBudget,
+) -> Result<(), MetadataArtifactError> {
+    defaults::validate_wire(reference, budget)
+}
 
 pub(super) fn encode_generic_owner(
     owner: &etas_code::descriptor::GenericOwner,
@@ -49,6 +71,14 @@ pub(super) fn validate_generic_owner(
             header_budget::key(owner.subject.as_ref(), budget)?;
             header_budget::key(owner.selected_spec.as_ref(), budget)
         }
+        Some(Kind::Action(owner)) => {
+            budget.charge(1, "generic action owner")?;
+            header_budget::key(owner.effect.as_ref(), budget)
+        }
+        Some(Kind::ActionOverload(owner)) => {
+            budget.charge(1 + owner.signature.len(), "generic action overload owner")?;
+            header_budget::key(owner.effect.as_ref(), budget)
+        }
         None => Err(invalid("type parameter has no generic owner")),
     }
 }
@@ -68,6 +98,9 @@ pub(super) fn validate_model_generic_owner(
             1 + owner.module().len()
                 + units(owner.subject())
                 + owner.selected_spec().map_or(0, units)
+        }
+        GenericOwner::Action { effect, .. } | GenericOwner::ActionOverload { effect, .. } => {
+            1 + units(effect)
         }
     };
     budget.charge(count, "generic type parameter owner")
@@ -155,10 +188,156 @@ pub(super) fn limits() -> DescriptorLimits {
     }
 }
 
+fn has_result_observations(graph: &DescriptorGraphInput) -> bool {
+    graph.traces.iter().any(|trace| {
+        matches!(
+            trace,
+            etas_code::descriptor::TraceInfo::Outcome(
+                etas_code::descriptor::CallableOutcomeInfo::Returned {
+                    observation: etas_code::descriptor::ReturnObservationInfo::Result(_),
+                    ..
+                }
+            )
+        )
+    })
+}
+
+fn has_option_observations(graph: &DescriptorGraphInput) -> bool {
+    graph.traces.iter().any(|trace| {
+        matches!(
+            trace,
+            etas_code::descriptor::TraceInfo::Outcome(
+                etas_code::descriptor::CallableOutcomeInfo::Returned {
+                    observation: etas_code::descriptor::ReturnObservationInfo::Option(_),
+                    ..
+                }
+            )
+        )
+    })
+}
+
+const CURRENT_DESCRIPTOR_GRAPH_VERSION: u32 = 19;
+
+fn has_effect_type_arguments(graph: &DescriptorGraphInput) -> bool {
+    graph.types.iter().any(|ty| {
+        let etas_code::descriptor::TypeInfo::Applied { constructor, .. } = ty else {
+            return false;
+        };
+        let parameters = match graph.types.get(constructor.0 as usize) {
+            Some(
+                etas_code::descriptor::TypeInfo::Nominal { parameters, .. }
+                | etas_code::descriptor::TypeInfo::Alias { parameters, .. }
+                | etas_code::descriptor::TypeInfo::Enum { parameters, .. },
+            ) => parameters,
+            _ => return false,
+        };
+        parameters.iter().any(|parameter| {
+            graph
+                .binders
+                .get(parameter.0 as usize)
+                .is_some_and(|binder| {
+                    binder.kind == etas_code::descriptor::GenericParameterKind::EffectRow
+                })
+        })
+    })
+}
+
+fn wire_has_effect_type_arguments(graph: &ProtoDescriptorGraph) -> bool {
+    graph.types.iter().any(|ty| {
+        let Some(schema::ty::Kind::Applied(applied)) = &ty.kind else {
+            return false;
+        };
+        let parameters = match graph
+            .types
+            .get(applied.constructor as usize)
+            .and_then(|ty| ty.kind.as_ref())
+        {
+            Some(
+                schema::ty::Kind::Nominal(declaration)
+                | schema::ty::Kind::Alias(declaration)
+                | schema::ty::Kind::Enum(declaration),
+            ) => &declaration.parameters,
+            _ => return false,
+        };
+        parameters.iter().any(|parameter| {
+            graph
+                .binders
+                .get(*parameter as usize)
+                .is_some_and(|binder| binder.kind == 2)
+        })
+    })
+}
+
 pub(super) fn to_proto(set: &DefinitionDescriptorSet) -> ProtoDescriptorGraph {
     let input = &set.graph;
     ProtoDescriptorGraph {
         version: match &set.headers {
+            _ if has_effect_type_arguments(input) => CURRENT_DESCRIPTOR_GRAPH_VERSION,
+            _ if input.binders.iter().any(|binder| {
+                matches!(
+                    binder.owner,
+                    etas_code::descriptor::GenericOwner::ActionOverload { .. }
+                )
+            }) =>
+            {
+                18
+            }
+            _ if input.types.iter().any(|ty| {
+                matches!(ty, etas_code::descriptor::TypeInfo::Function(signature)
+                if signature.parameters.iter().any(|parameter| parameter.default.is_some()))
+            }) =>
+            {
+                17
+            }
+            Some(headers)
+                if headers
+                    .callables
+                    .iter()
+                    .any(|callable| callable.analysis.suspension.is_some()) =>
+            {
+                16
+            }
+            _ if input
+                .types
+                .iter()
+                .any(|ty| matches!(ty, etas_code::descriptor::TypeInfo::AgentContext(_)))
+                || set
+                    .headers
+                    .as_ref()
+                    .and_then(|headers| headers.snapshots.as_ref())
+                    .is_some_and(|snapshots| !snapshots.tools.is_empty()) =>
+            {
+                15
+            }
+            _ if input.binders.iter().any(|binder| {
+                matches!(
+                    binder.owner,
+                    etas_code::descriptor::GenericOwner::Action { .. }
+                )
+            }) =>
+            {
+                14
+            }
+            _ if has_option_observations(input) => 13,
+            _ if has_result_observations(input) => 12,
+            _ if input.types.iter().any(|ty| match ty {
+                etas_code::descriptor::TypeInfo::Builtin {
+                    constructor:
+                        etas_code::descriptor::BuiltinTypeInfo::SchedulerHandle
+                        | etas_code::descriptor::BuiltinTypeInfo::Continuation,
+                    ..
+                } => true,
+                etas_code::descriptor::TypeInfo::Nominal { parameters, .. } => {
+                    parameters.iter().any(|parameter| {
+                        input.binders[parameter.0 as usize].kind
+                            == etas_code::descriptor::GenericParameterKind::EffectRow
+                    })
+                }
+                _ => false,
+            }) =>
+            {
+                11
+            }
             _ if input.binders.iter().any(|binder| {
                 matches!(
                     binder.owner,
@@ -262,12 +441,75 @@ pub(super) fn from_proto(
             | (8, Some((_, _, true)))
             | (9, _)
             | (10, _)
+            | (11, _)
+            | (12, _)
+            | (13, _)
+            | (14, _)
+            | (15, _)
+            | (16, _)
+            | (17, _)
+            | (18, _)
+            | (19, _)
     ) {
         return Err(invalid("unsupported descriptor graph schema"));
+    }
+    let has_action_binders = input.binders.iter().any(|binder| {
+        matches!(
+            binder.owner.as_ref().and_then(|owner| owner.kind.as_ref()),
+            Some(
+                schema::generic_owner::Kind::Action(_)
+                    | schema::generic_owner::Kind::ActionOverload(_)
+            )
+        )
+    });
+    let has_defaults = input.types.iter().any(|ty| {
+        matches!(&ty.kind, Some(schema::ty::Kind::Function(signature))
+        if signature.parameters.iter().any(|parameter| parameter.default.is_some()))
+    });
+    if (has_defaults && input.version < 17) || (input.version == 17 && !has_defaults) {
+        return Err(invalid(
+            "parameter default references require their descriptor schema",
+        ));
+    }
+    let has_overload_binders = input.binders.iter().any(|binder| {
+        matches!(
+            binder.owner.as_ref().and_then(|owner| owner.kind.as_ref()),
+            Some(schema::generic_owner::Kind::ActionOverload(_))
+        )
+    });
+    if (has_overload_binders && input.version < 18)
+        || (input.version == 18 && !has_overload_binders)
+    {
+        return Err(invalid(
+            "action overload binders require their descriptor schema",
+        ));
+    }
+    if wire_has_effect_type_arguments(&input) != (input.version == 19) {
+        return Err(invalid(
+            "effect type arguments require their descriptor schema",
+        ));
+    }
+    if (has_action_binders && input.version < 14) || (input.version == 14 && !has_action_binders) {
+        return Err(invalid("action binders require their descriptor schema"));
     }
     let has_callable_definition = input.types.iter().any(|ty| {
         matches!(&ty.kind, Some(schema::ty::Kind::Builtin(builtin)) if builtin.constructor == 23)
     });
+    let has_task_control = input.types.iter().any(|ty| match &ty.kind {
+        Some(schema::ty::Kind::Builtin(builtin)) => matches!(builtin.constructor, 24 | 25),
+        Some(schema::ty::Kind::Nominal(nominal)) => nominal.parameters.iter().any(|parameter| {
+            input
+                .binders
+                .get(*parameter as usize)
+                .is_some_and(|binder| binder.kind == 2)
+        }),
+        _ => false,
+    });
+    if (has_task_control && input.version < 11) || (input.version == 11 && !has_task_control) {
+        return Err(invalid(
+            "task control types require their descriptor schema",
+        ));
+    }
     let has_existential = input
         .types
         .iter()
@@ -284,12 +526,14 @@ pub(super) fn from_proto(
             )
         )
     });
-    if has_implementation_binders != (input.version == 10) {
+    if (has_implementation_binders && input.version < 10)
+        || (input.version == 10 && !has_implementation_binders)
+    {
         return Err(invalid(
             "implementation binders require their descriptor schema",
         ));
     }
-    if (has_callable_definition && !matches!(input.version, 8..=10))
+    if (has_callable_definition && !matches!(input.version, 8..=CURRENT_DESCRIPTOR_GRAPH_VERSION))
         || (input.version == 8 && !has_callable_definition)
     {
         return Err(invalid(
@@ -297,7 +541,7 @@ pub(super) fn from_proto(
         ));
     }
     if (matches!(input.version, 5..=7)
-        || (matches!(input.version, 8..=10)
+        || (matches!(input.version, 8..=CURRENT_DESCRIPTOR_GRAPH_VERSION)
             && input.headers.as_ref().is_some_and(|headers| {
                 headers
                     .agents
@@ -320,7 +564,9 @@ pub(super) fn from_proto(
         .as_ref()
         .and_then(|headers| headers.snapshots.as_ref())
         .is_some_and(|snapshots| !snapshots.flows.is_empty());
-    if (has_flows && !matches!(input.version, 6..=10)) || (input.version == 6 && !has_flows) {
+    if (has_flows && !matches!(input.version, 6..=CURRENT_DESCRIPTOR_GRAPH_VERSION))
+        || (input.version == 6 && !has_flows)
+    {
         return Err(invalid(
             "flow snapshot coordinates require their descriptor schema",
         ));
@@ -330,9 +576,40 @@ pub(super) fn from_proto(
         .as_ref()
         .and_then(|headers| headers.snapshots.as_ref())
         .is_some_and(|snapshots| !snapshots.methods.is_empty());
-    if (has_methods && !matches!(input.version, 7..=10)) || (input.version == 7 && !has_methods) {
+    if (has_methods && !matches!(input.version, 7..=CURRENT_DESCRIPTOR_GRAPH_VERSION))
+        || (input.version == 7 && !has_methods)
+    {
         return Err(invalid(
             "method snapshot coordinates require their descriptor schema",
+        ));
+    }
+    let has_tools = input
+        .headers
+        .as_ref()
+        .and_then(|headers| headers.snapshots.as_ref())
+        .is_some_and(|snapshots| !snapshots.tools.is_empty());
+    let has_agent_context = input
+        .types
+        .iter()
+        .any(|ty| matches!(ty.kind, Some(schema::ty::Kind::AgentContext(_))));
+    if ((has_tools || has_agent_context) && input.version < 15)
+        || (input.version == 15 && !(has_tools || has_agent_context))
+    {
+        return Err(invalid(
+            "agent contexts and tool snapshots require their descriptor schema",
+        ));
+    }
+    let has_suspension = input.headers.as_ref().is_some_and(|headers| {
+        headers.callables.iter().any(|callable| {
+            callable
+                .analysis
+                .as_ref()
+                .is_some_and(|analysis| analysis.suspension.is_some())
+        })
+    });
+    if (has_suspension && input.version < 16) || (input.version == 16 && !has_suspension) {
+        return Err(invalid(
+            "suspension analysis requires its descriptor schema",
         ));
     }
     let declarations = input
@@ -348,6 +625,7 @@ pub(super) fn from_proto(
             })
         })
         .collect::<Result<_, MetadataArtifactError>>()?;
+    let version = input.version;
     let headers = input.headers.map(headers::decode).transpose()?;
     let input = DescriptorGraphInput {
         types: input
@@ -371,6 +649,15 @@ pub(super) fn from_proto(
             .map(traces::decode)
             .collect::<Result<_, _>>()?,
     };
+    if (has_result_observations(&input) && version < 12)
+        || (version == 12 && !has_result_observations(&input))
+        || (has_option_observations(&input) && version < 13)
+        || (version == 13 && !has_option_observations(&input))
+    {
+        return Err(invalid(
+            "Option/Result observations require their descriptor schema",
+        ));
+    }
     // Wire references are inert until the shared descriptor validator accepts them.
     let set = DefinitionDescriptorSet {
         graph: input,
