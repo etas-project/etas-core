@@ -117,6 +117,14 @@ impl ExecutionScope {
     pub fn id(&self) -> ScopeId {
         self.id
     }
+    pub(crate) fn parent(&self) -> Result<Option<Self>, HostError> {
+        Ok(self.lock()?.nodes[self.id.0 as usize]
+            .parent
+            .map(|id| Self {
+                tree: self.tree.clone(),
+                id,
+            }))
+    }
     /// Reserve the unique engine owner. A stopped-but-not-started invocation may
     /// still be claimed so its driver can publish cancellation without executing.
     pub fn claim_body(&self) -> Result<(), HostError> {
