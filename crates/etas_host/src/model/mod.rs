@@ -6,6 +6,8 @@ pub mod protocol;
 pub(crate) mod tool_schema;
 mod usage;
 
+pub use tool_schema::host_schema_to_json_schema;
+
 pub use anthropic::{
     AnthropicProtocolAdapter, AnthropicProviderRequest, AnthropicProviderResponse,
 };

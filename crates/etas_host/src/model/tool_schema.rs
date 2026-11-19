@@ -46,7 +46,7 @@ pub(crate) fn anthropic_tools(schemas: &[ToolSchema]) -> Result<Value, HostError
     Ok(Value::Array(tools))
 }
 
-pub(crate) fn host_schema_to_json_schema(schema: &HostSchema) -> Result<Value, HostError> {
+pub fn host_schema_to_json_schema(schema: &HostSchema) -> Result<Value, HostError> {
     match schema {
         HostSchema::Unit => Ok(json!({ "type": "null" })),
         HostSchema::Bool => Ok(json!({ "type": "boolean" })),
