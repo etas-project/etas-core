@@ -659,6 +659,7 @@ mod tests {
                 args: Vec::new(),
             }],
         }];
+        action.param_names = vec!["stream".to_owned()];
         action.params = vec![Type {
             kind: TypeKind::Var,
             name: "S".to_owned(),

@@ -53,6 +53,8 @@ pub struct SpecMethodCallableArgument {
     /// Index in the complete method input list, including its receiver.
     pub position: u32,
     /// Root parameters and generic binders belong to the enclosing callable.
+    /// Inside a CallableValueNode, parameter positions index its ordered
+    /// parameter_bindings interface, including captured lexical inputs.
     pub sources: CallableValueGraph,
 }
 

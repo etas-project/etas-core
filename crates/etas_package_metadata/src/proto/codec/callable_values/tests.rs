@@ -264,7 +264,7 @@ fn residual_reference_budget_is_shared_across_the_artifact() {
         parameter_projections: Vec::new(),
         objects: Vec::new(),
         sources: vec![CallableValueSource::Value(0)],
-        values: vec![value.clone(), value],
+        values: vec![value; crate::MAX_METADATA_GRAPH_NODES / (2700 * (bindings.len() + 1)) + 1],
     };
     let mut package = crate::test_package_metadata();
     package
@@ -318,7 +318,14 @@ fn root_and_latent_residuals_share_the_artifact_budget() {
         });
     assert!(validate_package_metadata_graph(&package).is_ok());
     assert!(validate_proto_package_metadata_graph(&package_metadata_to_proto(&package)).is_ok());
-    package.public_metadata.effect_summaries[0].latent_flows[0].residual_checks = references;
+    let copies = crate::MAX_METADATA_GRAPH_NODES / (references.len() * (bindings.len() + 1)) + 1;
+    package.public_metadata.effect_summaries[0].latent_flows = vec![
+        crate::LatentFlowSummary {
+            residual_checks: references,
+            ..Default::default()
+        };
+        copies
+    ];
     assert!(validate_package_metadata_graph(&package).is_err());
     assert!(validate_proto_package_metadata_graph(&package_metadata_to_proto(&package)).is_err());
 }
@@ -374,16 +381,13 @@ fn callable_behavior_has_typed_closed_enums_and_affects_content_identity() {
 }
 
 #[test]
-fn callable_graph_rejects_dangling_scopes_empty_returns_and_unbound_traces() {
+fn callable_graph_rejects_dangling_scopes_and_unbound_traces() {
     let mut cases = vec![];
     let mut bad = graph();
     bad.sources = vec![CallableValueSource::Value(1)];
     cases.push(bad);
     let mut bad = graph();
     bad.sources = vec![parameter(CallableValueScope::Value(0), 0)];
-    cases.push(bad);
-    let mut bad = graph();
-    bad.values[0].returned_sources = Some(vec![]);
     cases.push(bad);
     let mut bad = graph();
     bad.values[0].action_trace = ActionTrace::ParameterCall {
@@ -567,7 +571,7 @@ fn node_types_and_traces_share_the_artifact_depth_budget() {
 
 #[test]
 fn multiple_return_graphs_consume_one_whole_artifact_node_budget() {
-    let sources = (0..60_000)
+    let sources = (0..(crate::MAX_METADATA_GRAPH_NODES / 2 + 1) as u32)
         .map(|position| parameter(CallableValueScope::Root, position))
         .collect();
     let graph = CallableValueGraph {

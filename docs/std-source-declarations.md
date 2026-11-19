@@ -1,41 +1,48 @@
 # Etas standard-library implementation migration
 
-The maintained std contains 122 Etas files. A fresh strict frontend217 build
-of the current source succeeds in 65.009 seconds with caching disabled. Its
-artifact hash is `1c2a36bc15d1163a93113251df4252022a1ffac8c83ae89a52ecc863e7920df3`.
-Its profile records 600 type-checked and 600 Effect-checked bodies. It includes
-terminal `resume` typing; its source payload matches the earlier SDK. FIFO now
-executes against this bundle and its checkpoint restores independently to 42.
-A second independent build through the actual `std install` command produces
-the same artifact hash, installs the matching runtime221 binary and moves the
-whole prefix. The task-owned producer source copy has been removed.
+The maintained std contains 122 Etas files and 600 bodies. A fresh strict
+frontend220 build checks all 600 bodies for types and Effects in 20.763 seconds
+with caching disabled and the complete legacy registry compiled out. The SDK
+artifact hash is
+`blake3:49ce97530bfbd68307115373e49b173e987a905b0aeacfb26494f0ba3225db41`.
+A second independent build through `std install` produces identical manifest
+and artifact bytes. The whole prefix is moved, and only the task-owned producer
+source copy is removed. All 122 installed source files match the maintained tree.
 
-A full-source SDK integration run also adds a new generic `sdk_echo` API by
-writing only one Etas file. Its private record and owning `unpack` method survive
-separate-process publication and relocation; cold and warm application runs both
-return 42. This uses all 122 maintained files plus the added file. An old-project
-fixture initially required exactly std 0.4 and therefore could not create its
-legacy 0.2 lock; its requirement is corrected to `>=0.2`. The retained SDK now
-upgrades that real `builtin:std` lock and runs a dependent package to 42. The
-changed-join body now returns 43 both uncached and through the original cache
-directory, after returning 42 before rebuilding. The corrected full Rust test
-rerun remains open; the tail receipt is
-`/tmp/etas-source-sdk222-delivery-receipts/tail-receipt.json`.
+Two independent external application sessions each pass all seven execution
+entries and six sealed checkpoint restores. They cover collections, protected
+filesystem I/O, FIFO/stateful/yielding scheduling, try_join cancellation cleanup,
+and Handler/Lambda lexical control flow and original-var writeback. The matching
+binary SHA256 is
+`1b5aa2d37df5af3d071f090f298e2fc9deacc3e261828ae6e8832a6934c93ba6`.
+The consolidated runtime suite passes 1,617 tests, with zero failures and one
+ignored test. The matching installation receipt is
+`/tmp/etas-source-matching227-delivery/receipt.json`.
 
-Profiled current-bundle loading identifies the startup cost: of a 59.665-second
-simple execution, restoring Effect analysis takes 55.537 seconds, including
-47.604 seconds in summary solving and 6.770 seconds in memory provenance.
-`std.restore.*` profile counters now expose these passes. The per-load restore cost remains unresolved. CLI `check` now uses the same
-selected provider for loading and checking; the annotated program checks in
-65.747 seconds with one SDK load, after its earlier 119.688-second reproduction.
-A subsequent sampled optimization makes effect projections and substitutions
-reuse a checked type lookup index: the same complete SDK application returns 42
-in 24.031 seconds; summary solving takes 11.023 seconds. Native analysis and
-publication checks remain enabled. A subsequent alias-summary join optimization
-reduces the same use case to 17.864 seconds, including 0.926 seconds in memory
-provenance. The consolidated runtime suite passes 1,617 tests with zero failures
-and one ignored test. Fresh matching SDK installation acceptance remains open.
-The normal release provider remains legacy.
+The complete SDK installation integration test also passes. Adding a generic
+API requires only one new Etas file; its private record and owning impl survive
+publication and relocation. It verifies deterministic builds, removed producer
+sources, external check/run, cold/warm caches, actual builtin std lock upgrades,
+and cross-package execution. A source-only join body rebuild changes the result
+from 42 to 43 through the original cache. The test log is
+`/tmp/etas-source-sdk227-delivery-test.log`.
+
+Sampled optimization preserves every native analysis and checked-publication
+pass while reducing the same full-SDK application from about 60 seconds to
+17.864 seconds. Indexed type lookup reduces summary solving to 11.193 seconds;
+alias-summary joins reduce memory-provenance analysis to 0.926 seconds. CLI
+check also reuses its selected provider instead of loading the SDK twice.
+
+The wider module compatibility test identified a returned-lambda spec-receiver
+metadata scope mismatch in `std.extra.reader`. Its repair uses each node's
+ordered checked binding interface, including lexical captures. The current
+compiler code advances frontend221 and metadata68; acceptance with that new
+producer remains pending. The metadata suite passes 125 tests after the repair.
+The wider module test, broader
+consolidated regressions, final installed IDE/VSIX acceptance, provider rollout
+and all-five-repository published Git/main delivery remain open. The normal
+release provider remains legacy. Core implementation is published on its feature
+branch; downstream dependency closure is being verified without path overrides.
 
 The earlier complete strict frontend202
 producer successfully checks 600 bodies for types and Effects and publishes the

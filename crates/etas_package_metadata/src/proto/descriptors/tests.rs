@@ -976,7 +976,10 @@ fn package_graph_roundtrip_and_shared_descriptor_budget_use_the_production_codec
     let large = DefinitionDescriptorSet {
         headers: None,
         graph: DescriptorGraphInput {
-            types: vec![TypeInfo::Primitive(PrimitiveInfo::Unit); 50_000],
+            types: vec![
+                TypeInfo::Primitive(PrimitiveInfo::Unit);
+                crate::MAX_METADATA_GRAPH_NODES / 2 + 1
+            ],
             ..Default::default()
         },
         declarations: vec![],

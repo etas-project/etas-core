@@ -405,8 +405,8 @@ impl CallableValueGraph {
                 }
                 self.parameter(binding.parameter, root)?;
             }
-            // A spec invocation's callback graph is rooted in this callable,
-            // including when the callable itself is a node in a method graph.
+            // A node's callback evidence uses its checked binding interface,
+            // which includes lexical captures as well as invocation arguments.
             let invocation_generics =
                 node.generic_bindings
                     .iter()
@@ -421,7 +421,7 @@ impl CallableValueGraph {
                     .collect::<Option<Vec<_>>>();
             let invocation_root = invocation_generics
                 .as_deref()
-                .map(|kinds| (node.params.len(), kinds));
+                .map(|kinds| (node.parameter_bindings.len(), kinds));
             let mut trace = vec![&node.action_trace];
             if let Some(requests) = &node.handler_requests {
                 for parameter in &requests.parameters {

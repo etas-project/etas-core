@@ -51,7 +51,7 @@ fn response(reason: Option<Value>, message: Value) -> ModelResponse {
 }
 
 #[test]
-fn length_retains_usage_and_rejects_even_valid_text_or_truncated_tools() {
+fn length_retains_usage_and_termination_without_decoding_truncated_tools() {
     for message in [
         json!({"content":"[\"delegate\",\"Read context.txt\"]","reasoning_content":"PRIVATE_REASONING"}),
         json!({"content":""}),
@@ -60,10 +60,13 @@ fn length_retains_usage_and_rejects_even_valid_text_or_truncated_tools() {
         let response = response(Some(json!("length")), message);
         assert_eq!(response.id, crate::HostRequestId(49));
         let usage = response.usage.unwrap();
-        assert_eq!(usage.input_tokens + usage.output_tokens, 14);
-        let error = response.result.unwrap_err();
-        assert_eq!(error.code, HostErrorCode::IncompleteResponse);
-        assert!(!error.to_string().contains("PRIVATE_REASONING"));
+        assert_eq!(
+            (usage.input_tokens, usage.output_tokens),
+            (Some(10), Some(4))
+        );
+        let output = response.result.unwrap();
+        assert_eq!(output.termination, crate::ModelTermination::Truncated);
+        assert!(output.message.tool_calls.is_empty());
     }
 }
 
@@ -84,9 +87,9 @@ fn missing_null_unknown_and_conflicting_finish_reasons_fail_closed_with_usage() 
     assert_eq!(
         response(Some(json!("content_filter")), json!({"content":"valid"}))
             .result
-            .unwrap_err()
-            .code,
-        HostErrorCode::ProviderRejected
+            .unwrap()
+            .termination,
+        crate::ModelTermination::Refused("content_filter".into())
     );
     assert!(
         response(
@@ -96,11 +99,13 @@ fn missing_null_unknown_and_conflicting_finish_reasons_fail_closed_with_usage() 
         .result
         .is_ok()
     );
-    assert!(
+    assert!(matches!(
         response(Some(json!("tool_calls")), json!({"content":"valid"}))
             .result
-            .is_err()
-    );
+            .unwrap()
+            .termination,
+        crate::ModelTermination::InvalidToolCall(_)
+    ));
     assert!(
         response(
             Some(json!("stop")),

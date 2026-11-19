@@ -190,7 +190,7 @@ mod tests {
 
     #[test]
     fn origin_budget_is_shared_with_the_entire_package_graph_before_encoding() {
-        let origins = fixture(9_000);
+        let origins = fixture(crate::MAX_METADATA_GRAPH_NODES / 12 + 1);
         let mut metadata = crate::PackageMetadata {
             std_compatibility: "test-std".into(),
             ..crate::PackageMetadata::default()
