@@ -4,7 +4,7 @@ module std.browser.protocol;
 public type BrowserError = { code: string, message: string };
 
 // Browser protocol substrate support type.
-public type BrowserMessage = std.json.JsonValue;
+public alias BrowserMessage = std.json.JsonValue;
 
 // Browser protocol substrate support type.
 public type BrowserProfile = {
