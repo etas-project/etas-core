@@ -1,225 +1,43 @@
 # Etas Core
 
-Shared, dependency-bottom infrastructure for the Etas toolchain.
+Shared types, diagnostics, standard-library declarations, and host interfaces
+for the Etas toolchain.
 
-`etas-core` owns stable data contracts and reusable mechanisms used by the
-frontend, interpreter, CLI, package tooling, IDE, and future AIR runtime. It
-does not own source parsing, HIR semantics, type/effect checking, interpreter
-control flow, package resolution, or AIR/FIR lowering.
+This is the common foundation used by the compiler, interpreter, and editor
+tooling, not a standalone language executable. It includes:
 
-## Workspace Crates
+- Source locations, diagnostics, identifiers, and shared data structures.
+- Standard-library API declarations and pure builtin implementations.
+- Host interfaces for observable operations such as I/O and model calls.
+- Cache infrastructure and package-metadata contracts.
 
-| Crate | Responsibility |
-|---|---|
-| `etas_core` | Source files, spans, diagnostics, typed IDs, arenas, interning, and common result types |
-| `etas_utils` | Pipelines, fixpoints, abstract domains, graph algorithms, automata, reusable patterns, and profiling |
-| `etas_cache` | Artifact identities, fingerprints, dependency records, SQLite/WAL storage, blob compression, invalidation, and telemetry |
-| `etas_package_metadata` | Versioned public package metadata and compressed binary artifact encoding |
-| `etas_std` | Standard-package module, type, flow, effect, action, intrinsic, and editor declarations |
-| `etas_builtin` | Runtime-neutral implementations of pure deterministic intrinsics |
-| `etas_host` | Explicit host protocols and adapters for console, filesystem, commands, network, TLS, streams, memory, sessions, tools, models, approvals, secrets, and browsers |
+Standard-library declarations describe the source-facing API; pure builtins
+implement deterministic operations; host adapters provide external services.
+Keeping these separate lets different execution backends reuse the same API.
 
-The boundaries between the last three crates are intentional:
+Experimental. To write and run Etas programs, start with the
+[Etas CLI](https://github.com/etas-project/etas#quickstart).
 
-```text
-etas_std       declares the source-visible API and its static metadata
-etas_builtin   executes pure, runtime-neutral intrinsic kernels
-etas_host      mediates observable host operations and authority
-```
+## Bootstrap
 
-A host operation must not be hidden in `etas_builtin`, and `etas_host` must not
-invent source-language semantics. Runtime authorization policy is an execution
-concern carried through host requests; it is not the removed source-level
-`policy` language construct.
+Requires Rust 1.85+ and a native C/C++ build toolchain.
 
-## Dependency Boundary
-
-This repository is the bottom of the Etas dependency graph:
-
-```text
-etas-core
-   ^
-   +-- etas-frontend
-   +-- etas-interpreter
-   +-- etas
-   +-- etas-runtime
-   +-- etas-optimizing
-   +-- etas-ide
-```
-
-It must not depend on another Etas repository. Crates inside this workspace may
-depend on one another in the direction encoded by Cargo, but public contracts
-must remain independent of frontend and execution implementation details.
-
-Shared mechanisms belong here only when at least two higher layers can use
-them without importing layer-specific state. For example, a generic fixpoint
-engine belongs in `etas_utils`; an effect-domain transfer function remains in
-`etas_effects`.
-
-## Host Boundary
-
-Every observable host request carries stable request identity, authority,
-trace context, budget/cancellation data, and a typed operation payload. Concrete
-adapters must fail closed when a service or grant is absent. They must not
-return empty values, mock success, or private package-specific fallbacks.
-
-Filesystem access is workspace-scoped and canonicalized. Network, browser,
-command, secret, memory, model, and tool operations remain explicit service
-families so the interpreter and future runtime can share protocol contracts
-without sharing their execution engines.
-
-## Cache Boundary
-
-`etas_cache` is a generic, cross-process artifact store, not a live compiler
-session. SQLite metadata uses WAL and transactions; immutable blobs use atomic
-writes and content fingerprints. Frontend sessions decide what is worth
-persisting and which artifacts should be recomputed.
-
-## Build and Verify
-
-The workspace requires Rust `1.85` or newer.
-
-```bash
+```sh
+git clone https://github.com/etas-project/etas-core.git
+cd etas-core
 cargo build --workspace
 ```
 
-Standard verification:
+This builds the shared Rust libraries. For a focused test run:
 
-```bash
-cargo fmt --all -- --check
-cargo test --workspace --offline
-cargo clippy --workspace --offline -- -D warnings
+```sh
+cargo test -p etas_core
 ```
 
-Focused crates can be checked independently:
+## Documentation
 
-```bash
-cargo test -p etas_utils --offline
-cargo test -p etas_cache --offline
-cargo test -p etas_std --offline
-cargo test -p etas_host --offline
-```
+- [Core design](docs/architect/phase1-core-design.md)
+- [Repository boundaries](docs/architect/repository-boundary.md)
+- [Standard library source implementation](docs/std-source-declarations.md)
 
-`--offline` assumes Cargo dependencies have already been fetched.
-
-### Standard Library Migration Baseline
-
-Export the legacy std contract and compare a candidate inventory in a separate
-process:
-
-```bash
-cargo run --offline --locked -p etas_std --example std_migration_baseline -- export /tmp/std-legacy.json
-target/debug/examples/std_migration_baseline compare /tmp/std-legacy.json /tmp/std-candidate.json
-```
-
-The JSON inventory uses canonical module and symbol paths rather than registry
-ordinals. It records declarations, overloads, effects, implementations, exports,
-prelude bindings, runtime roles and primitive contracts. Each primitive lists
-the symbols that require it and those that use it as optional acceleration.
-The comparison reports coverage and contract, export and implementation changes
-per module, and exits unsuccessfully if the inventories differ. Source body or
-native binding changes still need runtime differential verification; this
-inventory is an audit format, not a loadable std bundle.
-
-The maintained source package is `crates/etas_std/etas.toml`, with source root
-`library`. The text files declare `std.text` as module parts so moving a flow
-between files preserves its canonical name. Public flow declarations live in
-those `.es` files. The fixed embedded-source table remains the legacy provider's
-implementation asset list; source library discovery scans the manifest root.
-`StdRegistry::native_bootstrap` exposes the transitional Rust type/primitive
-contract without any source-backed legacy declarations. Native symbol IDs stay
-unchanged, so source definitions can acquire their own canonical identities.
-The final minimal bootstrap remains a separate migration gate.
-
-The maintained `std.core` source owns the `Index` marker spec and its integer
-implementations. `std.result` owns the `Result<T, E>` enum, its `Ok`/`Err`
-constructor flows and `is_ok`/`is_err` functions and methods. Checked roles keep
-the existing Result value ABI and constructor-pattern semantics; the Rust
-query view takes parameter names, enum payloads and Index impls from the bundle.
-`std.option` similarly owns `Option<T>`, its constructors, predicates and unwrap.
-Both Option and Result expose checked source methods and source unwrap bodies.
-Descriptor schema 13 carries typed Option and Result tags across processes.
-The bootstrap catalog contains no spec implementations: Index impls are loaded
-from checked source rather than duplicated as native bootstrap facts.
-
-Public standard-library declarations and algorithms belong in Etas. Rust keeps
-execution rules such as continuation capture/resume and Result representation,
-and host primitives for threads, I/O and storage. A generated `StdRegistry`
-query view is part of loading the checked source bundle. The transitional
-compiler/host contract catalog still needs a minimality audit; disabling the
-complete legacy registry factory alone does not finish std source ownership.
-
-`StdSourceRole` lists the compiler identities and minimum ABI for Index,
-Option/Result and their constructor aliases, Task, Scheduler and Continuation.
-The role checker reads this ABI directly, without looking up a copied public
-declaration in the registry. It enforces parameter kinds and executable value
-shapes; source declarations supply the parameter names. The compiler generates
-temporary query predeclarations with internal parameter names, and the installed
-query takes its public parameters from the checked bundle. These ten roles and
-their four constructor primitives are absent from the static bootstrap catalog.
-The remaining catalog has 124 transitional contracts and 21 primitives; its
-prelude references to compiler roles remain part of the migration work.
-
-Native-backed flows can own their public declaration in Etas source:
-
-```etas
-@std.binding("std.char.is_whitespace")
-public flow is_whitespace(value: char) -> bool ![] {}
-```
-
-The compiler accepts this annotation only in an explicit std source build,
-requires an empty body and explicit result/effects, and checks parameters,
-generic bounds and public effects against the primitive ABI. It emits a checked
-call to the primitive through a private native binding identity. Public source
-exports replace their bootstrap slots without changing prelude/re-export IDs;
-application calls still enter the installed source owner. Generic type and
-effect arguments are forwarded through the normal checked invocation pipeline.
-`std.text.trim` now implements Unicode trimming in Etas using that property
-primitive; it has no native bootstrap declaration. Array extend and list
-push/extend algorithms also have Etas bodies. Collection type/method migration
-remains in progress; these first collection algorithms are public flow APIs.
-
-Verified SDK queries also retain canonical declaration identities for source
-types and enum constructors. Registry image schema 2 preserves those owners and
-named enum payload fields; the native bootstrap view removes source-owned slots.
-These declarations do not acquire native roles from their spelling.
-
-`StdRegistryImage` serializes the query data, native contracts, public exports,
-prelude and source callable identities. `into_registry` validates its references
-and contracts before publishing the query view. Native symbol addresses survive
-removed source slots, and new source callables use `CallableId` bindings rather
-than legacy source enums. Legacy embedded-source implementations cannot be
-decoded from an artifact image. Static resource type names retain borrowed
-storage in Rust tables and owned storage when decoded.
-
-The reader below constructs its registry entirely from the image:
-
-```bash
-cargo run --offline --locked -p etas_std --example std_registry_image -- export-native /tmp/std-native.json
-target/debug/examples/std_registry_image read /tmp/std-native.json
-```
-
-## Downstream Use
-
-Committed downstream dependencies use the repository Git identity. During
-multi-repository development, the top-level `etas` checkout supplies local
-Cargo patches for sibling repositories; do not commit developer-specific paths
-inside this repository.
-
-The language specification and user-facing CLI live in
-[`etas`](https://github.com/etas-project/etas).
-
-## Architecture Documents
-
-- [Phase 1 core architecture](docs/architect/phase1-core-design.md)
-- [Utilities and analysis infrastructure](docs/architect/etas-utils-design.md)
-- [Artifact cache](docs/architect/etas-cache-design.md)
-- [Pure builtin kernels](docs/architect/etas-builtin-design.md)
-- [Host services](docs/architect/etas-host-design.md)
-- [Repository boundary](docs/architect/repository-boundary.md)
-
-## License
-
-Etas Core is distributed under the terms of both the
-[MIT License](LICENSE-MIT) and the
-[Apache License (Version 2.0)](LICENSE-APACHE). You may choose either license.
+[MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE)
