@@ -15,6 +15,8 @@ pub enum HostSchema {
     Record(Vec<HostFieldSchema>),
     Variant(Vec<HostVariantSchema>),
     Json,
+    /// A source-authored JSON Schema for a model response.
+    JsonDefinition(serde_json::Value),
 }
 
 #[derive(Clone, Debug, PartialEq)]

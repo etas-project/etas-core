@@ -61,6 +61,10 @@ fn schema(value: &HostSchema) -> HostValue {
             )],
         ),
         HostSchema::Json => variant("Json", Vec::new()),
+        HostSchema::JsonDefinition(definition) => variant(
+            "JsonDefinition",
+            vec![HostValue::String(definition.to_string())],
+        ),
     }
 }
 

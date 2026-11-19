@@ -65,6 +65,7 @@ pub fn host_schema_to_json_schema(schema: &HostSchema) -> Result<Value, HostErro
         HostSchema::Record(fields) => record_schema_to_json_schema(fields),
         HostSchema::Variant(variants) => variant_schema_to_json_schema(variants),
         HostSchema::Json => Ok(json!({})),
+        HostSchema::JsonDefinition(definition) => Ok(definition.clone()),
     }
 }
 
