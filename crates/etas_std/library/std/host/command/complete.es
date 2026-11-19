@@ -19,9 +19,13 @@ public enum CommandEvent {
     Stopped(bytes, bytes),
 }
 
-// The host issues and validates the handle. Its readonly reconnect identifier
-// is data; reconnect still checks the selected sandbox and current authority.
-public type CommandHandle = { private reconnect_id: string };
+// The host issues the process state. The reconnect identifier is data;
+// reconnect checks the selected sandbox and current authority.
+type CommandProcessState;
+public type CommandHandle = {
+    private reconnect_id: string,
+    private process: CommandProcessState,
+};
 
 public type CommandResult = { exit_code: i32, stdout: bytes, stderr: bytes };
 
