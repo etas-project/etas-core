@@ -107,8 +107,8 @@ public enum WriteOutcome<R, N> {
 }
 
 // Bind a typed persistent memory region handle.
-public flow region<S>(stable_id: string, name: string) -> MemoryRegion<S> ![] {
-    return MemoryRegion { stable_id= stable_id, name= name };
+public flow region<S>(stable_id: string, store: string) -> MemoryRegion<S> ![] {
+    return MemoryRegion { stable_id= stable_id, name= store };
 }
 
 // Construct an opaque memory version token for compare-and-set operations.
