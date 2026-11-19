@@ -22,9 +22,9 @@ fn generic_binders_survive_binary_descriptor_roundtrip() {
     )
     .unwrap();
     let method = MethodId::new(implementation.clone(), "replace".into()).unwrap();
-    let set = DefinitionDescriptorSet {
+    let mut set = DefinitionDescriptorSet {
         graph: DescriptorGraphInput {
-            types: (0..4)
+            types: (0..5)
                 .map(|id| TypeInfo::Parameter(GenericParameterRef(id)))
                 .collect(),
             binders: [
@@ -34,6 +34,11 @@ fn generic_binders_survive_binary_descriptor_roundtrip() {
                 GenericOwner::Action {
                     effect: key("Query", DefinitionKind::Effect),
                     name: "value".into(),
+                },
+                GenericOwner::ActionOverload {
+                    effect: key("Query", DefinitionKind::Effect),
+                    name: "value".into(),
+                    signature: CodeFingerprint::from_bytes([11; 32]),
                 },
             ]
             .into_iter()
@@ -50,8 +55,62 @@ fn generic_binders_survive_binary_descriptor_roundtrip() {
         declarations: vec![],
         headers: None,
     };
+    let carrier = key("Carrier", DefinitionKind::Type);
+    set.graph.binders.extend([
+        GenericParameterInfo {
+            owner: GenericOwner::Declaration(carrier.clone()),
+            position: 0,
+            name: "T".into(),
+            kind: GenericParameterKind::Type,
+            bounds: vec![],
+        },
+        GenericParameterInfo {
+            owner: GenericOwner::Declaration(carrier.clone()),
+            position: 1,
+            name: "E".into(),
+            kind: GenericParameterKind::EffectRow,
+            bounds: vec![],
+        },
+    ]);
+    set.graph.rows.push(EffectRowInfo {
+        effects: vec![],
+        tail: None,
+    });
+    set.graph.types.extend([
+        TypeInfo::Nominal {
+            definition: carrier,
+            parameters: vec![GenericParameterRef(5), GenericParameterRef(6)],
+            representation: Some(TypeInfoRef(6)),
+        },
+        TypeInfo::Record(vec![FieldInfo {
+            name: "value".into(),
+            ty: TypeInfoRef(7),
+        }]),
+        TypeInfo::Parameter(GenericParameterRef(5)),
+        TypeInfo::Handler {
+            handled: EffectRowInfoRef(0),
+            produced: None,
+            result: None,
+        },
+        TypeInfo::Applied {
+            constructor: TypeInfoRef(5),
+            arguments: vec![TypeInfoRef(10), TypeInfoRef(8)],
+        },
+        TypeInfo::Primitive(PrimitiveInfo::I32),
+        TypeInfo::Function(SignatureInfo {
+            generics: vec![],
+            parameters: vec![],
+            output: TypeInfoRef(10),
+            declared_output: None,
+            effects: None,
+        }),
+        TypeInfo::Builtin {
+            constructor: BuiltinTypeInfo::CallableDefinition,
+            arguments: vec![TypeInfoRef(11)],
+        },
+    ]);
     let wire = to_proto(&set);
-    assert_eq!(wire.version, 14);
+    assert_eq!(wire.version, 19);
     let bytes = wire.encode_to_vec();
     assert_eq!(
         from_proto(ProtoDescriptorGraph::decode(bytes.as_slice()).unwrap()).unwrap(),
@@ -110,6 +169,19 @@ fn existential_descriptor_roundtrip_keeps_spec_identity_arguments_and_fingerprin
 #[test]
 fn parameter_nonreturn_survives_binary_trace_codec() {
     let call = ParameterCallInfo {
+        projection: vec![
+            ValueProjectionStep::Field("callbacks".into()),
+            ValueProjectionStep::TupleElement(1),
+            ValueProjectionStep::VariantPayload {
+                variant: "Some".into(),
+                position: 0,
+            },
+            ValueProjectionStep::SequenceElement,
+            ValueProjectionStep::ListHead,
+            ValueProjectionStep::ListTail,
+            ValueProjectionStep::MapKey,
+            ValueProjectionStep::MapValue,
+        ],
         handlers: Some(vec![]),
         callable: CallableId::declaration(key("visit", DefinitionKind::Flow)).unwrap(),
         signature: TypeInfoRef(4),
@@ -135,6 +207,7 @@ fn parameter_nonreturn_survives_binary_trace_codec() {
 #[test]
 fn parameter_integer_codec_rejects_non_128_bit_magnitude() {
     let original = TraceInfo::ParameterCall(ParameterCallInfo {
+        projection: Vec::new(),
         handlers: Some(vec![]),
         callable: CallableId::declaration(key("visit", DefinitionKind::Flow)).unwrap(),
         signature: TypeInfoRef(0),
@@ -160,6 +233,7 @@ fn parameter_integer_codec_rejects_non_128_bit_magnitude() {
 #[test]
 fn parameter_handler_scope_codec_rejects_unknown_scope_kind() {
     let original = TraceInfo::ParameterCall(ParameterCallInfo {
+        projection: Vec::new(),
         callable: CallableId::declaration(key("visit", DefinitionKind::Flow)).unwrap(),
         signature: TypeInfoRef(0),
         position: 0,
@@ -218,6 +292,7 @@ fn parameter_nonreturn_survives_full_package_artifact_roundtrip() {
     use crate::*;
     let flow = key("visit", DefinitionKind::Flow);
     let call = ParameterCallInfo {
+        projection: Vec::new(),
         handlers: Some(vec![ParameterHandlerScopeInfo::Handle {
             arms: vec![
                 ParameterHandlerArmInfo {
@@ -269,10 +344,12 @@ fn parameter_nonreturn_survives_full_package_artifact_roundtrip() {
                     generics: vec![],
                     parameters: vec![
                         ParameterInfo {
+                            default: None,
                             name: Some("f".into()),
                             ty: TypeInfoRef(1),
                         },
                         ParameterInfo {
+                            default: None,
                             name: Some("value".into()),
                             ty: TypeInfoRef(3),
                         },
@@ -285,10 +362,12 @@ fn parameter_nonreturn_survives_full_package_artifact_roundtrip() {
                     generics: vec![],
                     parameters: vec![
                         ParameterInfo {
+                            default: None,
                             name: Some("value".into()),
                             ty: TypeInfoRef(3),
                         },
                         ParameterInfo {
+                            default: None,
                             name: Some("boundary".into()),
                             ty: TypeInfoRef(4),
                         },
@@ -386,6 +465,7 @@ fn fixture() -> DefinitionDescriptorSet {
     )
     .unwrap();
     let call = ParameterCallInfo {
+        projection: Vec::new(),
         handlers: Some(vec![]),
         callable: CallableId::method(method.clone()),
         signature: TypeInfoRef(10),
@@ -466,6 +546,7 @@ fn fixture() -> DefinitionDescriptorSet {
                 TypeInfo::Function(SignatureInfo {
                     generics: vec![GenericParameterRef(1), GenericParameterRef(2)],
                     parameters: vec![ParameterInfo {
+                        default: None,
                         name: Some("value".into()),
                         ty: TypeInfoRef(13),
                     }],
@@ -554,6 +635,7 @@ fn fixture() -> DefinitionDescriptorSet {
                     parameter_calls: vec![
                         call,
                         ParameterCallInfo {
+                            projection: Vec::new(),
                             handlers: Some(vec![]),
                             callable: CallableId::declaration(flow.clone()).unwrap(),
                             signature: TypeInfoRef(10),

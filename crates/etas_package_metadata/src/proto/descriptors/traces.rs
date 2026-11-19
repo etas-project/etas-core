@@ -8,6 +8,11 @@ fn encode_call(call: &ParameterCallInfo) -> p::ParameterCall {
         callable: Some(encode_callable(&call.callable)),
         signature: call.signature.0,
         position: call.position,
+        projection: call
+            .projection
+            .iter()
+            .map(super::super::value_projection::encode)
+            .collect(),
         arguments: call
             .arguments
             .as_ref()
@@ -70,6 +75,11 @@ fn encode_call(call: &ParameterCallInfo) -> p::ParameterCall {
 }
 fn decode_call(call: p::ParameterCall) -> Result<ParameterCallInfo, Error> {
     Ok(ParameterCallInfo {
+        projection: call
+            .projection
+            .into_iter()
+            .map(super::super::value_projection::decode)
+            .collect::<Result<_, _>>()?,
         callable: decode_callable(required(call.callable, "parameter call identity")?)?,
         signature: TypeInfoRef(call.signature),
         position: call.position,

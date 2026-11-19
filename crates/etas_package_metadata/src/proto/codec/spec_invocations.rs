@@ -21,7 +21,7 @@ pub(crate) fn ensure_distinct(
 
 pub(crate) fn fingerprint(target: &CallableRequestTarget) -> etas_code::CodeFingerprint {
     etas_code::CodeFingerprint::of_bytes(
-        "etas.metadata.callable-request-target.v13",
+        "etas.metadata.callable-request-target.v14",
         &to_proto(target).encode_to_vec(),
     )
 }
@@ -30,6 +30,15 @@ pub(super) fn to_proto(target: &CallableRequestTarget) -> ProtoCallableRequestTa
     use proto_callable_request_target::Target;
     ProtoCallableRequestTarget {
         target: Some(match target {
+            CallableRequestTarget::ParameterProjection { parameter, path } => {
+                Target::ParameterProjection(ProtoParameterRequestProjection {
+                    parameter: parameter.clone(),
+                    path: path
+                        .iter()
+                        .map(super::super::value_projection::encode)
+                        .collect(),
+                })
+            }
             CallableRequestTarget::Parameter(parameter) => Target::Parameter(parameter.clone()),
             CallableRequestTarget::AgentTools(context) => {
                 Target::AgentTools(Box::new(type_to_proto(context)))
@@ -83,6 +92,14 @@ pub(super) fn from_proto(
         .target
         .ok_or_else(|| invalid("callable evidence target is missing its kind"))?
     {
+        Target::ParameterProjection(projection) => CallableRequestTarget::ParameterProjection {
+            parameter: projection.parameter,
+            path: projection
+                .path
+                .into_iter()
+                .map(super::super::value_projection::decode)
+                .collect::<Result<_, _>>()?,
+        },
         Target::Parameter(parameter) => CallableRequestTarget::Parameter(parameter),
         Target::AgentTools(context) => CallableRequestTarget::AgentTools(Box::new(
             type_from_proto_with_budget(*context, depth + 1, budget)?,

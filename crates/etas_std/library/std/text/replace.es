@@ -1,7 +1,7 @@
 module std.text;
 
-import std.collections.array_get;
 import std.text.{chars, char_count, from_char, character_array, matches_at};
+
 
 public flow replace_n(text: string, pattern: string, replacement: string, limit: usize) -> string ![] {
     if limit == 0 { return text; }
@@ -30,7 +30,7 @@ public flow replace_n(text: string, pattern: string, replacement: string, limit:
             remaining = remaining - 1;
             index = index + width;
         } else {
-            output = output + from_char(array_get(values, index).unwrap());
+            output = output + from_char(values.get(index).unwrap());
             index = index + 1;
         }
     }

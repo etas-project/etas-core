@@ -1,27 +1,77 @@
 module std.char;
 
-// Unicode property tables are provided by the host character primitive.
-@std.binding("std.char.is_whitespace")
-public flow is_whitespace(value: char) -> bool ![] {}
+impl char {
 
-@std.binding("std.char.is_alphabetic")
-public flow is_alphabetic(value: char) -> bool ![] {}
+    public flow is_whitespace(self) -> bool ![] {
+        let scalar = u32 { bits= self.bits };
+        var low: usize = 0;
+        var high = WHITESPACE.length;
+        while low < high limit Iterations(32) {
+            let middle = low + (high - low) / 2;
+            let (start, end) = WHITESPACE.get(middle).unwrap();
+            if scalar < start {
+                high = middle;
+            } else if scalar > end {
+                low = middle + 1;
+            } else {
+                return true;
+            }
+        }
+        return false;
+    }
 
-@std.binding("std.char.is_alphanumeric")
-public flow is_alphanumeric(value: char) -> bool ![] {}
+    public flow is_alphabetic(self) -> bool ![] {
+        let scalar = u32 { bits= self.bits };
+        var low: usize = 0;
+        var high = ALPHABETIC.length;
+        while low < high limit Iterations(32) {
+            let middle = low + (high - low) / 2;
+            let (start, end) = ALPHABETIC.get(middle).unwrap();
+            if scalar < start {
+                high = middle;
+            } else if scalar > end {
+                low = middle + 1;
+            } else {
+                return true;
+            }
+        }
+        return false;
+    }
 
-@std.binding("std.char.to_u32")
-public flow to_u32(value: char) -> u32 ![] {}
+    public flow is_alphanumeric(self) -> bool ![] {
+        let scalar = u32 { bits= self.bits };
+        var low: usize = 0;
+        var high = ALPHANUMERIC.length;
+        while low < high limit Iterations(32) {
+            let middle = low + (high - low) / 2;
+            let (start, end) = ALPHANUMERIC.get(middle).unwrap();
+            if scalar < start {
+                high = middle;
+            } else if scalar > end {
+                low = middle + 1;
+            } else {
+                return true;
+            }
+        }
+        return false;
+    }
 
-@std.binding("std.char.from_u32")
-public flow from_u32(value: u32) -> Option<char> ![] {}
+    public flow to_u32(self) -> u32 ![] {
+        return u32 { bits= self.bits };
+    }
 
-public flow is_ascii_digit(value: char) -> bool ![] {
-    let scalar = to_u32(value);
-    return scalar >= 48 && scalar <= 57;
-}
+    public flow from_u32(value: u32) -> Option<char> ![] {
+        if value > 1114111 || (value >= 55296 && value <= 57343) {
+            return None;
+        }
+        return Some(char { bits= value.bits });
+    }
 
-public flow is_control(value: char) -> bool ![] {
-    let scalar = to_u32(value);
-    return scalar < 32 || (scalar >= 127 && scalar <= 159);
+    public flow is_ascii_digit(self) -> bool ![] {
+        return self.bits >= 48 && self.bits <= 57;
+    }
+
+    public flow is_control(self) -> bool ![] {
+        return self.bits < 32 || (self.bits >= 127 && self.bits <= 159);
+    }
 }

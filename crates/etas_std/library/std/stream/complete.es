@@ -1,13 +1,12 @@
 module std.stream;
 
-// Public declarations migrated from the legacy API inventory.
-// Maintained as Etas source; native bindings retain existing execution during migration.
+public import std.stream.StreamRead.{Data, Eof};
+public import std.stream.StreamError.{Cancelled, Closed, Host, Interrupted, LimitExceeded, TimedOut};
 
 // Bounded stream operation configuration.
 public type ByteLimit = { bytes: i32 };
 
 // Standard byte-stream marker spec.
-@std.role("std.stream.ByteStream")
 public spec ByteStream;
 
 // Typed stream operation failure.
@@ -29,22 +28,67 @@ public enum StreamRead {
 // Bounded stream operation configuration.
 public type Timeout = { ms: i32 };
 
-// Close a host-mediated stream.
-@std.binding("std.stream.close")
-public flow close<S ~ std.stream.ByteStream>(arg0: S) -> unit ![Error<std.stream.StreamError>] {}
 
-// Flush a host-mediated stream.
-@std.binding("std.stream.flush")
-public flow flush<S ~ std.stream.ByteStream>(arg0: S) -> unit ![Error<std.stream.StreamError>] {}
+public flow close<S ~ ByteStream>(stream: S) -> unit ![Error<StreamError>] {
+    perform std.effects.Stream.close<S>(stream);
+}
 
-// Read at most the requested byte count from a host-mediated stream.
-@std.binding("std.stream.read")
-public flow read<S ~ std.stream.ByteStream>(arg0: S, arg1: usize, arg2: std.option.Option<std.stream.Timeout>) -> std.stream.StreamRead ![Error<std.stream.StreamError>] {}
+public flow flush<S ~ ByteStream>(stream: S) -> unit ![Error<StreamError>] {
+    perform std.effects.Stream.flush<S>(stream);
+}
 
-// Read from a host-mediated stream until EOF or the requested byte limit.
-@std.binding("std.stream.read_until_limit")
-public flow read_until_limit<S ~ std.stream.ByteStream>(arg0: S, arg1: std.stream.ByteLimit, arg2: std.option.Option<std.stream.Timeout>) -> bytes ![Error<std.stream.StreamError>] {}
+public flow read<S ~ ByteStream>(stream: S, max_bytes: usize, timeout: Option<Timeout>) -> StreamRead ![Error<StreamError>] {
+    match timeout {
+        Some(value) => {
+            if value.ms < 0 { std.core.abort("Timeout must be nonnegative"); }
+        },
+        None => {},
+    };
+    return perform std.effects.Stream.read<S>(stream, max_bytes, timeout);
+}
 
-// Write all bytes to a host-mediated stream.
-@std.binding("std.stream.write_all")
-public flow write_all<S ~ std.stream.ByteStream>(arg0: S, arg1: bytes) -> unit ![Error<std.stream.StreamError>] {}
+public flow read_until_limit<S ~ ByteStream>(stream: S, limit: ByteLimit, timeout: Option<Timeout>) -> bytes ![Error<StreamError>] {
+    let maximum = match limit.bytes::std.core.Index.to_usize() {
+        Some(value) => value,
+        None => std.core.abort("ByteLimit must be nonnegative"),
+    };
+    let deadline = match timeout {
+        None => None,
+        Some(value) => {
+            if value.ms < 0 { std.core.abort("Timeout must be nonnegative"); }
+            Some(StreamClock.now() + value.ms.bits)
+        },
+    };
+    var body = bytes { data= [] };
+    while true limit Iterations(18446744073709551615) {
+        let remaining_timeout = match deadline {
+            None => None,
+            Some(end) => {
+                let now = StreamClock.now();
+                if now >= end { perform Error.raise<StreamError>(StreamError.TimedOut); }
+                Some(Timeout { ms= i32 { bits= end - now } })
+            },
+        };
+        let remaining = maximum - body.length;
+        // One extra byte distinguishes an exactly full stream from truncation.
+        let requested = if remaining >= 8192 { 8192 } else { remaining + 1 };
+        let part = perform std.effects.Stream.read<S>(stream, requested, remaining_timeout);
+        match deadline {
+            Some(end) => {
+                if StreamClock.now() >= end { perform Error.raise<StreamError>(StreamError.TimedOut); }
+            },
+            None => {},
+        };
+        match part {
+            StreamRead.Eof => { return body; },
+            StreamRead.Data(chunk) => {
+                if chunk.length > remaining { perform Error.raise<StreamError>(StreamError.LimitExceeded); }
+                body = body + chunk;
+            },
+        };
+    }
+}
+
+public flow write_all<S ~ ByteStream>(stream: S, body: bytes) -> unit ![Error<StreamError>] {
+    perform std.effects.Stream.write<S>(stream, body);
+}

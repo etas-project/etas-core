@@ -1,7 +1,12 @@
 module std.host.url;
 
-// Public declarations migrated from the legacy API inventory.
-// Maintained as Etas source; native bindings retain existing execution during migration.
-
-// Host URL support type.
-public type Url;
+public type Url = {
+    scheme: string,
+    username: Option<string>,
+    password: Option<string>,
+    host: Option<string>,
+    port: Option<u16>,
+    path: string,
+    query: Option<string>,
+    fragment: Option<string>,
+};

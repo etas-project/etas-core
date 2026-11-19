@@ -11,7 +11,9 @@ public spec Scheduler {
 public type FifoScheduler = {};
 
 impl FifoScheduler ~ Scheduler {
-    public flow select(var self, ready: Array<ReadyTask>) -> usize ![] { return 0; }
+    public flow select(var self, ready: Array<ReadyTask>) -> usize ![] {
+        return 0;
+    }
 }
 
 public let DefaultScheduler = FifoScheduler {};

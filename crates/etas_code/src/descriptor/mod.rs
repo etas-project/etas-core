@@ -4,7 +4,9 @@
 mod annotation;
 pub mod behavior;
 pub mod callable;
+mod defaults;
 mod definitions;
+pub use defaults::{ParameterDefaultInfo, ParameterDefaultOwner};
 mod fingerprint;
 pub use fingerprint::DescriptorFingerprintBudget;
 pub(crate) use fingerprint::{builtin_tag, primitive_tag};
@@ -14,6 +16,8 @@ mod spec;
 mod traversal;
 pub mod types;
 mod validation;
+mod value_projection;
+pub use value_projection::ValueProjectionStep;
 
 pub use annotation::{
     AnnotationArgumentInfo, AnnotationConstructorKind, AnnotationFieldInfo, AnnotationInfo,
@@ -23,7 +27,8 @@ pub use behavior::{
     CallableAnalysisInfo, CallableOutcomeInfo, DeterminismInfo, EffectInfo, EffectRowInfo,
     EffectRowInfoRef, EffectSummaryInfo, EffectTargetInfo, ParameterArgumentInfo,
     ParameterCallInfo, ParameterHandlerArmInfo, ParameterHandlerCompletionInfo,
-    ParameterHandlerScopeInfo, ReturnObservationInfo, StaticEffectArgInfo, TraceInfo, TraceInfoRef,
+    ParameterHandlerScopeInfo, ReturnObservationInfo, StaticEffectArgInfo, SuspensionInfo,
+    TraceInfo, TraceInfoRef,
 };
 pub use callable::{
     GenericOwner, GenericParameterInfo, GenericParameterKind, GenericParameterRef, ParameterInfo,

@@ -1,10 +1,5 @@
 module std.host.path;
 
-// Public declarations migrated from the legacy API inventory.
-// Maintained as Etas source; native bindings retain existing execution during migration.
-
-// Host path support type.
-public type Path;
-
-// Host path support type.
-public type PathPattern;
+// Paths and patterns are data. Sandbox authority belongs to the operation.
+public type Path = { text: string };
+public type PathPattern = { pattern: string };

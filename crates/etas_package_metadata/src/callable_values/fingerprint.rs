@@ -19,7 +19,7 @@ struct Encoder(blake3::Hasher);
 impl Encoder {
     fn new() -> Self {
         Self(blake3::Hasher::new_derive_key(
-            "etas.metadata.callable-value-input.v7",
+            "etas.metadata.callable-value-input.v9",
         ))
     }
     fn byte(&mut self, value: u8) {
@@ -31,6 +31,33 @@ impl Encoder {
     fn text(&mut self, value: &str) {
         self.number(value.len());
         self.0.update(value.as_bytes());
+    }
+    fn value_projection_path(&mut self, path: &[etas_code::descriptor::ValueProjectionStep]) {
+        self.number(path.len());
+        for step in path {
+            use etas_code::descriptor::ValueProjectionStep as S;
+            match step {
+                S::Field(name) => {
+                    self.byte(0);
+                    self.text(name);
+                }
+                S::TupleElement(position) => {
+                    self.byte(1);
+                    self.number(*position as usize);
+                }
+                S::VariantPayload { variant, position } => {
+                    self.byte(2);
+                    self.text(variant);
+                    self.number(*position as usize);
+                }
+                S::SequenceElement => self.byte(3),
+                S::ListHead => self.byte(4),
+                S::ListTail => self.byte(5),
+                S::MapKey => self.byte(6),
+                S::MapValue => self.byte(7),
+                S::CallResult => self.byte(8),
+            }
+        }
     }
     fn target(&mut self, target: &crate::CallableRequestTarget) {
         self.0
@@ -63,6 +90,10 @@ impl Encoder {
     fn parameter(&mut self, parameter: CallableValueParameter) {
         self.scope(parameter.scope);
         self.number(parameter.position as usize);
+        self.option(parameter.projection.is_some());
+        if let Some(index) = parameter.projection {
+            self.number(index as usize);
+        }
     }
     fn source(&mut self, source: CallableValueSource) {
         match source {
@@ -266,6 +297,21 @@ pub fn callable_value_graph_input_fingerprint(
     graph: &CallableValueGraph,
 ) -> etas_code::CodeFingerprint {
     let mut e = Encoder::new();
+    e.number(graph.parameter_projections.len());
+    for path in &graph.parameter_projections {
+        e.value_projection_path(path);
+    }
+    e.number(graph.source_projections.len());
+    for projection in &graph.source_projections {
+        e.value_projection_path(&projection.path);
+        e.option(projection.sources.is_some());
+        if let Some(sources) = &projection.sources {
+            e.number(sources.len());
+            for source in sources {
+                e.source(*source);
+            }
+        }
+    }
     e.number(graph.sources.len());
     for source in &graph.sources {
         e.source(*source);
@@ -369,6 +415,17 @@ pub fn callable_value_graph_input_fingerprint(
             e.parameter(binding.parameter);
         }
         e.encode(Task::Trace(&node.action_trace));
+        e.number(node.returned_projections.len());
+        for projection in &node.returned_projections {
+            e.value_projection_path(&projection.path);
+            e.option(projection.sources.is_some());
+            if let Some(sources) = &projection.sources {
+                e.number(sources.len());
+                for source in sources {
+                    e.source(*source);
+                }
+            }
+        }
         e.option(node.returned_sources.is_some());
         if let Some(sources) = &node.returned_sources {
             e.number(sources.len());
@@ -429,6 +486,10 @@ pub fn published_method_input_fingerprint(
         }
         crate::MethodReceiver::Associated => e.byte(1),
         crate::MethodReceiver::Component => e.byte(2),
+        crate::MethodReceiver::Updating { slot } => {
+            e.byte(3);
+            e.number(slot as usize);
+        }
     }
     e.number(method.owner_params.len());
     for param in &method.owner_params {
@@ -526,9 +587,12 @@ mod tests {
 
     fn graph() -> CallableValueGraph {
         CallableValueGraph {
+            source_projections: Vec::new(),
+            parameter_projections: Vec::new(),
             objects: Vec::new(),
             sources: vec![CallableValueSource::Value(0)],
             values: vec![CallableValueNode {
+                returned_projections: Vec::new(),
                 residual_checks: Vec::new(),
                 handler_requests: None,
                 behavior: CallableValueBehavior {

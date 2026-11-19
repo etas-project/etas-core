@@ -2,6 +2,7 @@ module std.text;
 
 import std.text.{chars, from_char};
 
+
 public flow ascii_lowercase(text: string) -> string ![] {
     var output = "";
     for scalar in chars(text) limit Iterations(18446744073709551615) {

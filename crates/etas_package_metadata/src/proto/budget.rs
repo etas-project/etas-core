@@ -11,7 +11,9 @@ pub(crate) use callable_values::validate as validate_callable_values;
 pub(crate) use spec_invocations::validate as validate_callable_request_target;
 
 pub const MAX_METADATA_GRAPH_DEPTH: usize = 64;
-pub const MAX_METADATA_GRAPH_NODES: usize = 100_000;
+// One package includes declaration descriptors, body contracts and behavior
+// graphs. The complete source standard library exceeds the former 100k cap.
+pub const MAX_METADATA_GRAPH_NODES: usize = 1_000_000;
 
 #[derive(Default)]
 pub(crate) struct MetadataGraphBudget {
@@ -168,6 +170,15 @@ impl ModelGraphValidator {
     }
 
     fn public_metadata(&mut self, metadata: &PublicMetadata) -> Result<(), MetadataArtifactError> {
+        let mut scoped = std::collections::BTreeSet::new();
+        for contract in &metadata.scoped_callbacks {
+            self.budget
+                .charge(1 + contract.parameters.len(), "scoped callback contracts")?;
+            contract.validate(metadata)?;
+            if !scoped.insert(&contract.target) {
+                return Err(invalid("duplicate scoped callback contract target"));
+            }
+        }
         if let Some(graph) = &metadata.definition_descriptors {
             super::descriptors::validate_model(graph, &mut self.budget)?;
             super::descriptors::validate_public_bodies(metadata)?;
@@ -226,6 +237,16 @@ impl ModelGraphValidator {
         }
         for action in &metadata.actions {
             validate_model_action(action)?;
+            if let Some(row) = &action.default_handler_effects {
+                self.effect_row(row, 0)?;
+            }
+            super::parameter_defaults::validate_model(
+                &action.parameter_defaults,
+                action.params.len(),
+                &mut self.budget,
+            )?;
+            self.budget
+                .charge(action.param_names.len(), "action parameter names")?;
             for param in &action.generic_params {
                 self.generic_param(param)?;
             }
@@ -275,6 +296,19 @@ impl ModelGraphValidator {
             self.method(method)?;
         }
         for implementation in &metadata.spec_impls {
+            if let Some(owner) = &implementation.owner {
+                super::descriptors::validate_model_generic_owner(
+                    &etas_code::descriptor::GenericOwner::Implementation(owner.clone()),
+                    &mut self.budget,
+                )?;
+            } else if !implementation.generic_params.is_empty() {
+                return Err(invalid(
+                    "generic spec implementation has no canonical owner",
+                ));
+            }
+            for parameter in &implementation.generic_params {
+                self.generic_param(parameter)?;
+            }
             self.ty(&implementation.self_type, 0)?;
             for arg in &implementation.args {
                 self.ty(arg, 0)?;
@@ -287,6 +321,17 @@ impl ModelGraphValidator {
                 if published.self_type != implementation.self_type {
                     return Err(invalid(
                         "spec implementation method has a different owner type",
+                    ));
+                }
+                if implementation
+                    .owner
+                    .as_ref()
+                    .is_some_and(|owner| method.implementation() != owner)
+                    || (implementation.owner.is_some()
+                        && published.owner_params != implementation.generic_params)
+                {
+                    return Err(invalid(
+                        "spec implementation method has a different owner binder",
                     ));
                 }
             }
@@ -389,6 +434,11 @@ impl ModelGraphValidator {
     }
 
     fn callable(&mut self, signature: &CallableSignature) -> Result<(), MetadataArtifactError> {
+        super::parameter_defaults::validate_model(
+            &signature.parameter_defaults,
+            signature.input.len(),
+            &mut self.budget,
+        )?;
         for param in &signature.generic_params {
             self.generic_param(param)?;
         }
@@ -663,6 +713,10 @@ impl ProtoGraphValidator {
         &mut self,
         metadata: &proto::ProtoPublicMetadataSection,
     ) -> Result<(), MetadataArtifactError> {
+        for contract in &metadata.scoped_callbacks {
+            self.budget
+                .charge(1 + contract.parameters.len(), "scoped callback contracts")?;
+        }
         if let Some(graph) = &metadata.definition_descriptors {
             super::descriptors::validate_wire(graph, &mut self.budget)?;
         }
@@ -712,6 +766,16 @@ impl ProtoGraphValidator {
             self.callable(signature)?;
         }
         for action in &metadata.actions {
+            super::parameter_defaults::validate_wire(
+                &action.parameter_defaults,
+                action.params.len(),
+                &mut self.budget,
+            )?;
+            if let Some(row) = &action.default_handler_effects {
+                self.effect_row(row, 0)?;
+            }
+            self.budget
+                .charge(action.param_names.len(), "action parameter names")?;
             for generic in &action.generic_params {
                 self.generic_param(generic)?;
             }
@@ -801,6 +865,12 @@ impl ProtoGraphValidator {
             }
         }
         for implementation in &metadata.spec_impls {
+            if let Some(owner) = &implementation.owner {
+                super::descriptors::validate_generic_owner(owner, &mut self.budget)?;
+            }
+            for parameter in &implementation.generic_params {
+                self.generic_param(parameter)?;
+            }
             if let Some(ty) = implementation.self_type.as_ref() {
                 self.ty(ty, 0)?;
             }
@@ -939,6 +1009,11 @@ impl ProtoGraphValidator {
         &mut self,
         signature: &proto::ProtoCallableSignature,
     ) -> Result<(), MetadataArtifactError> {
+        super::parameter_defaults::validate_wire(
+            &signature.parameter_defaults,
+            signature.input.len(),
+            &mut self.budget,
+        )?;
         for generic in &signature.generic_params {
             self.generic_param(generic)?;
         }
@@ -1228,6 +1303,20 @@ fn validate_trace_selector_bound(
 }
 
 pub(super) fn validate_model_action(action: &ActionSignature) -> Result<(), MetadataArtifactError> {
+    if (!action.param_names.is_empty() || !action.parameter_defaults.is_empty())
+        && (action.param_names.len() != action.params.len()
+            || action.param_names.iter().any(String::is_empty)
+            || action
+                .param_names
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                != action.param_names.len())
+    {
+        return Err(invalid(
+            "action value parameter names differ from its declaration signature",
+        ));
+    }
     if action.path.is_empty() || action.path.iter().any(String::is_empty) {
         return Err(invalid("action signature path is required"));
     }

@@ -1,6 +1,6 @@
 mod callable_contracts;
 mod callable_values;
-pub use callable_contracts::CallableContractTarget;
+pub use callable_contracts::{CallableContractTarget, ScopedCallbackContract};
 pub mod container;
 pub mod error;
 mod method;
@@ -178,9 +178,12 @@ mod tests {
             vec![reference.clone()];
         metadata.public_metadata.effect_summaries[0].returned_callables =
             Some(CallableValueGraph {
+                source_projections: Vec::new(),
+                parameter_projections: Vec::new(),
                 objects: Vec::new(),
                 sources: vec![CallableValueSource::Value(0)],
                 values: vec![CallableValueNode {
+                    returned_projections: Vec::new(),
                     residual_checks: vec![reference],
                     handler_requests: Some(Default::default()),
                     behavior: CallableValueBehavior {
@@ -938,6 +941,8 @@ mod tests {
                 dependencies: Vec::new(),
                 public_metadata: PublicMetadata {
                     flows: vec![CallableSignature {
+                        definition: None,
+                        parameter_defaults: Vec::new(),
                         path: vec!["dep".to_owned(), "run".to_owned()],
                         generic_params: Vec::new(),
                         param_names: vec!["input".to_owned()],
@@ -1095,6 +1100,7 @@ mod tests {
                     ..Default::default()
                 }],
                 effect_summaries: vec![EffectSummary {
+                    definition: None,
                     residual_checks: vec![],
                     behavior: None,
                     handler_requests: None,
@@ -1162,6 +1168,9 @@ mod tests {
                     ]),
                 }],
                 actions: vec![ActionSignature {
+                    default_handler_effects: Some(EffectRow::default()),
+                    param_names: vec!["method".into(), "host".into(), "request".into()],
+                    parameter_defaults: Vec::new(),
                     path: vec![
                         "demo".to_owned(),
                         "EdkHttp".to_owned(),

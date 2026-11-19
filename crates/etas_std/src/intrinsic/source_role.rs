@@ -11,6 +11,8 @@ pub enum StdSourceRole {
     Limit,
     Money,
     Index,
+    Number,
+    IndexError,
     Region,
     WorkspacePath,
     Option,
@@ -100,7 +102,7 @@ pub enum StdSourceRole {
 }
 
 impl StdSourceRole {
-    pub const ALL: [Self; 109] = [
+    pub const ALL: [Self; 111] = [
         Self::Money,
         Self::Limit,
         Self::Primitive(StdPrimitiveType::Bool),
@@ -124,6 +126,8 @@ impl StdSourceRole {
         Self::Primitive(StdPrimitiveType::Unit),
         Self::Primitive(StdPrimitiveType::USize),
         Self::Index,
+        Self::Number,
+        Self::IndexError,
         Self::Region,
         Self::WorkspacePath,
         Self::Option,
@@ -237,6 +241,8 @@ impl StdSourceRole {
             Self::Limit => "std.runtime.limits.Limit",
             Self::Money => "std.runtime.budget.Money",
             Self::Index => "std.core.Index",
+            Self::Number => "std.math.Number",
+            Self::IndexError => "std.runtime.error.IndexError",
             Self::Region => "std.fs.Region",
             Self::WorkspacePath => "std.fs.WorkspacePath",
             Self::Option => "std.option.Option",
@@ -326,6 +332,30 @@ impl StdSourceRole {
         }
     }
 
+    /// Only these identities have native Effect execution semantics. Ordinary
+    /// std types are collected from source, rather than predeclared here.
+    pub const EXECUTION_EFFECTS: [Self; 19] = [
+        Self::EffectAgentic,
+        Self::EffectNetwork,
+        Self::EffectFileIO,
+        Self::EffectConsole,
+        Self::EffectCommand,
+        Self::EffectMemory,
+        Self::EffectSecret,
+        Self::EffectTime,
+        Self::EffectHuman,
+        Self::EffectError,
+        Self::EffectFs,
+        Self::EffectAsync,
+        Self::EffectApproval,
+        Self::EffectBrowser,
+        Self::EffectClock,
+        Self::EffectCode,
+        Self::EffectNet,
+        Self::EffectStream,
+        Self::EffectTls,
+    ];
+
     pub fn from_path(path: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|role| role.path() == path)
     }
@@ -378,6 +408,8 @@ impl StdSourceRole {
             | Self::Limit
             | Self::Money
             | Self::Index
+            | Self::Number
+            | Self::IndexError
             | Self::Region
             | Self::Scheduler
             | Self::CompilerActionSummary
@@ -427,13 +459,19 @@ impl StdSourceRole {
     pub fn is_spec(self) -> bool {
         matches!(
             self,
-            Self::Index | Self::Region | Self::NativePromptEncode | Self::NativeByteStream
+            Self::Index
+                | Self::Number
+                | Self::Region
+                | Self::NativePromptEncode
+                | Self::NativeByteStream
         )
     }
 
     pub fn parameter_bounds(self, index: usize) -> Vec<crate::StdSpecRef> {
         if self == Self::WorkspacePath && index == 0 {
             vec![crate::StdSpecRef::new(&["std", "fs", "Region"])]
+        } else if self == Self::Range && index == 0 {
+            vec![crate::StdSpecRef::new(&["std", "core", "Index"])]
         } else {
             Vec::new()
         }
@@ -526,8 +564,7 @@ impl StdSourceRole {
                     | Self::NativeSecret
                     | Self::NativeTrusted
                     | Self::NativeUntrusted
-                    | Self::Money
-                    | Self::WorkspacePath
+                    | Self::IndexError
                     | Self::Task
                     | Self::Scheduler
                     | Self::Continuation
@@ -537,7 +574,6 @@ impl StdSourceRole {
                     | Self::Set
                     | Self::Range
                     | Self::Slice
-                    | Self::Iter
             )
     }
 
@@ -545,7 +581,10 @@ impl StdSourceRole {
     pub fn is_represented_type(self) -> bool {
         matches!(
             self,
-            Self::NativeMessage
+            Self::Money
+                | Self::WorkspacePath
+                | Self::Iter
+                | Self::NativeMessage
                 | Self::NativeConversation
                 | Self::NativeSessionConfig
                 | Self::NativeSessionId
@@ -633,9 +672,17 @@ impl StdSourceRole {
         let parameter =
             |index: usize| Box::new(crate::StdType::Var(declaration.params[index].name.clone()));
         declaration.canonical_type = match self {
+            Self::Array => Some(crate::StdType::Array(parameter(0))),
+            Self::List => Some(crate::StdType::List(parameter(0))),
+            Self::Map => Some(crate::StdType::Map {
+                key: parameter(0),
+                value: parameter(1),
+            }),
+            Self::Set => Some(crate::StdType::Set(parameter(0))),
+            Self::Slice => Some(crate::StdType::Slice(parameter(0))),
+            Self::Range => Some(crate::StdType::Range(parameter(0))),
             Self::NativePrompt => Some(crate::StdType::Prompt),
             Self::NativePromptPart => Some(crate::StdType::PromptPart),
-            Self::NativeMessage => Some(crate::StdType::Message(parameter(0))),
             Self::NativeSchema => Some(crate::StdType::Schema(parameter(0))),
             Self::NativeMemoryRegion => Some(crate::StdType::MemoryRegion(parameter(0))),
             Self::NativeMemorySelection => Some(crate::StdType::MemorySelection(parameter(0))),
@@ -656,12 +703,14 @@ impl StdSourceRole {
             return declaration.code_role(role).intrinsic_only();
         }
         if self == Self::Iter {
-            return declaration.iterable_elements(0).intrinsic_only();
+            return declaration.iterable_elements(0);
         }
         match self.runtime_role() {
-            Some(role @ (RuntimeTypeRole::WorkspacePath | RuntimeTypeRole::Limit)) => {
-                declaration.runtime_role(role)
-            }
+            Some(
+                role @ (RuntimeTypeRole::WorkspacePath
+                | RuntimeTypeRole::Limit
+                | RuntimeTypeRole::Money),
+            ) => declaration.runtime_role(role),
             Some(role) => declaration.runtime_role(role).intrinsic_only(),
             None => declaration,
         }

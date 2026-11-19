@@ -1,17 +1,18 @@
 module std.secret;
 
-// Public declarations migrated from the legacy API inventory.
-// Maintained as Etas source; native bindings retain existing execution during migration.
+// Secret substrate support type.
+public type SecretError = { code: string, message: string };
 
 // Secret substrate support type.
-public type SecretError;
+public type SecretKey<K> = { name: string };
 
 // Secret substrate support type.
-public type SecretKey<K>;
-
-// Secret substrate support type.
-public type SecretValue<K>;
+// A secret is a live, redaction-safe capability rather than readable bytes.
+type SecretHandle;
+public type SecretValue<K> = { private handle: SecretHandle };
 
 // Read a redaction-safe secret value from the host secret provider.
-@std.binding("std.secret.read")
-public flow read<K>(arg0: std.secret.SecretKey<K>) -> std.secret.SecretValue<K> ![Error<std.secret.SecretError>] {}
+
+public flow read<K>(key: SecretKey<K>) -> SecretValue<K> ![Error<SecretError>] {
+    return perform std.effects.Secret.read<K>(key);
+}

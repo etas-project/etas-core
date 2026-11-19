@@ -2,7 +2,11 @@ use super::*;
 use crate::{CallableValueGenericBinding, GenericParamKind, TypeKind};
 
 fn parameter(scope: CallableValueScope, position: u32) -> CallableValueSource {
-    CallableValueSource::Parameter(CallableValueParameter { scope, position })
+    CallableValueSource::Parameter(CallableValueParameter {
+        projection: None,
+        scope,
+        position,
+    })
 }
 
 fn unit() -> Type {
@@ -14,6 +18,7 @@ fn unit() -> Type {
 
 fn node() -> CallableValueNode {
     CallableValueNode {
+        returned_projections: Vec::new(),
         residual_checks: Vec::new(),
         handler_requests: Some(Default::default()),
         behavior: crate::CallableValueBehavior {
@@ -40,6 +45,8 @@ fn node() -> CallableValueNode {
 
 fn graph() -> CallableValueGraph {
     CallableValueGraph {
+        source_projections: Vec::new(),
+        parameter_projections: Vec::new(),
         objects: Vec::new(),
         sources: vec![CallableValueSource::Value(0)],
         values: vec![node()],
@@ -106,6 +113,7 @@ fn callable_graph_round_trips_captures_scoped_generics_and_recursive_returns() {
         CallableValueParameterBinding {
             label: "captured-callback".into(),
             parameter: CallableValueParameter {
+                projection: None,
                 scope: CallableValueScope::Root,
                 position: 0,
             },
@@ -113,6 +121,7 @@ fn callable_graph_round_trips_captures_scoped_generics_and_recursive_returns() {
         CallableValueParameterBinding {
             label: "own-callback".into(),
             parameter: CallableValueParameter {
+                projection: None,
                 scope: CallableValueScope::Value(0),
                 position: 0,
             },
@@ -251,6 +260,8 @@ fn residual_reference_budget_is_shared_across_the_artifact() {
     let mut value = node();
     value.residual_checks = references;
     let graph = CallableValueGraph {
+        source_projections: Vec::new(),
+        parameter_projections: Vec::new(),
         objects: Vec::new(),
         sources: vec![CallableValueSource::Value(0)],
         values: vec![value.clone(), value],
@@ -435,6 +446,8 @@ fn root_parameter_positions_and_generic_kinds_are_rechecked_after_binary_decode(
     let error = decoded.validate_references(Some((1, &root))).unwrap_err();
     assert!(error.to_string().contains("wrong kind"), "{error}");
     let bad = CallableValueGraph {
+        source_projections: Vec::new(),
+        parameter_projections: Vec::new(),
         objects: Vec::new(),
         sources: vec![parameter(CallableValueScope::Root, 1)],
         values: vec![],
@@ -477,6 +490,8 @@ fn root_parameter_positions_and_generic_kinds_are_rechecked_after_binary_decode(
     );
     package.public_metadata.as_mut().unwrap().effect_summaries[0].returned_callables =
         Some(to_proto(&CallableValueGraph {
+            source_projections: Vec::new(),
+            parameter_projections: Vec::new(),
             objects: Vec::new(),
             sources: vec![parameter(CallableValueScope::Root, 0)],
             values: vec![],
@@ -488,6 +503,8 @@ fn root_parameter_positions_and_generic_kinds_are_rechecked_after_binary_decode(
 fn long_callable_reference_cycles_are_flat_not_recursive_wire_graphs() {
     let count = 2000;
     let graph = CallableValueGraph {
+        source_projections: Vec::new(),
+        parameter_projections: Vec::new(),
         objects: Vec::new(),
         sources: vec![CallableValueSource::Value(0)],
         values: (0..count)
@@ -554,6 +571,8 @@ fn multiple_return_graphs_consume_one_whole_artifact_node_budget() {
         .map(|position| parameter(CallableValueScope::Root, position))
         .collect();
     let graph = CallableValueGraph {
+        source_projections: Vec::new(),
+        parameter_projections: Vec::new(),
         sources,
         values: vec![],
         objects: vec![],
@@ -635,6 +654,8 @@ fn object_evidence_round_trips_bound_and_concrete_member_witnesses() {
         ..Default::default()
     };
     let mut graph = CallableValueGraph {
+        source_projections: Vec::new(),
+        parameter_projections: Vec::new(),
         sources: vec![
             CallableValueSource::Existential(0),
             CallableValueSource::Existential(1),
@@ -783,6 +804,7 @@ fn lexical_scope_edges_cannot_capture_siblings_or_future_arguments() {
         .push(CallableValueParameterBinding {
             label: "captured".into(),
             parameter: CallableValueParameter {
+                projection: None,
                 scope: CallableValueScope::Value(0),
                 position: 0,
             },

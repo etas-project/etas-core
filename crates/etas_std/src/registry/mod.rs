@@ -1,5 +1,6 @@
 mod action_forwarder;
 pub mod builder;
+mod callable_interface;
 mod canonical_type;
 mod checked_index;
 mod collection;
@@ -10,6 +11,7 @@ pub mod lookup;
 pub mod module;
 mod native_reference;
 pub mod prelude;
+mod publication;
 mod validation;
 mod value_role;
 pub use image::StdRegistryImage;
@@ -19,8 +21,10 @@ pub use native_reference::{
 };
 
 pub use builder::StdRegistryBuilder;
+pub use callable_interface::StdParameterInterface;
 pub use module::{
-    StdModule, StdModuleId, StdNamespace, StdRegistryVersion, StdSymbol, StdSymbolId, StdSymbolKind,
+    StdModule, StdModuleId, StdNamespace, StdRegistryVersion, StdSymbol, StdSymbolId,
+    StdSymbolKind, StdSymbolVisibility,
 };
 pub use prelude::{StdPrelude, StdSymbolRef};
 pub use validation::StdRegistryValidationError;
@@ -35,6 +39,8 @@ pub struct StdRegistry {
     modules: Vec<StdModule>,
     symbols: Vec<Option<StdSymbol>>,
     bodies: BTreeMap<u32, crate::StdBodyBinding>,
+    execution_roles: BTreeMap<etas_code::CallableId, crate::StdExecutionRole>,
+    parameter_interfaces: BTreeMap<etas_code::CallableId, Vec<StdParameterInterface>>,
     declarations: BTreeMap<StdSymbolId, etas_code::DefinitionKey>,
     enum_field_names: BTreeMap<StdSymbolId, Vec<String>>,
     prelude: StdPrelude,
@@ -43,6 +49,7 @@ pub struct StdRegistry {
     memory_place_results: BTreeMap<StdIntrinsicId, usize>,
     spec_impls: Vec<StdImplFact>,
     flow_overloads: BTreeMap<StdSymbolId, Vec<crate::FlowDecl>>,
+    flow_overload_bodies: BTreeMap<StdSymbolId, Vec<u32>>,
     action_overloads: BTreeMap<StdSymbolId, Vec<crate::EffectActionDecl>>,
     native_enum_references: BTreeMap<String, StdNativeEnumReference>,
     native_opaque_references: BTreeMap<String, StdNativeOpaqueReference>,
@@ -253,7 +260,10 @@ impl StdRegistry {
         registry
             .flow_overloads
             .retain(|id, _| !source_ids.contains(id));
+        registry.flow_overload_bodies.clear();
         registry.bodies.clear();
+        registry.execution_roles.clear();
+        registry.parameter_interfaces.clear();
         registry.declarations.clear();
         registry
             .enum_field_names
@@ -280,6 +290,36 @@ impl StdRegistry {
         self.bodies.get(&body)
     }
 
+    /// The checked implementation selected by a flow overload index.
+    pub fn flow_body_binding(
+        &self,
+        symbol: StdSymbolId,
+        overload: usize,
+    ) -> Option<&crate::StdBodyBinding> {
+        if overload == 0 {
+            return self.body_binding(symbol);
+        }
+        self.bodies
+            .get(self.flow_overload_bodies.get(&symbol)?.get(overload - 1)?)
+    }
+
+    /// Mechanism identities generated from the selected bundle's checked bodies.
+    /// Ordinary source callables have no execution role in this query table.
+    pub fn execution_role(
+        &self,
+        callable: &etas_code::CallableId,
+    ) -> Option<crate::StdExecutionRole> {
+        self.execution_roles.get(callable).copied()
+    }
+
+    /// Names and default origins from the selected bundle's checked signature.
+    pub fn parameter_interface(
+        &self,
+        callable: &etas_code::CallableId,
+    ) -> Option<&[StdParameterInterface]> {
+        self.parameter_interfaces.get(callable).map(Vec::as_slice)
+    }
+
     /// Module-level declarations and explicit re-exports, retaining canonical identity.
     pub fn module_exports(&self, module: StdModuleId) -> impl Iterator<Item = (&str, &StdSymbol)> {
         let module = self.module(module);
@@ -289,7 +329,8 @@ impl StdRegistry {
             if parent != module.path {
                 return None;
             }
-            Some((name.as_str(), self.symbol(*id)?))
+            let symbol = self.symbol(*id)?;
+            (symbol.visibility == StdSymbolVisibility::Public).then_some((name.as_str(), symbol))
         })
     }
 
@@ -332,7 +373,7 @@ impl StdRegistry {
     pub fn enum_constructor(&self, owner: StdSymbolId, name: &str) -> Option<&StdSymbol> {
         let mut path = self.symbol(owner)?.qualified_path.clone();
         path.push(name.to_owned());
-        self.lookup_qualified(&path)
+        self.lookup_qualified_internal(&path)
             .filter(|symbol| symbol.enum_owner == Some(owner))
     }
 
@@ -342,6 +383,18 @@ impl StdRegistry {
     }
 
     pub fn lookup_qualified(&self, path: &[impl AsRef<str>]) -> Option<&StdSymbol> {
+        self.lookup_qualified_internal(path)
+            .filter(|symbol| symbol.visibility == StdSymbolVisibility::Public)
+    }
+
+    /// Type metadata may reference private declarations without exporting them
+    /// into a language module or making their names available to imports.
+    pub fn lookup_type_dependency(&self, path: &[impl AsRef<str>]) -> Option<&StdSymbol> {
+        self.lookup_qualified_internal(path)
+            .filter(|symbol| matches!(symbol.decl, crate::StdDecl::Type(_)))
+    }
+
+    pub(crate) fn lookup_qualified_internal(&self, path: &[impl AsRef<str>]) -> Option<&StdSymbol> {
         let key = path
             .iter()
             .map(|segment| segment.as_ref().to_owned())
@@ -353,6 +406,7 @@ impl StdRegistry {
         self.prelude
             .lookup(name)
             .and_then(|symbol| self.symbol(symbol.id))
+            .filter(|symbol| symbol.visibility == StdSymbolVisibility::Public)
     }
 
     pub fn lookup_prelude_in_namespace(
@@ -361,8 +415,10 @@ impl StdRegistry {
         namespace: StdNamespace,
     ) -> Option<&StdSymbol> {
         let mut candidates = self.prelude.candidates(name).filter_map(|binding| {
-            self.symbol(binding.id)
-                .filter(|symbol| symbol.kind.namespace() == namespace)
+            self.symbol(binding.id).filter(|symbol| {
+                symbol.visibility == StdSymbolVisibility::Public
+                    && symbol.kind.namespace() == namespace
+            })
         });
         let symbol = candidates.next()?;
         candidates.next().is_none().then_some(symbol)

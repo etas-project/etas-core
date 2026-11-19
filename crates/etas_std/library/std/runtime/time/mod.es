@@ -1,3 +1,3 @@
 module std.runtime.time;
 
-public type Duration;
+public type Duration = { millis: u128 };

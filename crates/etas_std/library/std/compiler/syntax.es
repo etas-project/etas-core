@@ -1,11 +1,37 @@
 module std.compiler;
 
-import std.compiler.SyntaxBlock;
+// Parsing creates an immutable association between source, tokens and AST.
+// That association is a compiler mechanism; formatting is an Etas algorithm.
+@std.role("std.compiler.parse_body")
+public flow parse_body(text: string) -> Result<SyntaxBlock, ParseError> ![];
 
-// Syntax processing uses the compiler's parser and formatter. The public
-// declarations and the data returned for errors belong to this source package.
-@std.binding("std.compiler.parse_body")
-public flow parse_body(text: string) -> Result<SyntaxBlock, ParseError> ![] {}
-
-@std.binding("std.compiler.format")
-public flow format(body: SyntaxBlock) -> string ![] {}
+public flow format(body: SyntaxBlock) -> string ![] {
+    var formatter = BodyFormatter {
+        buffer= FormatBuffer { parts= [], size= 0, maximum= body.format_limit },
+        indent= 0,
+        previous= None,
+    };
+    var index: usize = 0;
+    var current: Option<SyntaxToken> = None;
+    while index < body.tokens.length limit Iterations(18446744073709551615) {
+        let next = body.tokens.get(index).unwrap();
+        index = index + 1;
+        if next.kind != SyntaxTokenKind.Trivia {
+            match current {
+                Some(token) => formatter.token(token, Some(next)),
+                None => {},
+            };
+            if next.kind == SyntaxTokenKind.Eof {
+                var buffer = formatter.buffer;
+                return buffer.finish();
+            }
+            current = Some(next);
+        }
+    }
+    match current {
+        Some(token) => formatter.token(token, None),
+        None => {},
+    };
+    var buffer = formatter.buffer;
+    return buffer.finish();
+}

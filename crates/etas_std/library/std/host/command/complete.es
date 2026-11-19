@@ -1,70 +1,92 @@
 module std.host.command;
 
-// Public declarations migrated from the legacy API inventory.
-// Maintained as Etas source; native bindings retain existing execution during migration.
+// Existential boxing retains the concrete WorkspacePath<R> and its checked R.
+// This private marker is no ambient path, root handle, or authority grant.
+spec CommandDirectory;
+impl std.fs.WorkspacePath<R> ~ CommandDirectory {}
 
-// Host command support type.
-@std.role("std.host.command.Command")
-public type Command;
+public type Command = {
+    private program: string,
+    private args: Array<string>,
+    private environment: Map<string, string>,
+    private cwd: Option<? ~ CommandDirectory>,
+    private stdin: Option<bytes>,
+};
 
-// An incremental command output or terminal process event.
 public enum CommandEvent {
     Exited(i32, bytes, bytes),
     Output(bytes, bytes),
     Stopped(bytes, bytes),
 }
 
-// Host command support type.
-public type CommandHandle;
+// The host issues and validates the handle. Its readonly reconnect identifier
+// is data; reconnect still checks the selected sandbox and current authority.
+public type CommandHandle = { private reconnect_id: string };
 
-// Host command support type.
-@std.role("std.host.command.CommandResult")
 public type CommandResult = { exit_code: i32, stdout: bytes, stderr: bytes };
 
-// Close a background command's standard input.
-@std.binding("std.host.command.close_stdin")
-public flow close_stdin(arg0: std.host.command.CommandHandle) -> unit ![] {}
+impl Command {
+    public flow new(program: string, args: Array<string>) -> Command ![] {
+        if program == "" { std.core.abort("command program must not be empty"); }
+        return Command {
+            program= program,
+            args= args,
+            environment= {},
+            cwd= None,
+            stdin= None,
+        };
+    }
 
-// Construct an opaque command value from a program and argument list.
-@std.binding("std.host.command.command")
-public flow command(arg0: string, arg1: std.collections.Array<string>) -> std.host.command.Command ![] {}
+    public flow with_cwd<R ~ std.fs.Region>(self, path: std.fs.WorkspacePath<R>) -> Command ![] {
+        var result = self;
+        let directory: ? ~ CommandDirectory = path;
+        result.cwd = Some(directory);
+        return result;
+    }
 
-// Return the stable reconnect identifier for a command handle.
-@std.binding("std.host.command.id")
-public flow id(arg0: std.host.command.CommandHandle) -> string ![] {}
+    public flow with_env(self, environment: Map<string, string>) -> Command ![] {
+        var result = self;
+        result.environment = environment;
+        return result;
+    }
 
-// Read a bounded incremental output event from a background command.
-@std.binding("std.host.command.read")
-public flow read(arg0: std.host.command.CommandHandle, arg1: usize) -> std.host.command.CommandEvent ![] {}
+    public flow with_stdin(self, body: bytes) -> Command ![] {
+        var result = self;
+        result.stdin = Some(body);
+        return result;
+    }
+}
 
-// Reconnect to a host-managed background command by stable identifier.
-@std.binding("std.host.command.reconnect")
-public flow reconnect(arg0: string, arg1: std.host.sandbox.SandboxProfile) -> std.host.command.CommandHandle ![] {}
+impl CommandHandle {
+    public flow id(self) -> string ![] {
+        return self.reconnect_id;
+    }
 
-// Run a command through the checked command host boundary.
-@std.binding("std.host.command.run")
-public flow run(arg0: std.host.command.Command, arg1: std.host.sandbox.SandboxProfile) -> std.host.command.CommandResult ![] {}
+    public flow read(self, max_bytes: usize) -> CommandEvent ![] {
+        return perform std.effects.Command.read(self, max_bytes);
+    }
 
-// Start a command as a host-managed background process.
-@std.binding("std.host.command.start")
-public flow start(arg0: std.host.command.Command, arg1: std.host.sandbox.SandboxProfile) -> std.host.command.CommandHandle ![] {}
+    public flow write(self, body: bytes) -> unit ![] {
+        perform std.effects.Command.write(self, body);
+    }
 
-// Stop a background command and return its terminal output event.
-@std.binding("std.host.command.stop")
-public flow stop(arg0: std.host.command.CommandHandle) -> std.host.command.CommandEvent ![] {}
+    public flow close_stdin(self) -> unit ![] {
+        perform std.effects.Command.close_stdin(self);
+    }
 
-// Return a command value with a region-indexed working directory.
-@std.binding("std.host.command.with_cwd")
-public flow with_cwd<R ~ std.fs.Region>(arg0: std.host.command.Command, arg1: std.fs.WorkspacePath<R>) -> std.host.command.Command ![] {}
+    public flow stop(self) -> CommandEvent ![] {
+        return perform std.effects.Command.stop(self);
+    }
+}
 
-// Return a command value with an explicit environment.
-@std.binding("std.host.command.with_env")
-public flow with_env(arg0: std.host.command.Command, arg1: std.collections.Map<string, string>) -> std.host.command.Command ![] {}
+public flow reconnect(id: string, sandbox: std.host.sandbox.SandboxProfile) -> CommandHandle ![] {
+    return perform std.effects.Command.reconnect(id, sandbox);
+}
 
-// Return a command value with bounded stdin bytes.
-@std.binding("std.host.command.with_stdin")
-public flow with_stdin(arg0: std.host.command.Command, arg1: bytes) -> std.host.command.Command ![] {}
+public flow run(command: Command, sandbox: std.host.sandbox.SandboxProfile = std.host.sandbox.DefaultCommandSandbox) -> CommandResult ![] {
+    return perform std.effects.Command.run(command, sandbox);
+}
 
-// Write bytes to a background command's standard input.
-@std.binding("std.host.command.write")
-public flow write(arg0: std.host.command.CommandHandle, arg1: bytes) -> unit ![] {}
+public flow start(command: Command, sandbox: std.host.sandbox.SandboxProfile) -> CommandHandle ![] {
+    return perform std.effects.Command.start(command, sandbox);
+}

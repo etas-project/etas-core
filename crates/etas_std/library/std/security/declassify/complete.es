@@ -1,10 +1,45 @@
 module std.security.declassify;
 
-// Public declarations migrated from the legacy API inventory.
-// Maintained as Etas source; native bindings retain existing execution during migration.
+// Only an execution primitive can create evidence/authorization handles.
+type SanitizationHandle;
+type DeclassificationPermit;
 
-// Security declassification support descriptor.
-public flow declassify<T>(arg0: T) -> T ![Secret];
+public type SanitizationEvidence<U> = {
+    private handle: SanitizationHandle,
+};
 
-// Security declassification support descriptor.
-public flow sanitize<T>(arg0: T) -> T ![Secret];
+public type SanitizationStrategy<T, U> = {
+    private transform: (T) -> Result<U, SecurityError> ![],
+    private evidence: SanitizationEvidence<U>,
+};
+
+public type DeclassificationStrategy<T, U> = {
+    private transform: (T) -> Result<U, SecurityError> ![],
+    private evidence: SanitizationEvidence<U>,
+    private permit: DeclassificationPermit,
+};
+
+public enum SecurityError {
+    Rejected,
+    Denied,
+    InvalidReason,
+    Unavailable,
+    StrategyMismatch,
+}
+
+public flow sanitize<T, U>(value: Untrusted<T>, strategy: SanitizationStrategy<T, U>)
+    -> Sanitized<U> ![Error<SecurityError>] {
+    let transformed = (strategy.transform)(value.value);
+    return match transformed {
+        Ok(output) => Sanitized { value= output, evidence= strategy.evidence },
+        Err(error) => perform Error.raise<SecurityError>(error),
+    };
+}
+
+public flow declassify<T, U>(value: Secret<T>, strategy: DeclassificationStrategy<T, U>, reason: string)
+    -> Sanitized<U> ![std.effects.Secret, Error<SecurityError>] {
+    if std.text.is_empty(std.text.trim(reason)) {
+        perform Error.raise<SecurityError>(SecurityError.InvalidReason);
+    }
+    return perform std.effects.Secret.declassify(value, strategy, reason);
+}

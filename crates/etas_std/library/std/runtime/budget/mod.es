@@ -1,8 +1,7 @@
 module std.runtime.budget;
 
-@std.role("std.runtime.budget.Money")
-public type Money;
+public type Money = { private amount: f64, private currency: string };
 
-// The runtime creates the opaque monetary value; source owns its public API.
-@std.binding("std.runtime.budget.usd")
-public flow usd(amount: f64) -> Money ![] {}
+public flow usd(amount: f64) -> Money ![] {
+    return Money { amount= amount, currency= "USD" };
+}

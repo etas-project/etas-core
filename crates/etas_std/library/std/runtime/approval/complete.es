@@ -1,17 +1,26 @@
 module std.runtime.approval;
 
-// Public declarations migrated from the legacy API inventory.
-// Maintained as Etas source; native bindings retain existing execution during migration.
+public enum Risk {
+    Low,
+    Medium,
+    High,
+}
 
-// Approval support type.
-public type ApprovalDecision;
+public type ApprovalRequest<T> = { title: string, content: T, risk: Risk };
 
-// Approval support type.
-public type ApprovalRequest;
+public enum ApprovalDecision {
+    Accepted,
+    Rejected,
+}
 
-// Approval support type.
-public type Risk;
-
-// Request human approval through the future runtime boundary.
-@std.binding("std.runtime.approval.approve")
-public flow approve<T>(arg0: string, arg1: T, arg2: std.runtime.approval.Risk) -> bool ![Approval] {}
+public flow approve<T>(title: string, content: T, risk: Risk) -> bool ![std.effects.Approval] {
+    let decision = perform std.effects.Approval.request(ApprovalRequest {
+        title= title,
+        content= content,
+        risk= risk,
+    });
+    return match decision {
+        ApprovalDecision.Accepted => true,
+        ApprovalDecision.Rejected => false,
+    };
+}

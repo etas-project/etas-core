@@ -87,9 +87,12 @@ fn published_method() -> PublishedMethod {
         owner_params: Vec::new(),
         identity: MethodId::new(owner, "encode".into()).unwrap(),
         callable: CallableValueGraph {
+            source_projections: Vec::new(),
+            parameter_projections: Vec::new(),
             objects: Vec::new(),
             sources: vec![CallableValueSource::Value(0)],
             values: vec![CallableValueNode {
+                returned_projections: Vec::new(),
                 residual_checks: Default::default(),
                 handler_requests: None,
                 behavior: CallableValueBehavior {
@@ -176,6 +179,8 @@ fn method_behavior_requirements_round_trip_and_invalidate_the_input_fingerprint(
 fn implementation() -> SpecImpl {
     let method = published_method();
     SpecImpl {
+        owner: Some(method.identity.implementation().clone()),
+        generic_params: method.owner_params,
         self_type: method.self_type,
         spec: vec!["api".into(), "Encoder".into()],
         args: Vec::new(),
@@ -321,6 +326,7 @@ fn inherent_and_associated_methods_preserve_distinct_owner_and_method_binders() 
     use crate::{CallableValueGenericBinding, GenericParam, GenericParamKind};
     for receiver in [
         MethodReceiver::Value { slot: 0 },
+        MethodReceiver::Updating { slot: 0 },
         MethodReceiver::Associated,
     ] {
         let mut method = published_method();
@@ -406,6 +412,7 @@ fn encode_and_decode_reject_unowned_or_missing_implementation_roots() {
             2 => {
                 method.callable.sources[0] =
                     CallableValueSource::Parameter(CallableValueParameter {
+                        projection: None,
                         scope: CallableValueScope::Root,
                         position: 0,
                     })
@@ -414,6 +421,7 @@ fn encode_and_decode_reject_unowned_or_missing_implementation_roots() {
                 method.callable.values[0].returned_sources =
                     Some(vec![CallableValueSource::Parameter(
                         CallableValueParameter {
+                            projection: None,
                             scope: CallableValueScope::Root,
                             position: 0,
                         },

@@ -188,7 +188,10 @@ fn validate_parts(
                     }
                 }
             }
-            Part::Target(crate::CallableRequestTarget::Parameter(_)) => {}
+            Part::Target(
+                crate::CallableRequestTarget::Parameter(_)
+                | crate::CallableRequestTarget::ParameterProjection { .. },
+            ) => {}
             Part::Target(crate::CallableRequestTarget::AgentTools(context)) => {
                 work.push(Part::Type(context))
             }

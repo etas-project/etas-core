@@ -1,10 +1,7 @@
 module std.host.sandbox;
 
-// Public declarations migrated from the legacy API inventory.
-// Maintained as Etas source; native bindings retain existing execution during migration.
+public let DefaultCommandSandbox: SandboxProfile = SandboxProfile { name= "default" };
 
-@std.role("std.host.sandbox.DefaultCommandSandbox")
-public let DefaultCommandSandbox: std.host.sandbox.SandboxProfile;
-
-// Compiler-known support type for command sandbox profiles.
-public type SandboxProfile;
+// A profile names a host-configured policy; it does not carry the permission
+// to widen that policy. The host checks the selected profile for each operation.
+public type SandboxProfile = { name: string };

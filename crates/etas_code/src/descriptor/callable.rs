@@ -40,6 +40,12 @@ pub enum GenericOwner {
         effect: DefinitionKey,
         name: String,
     },
+    /// A checked input signature distinguishes declarations in an action group.
+    ActionOverload {
+        effect: DefinitionKey,
+        name: String,
+        signature: crate::CodeFingerprint,
+    },
 }
 
 impl GenericOwner {
@@ -55,7 +61,7 @@ impl GenericOwner {
             ),
             Self::Method(_) | Self::Implementation(_) => true,
             Self::ImplementationPattern(_) => false,
-            Self::Action { effect, name } => {
+            Self::Action { effect, name } | Self::ActionOverload { effect, name, .. } => {
                 effect.kind() == crate::DefinitionKind::Effect && !name.is_empty()
             }
         }
@@ -73,6 +79,17 @@ impl GenericOwner {
                 encoder.tag(4);
                 encoder.fingerprint(effect.fingerprint());
                 encoder.bytes(name.as_bytes());
+                return encoder.finish();
+            }
+            Self::ActionOverload {
+                effect,
+                name,
+                signature,
+            } => {
+                encoder.tag(5);
+                encoder.fingerprint(effect.fingerprint());
+                encoder.bytes(name.as_bytes());
+                encoder.fingerprint(*signature);
                 return encoder.finish();
             }
         };
@@ -120,6 +137,8 @@ pub struct GenericParameterInfo {
     Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
 )]
 pub struct ParameterInfo {
+    #[serde(default)]
+    pub default: Option<super::ParameterDefaultInfo>,
     pub name: Option<String>,
     pub ty: TypeInfoRef,
 }

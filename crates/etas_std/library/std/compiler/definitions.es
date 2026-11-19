@@ -1,10 +1,13 @@
 module std.compiler;
 
-// These fields describe compiler-managed values. The role keeps storage and
-// construction inside the compiler; source owns the public projected shape.
+// Source data describes each definition; the retained handle carries the live
+// compiler observation. Descriptive IDs alone cannot authorize compilation.
+type RetainedDefinition;
+type RetainedSyntax;
 
-@std.role("std.compiler.AgentDef")
 public type AgentDef<Actor> = {
+    private retained: RetainedDefinition,
+    private observation: DefinitionObservation,
     body: Option<std.compiler.SyntaxBlock>,
     effects: std.compiler.EffectSummary,
     determinism: Option<std.compiler.Determinism>,
@@ -19,8 +22,9 @@ public type AgentDef<Actor> = {
     methods: Array<std.compiler.CallableDef>,
 };
 
-@std.role("std.compiler.CallableDef")
 public type CallableDef<Callable> = {
+    private retained: RetainedDefinition,
+    private observation: DefinitionObservation,
     body: Option<std.compiler.SyntaxBlock>,
     effects: std.compiler.EffectSummary,
     determinism: Option<std.compiler.Determinism>,
@@ -31,7 +35,38 @@ public type CallableDef<Callable> = {
     signature: std.compiler.SignatureInfo,
 };
 
-@std.role("std.compiler.SyntaxBlock")
 public type SyntaxBlock = {
+    private retained: RetainedSyntax,
+    // Canonical compiler observation. The public format flow applies Etas
+    // formatting policy to the token observations below.
     text: string,
+    private tokens: Array<SyntaxToken>,
+    private format_limit: usize,
 };
+
+type DefinitionObservation = {
+    identity: DefinitionId,
+    entry: string,
+    environment: string,
+    signature: Option<string>,
+    body: Option<string>,
+    declared_bound: Option<string>,
+    escaping: Option<string>,
+    requested: Option<string>,
+    default_handled: Option<string>,
+    determinism: Option<Determinism>,
+    trace: Option<string>,
+};
+
+// Readonly lexer observations tied to the retained source and token spans.
+// Whitespace/comments remain in the observations so source owns their omission.
+enum SyntaxTokenKind {
+    Identifier,
+    Keyword,
+    Punctuation,
+    Other,
+    Trivia,
+    Eof,
+}
+
+type SyntaxToken = { kind: SyntaxTokenKind, text: string };

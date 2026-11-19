@@ -271,6 +271,16 @@ impl DescriptorGraph {
                         encoder.fingerprint(effect.fingerprint());
                         encoder.bytes(name.as_bytes());
                     }
+                    GenericOwner::ActionOverload {
+                        effect,
+                        name,
+                        signature,
+                    } => {
+                        encoder.tag(5);
+                        encoder.fingerprint(effect.fingerprint());
+                        encoder.bytes(name.as_bytes());
+                        encoder.fingerprint(*signature);
+                    }
                 }
                 encoder.number(u64::from(binder.position));
                 if !binder.owner.alpha_scoped() {
@@ -365,6 +375,33 @@ impl DescriptorGraph {
 fn encode_parameter_call(encoder: &mut CanonicalEncoder, call: &ParameterCallInfo) {
     encoder.fingerprint(call.callable.fingerprint());
     encoder.number(u64::from(call.position));
+    if !call.projection.is_empty() {
+        encoder.tag(2);
+        encoder.number(call.projection.len() as u64);
+        for step in &call.projection {
+            match step {
+                super::ValueProjectionStep::Field(name) => {
+                    encoder.tag(0);
+                    encoder.bytes(name.as_bytes());
+                }
+                super::ValueProjectionStep::TupleElement(position) => {
+                    encoder.tag(1);
+                    encoder.number(u64::from(*position));
+                }
+                super::ValueProjectionStep::VariantPayload { variant, position } => {
+                    encoder.tag(2);
+                    encoder.bytes(variant.as_bytes());
+                    encoder.number(u64::from(*position));
+                }
+                super::ValueProjectionStep::SequenceElement => encoder.tag(3),
+                super::ValueProjectionStep::ListHead => encoder.tag(4),
+                super::ValueProjectionStep::ListTail => encoder.tag(5),
+                super::ValueProjectionStep::MapKey => encoder.tag(6),
+                super::ValueProjectionStep::MapValue => encoder.tag(7),
+                super::ValueProjectionStep::CallResult => encoder.tag(8),
+            }
+        }
+    }
     match &call.arguments {
         None => encoder.tag(0),
         Some(arguments) => {
@@ -483,6 +520,13 @@ fn encode_signature(encoder: &mut CanonicalEncoder, signature: &SignatureInfo) {
     encoder.number(signature.generics.len() as u64);
     encoder.number(signature.parameters.len() as u64);
     for parameter in &signature.parameters {
+        match &parameter.default {
+            Some(default) => {
+                encoder.tag(1);
+                encoder.fingerprint(default.fingerprint());
+            }
+            None => encoder.tag(0),
+        }
         match &parameter.name {
             Some(name) => {
                 encoder.tag(1);

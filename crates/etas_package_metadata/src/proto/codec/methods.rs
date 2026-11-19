@@ -3,6 +3,7 @@ use super::*;
 pub(super) fn to_proto(method: &PublishedMethod) -> ProtoPublishedMethod {
     let (receiver, receiver_slot) = match method.receiver {
         MethodReceiver::Value { slot } => ("value", Some(slot)),
+        MethodReceiver::Updating { slot } => ("updating", Some(slot)),
         MethodReceiver::Associated => ("associated", None),
         MethodReceiver::Component => ("component", None),
     };
@@ -45,6 +46,7 @@ pub(super) fn from_proto(
 ) -> Result<PublishedMethod, MetadataArtifactError> {
     let receiver = match (method.receiver.as_str(), method.receiver_slot) {
         ("value", Some(slot)) => MethodReceiver::Value { slot },
+        ("updating", Some(slot)) => MethodReceiver::Updating { slot },
         ("associated", None) => MethodReceiver::Associated,
         ("component", None) => MethodReceiver::Component,
         _ => return Err(invalid_method("invalid published method receiver ABI")),

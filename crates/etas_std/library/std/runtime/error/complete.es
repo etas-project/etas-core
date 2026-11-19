@@ -1,52 +1,49 @@
 module std.runtime.error;
 
-// Public declarations migrated from the legacy API inventory.
-// Maintained as Etas source; native bindings retain existing execution during migration.
+// Standard runtime error support type.
+public type BudgetExceeded = { resource: string, limit: u128, consumed: u128 };
 
 // Standard runtime error support type.
-public type BudgetExceeded;
+public type EffectBoundaryViolation = { effect: string, boundary: string };
 
 // Standard runtime error support type.
-public type EffectBoundaryViolation;
+public type HumanRejected = { reason: Option<string> };
 
 // Standard runtime error support type.
-public type HumanRejected;
+public type IOError = { code: string, message: string };
 
 // Standard runtime error support type.
-public type IOError;
+public type IndexError = { index: usize, length: usize };
 
 // Standard runtime error support type.
-public type IndexError;
+public type MissingCitation = { claim: string };
 
 // Standard runtime error support type.
-public type MissingCitation;
+public type PolicyDenied = { policy: string, reason: string };
 
 // Standard runtime error support type.
-public type PolicyDenied;
+public type PolicyViolation = { policy: string, message: string };
 
 // Standard runtime error support type.
-public type PolicyViolation;
+public type PromptInjectionRisk = { message: string };
 
 // Standard runtime error support type.
-public type PromptInjectionRisk;
+public type ProtocolViolation = { protocol: string, message: string };
 
 // Standard runtime error support type.
-public type ProtocolViolation;
+public type SandboxViolation = { operation: string, target: string };
 
 // Standard runtime error support type.
-public type SandboxViolation;
+public type SchemaError = { path: Array<string>, expected: string, actual: string };
 
 // Standard runtime error support type.
-public type SchemaError;
+public type ToolDenied = { tool: string, reason: string };
 
 // Standard runtime error support type.
-public type ToolDenied;
+public type ToolError = { tool: string, code: string, message: string };
 
 // Standard runtime error support type.
-public type ToolError;
+public type ToolTimeout = { tool: string, timeout: std.runtime.time.Duration };
 
 // Standard runtime error support type.
-public type ToolTimeout;
-
-// Standard runtime error support type.
-public type ValidationError;
+public type ValidationError = { path: Array<string>, message: string };

@@ -114,11 +114,7 @@ impl RuntimeTypeRole {
             && representation
             && (!matches!(
                 self,
-                Self::CommandResult
-                    | Self::Task
-                    | Self::Scheduler
-                    | Self::Continuation
-                    | Self::Money
+                Self::CommandResult | Self::Task | Self::Scheduler | Self::Continuation
             ) || declaration.construction == super::StdTypeConstruction::IntrinsicOnly)
     }
 

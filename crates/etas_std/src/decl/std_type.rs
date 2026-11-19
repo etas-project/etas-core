@@ -50,6 +50,14 @@ pub enum StdType {
         args: Vec<StdType>,
     },
     Record(Vec<StdRecordField>),
+    Handler {
+        handled: super::StdEffectRowExpr,
+        produced: Option<super::StdEffectRowExpr>,
+        result: Option<Box<StdType>>,
+    },
+    Existential {
+        bounds: Vec<super::StdSpecRef>,
+    },
 }
 
 #[derive(

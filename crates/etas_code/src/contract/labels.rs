@@ -77,6 +77,7 @@ pub enum TraceLabel {
     ParameterCall {
         callable: CallableId,
         position: u32,
+        projection: Vec<crate::descriptor::ValueProjectionStep>,
         signature: CodeFingerprint,
         arguments: Option<Vec<ParameterArgumentInfo>>,
         handlers: Option<Vec<HandlerScopeLabel>>,
@@ -92,6 +93,7 @@ pub enum TraceLabel {
     ParameterNonReturn {
         callable: CallableId,
         position: u32,
+        projection: Vec<crate::descriptor::ValueProjectionStep>,
         signature: CodeFingerprint,
         arguments: Option<Vec<ParameterArgumentInfo>>,
         handlers: Option<Vec<HandlerScopeLabel>>,
@@ -163,16 +165,31 @@ impl TraceLabel {
             Self::Action(effect) => effect_work(effect),
             Self::ParameterCall {
                 callable,
+                projection,
                 arguments,
                 handlers,
                 ..
             }
             | Self::ParameterNonReturn {
                 callable,
+                projection,
                 arguments,
                 handlers,
                 ..
             } => callable_work(callable)
+                .saturating_add(
+                    projection
+                        .iter()
+                        .map(|step| match step {
+                            crate::descriptor::ValueProjectionStep::Field(name)
+                            | crate::descriptor::ValueProjectionStep::VariantPayload {
+                                variant: name,
+                                ..
+                            } => 1 + name.len(),
+                            _ => 1,
+                        })
+                        .sum::<usize>(),
+                )
                 .saturating_add(arguments.as_ref().map_or(1, Vec::len))
                 .saturating_add(handlers_work(handlers)),
             Self::Returned {
@@ -256,6 +273,7 @@ pub(super) fn outcome_label(
         CallableOutcomeInfo::ParameterNonReturn(call) => TraceLabel::ParameterNonReturn {
             callable: call.callable.clone(),
             position: call.position,
+            projection: call.projection.clone(),
             signature: graph.type_fingerprint(call.signature)?,
             arguments: call.arguments.clone(),
             handlers: handler_scope_labels(graph, call)?,

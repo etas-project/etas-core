@@ -1,22 +1,71 @@
 module std.crypto;
 
-// Public declarations migrated from the legacy API inventory.
-// Maintained as Etas source; native bindings retain existing execution during migration.
+public type CryptoError = { code: string, message: string };
+public alias Digest = bytes;
 
-// Secret-backed crypto error type.
-public type CryptoError;
+public flow constant_time_eq(left: bytes, right: bytes) -> bool ![] {
+    let length = if left.length > right.length { left.length } else { right.length };
+    var difference: u128 = if left.length == right.length { 0 } else { 1 };
+    var index: usize = 0;
+    while index < length limit Iterations(18446744073709551615) {
+        let a: u8 = match left.get(index) { Some(value) => value, None => 0 };
+        let b: u8 = match right.get(index) { Some(value) => value, None => 0 };
+        let delta = i32 { bits= a.bits } - i32 { bits= b.bits };
+        let square = delta * delta;
+        difference = difference + square.bits;
+        index = index + 1;
+    }
+    return difference == 0;
+}
 
-// Nominal cryptographic digest backed by bytes.
-public type Digest = bytes;
+// Host-secret handles may be non-exportable. This is the separately declared
+// Secret.use operation required by the host architecture, not the public hash
+// algorithm's execution path.
+public flow hmac_sha256<K>(key: std.secret.SecretValue<K>, body: bytes)
+    -> Digest ![Error<CryptoError>] {
+    return perform std.effects.Secret.use<K>(key, body);
+}
 
-// Compare byte arrays without data-dependent early exit.
-@std.binding("std.crypto.constant_time_eq")
-public flow constant_time_eq(arg0: bytes, arg1: bytes) -> bool ![] {}
+public flow sha256(input: bytes) -> Digest ![] {
+    var state = Sha256State.new();
+    let prefix = input.length - input.length % 64;
+    var offset: usize = 0;
+    while offset < prefix limit Iterations(18446744073709551615) {
+        state = state.compress(input, offset);
+        offset = offset + 64;
+    }
 
-// Compute HMAC-SHA256 using a host-mediated opaque secret.
-@std.binding("std.crypto.hmac_sha256")
-public flow hmac_sha256<K>(arg0: std.secret.SecretValue<K>, arg1: bytes) -> std.crypto.Digest ![Error<std.crypto.CryptoError>] {}
+    var padding: Array<u8> = [];
+    while offset < input.length limit Iterations(63) {
+        padding = padding.push(input.get(offset).unwrap());
+        offset = offset + 1;
+    }
+    padding = padding.push(128);
+    while padding.length % 64 != 56 limit Iterations(64) {
+        padding = padding.push(0);
+    }
+    let bit_length = (input.length.bits * 8) % 18446744073709551616;
+    var length_byte: usize = 0;
+    while length_byte < 8 limit Iterations(8) {
+        let divisor = BYTE_POWERS.get(7 - length_byte).unwrap();
+        padding = padding.push(u8 { bits= (bit_length / divisor) % 256 });
+        length_byte = length_byte + 1;
+    }
+    let tail = bytes { data= padding };
+    offset = 0;
+    while offset < tail.length limit Iterations(2) {
+        state = state.compress(tail, offset);
+        offset = offset + 64;
+    }
 
-// Compute SHA-256 over public bytes.
-@std.binding("std.crypto.sha256")
-public flow sha256(arg0: bytes) -> std.crypto.Digest ![] {}
+    var output: Array<u8> = [];
+    for word in state.words limit Iterations(8) {
+        output = output.extend([
+            u8 { bits= word.raw / 16777216 },
+            u8 { bits= (word.raw / 65536) % 256 },
+            u8 { bits= (word.raw / 256) % 256 },
+            u8 { bits= word.raw % 256 },
+        ]);
+    }
+    return bytes { data= output };
+}

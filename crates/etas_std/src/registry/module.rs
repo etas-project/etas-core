@@ -53,11 +53,20 @@ pub struct StdSymbol {
     pub name: String,
     pub qualified_path: Vec<String>,
     pub kind: StdSymbolKind,
+    pub visibility: StdSymbolVisibility,
     pub decl: StdDecl,
     pub intrinsic: Option<IntrinsicDescriptor>,
     pub implementation: Option<StdImplementationRef>,
     pub docs: DocsMetadata,
     pub completion: CompletionMetadata,
+}
+
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, etas_core::RetainedSize, serde::Serialize, serde::Deserialize,
+)]
+pub enum StdSymbolVisibility {
+    Public,
+    Private,
 }
 
 #[derive(

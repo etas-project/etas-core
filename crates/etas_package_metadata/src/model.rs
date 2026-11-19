@@ -95,6 +95,7 @@ pub struct ExternalExport {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PublicMetadata {
+    pub scoped_callbacks: Vec<crate::ScopedCallbackContract>,
     pub definition_descriptors: Option<etas_code::descriptor::DefinitionDescriptorSet>,
     pub definition_origins: Option<etas_code::identity::PackageDefinitionOrigins>,
     pub modules: Vec<ExternalModule>,
@@ -125,7 +126,8 @@ pub struct PublicMetadata {
 
 impl PublicMetadata {
     pub fn is_empty(&self) -> bool {
-        self.definition_descriptors.is_none()
+        self.scoped_callbacks.is_empty()
+            && self.definition_descriptors.is_none()
             && self.definition_origins.is_none()
             && self.modules.is_empty()
             && self.types.is_empty()
@@ -211,9 +213,12 @@ pub struct NamedSignature {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CallableSignature {
+    /// Exact source implementation, distinct from a public overload-group name.
+    pub definition: Option<etas_code::DefinitionKey>,
     pub path: Vec<String>,
     pub generic_params: Vec<GenericParam>,
     pub param_names: Vec<String>,
+    pub parameter_defaults: Vec<ParameterDefault>,
     pub input: Vec<Type>,
     pub output: Option<Type>,
     pub effects: Option<EffectRow>,
@@ -224,6 +229,8 @@ pub struct CallableSignature {
 pub struct ActionSignature {
     pub path: Vec<String>,
     pub generic_params: Vec<ActionGenericParam>,
+    pub param_names: Vec<String>,
+    pub parameter_defaults: Vec<ParameterDefault>,
     pub params: Vec<Type>,
     pub effect_args: Vec<ActionArgKind>,
     // Indexed by selector position. Type selectors name a declared type parameter;
@@ -232,7 +239,19 @@ pub struct ActionSignature {
     pub selector_defaults: Vec<Option<EffectArg>>,
     pub output: Option<Type>,
     pub returns_never: bool,
+    /// Presence declares a runtime default; an empty row is an explicit pure default.
+    pub default_handler_effects: Option<EffectRow>,
     pub visibility: Visibility,
+}
+
+/// A declaration calling slot and its definition-owned expression revision.
+/// This information is absent from first-class function types.
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub struct ParameterDefault {
+    pub slot: u32,
+    pub reference: etas_code::descriptor::ParameterDefaultInfo,
 }
 
 #[derive(
@@ -391,6 +410,8 @@ impl EffectMetadata {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct EffectSummary {
+    /// Exact checked source declaration, including overload identity.
+    pub definition: Option<etas_code::DefinitionKey>,
     pub residual_checks: Vec<etas_code::residual::identity::ResidualObligationRef>,
     pub behavior: Option<crate::CallableValueBehavior>,
     pub handler_requests: Option<RequestInstantiationTemplate>,
@@ -636,6 +657,7 @@ pub struct SpecMethod {
     pub path: Vec<String>,
     pub signature: Option<CallableSignature>,
     pub receiver_param: Option<u32>,
+    pub updating_receiver: bool,
 }
 
 #[derive(
@@ -655,6 +677,8 @@ pub struct SpecBound {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SpecImpl {
+    pub owner: Option<etas_code::ImplementationKey>,
+    pub generic_params: Vec<GenericParam>,
     pub self_type: Type,
     pub spec: Vec<String>,
     pub args: Vec<Type>,
@@ -735,6 +759,7 @@ pub enum MethodReceiver {
     Value { slot: u32 },
     Associated,
     Component,
+    Updating { slot: u32 },
 }
 
 impl PublishedMethod {

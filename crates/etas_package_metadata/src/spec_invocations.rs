@@ -5,6 +5,10 @@ use crate::{CallableValueGraph, EffectRow, Type};
 )]
 pub enum CallableRequestTarget {
     Parameter(String),
+    ParameterProjection {
+        parameter: String,
+        path: Vec<etas_code::descriptor::ValueProjectionStep>,
+    },
     AgentTools(Box<Type>),
     SpecMethod(Box<SpecMethodInvocation>),
 }
@@ -68,6 +72,15 @@ impl CallableRequestTarget {
 
     pub(crate) fn validate_shape(&self) -> Result<(), String> {
         match self {
+            Self::ParameterProjection { parameter, path } => {
+                if parameter.is_empty()
+                    || path.is_empty()
+                    || path.len() > crate::MAX_METADATA_GRAPH_DEPTH
+                {
+                    return Err("callable request projection has no valid parameter path".into());
+                }
+                Ok(())
+            }
             Self::Parameter(parameter) if parameter.is_empty() => {
                 Err("callable request parameter is empty".into())
             }

@@ -173,6 +173,7 @@ pub(super) fn encode(ty: &TypeInfo) -> p::Type {
                 .parameters
                 .iter()
                 .map(|parameter| p::Parameter {
+                    default: parameter.default.as_ref().map(super::defaults::encode),
                     name: parameter.name.clone(),
                     ty: parameter.ty.0,
                 })
@@ -310,11 +311,14 @@ pub(super) fn decode(ty: p::Type) -> Result<TypeInfo, Error> {
             parameters: value
                 .parameters
                 .into_iter()
-                .map(|parameter| ParameterInfo {
-                    name: parameter.name,
-                    ty: TypeInfoRef(parameter.ty),
+                .map(|parameter| {
+                    Ok(ParameterInfo {
+                        default: parameter.default.map(super::defaults::decode).transpose()?,
+                        name: parameter.name,
+                        ty: TypeInfoRef(parameter.ty),
+                    })
                 })
-                .collect(),
+                .collect::<Result<_, Error>>()?,
             output: TypeInfoRef(value.output),
             declared_output: value.declared_output.map(TypeInfoRef),
             effects: value.effects.map(EffectRowInfoRef),

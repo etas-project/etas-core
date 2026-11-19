@@ -116,6 +116,8 @@ pub struct ProtoExternalExport {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoPublicMetadataSection {
+    #[prost(message, repeated, tag = "27")]
+    pub scoped_callbacks: Vec<ProtoScopedCallbackContract>,
     #[prost(message, optional, tag = "25")]
     pub definition_descriptors: Option<super::descriptors::ProtoDescriptorGraph>,
     #[prost(message, optional, tag = "24")]
@@ -254,6 +256,8 @@ pub struct ProtoAnnotationValueMetadata {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoTypeContractsSection {
+    #[prost(message, repeated, tag = "17")]
+    pub scoped_callbacks: Vec<ProtoScopedCallbackContract>,
     #[prost(message, repeated, tag = "1")]
     pub types: Vec<ProtoNamedSignature>,
     #[prost(message, repeated, tag = "2")]
@@ -289,6 +293,14 @@ pub struct ProtoTypeContractsSection {
 }
 
 #[derive(Clone, PartialEq, Message)]
+pub struct ProtoScopedCallbackContract {
+    #[prost(message, optional, tag = "1")]
+    pub target: Option<ProtoCallableContractTarget>,
+    #[prost(uint32, repeated, tag = "2")]
+    pub parameters: Vec<u32>,
+}
+
+#[derive(Clone, PartialEq, Message)]
 pub struct ProtoSpecSignature {
     #[prost(string, repeated, tag = "1")]
     pub path: Vec<String>,
@@ -318,6 +330,8 @@ pub struct ProtoSpecMethod {
     pub signature: Option<ProtoCallableSignature>,
     #[prost(uint32, optional, tag = "4")]
     pub receiver_param: Option<u32>,
+    #[prost(bool, tag = "5")]
+    pub updating_receiver: bool,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -338,6 +352,10 @@ pub struct ProtoSpecImpl {
     pub args: Vec<ProtoType>,
     #[prost(message, repeated, tag = "4")]
     pub methods: Vec<super::descriptors::ProtoMethodIdentity>,
+    #[prost(message, optional, tag = "5")]
+    pub owner: Option<super::descriptors::ProtoGenericOwner>,
+    #[prost(message, repeated, tag = "6")]
+    pub generic_params: Vec<ProtoActionGenericParam>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -440,6 +458,8 @@ pub struct ProtoNamedSignature {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoCallableSignature {
+    #[prost(message, optional, tag = "9")]
+    pub definition: Option<ProtoDefinitionKey>,
     #[prost(string, repeated, tag = "1")]
     pub path: Vec<String>,
     #[prost(message, repeated, tag = "2")]
@@ -454,6 +474,8 @@ pub struct ProtoCallableSignature {
     pub param_names: Vec<String>,
     #[prost(message, repeated, tag = "7")]
     pub generic_params: Vec<ProtoActionGenericParam>,
+    #[prost(message, repeated, tag = "8")]
+    pub parameter_defaults: Vec<ProtoParameterDefault>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -476,6 +498,20 @@ pub struct ProtoActionSignature {
     pub selector_defaults: Vec<ProtoOptionalEffectArg>,
     #[prost(message, repeated, tag = "9")]
     pub generic_params: Vec<ProtoActionGenericParam>,
+    #[prost(string, repeated, tag = "10")]
+    pub param_names: Vec<String>,
+    #[prost(message, repeated, tag = "11")]
+    pub parameter_defaults: Vec<ProtoParameterDefault>,
+    #[prost(message, optional, tag = "12")]
+    pub default_handler_effects: Option<ProtoEffectRow>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoParameterDefault {
+    #[prost(uint32, tag = "1")]
+    pub slot: u32,
+    #[prost(message, optional, tag = "2")]
+    pub reference: Option<super::descriptors::ProtoParameterDefaultReference>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -594,6 +630,8 @@ pub struct ProtoEffectMetadataSection {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoEffectSummary {
+    #[prost(message, optional, tag = "12")]
+    pub definition: Option<ProtoDefinitionKey>,
     #[prost(message, optional, tag = "11")]
     pub residual_checks: Option<ProtoResidualReferenceSet>,
     #[prost(message, optional, tag = "10")]
@@ -736,7 +774,7 @@ pub struct ProtoActionTrace {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoCallableRequestTarget {
-    #[prost(oneof = "proto_callable_request_target::Target", tags = "1, 2, 3")]
+    #[prost(oneof = "proto_callable_request_target::Target", tags = "1, 2, 3, 4")]
     pub target: Option<proto_callable_request_target::Target>,
 }
 
@@ -749,7 +787,17 @@ pub mod proto_callable_request_target {
         SpecMethod(Box<super::ProtoSpecMethodInvocation>),
         #[prost(message, boxed, tag = "3")]
         AgentTools(Box<super::ProtoType>),
+        #[prost(message, tag = "4")]
+        ParameterProjection(super::ProtoParameterRequestProjection),
     }
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoParameterRequestProjection {
+    #[prost(string, tag = "1")]
+    pub parameter: String,
+    #[prost(message, repeated, tag = "2")]
+    pub path: Vec<super::descriptors::ProtoValueProjectionStep>,
 }
 
 #[derive(Clone, PartialEq, Message)]

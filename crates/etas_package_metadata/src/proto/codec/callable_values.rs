@@ -7,6 +7,33 @@ use crate::{
 
 pub(super) fn to_proto(graph: &CallableValueGraph) -> ProtoCallableValueGraph {
     ProtoCallableValueGraph {
+        source_projections: graph
+            .source_projections
+            .iter()
+            .map(|projection| ProtoCallableReturnedProjection {
+                path: projection
+                    .path
+                    .iter()
+                    .map(super::super::value_projection::encode)
+                    .collect(),
+                sources: projection
+                    .sources
+                    .as_ref()
+                    .map(|sources| ProtoCallableValueSources {
+                        sources: sources.iter().copied().map(source_to_proto).collect(),
+                    }),
+            })
+            .collect(),
+        parameter_projections: graph
+            .parameter_projections
+            .iter()
+            .map(|path| ProtoCallableParameterProjection {
+                steps: path
+                    .iter()
+                    .map(super::super::value_projection::encode)
+                    .collect(),
+            })
+            .collect(),
         objects: graph.objects.iter().map(object_to_proto).collect(),
         sources: graph.sources.iter().copied().map(source_to_proto).collect(),
         values: graph
@@ -54,6 +81,22 @@ pub(super) fn to_proto(graph: &CallableValueGraph) -> ProtoCallableValueGraph {
                     })
                     .collect(),
                 action_trace: Some(action_trace_to_proto(&node.action_trace)),
+                returned_projections: node
+                    .returned_projections
+                    .iter()
+                    .map(|projection| ProtoCallableReturnedProjection {
+                        path: projection
+                            .path
+                            .iter()
+                            .map(super::super::value_projection::encode)
+                            .collect(),
+                        sources: projection.sources.as_ref().map(|sources| {
+                            ProtoCallableValueSources {
+                                sources: sources.iter().copied().map(source_to_proto).collect(),
+                            }
+                        }),
+                    })
+                    .collect(),
                 returned_sources: node.returned_sources.as_ref().map(|sources| {
                     ProtoCallableValueSources {
                         sources: sources.iter().copied().map(source_to_proto).collect(),
@@ -68,6 +111,33 @@ pub(super) fn from_proto(
     graph: ProtoCallableValueGraph,
 ) -> Result<CallableValueGraph, MetadataArtifactError> {
     let graph = CallableValueGraph {
+        source_projections: graph
+            .source_projections
+            .into_iter()
+            .map(|projection| {
+                Ok(crate::CallableReturnedProjection {
+                    path: projection
+                        .path
+                        .into_iter()
+                        .map(super::super::value_projection::decode)
+                        .collect::<Result<_, _>>()?,
+                    sources: projection
+                        .sources
+                        .map(|sources| sources.sources.into_iter().map(source_from_proto).collect())
+                        .transpose()?,
+                })
+            })
+            .collect::<Result<_, MetadataArtifactError>>()?,
+        parameter_projections: graph
+            .parameter_projections
+            .into_iter()
+            .map(|path| {
+                path.steps
+                    .into_iter()
+                    .map(super::super::value_projection::decode)
+                    .collect::<Result<_, _>>()
+            })
+            .collect::<Result<_, _>>()?,
         objects: graph
             .objects
             .into_iter()
@@ -159,6 +229,25 @@ pub(super) fn from_proto(
                         node.action_trace
                             .ok_or_else(|| invalid("callable value is missing action trace"))?,
                     )?,
+                    returned_projections: node
+                        .returned_projections
+                        .into_iter()
+                        .map(|projection| {
+                            Ok(crate::CallableReturnedProjection {
+                                path: projection
+                                    .path
+                                    .into_iter()
+                                    .map(super::super::value_projection::decode)
+                                    .collect::<Result<_, _>>()?,
+                                sources: projection
+                                    .sources
+                                    .map(|sources| {
+                                        sources.sources.into_iter().map(source_from_proto).collect()
+                                    })
+                                    .transpose()?,
+                            })
+                        })
+                        .collect::<Result<_, MetadataArtifactError>>()?,
                     returned_sources: node
                         .returned_sources
                         .map(|sources| sources.sources.into_iter().map(source_from_proto).collect())
@@ -348,6 +437,7 @@ fn scope_from_proto(
 
 fn parameter_to_proto(parameter: CallableValueParameter) -> ProtoCallableValueParameter {
     ProtoCallableValueParameter {
+        projection: parameter.projection,
         scope: Some(scope_to_proto(parameter.scope)),
         position: parameter.position,
     }
@@ -357,6 +447,7 @@ fn parameter_from_proto(
     parameter: ProtoCallableValueParameter,
 ) -> Result<CallableValueParameter, MetadataArtifactError> {
     Ok(CallableValueParameter {
+        projection: parameter.projection,
         scope: scope_from_proto(
             parameter
                 .scope

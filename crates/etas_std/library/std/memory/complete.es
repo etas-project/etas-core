@@ -4,16 +4,12 @@ public import std.memory.WriteCondition.Any;
 public import std.memory.WriteCondition.Exists;
 public import std.memory.WriteCondition.Missing;
 
-// Public declarations migrated from the legacy API inventory.
-// Maintained as Etas source; native bindings retain existing execution during migration.
-
 
 // Closed storage outcome.
 public enum ConfirmedOutcome<R, N> {
     Committed(R),
     NotCommitted(std.memory.StorageOperationRef, N),
 }
-
 
 // Typed persistent memory conflict information.
 public type MemoryConflict = { expected: std.option.Option<std.memory.MemoryVersion>, actual: std.option.Option<std.memory.MemoryVersion>, current_value: std.option.Option<std.json.JsonValue> };
@@ -28,18 +24,20 @@ public type MemoryEntry<K, V> = { key: K, value: V, version: std.memory.MemoryVe
 public type MemoryPage<K, V> = { entries: std.collections.List<std.memory.MemoryEntry<K, V>>, cursor: std.option.Option<std.memory.MemoryCursor> };
 
 // Typed persistent memory support type.
-@std.role("std.memory.MemoryRegion")
-public type MemoryRegion<S>;
+public type MemoryRegion<S> = { private stable_id: string, private name: string };
 
 // Typed persistent memory support type.
-@std.role("std.memory.MemorySelection")
-public type MemorySelection<V>;
+public type MemorySelection<V> = {
+    private evaluate: (Option<u32>) -> Array<SelectionEntry> ![],
+    private maximum: Option<u32>,
+};
 
 // Typed storage receipt evidence.
 public type MemoryTombstone = { opaque: string };
 
 // Typed persistent memory support type.
-public type MemoryTransaction;
+type TransactionHandle;
+public type MemoryTransaction = { private handle: TransactionHandle };
 
 // Typed persistent memory version token.
 public type MemoryVersion = { opaque: string };
@@ -51,8 +49,12 @@ public enum MemoryWriteChange {
 }
 
 // Storage preparation contract.
-@std.role("std.memory.MemoryWriteIntent")
-public type MemoryWriteIntent<K, V>;
+public type MemoryWriteIntent<K, V> = {
+    private store: Store<K, V>,
+    private mutation: WriteRequest<K, V>,
+    private operation: StorageOperationRef,
+    private wire: string,
+};
 
 // Typed storage receipt evidence.
 public type MemoryWriteReceipt<K> = { operation: std.memory.StorageOperationRef, target: std.memory.MemoryWriteTarget<K>, change: std.memory.MemoryWriteChange, durability: std.memory.StorageDurability };
@@ -66,7 +68,6 @@ public enum MemoryWriteRejection {
 
 // Typed storage receipt evidence.
 public type MemoryWriteTarget<K> = { region: string, store: std.collections.Array<string>, schema_fingerprint: std.option.Option<string>, key: K };
-
 
 // Closed storage outcome.
 public enum ReconcileResult<R, N> {
@@ -88,8 +89,7 @@ public type StorageError = { code: string, message: string };
 public type StorageOperationRef = { key: string, fingerprint: string };
 
 // Typed persistent memory support type.
-@std.role("std.memory.Store")
-public type Store<K, V>;
+public type Store<K, V> = { private description: StoreDescription };
 
 // Conditional mutation requirement.
 public enum WriteCondition {
@@ -106,126 +106,279 @@ public enum WriteOutcome<R, N> {
     Unknown(std.memory.StorageOperationRef),
 }
 
-// Clear a persistent store.
-@std.binding("std.memory.clear")
-public flow clear<K, V>(arg0: std.memory.Store<K, V>) -> unit ![] {}
-
-// Commit an immutable storage intent or query its retained completion evidence.
-@std.binding("std.memory.commit")
-public flow commit<K, V>(arg0: std.memory.MemoryWriteIntent<K, V>) -> std.memory.WriteOutcome<std.memory.MemoryWriteReceipt<K>, std.memory.MemoryWriteRejection> ![Error<std.memory.StorageError>] {}
-
-// Return whether a persistent store contains the given key.
-@std.binding("std.memory.contains")
-public flow contains<K, V>(arg0: std.memory.Store<K, V>, arg1: K) -> bool ![] {}
-
-// Delete a typed value from a persistent store.
-@std.binding("std.memory.delete")
-public flow delete<K, V>(arg0: std.memory.Store<K, V>, arg1: K) -> unit ![] {}
-
-// Delete a typed value if the persistent store entry still has the expected version.
-@std.binding("std.memory.delete_versioned")
-public flow delete_versioned<K, V>(arg0: std.memory.Store<K, V>, arg1: K, arg2: std.memory.MemoryVersion) -> unit ![] {}
-
-// Read a typed value from a persistent store.
-@std.binding("std.memory.get")
-public flow get<K, V>(arg0: std.memory.Store<K, V>, arg1: K) -> std.option.Option<V> ![] {}
-
-// Read the key, value and version atomically for a conditional write.
-@std.binding("std.memory.get_entry")
-public flow get_entry<K, V>(arg0: std.memory.Store<K, V>, arg1: K) -> std.option.Option<std.memory.MemoryEntry<K, V>> ![] {}
-
-// Insert a typed value into a persistent store.
-@std.binding("std.memory.insert")
-public flow insert<K, V>(arg0: std.memory.Store<K, V>, arg1: K, arg2: V) -> unit ![] {}
-
-// List keys from a persistent store.
-@std.binding("std.memory.keys")
-public flow keys<K, V>(arg0: std.memory.Store<K, V>) -> std.collections.List<K> ![] {}
-
-// Limit a typed persistent-memory selection without performing additional host actions.
-@std.binding("std.memory.limit")
-public flow limit<V>(arg0: std.memory.MemorySelection<V>, arg1: std.runtime.limits.Limit) -> std.memory.MemorySelection<V> ![] {}
-
-// Prepare immutable write data or inspect its identity without accessing storage.
-@std.binding("std.memory.operation_ref")
-public flow operation_ref<K, V>(arg0: std.memory.MemoryWriteIntent<K, V>) -> std.memory.StorageOperationRef ![] {}
-
-// Read one bounded page; pass None for the first page. Writes invalidate its cursor.
-@std.binding("std.memory.page")
-public flow page<K, V>(arg0: std.memory.Store<K, V>, arg1: std.option.Option<std.memory.MemoryCursor>, arg2: u32) -> std.memory.MemoryPage<K, V> ![] {}
-
-// Prepare immutable write data or inspect its identity without accessing storage.
-@std.binding("std.memory.prepare_delete")
-public flow prepare_delete<K, V>(arg0: std.memory.Store<K, V>, arg1: K, arg2: std.memory.WriteCondition) -> std.memory.MemoryWriteIntent<K, V> ![Error<std.memory.StorageError>] {}
-
-// Prepare immutable write data or inspect its identity without accessing storage.
-@std.binding("std.memory.prepare_put")
-public flow prepare_put<K, V>(arg0: std.memory.Store<K, V>, arg1: K, arg2: V, arg3: std.memory.WriteCondition) -> std.memory.MemoryWriteIntent<K, V> ![Error<std.memory.StorageError>] {}
-
-// Write a typed value into a persistent store.
-@std.binding("std.memory.put")
-public flow put<K, V>(arg0: std.memory.Store<K, V>, arg1: K, arg2: V) -> unit ![] {}
-
-// Write a typed value if the persistent store entry still has the expected version.
-@std.binding("std.memory.put_versioned")
-public flow put_versioned<K, V>(arg0: std.memory.Store<K, V>, arg1: K, arg2: V, arg3: std.memory.MemoryVersion) -> unit ![] {}
-
-// Build a typed persistent-memory query from a store.
-@std.binding("std.memory.query")
-public flow query<K, V, Q>(arg0: std.memory.Store<K, V>, arg1: Q) -> std.memory.MemorySelection<V> ![] {}
-
-// Commit an immutable storage intent or query its retained completion evidence.
-@std.binding("std.memory.reconcile")
-public flow reconcile<K, V>(arg0: std.memory.Store<K, V>, arg1: std.memory.StorageOperationRef) -> std.memory.ReconcileResult<std.memory.MemoryWriteReceipt<K>, std.memory.MemoryWriteRejection> ![Error<std.memory.StorageError>] {}
-
 // Bind a typed persistent memory region handle.
-@std.binding("std.memory.region")
-public flow region<S>(arg0: string, arg1: string) -> std.memory.MemoryRegion<S> ![] {}
-
-// Build a retrieval-oriented memory selection related to the given query value.
-@std.binding("std.memory.related_to")
-public flow related_to<K, V, Q>(arg0: std.memory.Store<K, V>, arg1: Q) -> std.memory.MemorySelection<V> ![] {}
-
-// Build a typed persistent-memory scan over a store.
-@std.binding("std.memory.scan")
-public flow scan<K, V>(arg0: std.memory.Store<K, V>) -> std.memory.MemorySelection<V> ![] {}
-
-// Build a typed persistent-memory selection from a store.
-@std.binding("std.memory.select")
-public flow select<K, V, Q>(arg0: std.memory.Store<K, V>, arg1: Q) -> std.memory.MemorySelection<V> ![] {}
-
-// Update a typed value in a persistent store.
-@std.binding("std.memory.update")
-public flow update<K, V>(arg0: std.memory.Store<K, V>, arg1: K, arg2: V) -> unit ![] {}
-
-// Upsert a typed value in a persistent store.
-@std.binding("std.memory.upsert")
-public flow upsert<K, V>(arg0: std.memory.Store<K, V>, arg1: K, arg2: V) -> unit ![] {}
-
-// Construct an opaque memory version token for compare-and-set operations.
-@std.binding("std.memory.version")
-public flow version(arg0: string) -> std.memory.MemoryVersion ![] {}
-
-impl std.memory.MemorySelection<V> {
-    public flow limit(self, arg0: std.runtime.limits.Limit) -> std.memory.MemorySelection<V> ![] { return std.memory.limit(self, arg0); }
+public flow region<S>(stable_id: string, name: string) -> MemoryRegion<S> ![] {
+    return MemoryRegion { stable_id= stable_id, name= name };
 }
 
-impl std.memory.Store<K, V> {
-    public flow clear(self) -> unit ![] { return std.memory.clear(self); }
-    public flow contains(self, arg0: K) -> bool ![] { return std.memory.contains(self, arg0); }
-    public flow delete(self, arg0: K) -> unit ![] { return std.memory.delete(self, arg0); }
-    public flow delete_versioned(self, arg0: K, arg1: std.memory.MemoryVersion) -> unit ![] { return std.memory.delete_versioned(self, arg0, arg1); }
-    public flow get(self, arg0: K) -> std.option.Option<V> ![] { return std.memory.get(self, arg0); }
-    public flow get_entry(self, arg0: K) -> std.option.Option<std.memory.MemoryEntry<K, V>> ![] { return std.memory.get_entry(self, arg0); }
-    public flow insert(self, arg0: K, arg1: V) -> unit ![] { return std.memory.insert(self, arg0, arg1); }
-    public flow keys(self) -> std.collections.List<K> ![] { return std.memory.keys(self); }
-    public flow page(self, arg0: std.option.Option<std.memory.MemoryCursor>, arg1: u32) -> std.memory.MemoryPage<K, V> ![] { return std.memory.page(self, arg0, arg1); }
-    public flow put(self, arg0: K, arg1: V) -> unit ![] { return std.memory.put(self, arg0, arg1); }
-    public flow put_versioned(self, arg0: K, arg1: V, arg2: std.memory.MemoryVersion) -> unit ![] { return std.memory.put_versioned(self, arg0, arg1, arg2); }
-    public flow query<Q>(self, arg0: Q) -> std.memory.MemorySelection<V> ![] { return std.memory.query(self, arg0); }
-    public flow related_to<Q>(self, arg0: Q) -> std.memory.MemorySelection<V> ![] { return std.memory.related_to(self, arg0); }
-    public flow scan(self) -> std.memory.MemorySelection<V> ![] { return std.memory.scan(self); }
-    public flow select<Q>(self, arg0: Q) -> std.memory.MemorySelection<V> ![] { return std.memory.select(self, arg0); }
-    public flow update(self, arg0: K, arg1: V) -> unit ![] { return std.memory.update(self, arg0, arg1); }
-    public flow upsert(self, arg0: K, arg1: V) -> unit ![] { return std.memory.upsert(self, arg0, arg1); }
+// Construct an opaque memory version token for compare-and-set operations.
+public flow version(token: string) -> MemoryVersion ![] {
+    return MemoryVersion { opaque= token };
+}
+
+impl MemorySelection<V> {
+    public flow limit(self, limit: std.runtime.limits.Limit) -> MemorySelection<V> ![] {
+        let count = match limit {
+            std.runtime.limits.Limit.Iterations(value) => value,
+            std.runtime.limits.Limit.Tokens(value) => value,
+            std.runtime.limits.Limit.ContextTokens(value) => value,
+            std.runtime.limits.Limit.Attempts(value) => value,
+            _ => std.core.abort("memory selection limit requires a count limit"),
+        };
+        if count.bits > 4294967295 { std.core.abort("memory selection count exceeds u32 range"); }
+        return MemorySelection { evaluate= self.evaluate, maximum= Some(u32 { bits= count.bits }) };
+    }
+}
+
+impl Store<K, V> {
+    public flow prepare_delete(self, key: K, condition: WriteCondition) -> MemoryWriteIntent<K, V> ![Error<StorageError>] {
+        let context = StorageContext.current();
+        self.description.validate();
+        let key_data = match std.runtime.value.Data.capture(key) {
+            Ok(data) => data,
+            Err(error) => perform Error.raise<StorageError>(StorageError { code= error.code, message= error.message }),
+        };
+        let condition_text = condition.token();
+        let operation_key = context.operation_key();
+        var fingerprint = MutationFingerprint.new(self.description, "delete", context.max_value_bytes);
+        fingerprint.value(key_data);
+        fingerprint.part(condition_text);
+        let operation = StorageOperationRef { key= operation_key, fingerprint= fingerprint.finish() };
+        let wire = IntentEnvelope.encode(self.description, std.runtime.value.Data.Variant("Delete", [key_data, condition.data()]), operation, context.max_value_bytes);
+        return MemoryWriteIntent { store= self, mutation= WriteRequest.Delete(key, condition), operation= operation, wire= wire };
+    }
+    public flow prepare_put(self, key: K, value: V, condition: WriteCondition) -> MemoryWriteIntent<K, V> ![Error<StorageError>] {
+        let context = StorageContext.current();
+        self.description.validate();
+        let key_data = match std.runtime.value.Data.capture(key) {
+            Ok(data) => data,
+            Err(error) => perform Error.raise<StorageError>(StorageError { code= error.code, message= error.message }),
+        };
+        let value_data = match std.runtime.value.Data.capture(value) {
+            Ok(data) => data,
+            Err(error) => perform Error.raise<StorageError>(StorageError { code= error.code, message= error.message }),
+        };
+        let condition_text = condition.token();
+        let operation_key = context.operation_key();
+        var fingerprint = MutationFingerprint.new(self.description, "put", context.max_value_bytes);
+        fingerprint.value(key_data);
+        fingerprint.part(condition_text);
+        fingerprint.value(value_data);
+        let operation = StorageOperationRef { key= operation_key, fingerprint= fingerprint.finish() };
+        let wire = IntentEnvelope.encode(self.description, std.runtime.value.Data.Variant("Put", [key_data, value_data, condition.data()]), operation, context.max_value_bytes);
+        return MemoryWriteIntent { store= self, mutation= WriteRequest.Put(key, value, condition), operation= operation, wire= wire };
+    }
+
+    public flow reconcile(self, operation: StorageOperationRef) -> ReconcileResult<MemoryWriteReceipt<K>, MemoryWriteRejection> ![Error<StorageError>] {
+        operation.validate();
+        return perform std.effects.Memory.reconcile(self, operation);
+    }
+
+    public flow clear(self) -> unit ![] {
+        // Finish the fenced read before mutation. Only delete the captured
+        // versions, so a concurrent replacement is never removed by clear.
+        var snapshot: List<MemoryEntry<K, V>> = [];
+        var cursor: Option<MemoryCursor> = None;
+        while true limit Iterations(18446744073709551615) {
+            let request: ReadRequest<K> = ReadRequest.Page(cursor, None);
+            let response: ReadResult<K, V> = perform std.effects.Memory.read(self, request);
+            let page = match response {
+                ReadResult.Page(value) => value,
+                _ => std.core.abort("scan result ABI invariant"),
+            };
+            for entry in page.entries limit Iterations(18446744073709551615) {
+                snapshot = entry :: snapshot;
+            }
+            cursor = page.cursor;
+            if cursor.is_none() { break; }
+        }
+        for entry in snapshot.reverse() limit Iterations(18446744073709551615) {
+            let request: WriteRequest<K, V> = WriteRequest.Delete(entry.key, WriteCondition.Match(entry.version));
+            perform std.effects.Memory.write(self, request);
+        }
+    }
+
+    public flow contains(self, key: K) -> bool ![] {
+        let request: ReadRequest<K> = ReadRequest.Get(key);
+        let response: ReadResult<K, V> = perform std.effects.Memory.read(self, request);
+        return match response {
+            ReadResult.Entry(value) => value.is_some(),
+            _ => std.core.abort("get result ABI invariant"),
+        };
+    }
+
+    public flow delete(self, key: K) -> unit ![] {
+        let request: WriteRequest<K, V> = WriteRequest.Delete(key, WriteCondition.Any);
+        perform std.effects.Memory.write(self, request);
+    }
+
+    public flow delete_versioned(self, key: K, version: MemoryVersion) -> unit ![] {
+        let request: WriteRequest<K, V> = WriteRequest.Delete(key, WriteCondition.Match(version));
+        perform std.effects.Memory.write(self, request);
+    }
+
+    public flow get(self, key: K) -> Option<V> ![] {
+        let request: ReadRequest<K> = ReadRequest.Get(key);
+        let response: ReadResult<K, V> = perform std.effects.Memory.read(self, request);
+        return match response {
+            ReadResult.Entry(None) => None,
+            ReadResult.Entry(Some(entry)) => Some(entry.value),
+            _ => std.core.abort("get result ABI invariant"),
+        };
+    }
+
+    public flow get_entry(self, key: K) -> Option<MemoryEntry<K, V>> ![] {
+        let request: ReadRequest<K> = ReadRequest.Get(key);
+        let response: ReadResult<K, V> = perform std.effects.Memory.read(self, request);
+        return match response {
+            ReadResult.Entry(value) => value,
+            _ => std.core.abort("get result ABI invariant"),
+        };
+    }
+
+    public flow insert(self, key: K, value: V) -> unit ![] {
+        let request: WriteRequest<K, V> = WriteRequest.Put(key, value, WriteCondition.Missing);
+        perform std.effects.Memory.write(self, request);
+    }
+
+    public flow keys(self) -> List<K> ![] {
+        var keys: List<K> = [];
+        var cursor: Option<MemoryCursor> = None;
+        while true limit Iterations(18446744073709551615) {
+            let request: ReadRequest<K> = ReadRequest.Page(cursor, None);
+            let response: ReadResult<K, V> = perform std.effects.Memory.read(self, request);
+            let page = match response {
+                ReadResult.Page(value) => value,
+                _ => std.core.abort("scan result ABI invariant"),
+            };
+            for entry in page.entries limit Iterations(18446744073709551615) {
+                keys = entry.key :: keys;
+            }
+            cursor = page.cursor;
+            if cursor.is_none() { break; }
+        }
+        return keys.reverse();
+    }
+
+    public flow page(self, cursor: Option<MemoryCursor>, limit: u32) -> MemoryPage<K, V> ![] {
+        let request: ReadRequest<K> = ReadRequest.Page(cursor, Some(limit));
+        let response: ReadResult<K, V> = perform std.effects.Memory.read(self, request);
+        return match response {
+            ReadResult.Page(value) => value,
+            _ => std.core.abort("scan result ABI invariant"),
+        };
+    }
+
+    public flow put(self, key: K, value: V) -> unit ![] {
+        let request: WriteRequest<K, V> = WriteRequest.Put(key, value, WriteCondition.Any);
+        perform std.effects.Memory.write(self, request);
+    }
+
+    public flow put_versioned(self, key: K, value: V, version: MemoryVersion) -> unit ![] {
+        let request: WriteRequest<K, V> = WriteRequest.Put(key, value, WriteCondition.Match(version));
+        perform std.effects.Memory.write(self, request);
+    }
+
+    public flow query<Q>(self, query: Q) -> MemorySelection<V> ![] {
+        let store = self;
+        return MemorySelection { maximum= None, evaluate= (maximum: Option<u32>) => {
+            let predicate = match std.runtime.value.Data.capture(query) {
+                Ok(value) => value,
+                Err(error) => std.core.abort(error.message),
+            };
+            let request: ReadRequest<K> = ReadRequest.Selection(SelectionRequest.Query(predicate, maximum));
+            let response: ReadResult<K, V> = perform std.effects.Memory.read(store, request);
+            return match response {
+                ReadResult.Selected(page) => page.entries,
+                _ => std.core.abort("selection result ABI invariant"),
+            };
+        } };
+    }
+    public flow related_to<Q>(self, query: Q) -> MemorySelection<V> ![] {
+        let store = self;
+        return MemorySelection { maximum= None, evaluate= (maximum: Option<u32>) => {
+            let data = match std.runtime.value.Data.capture(query) {
+                Ok(value) => value,
+                Err(error) => std.core.abort(error.message),
+            };
+            let embedding = data.embedding();
+            let count = match maximum { None => 100, Some(0) => 1, Some(count) => count };
+            let request: ReadRequest<K> = ReadRequest.Selection(SelectionRequest.Vector(embedding, count));
+            let response: ReadResult<K, V> = perform std.effects.Memory.read(store, request);
+            return match response {
+                ReadResult.Selected(page) => page.entries,
+                _ => std.core.abort("selection result ABI invariant"),
+            };
+        } };
+    }
+    public flow scan(self) -> MemorySelection<V> ![] {
+        let store = self;
+        return MemorySelection { maximum= None, evaluate= (maximum: Option<u32>) => {
+            let context = StorageContext.current();
+            var output: Array<SelectionEntry> = [];
+            var cursor: Option<MemoryCursor> = None;
+            var total: usize = 0;
+            while true limit Iterations(context.max_scan_rows + 1) {
+                let remaining = match maximum {
+                    None => None,
+                    Some(count) => {
+                        if total.bits >= count.bits { return output; }
+                        Some(u32 { bits= count.bits - total.bits })
+                    },
+                };
+                let page_limit = match remaining {
+                    None => u32 { bits= context.max_page_entries.bits },
+                    Some(count) => if count.bits < context.max_page_entries.bits { count } else { u32 { bits= context.max_page_entries.bits } },
+                };
+                let request: ReadRequest<K> = ReadRequest.Selection(SelectionRequest.Scan(cursor, page_limit));
+                let response: ReadResult<K, V> = perform std.effects.Memory.read(store, request);
+                let page = match response {
+                    ReadResult.Selected(value) => value,
+                    _ => std.core.abort("selection scan result ABI invariant"),
+                };
+                for entry in page.entries limit Iterations(context.max_scan_rows - total) {
+                    output = output.push(entry);
+                    total = total + 1;
+                }
+                cursor = page.cursor;
+                if cursor.is_none() { return output; }
+            }
+            return std.core.abort("memory scan iteration limit exceeded");
+        } };
+    }
+    public flow select<Q>(self, query: Q) -> MemorySelection<V> ![] {
+        let store = self;
+        return MemorySelection { maximum= None, evaluate= (maximum: Option<u32>) => {
+            let predicate = match std.runtime.value.Data.capture(query) {
+                Ok(value) => value,
+                Err(error) => std.core.abort(error.message),
+            };
+            let request: ReadRequest<K> = ReadRequest.Selection(SelectionRequest.Query(predicate, maximum));
+            let response: ReadResult<K, V> = perform std.effects.Memory.read(store, request);
+            return match response {
+                ReadResult.Selected(page) => page.entries,
+                _ => std.core.abort("selection result ABI invariant"),
+            };
+        } };
+    }
+
+    public flow update(self, key: K, value: V) -> unit ![] {
+        let request: WriteRequest<K, V> = WriteRequest.Put(key, value, WriteCondition.Exists);
+        perform std.effects.Memory.write(self, request);
+    }
+
+    public flow upsert(self, key: K, value: V) -> unit ![] {
+        let request: WriteRequest<K, V> = WriteRequest.Put(key, value, WriteCondition.Any);
+        perform std.effects.Memory.write(self, request);
+    }
+}
+
+impl MemoryWriteIntent<K, V> {
+    public flow operation_ref(self) -> StorageOperationRef ![] {
+        return self.operation;
+    }
+
+    public flow commit(self) -> WriteOutcome<MemoryWriteReceipt<K>, MemoryWriteRejection> ![Error<StorageError>] {
+        return perform std.effects.Memory.commit(self.store, self.operation, self.mutation, self.wire);
+    }
 }

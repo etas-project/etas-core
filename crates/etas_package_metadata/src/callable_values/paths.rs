@@ -196,7 +196,10 @@ fn remap_parts(
                     work.push(Part::Trace(&mut node.action_trace));
                 }
             }
-            Part::Target(CallableRequestTarget::Parameter(_)) => {}
+            Part::Target(
+                CallableRequestTarget::Parameter(_)
+                | CallableRequestTarget::ParameterProjection { .. },
+            ) => {}
             Part::Target(CallableRequestTarget::AgentTools(context)) => {
                 work.push(Part::Type(context))
             }

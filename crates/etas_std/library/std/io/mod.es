@@ -1,25 +1,27 @@
 module std.io;
 
-// The host owns the opaque failure payload; the public type belongs to source.
-public type IOError;
+public type IOError = { code: string, message: string };
 
-@std.binding("std.io.read_all")
-public flow read_all() -> string ![Error<IOError>] {}
+public flow read_all() -> string ![Error<IOError>] {
+    return perform std.effects.Console.stdin_read_all();
+}
 
-@std.binding("std.io.read_line")
-public flow read_line() -> string ![Error<IOError>] {}
+public flow read_line() -> string ![Error<IOError>] {
+    return perform std.effects.Console.stdin_read_line();
+}
 
-@std.binding("std.io.print")
-public flow print(text: string) -> unit ![Error<IOError>] {}
+public flow print(text: string) -> unit ![Error<IOError>] {
+    perform std.effects.Console.stdout_write(text);
+}
 
 public flow println(text: string) -> unit ![Error<IOError>] {
-    print(text + "\n");
+    perform std.effects.Console.stdout_write(text + "\n");
+}
+
+public flow eprint(text: string) -> unit ![Error<IOError>] {
+    perform std.effects.Console.stderr_write(text);
 }
 
 public flow eprintln(text: string) -> unit ![Error<IOError>] {
-    eprint(text + "\n");
+    perform std.effects.Console.stderr_write(text + "\n");
 }
-
-// Standard error without an implicit newline, as specified by Standard IO.
-@std.binding("std.io.eprint")
-public flow eprint(text: string) -> unit ![Error<IOError>] {}

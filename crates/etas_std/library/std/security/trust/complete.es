@@ -1,24 +1,25 @@
 module std.security.trust;
 
-// Public declarations migrated from the legacy API inventory.
-// Maintained as Etas source; native bindings retain existing execution during migration.
+// Public and untrusted payloads require no authority to construct.
+public type Public<T> = { value: T };
+public type Untrusted<T> = { value: T };
 
-// Trust wrapper declaration.
-@std.role("std.security.trust.Public")
-public type Public<T>;
+// Evidence is an execution capability; the payload and wrapper are source data.
+// The primitive returns these handles. There is no source handle constructor.
+type TrustEvidence;
+type SecretEvidence;
 
-// Trust wrapper declaration.
-@std.role("std.security.trust.Sanitized")
-public type Sanitized<T>;
+public type Trusted<T> = {
+    private value: T,
+    private evidence: TrustEvidence,
+};
 
-// Trust wrapper declaration.
-@std.role("std.security.trust.Secret")
-public type Secret<T>;
+public type Secret<T> = {
+    private value: T,
+    private evidence: SecretEvidence,
+};
 
-// Trust wrapper declaration.
-@std.role("std.security.trust.Trusted")
-public type Trusted<T>;
-
-// Trust wrapper declaration.
-@std.role("std.security.trust.Untrusted")
-public type Untrusted<T>;
+public type Sanitized<T> = {
+    value: T,
+    private evidence: std.security.declassify.SanitizationEvidence<T>,
+};

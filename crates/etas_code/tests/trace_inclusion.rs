@@ -56,6 +56,7 @@ fn parameter_exit_coverage_handles_repeated_and_widened_traces() {
     )
     .unwrap();
     let f = ParameterCallInfo {
+        projection: Vec::new(),
         callable: callable.clone(),
         signature: TypeInfoRef(0),
         position: 0,
@@ -73,10 +74,12 @@ fn parameter_exit_coverage_handles_repeated_and_widened_traces() {
                     generics: vec![],
                     parameters: vec![
                         ParameterInfo {
+                            default: None,
                             name: Some("f".into()),
                             ty: TypeInfoRef(1),
                         },
                         ParameterInfo {
+                            default: None,
                             name: Some("g".into()),
                             ty: TypeInfoRef(1),
                         },
@@ -217,6 +220,7 @@ fn proof_budget_charges_each_handler_arm_and_selector() {
         },
     };
     let call = ParameterCallInfo {
+        projection: Vec::new(),
         callable,
         signature: TypeInfoRef(0),
         position: 0,
@@ -231,6 +235,7 @@ fn proof_budget_charges_each_handler_arm_and_selector() {
                 TypeInfo::Function(SignatureInfo {
                     generics: vec![],
                     parameters: vec![ParameterInfo {
+                        default: None,
                         name: Some("f".into()),
                         ty: TypeInfoRef(1),
                     }],
@@ -490,6 +495,7 @@ fn widened_parameter_calls_are_not_erased_from_the_trace_language() {
     )
     .unwrap();
     let call = ParameterCallInfo {
+        projection: Vec::new(),
         handlers: Some(vec![]),
         callable,
         signature: TypeInfoRef(0),
@@ -502,6 +508,7 @@ fn widened_parameter_calls_are_not_erased_from_the_trace_language() {
                 TypeInfo::Function(SignatureInfo {
                     generics: vec![],
                     parameters: vec![ParameterInfo {
+                        default: None,
                         name: Some("f".into()),
                         ty: TypeInfoRef(1),
                     }],
@@ -553,6 +560,7 @@ fn parameter_call_arguments_are_part_of_behavior_and_unknown_is_not_empty() {
     )
     .unwrap();
     let call = |arguments| ParameterCallInfo {
+        projection: Vec::new(),
         handlers: Some(vec![]),
         callable: callable.clone(),
         signature: TypeInfoRef(0),
@@ -569,10 +577,12 @@ fn parameter_call_arguments_are_part_of_behavior_and_unknown_is_not_empty() {
                 generics: vec![],
                 parameters: vec![
                     ParameterInfo {
+                        default: None,
                         name: Some("f".into()),
                         ty: TypeInfoRef(1),
                     },
                     ParameterInfo {
+                        default: None,
                         name: Some("value".into()),
                         ty: TypeInfoRef(3),
                     },
@@ -584,6 +594,7 @@ fn parameter_call_arguments_are_part_of_behavior_and_unknown_is_not_empty() {
             TypeInfo::Function(SignatureInfo {
                 generics: vec![],
                 parameters: vec![ParameterInfo {
+                    default: None,
                     name: Some("value".into()),
                     ty: TypeInfoRef(3),
                 }],
@@ -649,6 +660,7 @@ fn parameter_handler_scopes_are_part_of_the_behavioral_label() {
     )
     .unwrap();
     let call = |handlers| ParameterCallInfo {
+        projection: Vec::new(),
         callable: callable.clone(),
         signature: TypeInfoRef(0),
         position: 0,
@@ -682,6 +694,7 @@ fn parameter_handler_scopes_are_part_of_the_behavioral_label() {
                 TypeInfo::Function(SignatureInfo {
                     generics: vec![],
                     parameters: vec![ParameterInfo {
+                        default: None,
                         name: Some("f".into()),
                         ty: TypeInfoRef(1),
                     }],
@@ -855,6 +868,7 @@ fn parameter_integer_values_are_type_checked_and_compared_exactly() {
     )
     .unwrap();
     let call = |negative, magnitude| ParameterCallInfo {
+        projection: Vec::new(),
         handlers: Some(vec![]),
         callable: callable.clone(),
         signature: TypeInfoRef(0),
@@ -869,6 +883,7 @@ fn parameter_integer_values_are_type_checked_and_compared_exactly() {
             TypeInfo::Function(SignatureInfo {
                 generics: vec![],
                 parameters: vec![ParameterInfo {
+                    default: None,
                     name: None,
                     ty: TypeInfoRef(1),
                 }],
@@ -879,6 +894,7 @@ fn parameter_integer_values_are_type_checked_and_compared_exactly() {
             TypeInfo::Function(SignatureInfo {
                 generics: vec![],
                 parameters: vec![ParameterInfo {
+                    default: None,
                     name: None,
                     ty: TypeInfoRef(3),
                 }],
@@ -929,6 +945,7 @@ fn parameter_nonreturn_is_distinct_from_normal_completion_and_other_callbacks() 
     )
     .unwrap();
     let call = |position| ParameterCallInfo {
+        projection: Vec::new(),
         handlers: Some(vec![]),
         callable: callable.clone(),
         signature: TypeInfoRef(0),
@@ -941,10 +958,12 @@ fn parameter_nonreturn_is_distinct_from_normal_completion_and_other_callbacks() 
                 generics: vec![],
                 parameters: vec![
                     ParameterInfo {
+                        default: None,
                         name: Some("f".into()),
                         ty: TypeInfoRef(1),
                     },
                     ParameterInfo {
+                        default: None,
                         name: Some("g".into()),
                         ty: TypeInfoRef(1),
                     },
@@ -996,6 +1015,7 @@ fn parameter_nonreturn_is_distinct_from_normal_completion_and_other_callbacks() 
         panic!("callback")
     };
     callback.parameters.push(ParameterInfo {
+        default: None,
         name: None,
         ty: TypeInfoRef(2),
     });

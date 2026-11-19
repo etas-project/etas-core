@@ -32,7 +32,7 @@ impl Default for StorageLimits {
     }
 }
 impl StorageLimits {
-    pub(crate) fn value_budget(&self) -> ValueBudget<'_> {
+    pub fn value_budget(&self) -> ValueBudget<'_> {
         ValueBudget {
             limits: self,
             max_bytes: self.max_value_bytes,
@@ -82,14 +82,15 @@ impl StorageLimits {
         Ok(budget.bytes)
     }
 }
-pub(crate) struct ValueBudget<'a> {
+/// Incremental enforcement for neutral runtime value projections.
+pub struct ValueBudget<'a> {
     limits: &'a StorageLimits,
     max_bytes: usize,
     nodes: usize,
     bytes: usize,
 }
 impl ValueBudget<'_> {
-    pub(crate) fn add(&mut self, depth: usize, bytes: usize) -> Result<(), HostError> {
+    pub fn add(&mut self, depth: usize, bytes: usize) -> Result<(), HostError> {
         self.nodes = self.nodes.checked_add(1).ok_or_else(exceeded)?;
         self.bytes = self.bytes.checked_add(bytes).ok_or_else(exceeded)?;
         if depth > self.limits.max_depth

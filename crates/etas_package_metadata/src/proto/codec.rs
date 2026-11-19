@@ -19,7 +19,7 @@ pub(crate) fn callable_value_graph_fingerprint(
     graph: &crate::CallableValueGraph,
 ) -> etas_code::CodeFingerprint {
     etas_code::CodeFingerprint::of_bytes(
-        "etas.metadata.callable-values.v14",
+        "etas.metadata.callable-values.v15",
         &callable_values::to_proto(graph).encode_to_vec(),
     )
 }
@@ -149,6 +149,7 @@ pub fn package_metadata_to_sections(
         || !type_contracts.trace_specs.is_empty()
         || !type_contracts.protocols.is_empty()
         || !type_contracts.methods.is_empty()
+        || !type_contracts.scoped_callbacks.is_empty()
     {
         sections.push(section_from_message(
             MetadataSectionKind::TypeContracts,
@@ -240,6 +241,11 @@ fn exports_section(metadata: &PackageMetadata) -> ProtoExportsSection {
 
 fn type_contracts_section(metadata: &PublicMetadata) -> ProtoTypeContractsSection {
     ProtoTypeContractsSection {
+        scoped_callbacks: metadata
+            .scoped_callbacks
+            .iter()
+            .map(scoped_callback_to_proto)
+            .collect(),
         types: metadata
             .types
             .iter()
@@ -751,6 +757,11 @@ fn external_export_from_proto(
 
 fn public_metadata_to_proto(metadata: &PublicMetadata) -> ProtoPublicMetadataSection {
     ProtoPublicMetadataSection {
+        scoped_callbacks: metadata
+            .scoped_callbacks
+            .iter()
+            .map(scoped_callback_to_proto)
+            .collect(),
         definition_descriptors: metadata
             .definition_descriptors
             .as_ref()
@@ -870,6 +881,16 @@ fn public_metadata_from_proto(
     metadata: ProtoPublicMetadataSection,
 ) -> Result<PublicMetadata, MetadataArtifactError> {
     let metadata = PublicMetadata {
+        scoped_callbacks: metadata
+            .scoped_callbacks
+            .into_iter()
+            .map(|value| {
+                Ok(crate::ScopedCallbackContract {
+                    target: callable_contract_target_from_proto(value.target)?,
+                    parameters: value.parameters,
+                })
+            })
+            .collect::<Result<_, MetadataArtifactError>>()?,
         definition_descriptors: metadata
             .definition_descriptors
             .map(super::descriptors::from_proto)
@@ -1174,6 +1195,15 @@ fn named_signature_from_proto(
 
 fn callable_signature_to_proto(signature: &CallableSignature) -> ProtoCallableSignature {
     ProtoCallableSignature {
+        definition: signature
+            .definition
+            .as_ref()
+            .map(super::descriptors::identities::encode_key),
+        parameter_defaults: signature
+            .parameter_defaults
+            .iter()
+            .map(super::parameter_defaults::encode)
+            .collect(),
         path: signature.path.clone(),
         generic_params: signature
             .generic_params
@@ -1192,6 +1222,15 @@ fn callable_signature_from_proto(
     signature: ProtoCallableSignature,
 ) -> Result<CallableSignature, MetadataArtifactError> {
     Ok(CallableSignature {
+        definition: signature
+            .definition
+            .map(super::descriptors::identities::decode_key)
+            .transpose()?,
+        parameter_defaults: signature
+            .parameter_defaults
+            .into_iter()
+            .map(super::parameter_defaults::decode)
+            .collect::<Result<_, _>>()?,
         path: required_path(signature.path, "callable signature path")?,
         generic_params: signature
             .generic_params
@@ -1266,6 +1305,7 @@ fn spec_method_to_proto(method: &SpecMethod) -> ProtoSpecMethod {
         name: method.name.clone(),
         path: method.path.clone(),
         signature: method.signature.as_ref().map(callable_signature_to_proto),
+        updating_receiver: method.updating_receiver,
         receiver_param: method.receiver_param,
     }
 }
@@ -1278,6 +1318,7 @@ fn spec_method_from_proto(method: ProtoSpecMethod) -> Result<SpecMethod, Metadat
             .signature
             .map(callable_signature_from_proto)
             .transpose()?,
+        updating_receiver: method.updating_receiver,
         receiver_param: method.receiver_param,
     };
     crate::spec_receivers::validate(&method)
@@ -1305,6 +1346,16 @@ fn spec_bound_from_proto(bound: ProtoSpecBound) -> Result<SpecBound, MetadataArt
 
 fn spec_impl_to_proto(implementation: &SpecImpl) -> ProtoSpecImpl {
     ProtoSpecImpl {
+        owner: implementation.owner.as_ref().map(|owner| {
+            super::descriptors::encode_generic_owner(
+                &etas_code::descriptor::GenericOwner::Implementation(owner.clone()),
+            )
+        }),
+        generic_params: implementation
+            .generic_params
+            .iter()
+            .map(generic_param_to_proto)
+            .collect(),
         self_type: Some(type_to_proto(&implementation.self_type)),
         spec: implementation.spec.clone(),
         args: implementation.args.iter().map(type_to_proto).collect(),
@@ -1318,6 +1369,22 @@ fn spec_impl_to_proto(implementation: &SpecImpl) -> ProtoSpecImpl {
 
 fn spec_impl_from_proto(implementation: ProtoSpecImpl) -> Result<SpecImpl, MetadataArtifactError> {
     Ok(SpecImpl {
+        owner: implementation
+            .owner
+            .map(
+                |owner| match super::descriptors::decode_generic_owner(owner)? {
+                    etas_code::descriptor::GenericOwner::Implementation(owner) => Ok(owner),
+                    _ => Err(invalid(
+                        "spec implementation has a different generic owner kind",
+                    )),
+                },
+            )
+            .transpose()?,
+        generic_params: implementation
+            .generic_params
+            .into_iter()
+            .map(generic_param_from_proto)
+            .collect::<Result<_, _>>()?,
         self_type: type_from_proto(required_message(
             implementation.self_type,
             "spec impl self type",
@@ -1449,6 +1516,13 @@ fn callable_contract_target_to_proto(
     }
 }
 
+fn scoped_callback_to_proto(value: &crate::ScopedCallbackContract) -> ProtoScopedCallbackContract {
+    ProtoScopedCallbackContract {
+        target: Some(callable_contract_target_to_proto(&value.target)),
+        parameters: value.parameters.clone(),
+    }
+}
+
 fn callable_contract_target_from_proto(
     target: Option<ProtoCallableContractTarget>,
 ) -> Result<crate::CallableContractTarget, MetadataArtifactError> {
@@ -1469,6 +1543,16 @@ fn callable_contract_target_from_proto(
 
 fn action_signature_to_proto(signature: &ActionSignature) -> ProtoActionSignature {
     ProtoActionSignature {
+        default_handler_effects: signature
+            .default_handler_effects
+            .as_ref()
+            .map(effect_row_to_proto),
+        param_names: signature.param_names.clone(),
+        parameter_defaults: signature
+            .parameter_defaults
+            .iter()
+            .map(super::parameter_defaults::encode)
+            .collect(),
         path: signature.path.clone(),
         generic_params: signature
             .generic_params
@@ -1497,6 +1581,16 @@ fn action_signature_from_proto(
     signature: ProtoActionSignature,
 ) -> Result<ActionSignature, MetadataArtifactError> {
     let signature = ActionSignature {
+        default_handler_effects: signature
+            .default_handler_effects
+            .map(effect_row_from_proto)
+            .transpose()?,
+        param_names: signature.param_names,
+        parameter_defaults: signature
+            .parameter_defaults
+            .into_iter()
+            .map(super::parameter_defaults::decode)
+            .collect::<Result<_, _>>()?,
         path: required_path(signature.path, "action signature path")?,
         generic_params: signature
             .generic_params
@@ -1903,6 +1997,10 @@ fn effect_metadata_from_proto(
 
 fn effect_summary_to_proto(summary: &EffectSummary) -> ProtoEffectSummary {
     ProtoEffectSummary {
+        definition: summary
+            .definition
+            .as_ref()
+            .map(super::descriptors::identities::encode_key),
         residual_checks: Some(callable_values::residual_to_proto(&summary.residual_checks)),
         behavior: summary
             .behavior
@@ -1937,6 +2035,10 @@ fn effect_summary_from_proto(
     summary: ProtoEffectSummary,
 ) -> Result<EffectSummary, MetadataArtifactError> {
     Ok(EffectSummary {
+        definition: summary
+            .definition
+            .map(super::descriptors::identities::decode_key)
+            .transpose()?,
         residual_checks: callable_values::residual_from_proto(
             summary
                 .residual_checks
@@ -3127,10 +3229,13 @@ mod tests {
             CallableValueGraph, CallableValueParameter, CallableValueScope, CallableValueSource,
         };
         let source = CallableValueSource::Parameter(CallableValueParameter {
+            projection: None,
             scope: CallableValueScope::Root,
             position: 0,
         });
         let valid = CallableValueGraph {
+            source_projections: Vec::new(),
+            parameter_projections: Vec::new(),
             objects: Vec::new(),
             sources: vec![source],
             values: vec![],
@@ -3154,6 +3259,8 @@ mod tests {
                 effect_summaries: vec![ProtoEffectSummary {
                     residual_checks: Some(callable_values::residual_to_proto(&[])),
                     returned_callables: Some(callable_values::to_proto(&CallableValueGraph {
+                        source_projections: Vec::new(),
+                        parameter_projections: Vec::new(),
                         objects: Vec::new(),
                         sources: sources.clone(),
                         values: vec![],
@@ -3170,6 +3277,8 @@ mod tests {
                 public_metadata: PublicMetadata {
                     effect_summaries: vec![EffectSummary {
                         returned_callables: Some(CallableValueGraph {
+                            source_projections: Vec::new(),
+                            parameter_projections: Vec::new(),
                             sources,
                             values: vec![],
                             objects: vec![],
@@ -3187,10 +3296,13 @@ mod tests {
         graph.public_metadata = Some(ProtoPublicMetadataSection {
             effect_summaries: vec![ProtoEffectSummary {
                 returned_callables: Some(callable_values::to_proto(&CallableValueGraph {
+                    source_projections: Vec::new(),
+                    parameter_projections: Vec::new(),
                     objects: Vec::new(),
                     sources: (0..=super::super::budget::MAX_METADATA_GRAPH_NODES)
                         .map(|position| {
                             CallableValueSource::Parameter(CallableValueParameter {
+                                projection: None,
                                 scope: CallableValueScope::Root,
                                 position: position as u32,
                             })

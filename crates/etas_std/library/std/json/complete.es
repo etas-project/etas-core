@@ -1,15 +1,11 @@
 module std.json;
 
-// Public declarations migrated from the legacy API inventory.
-// Maintained as Etas source; native bindings retain existing execution during migration.
-
 // Structured JSON parse/stringify error support type.
 public enum JsonError {
     InvalidJson(string),
 }
 
 // Structured JSON value support type.
-@std.role("std.json.JsonValue")
 public enum JsonValue {
     Null,
     Bool(bool),
@@ -19,10 +15,16 @@ public enum JsonValue {
     Object(std.collections.Map<string, JsonValue>),
 }
 
-// Parse JSON into a structured value or return a JSON error.
-@std.binding("std.json.parse")
-public flow parse(arg0: string) -> std.result.Result<std.json.JsonValue, std.json.JsonError> ![] {}
+public flow parse(text: string) -> Result<JsonValue, JsonError> ![] {
+    var input: Array<char> = [];
+    for scalar in std.text.chars(text) limit Iterations(18446744073709551615) {
+        input = input.push(scalar);
+    }
+    var reader = JsonReader { input= input, position= 0 };
+    return reader.document()?;
+}
 
-// Stringify a structured JSON value or return a JSON error.
-@std.binding("std.json.stringify")
-public flow stringify(arg0: std.json.JsonValue) -> std.result.Result<string, std.json.JsonError> ![] {}
+public flow stringify(value: JsonValue) -> Result<string, JsonError> ![] {
+    let writer = JsonWriter {};
+    return writer.value(value)?;
+}

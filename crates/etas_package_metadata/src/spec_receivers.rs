@@ -2,6 +2,9 @@ use crate::{GenericParamKind, SpecMethod, TypeKind};
 
 pub(crate) fn validate(method: &SpecMethod) -> Result<(), String> {
     let Some(index) = method.receiver_param else {
+        if method.updating_receiver {
+            return Err("updating spec method requires an implicit receiver".into());
+        }
         return Ok(());
     };
     let signature = method

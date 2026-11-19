@@ -1,13 +1,14 @@
-//! Compiler and host ABI needed to check the maintained std sources. This
-//! catalog has no source algorithms, bodies, docs, or legacy registry identities.
+//! Compiler and host execution contracts used to check the maintained std
+//! sources. Ordinary type declarations, layouts, algorithms, aliases and
+//! prelude exports are supplied by source, never by this catalog.
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
 use super::StdSourceRole;
 use crate::{
-    IntrinsicDescriptor, StdDecl, StdImplFact, StdRegistry, StdRegistryBuilder, StdRegistryVersion,
-    StdSymbolKind,
+    IntrinsicDescriptor, StdDecl, StdPrimitiveType, StdRegistry, StdRegistryBuilder,
+    StdRegistryVersion, StdSymbolKind,
 };
 
 #[derive(Deserialize, Serialize)]
@@ -15,16 +16,30 @@ struct ContractSet {
     schema: u32,
     compatibility: StdRegistryVersion,
     contracts: Vec<Contract>,
-    #[serde(default)]
-    native_type_references: Vec<crate::StdNativeTypeReference>,
-    native_enum_references: Vec<crate::StdNativeEnumReference>,
-    native_opaque_references: Vec<crate::StdNativeOpaqueReference>,
-    native_record_references: Vec<crate::StdNativeRecordReference>,
-    native_projection_references: Vec<crate::StdNativeProjectionReference>,
-    prelude: Vec<(String, Vec<String>)>,
-    aliases: Vec<(Vec<String>, Vec<String>)>,
-    implementations: Vec<StdImplFact>,
 }
+
+const PRIMITIVES: [StdPrimitiveType; 20] = [
+    StdPrimitiveType::Bool,
+    StdPrimitiveType::I8,
+    StdPrimitiveType::I16,
+    StdPrimitiveType::I32,
+    StdPrimitiveType::I64,
+    StdPrimitiveType::I128,
+    StdPrimitiveType::ISize,
+    StdPrimitiveType::U8,
+    StdPrimitiveType::U16,
+    StdPrimitiveType::U32,
+    StdPrimitiveType::U64,
+    StdPrimitiveType::U128,
+    StdPrimitiveType::USize,
+    StdPrimitiveType::F32,
+    StdPrimitiveType::F64,
+    StdPrimitiveType::Char,
+    StdPrimitiveType::String,
+    StdPrimitiveType::Bytes,
+    StdPrimitiveType::Unit,
+    StdPrimitiveType::Never,
+];
 
 #[derive(Deserialize, Serialize)]
 struct Contract {
@@ -45,56 +60,44 @@ struct Contract {
 pub fn compiler_contract_identity() -> String {
     let mut hash = blake3::Hasher::new();
     hash.update(include_bytes!("bootstrap-contracts.json"));
-    let roles = StdSourceRole::ALL.map(|role| {
+    let effects = StdSourceRole::EXECUTION_EFFECTS.map(|role| (role.path(), role.predeclaration()));
+    let primitives =
+        PRIMITIVES.map(|primitive| (primitive, StdSourceRole::Primitive(primitive).path()));
+    let code_types = crate::CodeTypeRole::ALL.map(|role| {
         (
             role,
-            role.path(),
-            role.parameter_kinds(),
-            role.runtime_role(),
-            role.primitive_type(),
-            role.code_role(),
-            role.effect_execution(),
-            role.query_declaration(Vec::from_iter(
-                role.parameter_kinds()
-                    .iter()
-                    .enumerate()
-                    .map(|(index, kind)| crate::StdGenericParam {
-                        name: format!("$role{index}"),
-                        kind: *kind,
-                        bounds: role.parameter_bounds(index),
-                    }),
-            )),
-            (0..role.parameter_kinds().len())
-                .map(|index| role.parameter_bounds(index))
-                .collect::<Vec<_>>(),
+            role.source_path(),
+            role.type_parameter_count(),
+            role.has_read_only_erased_view(),
         )
     });
-    hash.update(&serde_json::to_vec(&(6, roles.as_slice())).expect("compiler role ABI"));
+    let executions = super::StdExecutionRole::ALL.map(|role| {
+        (
+            role,
+            role.role(),
+            role.source_path(),
+            role.associated_owner(),
+            role.owner_type_parameter_count(),
+            role.has_receiver(),
+            role.is_public(),
+            role.owner_is_public(),
+        )
+    });
+    hash.update(
+        &serde_json::to_vec(&(29, effects, primitives, code_types, executions))
+            .expect("compiler role ABI"),
+    );
     format!("blake3:{}", hash.finalize().to_hex())
 }
 
-/// Construct only the explicit compiler/host ABI. Public std interfaces are
-/// supplied by checked Etas declarations when the bundle query view is built.
+/// Construct only the native execution query. Source HIR supplies ordinary
+/// constructor identities before signature checking; the checked bundle owns
+/// their complete declarations and all public exports.
 pub fn compiler_contract_registry() -> StdRegistry {
     let contracts: ContractSet = serde_json::from_str(include_str!("bootstrap-contracts.json"))
         .expect("compiled bootstrap contracts");
-    assert_eq!(contracts.schema, 2, "bootstrap contract schema");
+    assert_eq!(contracts.schema, 3, "bootstrap contract schema");
     let mut builder = StdRegistryBuilder::new(contracts.compatibility);
-    for reference in contracts.native_type_references {
-        builder.native_type_reference(reference);
-    }
-    for reference in contracts.native_enum_references {
-        builder.native_enum_reference(reference);
-    }
-    for reference in contracts.native_opaque_references {
-        builder.native_opaque_reference(reference);
-    }
-    for reference in contracts.native_record_references {
-        builder.native_record_reference(reference);
-    }
-    for reference in contracts.native_projection_references {
-        builder.native_projection_reference(reference);
-    }
     let mut modules = BTreeMap::new();
     let mut symbols = BTreeMap::new();
     for contract in contracts.contracts {
@@ -136,9 +139,7 @@ pub fn compiler_contract_registry() -> StdRegistry {
         }
         symbols.insert(contract.path, symbol);
     }
-    // These are compiler type constructors, not a second public std API. The
-    // checked source supplies their actual parameter names and declarations.
-    for role in StdSourceRole::ALL {
+    for role in StdSourceRole::EXECUTION_EFFECTS {
         let path = role
             .path()
             .split('.')
@@ -151,22 +152,22 @@ pub fn compiler_contract_registry() -> StdRegistry {
         let symbol = builder.symbol(module, name, role.symbol_kind(), role.predeclaration(), "");
         symbols.insert(path, symbol);
     }
-    for (alias, target) in contracts.aliases {
-        let (name, parent) = alias.split_last().expect("contract alias");
-        let module = *modules.entry(parent.to_vec()).or_insert_with(|| {
-            builder.module(&parent.iter().map(String::as_str).collect::<Vec<_>>(), "")
-        });
-        builder
-            .re_export(module, name, symbols[&target])
-            .expect("compiled ABI alias");
+    let core = builder.module(&["std", "core"], "");
+    for primitive in PRIMITIVES {
+        let path = StdSourceRole::Primitive(primitive).path();
+        let name = path.rsplit('.').next().unwrap();
+        let symbol = builder.symbol(
+            core,
+            name,
+            StdSymbolKind::Type,
+            StdDecl::Type(crate::TypeDecl::primitive(name)),
+            "",
+        );
+        builder.prelude(name, symbol);
     }
-    for (name, target) in contracts.prelude {
-        builder.prelude(&name, symbols[&target]);
-    }
-    for implementation in contracts.implementations {
-        builder.spec_impl(implementation);
-    }
-    builder.finish()
+    // Value type names are completed by source_types::bind in the producer.
+    // Full registry validation belongs after that source declaration phase.
+    builder.finish_bootstrap()
 }
 
 #[cfg(test)]
@@ -174,7 +175,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn compiler_contracts_preserve_native_abi_without_std_algorithms() {
+    fn compiler_contracts_preserve_execution_abi_without_source_method_apis() {
         let kernel = compiler_contract_registry();
         let legacy = crate::standard_registry();
         assert_eq!(kernel.version(), legacy.version());
@@ -184,7 +185,6 @@ mod tests {
             "impls belong to checked source"
         );
         for contract in kernel.symbols() {
-            let native = legacy.lookup_qualified(&contract.qualified_path).unwrap();
             if let Some(role) = StdSourceRole::from_path(&contract.qualified_path.join(".")) {
                 if let Some((stable_id, core, requirement)) = role.effect_execution() {
                     let StdDecl::Effect(declaration) = &contract.decl else {
@@ -211,25 +211,86 @@ mod tests {
                 assert_eq!(contract.kind, role.symbol_kind());
                 assert!(contract.intrinsic.is_none());
             } else {
-                assert_eq!(contract.decl, native.decl);
+                let native = legacy.lookup_qualified(&contract.qualified_path).unwrap();
+                let mut native_declaration = native.decl.clone();
+                if let (StdDecl::EffectAction(current), StdDecl::EffectAction(previous)) =
+                    (&contract.decl, &mut native_declaration)
+                {
+                    for (current, previous) in
+                        current.effect_args.iter().zip(&mut previous.effect_args)
+                    {
+                        if let (
+                            crate::EffectActionArgKind::StaticResourcePath { ty: current },
+                            crate::EffectActionArgKind::StaticResourcePath { ty: previous },
+                        ) = (current, previous)
+                            && current != previous
+                        {
+                            // Source contracts qualify resource identities that
+                            // legacy signatures name in their owning module.
+                            let owner = legacy
+                                .lookup_type_dependency(&current.split('.').collect::<Vec<_>>())
+                                .unwrap();
+                            assert_eq!(previous.as_ref(), owner.qualified_path.last().unwrap());
+                            *previous = current.clone();
+                        }
+                    }
+                }
+                if let (StdDecl::EffectAction(current), StdDecl::EffectAction(previous)) =
+                    (&contract.decl, &native_declaration)
+                    && current.owner == "Fs"
+                {
+                    // Source Fs uses the explicit limit/content payload ABI.
+                    // Its canonical identity, authority selector and I/O failure
+                    // mechanism still match the released host action. Actual
+                    // source declarations validate the new payload signatures.
+                    assert_eq!(current.stable_id, previous.stable_id);
+                    assert_eq!(current.type_params, previous.type_params);
+                    assert_eq!(current.effect_args, previous.effect_args);
+                    assert_eq!(current.selector_param_names, previous.selector_param_names);
+                    assert_eq!(current.runtime_requirement, previous.runtime_requirement);
+                    assert_eq!(
+                        current.default_handler_effects,
+                        previous.default_handler_effects
+                    );
+                    assert_eq!(current.high_impact_ack, previous.high_impact_ack);
+                    continue;
+                }
+                assert_eq!(contract.decl, native_declaration);
                 assert_eq!(contract.intrinsic, native.intrinsic);
             }
         }
-        assert!(kernel.lookup_qualified(&["std", "text", "chars"]).is_some());
+        assert!(kernel.lookup_qualified(&["std", "text", "chars"]).is_none());
         assert!(kernel.lookup_qualified(&["std", "text", "join"]).is_none());
+        assert!(
+            kernel
+                .lookup_qualified(&["std", "task", "scheduler", "requeue"])
+                .is_none()
+        );
+        assert!(
+            kernel
+                .lookup_qualified(&["std", "task", "scheduler", "park"])
+                .is_none()
+        );
+        let execution_methods = kernel
+            .symbols()
+            .filter_map(|symbol| match &symbol.decl {
+                StdDecl::Flow(flow) if flow.source_method.is_some() => {
+                    Some(symbol.qualified_path.join("."))
+                }
+                _ => None,
+            })
+            .collect::<std::collections::BTreeSet<_>>();
+        assert!(
+            execution_methods.is_empty(),
+            "methods belong to checked source"
+        );
         assert!(
             kernel
                 .lookup_qualified(&["std", "text", "TextError"])
                 .is_none()
         );
-        assert_eq!(
-            kernel
-                .native_enum_reference("std.text.TextError")
-                .unwrap()
-                .required_unit_variants,
-            ["ParseFailure", "NumericOverflow"]
-        );
+        assert_eq!(kernel.native_enum_references().count(), 0);
         assert!(kernel.lookup_qualified(&["std", "fs", "IOError"]).is_none());
-        assert!(kernel.native_opaque_reference("std.fs.IOError").is_some());
+        assert_eq!(kernel.native_opaque_references().count(), 0);
     }
 }

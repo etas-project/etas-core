@@ -1,7 +1,7 @@
 module std.text;
 
-import std.collections.{array_get, array_push};
 import std.text.{chars, char_count, from_char};
+
 
 // Scalar order identifies the four UTF-8 encoding widths.
 // U+0080, U+0800 and U+10000 begin the longer forms.
@@ -15,7 +15,7 @@ flow scalar_width(scalar: char) -> usize ![] {
 flow character_array(text: string) -> Array<char> ![] {
     var output: Array<char> = [];
     for scalar in chars(text) limit Iterations(18446744073709551615) {
-        output = array_push(output, scalar);
+        output = output.push(scalar);
     }
     return output;
 }
@@ -23,7 +23,7 @@ flow character_array(text: string) -> Array<char> ![] {
 flow matches_at(text: Array<char>, pattern: Array<char>, start: usize) -> bool ![] {
     var index = start;
     for expected in pattern limit Iterations(18446744073709551615) {
-        match array_get(text, index) {
+        match text.get(index) {
             Some(actual) => { if actual != expected { return false; } },
             None => { return false; },
         };
@@ -45,7 +45,7 @@ flow match_position(text: string, pattern: string, last: bool) -> Option<(usize,
             found = Some((index, byte));
         }
         if index == length { return found; }
-        byte = byte + scalar_width(array_get(values, index).unwrap());
+        byte = byte + scalar_width(values.get(index).unwrap());
         index = index + 1;
     }
     return found;

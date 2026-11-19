@@ -246,6 +246,7 @@ impl Nfa {
                         TraceLabel::ParameterCall {
                             callable,
                             position,
+                            projection,
                             signature,
                             arguments,
                             handlers,
@@ -257,6 +258,7 @@ impl Nfa {
                                 TraceLabel::ParameterNonReturn {
                                     callable: callable.clone(),
                                     position: *position,
+                                    projection: projection.clone(),
                                     signature: *signature,
                                     arguments: arguments.clone(),
                                     handlers: handlers.clone(),
@@ -379,6 +381,7 @@ impl Nfa {
         let label = CompiledLabel::new(TraceLabel::ParameterCall {
             callable: call.callable.clone(),
             position: call.position,
+            projection: call.projection.clone(),
             signature: graph.type_fingerprint(call.signature)?,
             arguments: call.arguments.clone(),
             handlers: super::labels::handler_scope_labels(graph, call)?,
@@ -425,6 +428,18 @@ fn charge_call(
     budget: &mut ProofBudget,
 ) -> Result<(), TraceProofError> {
     budget.charge(callable_work(&call.callable))?;
+    budget.charge(
+        call.projection
+            .iter()
+            .map(|step| match step {
+                crate::descriptor::ValueProjectionStep::Field(name)
+                | crate::descriptor::ValueProjectionStep::VariantPayload {
+                    variant: name, ..
+                } => 1 + name.len(),
+                _ => 1,
+            })
+            .sum(),
+    )?;
     charge_graph(graph, budget)?;
     budget.charge(call.arguments.as_ref().map_or(0, Vec::len))?;
     for handler in call.handlers.iter().flatten() {

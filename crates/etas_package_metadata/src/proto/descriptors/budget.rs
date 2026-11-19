@@ -65,13 +65,20 @@ pub(in crate::proto) fn validate_model(
                 0
             }
             TypeInfo::Applied { arguments, .. } => arguments.len().saturating_add(1),
-            TypeInfo::Function(signature) => signature
-                .generics
-                .len()
-                .saturating_add(signature.parameters.len())
-                .saturating_add(1)
-                .saturating_add(usize::from(signature.declared_output.is_some()))
-                .saturating_add(usize::from(signature.effects.is_some())),
+            TypeInfo::Function(signature) => {
+                for parameter in &signature.parameters {
+                    if let Some(default) = &parameter.default {
+                        super::defaults::validate_model(default, budget)?;
+                    }
+                }
+                signature
+                    .generics
+                    .len()
+                    .saturating_add(signature.parameters.len())
+                    .saturating_add(1)
+                    .saturating_add(usize::from(signature.declared_output.is_some()))
+                    .saturating_add(usize::from(signature.effects.is_some()))
+            }
             TypeInfo::Handler {
                 produced, result, ..
             } => 1 + usize::from(produced.is_some()) + usize::from(result.is_some()),
@@ -166,13 +173,20 @@ pub(in crate::proto) fn validate_wire(
                 usize::from(value.representation.is_some())
             }
             Some(K::Applied(value)) => value.arguments.len().saturating_add(1),
-            Some(K::Function(value)) => value
-                .generics
-                .len()
-                .saturating_add(value.parameters.len())
-                .saturating_add(1)
-                .saturating_add(usize::from(value.declared_output.is_some()))
-                .saturating_add(usize::from(value.effects.is_some())),
+            Some(K::Function(value)) => {
+                for parameter in &value.parameters {
+                    if let Some(default) = &parameter.default {
+                        super::defaults::validate_wire(default, budget)?;
+                    }
+                }
+                value
+                    .generics
+                    .len()
+                    .saturating_add(value.parameters.len())
+                    .saturating_add(1)
+                    .saturating_add(usize::from(value.declared_output.is_some()))
+                    .saturating_add(usize::from(value.effects.is_some()))
+            }
             Some(K::Handler(value)) => {
                 1 + usize::from(value.produced.is_some()) + usize::from(value.result.is_some())
             }
@@ -227,6 +241,16 @@ pub(in crate::proto) fn validate_wire(
 
 fn model_call_references(call: &ParameterCallInfo) -> usize {
     1usize
+        .saturating_add(
+            call.projection
+                .iter()
+                .map(|step| match step {
+                    ValueProjectionStep::Field(name)
+                    | ValueProjectionStep::VariantPayload { variant: name, .. } => 1 + name.len(),
+                    _ => 1,
+                })
+                .sum::<usize>(),
+        )
         .saturating_add(call.arguments.as_ref().map_or(0, Vec::len))
         .saturating_add(call.handlers.as_ref().map_or(0, |handlers| {
             handlers.iter().fold(handlers.len(), |count, handler| {
@@ -242,6 +266,12 @@ fn model_call_references(call: &ParameterCallInfo) -> usize {
 
 fn wire_call_references(call: &p::ParameterCall) -> usize {
     1usize
+        .saturating_add(
+            call.projection
+                .iter()
+                .map(|step| 1 + step.name.len())
+                .sum::<usize>(),
+        )
         .saturating_add(
             call.arguments
                 .as_ref()

@@ -293,6 +293,7 @@ fn root_projection_preserves_trace_events_outcomes_and_callback_placeholders() {
     )
     .unwrap();
     let parameter = ParameterCallInfo {
+        projection: Vec::new(),
         handlers: Some(vec![ParameterHandlerScopeInfo::Handle {
             arms: vec![ParameterHandlerArmInfo {
                 action: event.clone(),
@@ -317,6 +318,7 @@ fn root_projection_preserves_trace_events_outcomes_and_callback_placeholders() {
                     parameters: vec![ParameterInfo {
                         name: Some("callback".into()),
                         ty: TypeInfoRef(2),
+                        default: None,
                     }],
                     output: TypeInfoRef(0),
                     declared_output: Some(TypeInfoRef(0)),
@@ -394,6 +396,7 @@ fn parameter_trace_calls_require_a_real_signature_parameter() {
     )
     .unwrap();
     let call = ParameterCallInfo {
+        projection: Vec::new(),
         handlers: Some(vec![]),
         callable,
         signature: TypeInfoRef(0),
@@ -442,6 +445,7 @@ fn parameter_trace_calls_require_callable_types_including_widened_traces() {
     )
     .unwrap();
     let call = ParameterCallInfo {
+        projection: Vec::new(),
         handlers: Some(vec![]),
         callable,
         signature: TypeInfoRef(0),
@@ -455,6 +459,7 @@ fn parameter_trace_calls_require_callable_types_including_widened_traces() {
                 parameters: vec![ParameterInfo {
                     name: Some("f".into()),
                     ty: TypeInfoRef(1),
+                    default: None,
                 }],
                 output: TypeInfoRef(1),
                 declared_output: None,
@@ -524,10 +529,7 @@ fn parameter_trace_calls_require_callable_types_including_widened_traces() {
         unreachable!()
     };
     *constructor = BuiltinTypeInfo::Option;
-    assert!(matches!(
-        DescriptorGraph::new(input.clone(), DescriptorLimits::default()),
-        Err(DescriptorError::Invalid { .. })
-    ));
+    assert!(DescriptorGraph::new(input.clone(), DescriptorLimits::default()).is_ok());
     let TypeInfo::Builtin {
         constructor,
         arguments,
@@ -553,6 +555,135 @@ fn parameter_trace_calls_require_callable_types_including_widened_traces() {
         DescriptorGraph::new(input, DescriptorLimits::default()),
         Err(DescriptorError::Invalid { .. })
     ));
+
+    // A selected field can contain a heterogeneous tuple. The alias and
+    // nominal declaration deliberately use separate binders with the same name.
+    let declaration = |name: &str| {
+        DefinitionKey::new(
+            package,
+            vec!["app".into()],
+            vec![name.into()],
+            DefinitionKind::Type,
+        )
+        .unwrap()
+    };
+    let holder = declaration("Holder");
+    let alias = declaration("HolderAlias");
+    let callback = |input| {
+        TypeInfo::Function(SignatureInfo {
+            generics: vec![],
+            parameters: vec![ParameterInfo {
+                name: None,
+                ty: TypeInfoRef(input),
+                default: None,
+            }],
+            output: TypeInfoRef(input),
+            declared_output: None,
+            effects: Some(EffectRowInfoRef(0)),
+        })
+    };
+    let selected = ParameterCallInfo {
+        callable: etas_code::CallableId::declaration(
+            DefinitionKey::new(
+                package,
+                vec!["app".into()],
+                vec!["select".into()],
+                DefinitionKind::Flow,
+            )
+            .unwrap(),
+        )
+        .unwrap(),
+        signature: TypeInfoRef(13),
+        position: 0,
+        projection: vec![
+            ValueProjectionStep::Field("callbacks".into()),
+            ValueProjectionStep::TupleElement(1),
+        ],
+        arguments: Some(vec![ParameterArgumentInfo::Bool(true)]),
+        handlers: Some(vec![]),
+    };
+    let mut projected = DescriptorGraphInput {
+        types: vec![
+            TypeInfo::Primitive(PrimitiveInfo::Bool),              // 0
+            TypeInfo::Primitive(PrimitiveInfo::I32),               // 1
+            callback(1),                                           // 2
+            callback(0),                                           // 3
+            TypeInfo::Tuple(vec![TypeInfoRef(2), TypeInfoRef(3)]), // 4
+            TypeInfo::Nominal {
+                definition: holder.clone(),
+                parameters: vec![GenericParameterRef(0)],
+                representation: Some(TypeInfoRef(7)),
+            }, // 5
+            TypeInfo::Parameter(GenericParameterRef(0)),           // 6
+            TypeInfo::Record(vec![FieldInfo {
+                name: "callbacks".into(),
+                ty: TypeInfoRef(6),
+            }]), // 7
+            TypeInfo::Applied {
+                constructor: TypeInfoRef(5),
+                arguments: vec![TypeInfoRef(4)],
+            }, // 8
+            TypeInfo::Alias {
+                definition: alias.clone(),
+                parameters: vec![GenericParameterRef(1)],
+                target: TypeInfoRef(11),
+            }, // 9
+            TypeInfo::Parameter(GenericParameterRef(1)),           // 10
+            TypeInfo::Applied {
+                constructor: TypeInfoRef(5),
+                arguments: vec![TypeInfoRef(10)],
+            }, // 11
+            TypeInfo::Applied {
+                constructor: TypeInfoRef(9),
+                arguments: vec![TypeInfoRef(4)],
+            }, // 12
+            TypeInfo::Function(SignatureInfo {
+                generics: vec![],
+                parameters: vec![ParameterInfo {
+                    name: Some("holder".into()),
+                    ty: TypeInfoRef(12),
+                    default: None,
+                }],
+                output: TypeInfoRef(14),
+                declared_output: None,
+                effects: Some(EffectRowInfoRef(0)),
+            }), // 13
+            TypeInfo::Primitive(PrimitiveInfo::Unit),              // 14
+        ],
+        binders: [holder, alias]
+            .into_iter()
+            .map(|owner| GenericParameterInfo {
+                owner: GenericOwner::Declaration(owner),
+                position: 0,
+                name: "T".into(),
+                kind: GenericParameterKind::Type,
+                bounds: vec![],
+            })
+            .collect(),
+        rows: vec![EffectRowInfo {
+            effects: vec![],
+            tail: None,
+        }],
+        traces: vec![TraceInfo::ParameterCall(selected.clone())],
+    };
+    DescriptorGraph::new(projected.clone(), DescriptorLimits::default()).unwrap();
+    let mut first = selected;
+    first.arguments = None;
+    projected.traces[0] = TraceInfo::ParameterCall(first.clone());
+    let right_graph = DescriptorGraph::new(projected.clone(), DescriptorLimits::default()).unwrap();
+    let right = right_graph.trace_fingerprint(TraceInfoRef(0)).unwrap();
+    let relocated = right_graph
+        .project(DescriptorNode::Trace(TraceInfoRef(0)))
+        .unwrap();
+    relocated.validate(DescriptorLimits::default()).unwrap();
+    assert_eq!(right, relocated.trace_fingerprint(TraceInfoRef(0)).unwrap());
+    first.projection[1] = ValueProjectionStep::TupleElement(0);
+    projected.traces[0] = TraceInfo::ParameterCall(first);
+    let left = DescriptorGraph::new(projected, DescriptorLimits::default())
+        .unwrap()
+        .trace_fingerprint(TraceInfoRef(0))
+        .unwrap();
+    assert_ne!(left, right);
 }
 
 #[test]

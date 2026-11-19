@@ -25,8 +25,11 @@ fn invocation() -> CallableRequestTarget {
         callable_arguments: vec![SpecMethodCallableArgument {
             position: 1,
             sources: CallableValueGraph {
+                source_projections: Vec::new(),
+                parameter_projections: Vec::new(),
                 objects: Vec::new(),
                 sources: vec![CallableValueSource::Parameter(CallableValueParameter {
+                    projection: None,
                     scope: CallableValueScope::Root,
                     position: 0,
                 })],
@@ -104,6 +107,7 @@ fn method_evidence_path_remapping_reaches_typed_arguments_and_callback_nodes() {
     assert!(matches!(
         method.callable_arguments[0].sources.sources[0],
         CallableValueSource::Parameter(CallableValueParameter {
+            projection: None,
             scope: CallableValueScope::Root,
             position: 0
         })
@@ -160,9 +164,12 @@ fn nested_method_callback_graphs_do_not_reset_the_depth_budget() {
             unreachable!()
         };
         method.callable_arguments[0].sources = CallableValueGraph {
+            source_projections: Vec::new(),
+            parameter_projections: Vec::new(),
             objects: Vec::new(),
             sources: vec![CallableValueSource::Value(0)],
             values: vec![CallableValueNode {
+                returned_projections: Vec::new(),
                 residual_checks: Default::default(),
                 handler_requests: None,
                 behavior: CallableValueBehavior {

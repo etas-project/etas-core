@@ -138,6 +138,15 @@ pub(super) fn encode_owner(owner: &GenericOwner) -> p::GenericOwner {
             effect: Some(encode_key(effect)),
             name: name.clone(),
         }),
+        GenericOwner::ActionOverload {
+            effect,
+            name,
+            signature,
+        } => p::generic_owner::Kind::ActionOverload(p::ActionOverloadOwner {
+            effect: Some(encode_key(effect)),
+            name: name.clone(),
+            signature: signature.as_bytes().to_vec(),
+        }),
     };
     p::GenericOwner { kind: Some(kind) }
 }
@@ -175,6 +184,16 @@ pub(super) fn decode_owner(owner: p::GenericOwner) -> Result<GenericOwner, Error
         p::generic_owner::Kind::Action(owner) => GenericOwner::Action {
             effect: decode_key(required(owner.effect, "action generic effect owner")?)?,
             name: owner.name,
+        },
+        p::generic_owner::Kind::ActionOverload(owner) => GenericOwner::ActionOverload {
+            effect: decode_key(required(owner.effect, "action overload effect owner")?)?,
+            name: owner.name,
+            signature: etas_code::CodeFingerprint::from_bytes(
+                owner
+                    .signature
+                    .try_into()
+                    .map_err(|_| invalid("invalid action overload input fingerprint"))?,
+            ),
         },
     })
 }

@@ -24,6 +24,35 @@ impl StdRegistryBuilder {
         Self { registry }
     }
 
+    pub fn source_parameter_interface(
+        &mut self,
+        callable: etas_code::CallableId,
+        parameters: Vec<super::StdParameterInterface>,
+    ) {
+        if let Some(previous) = self
+            .registry
+            .parameter_interfaces
+            .insert(callable, parameters.clone())
+        {
+            assert_eq!(previous, parameters, "one checked interface per callable");
+        }
+    }
+
+    /// Publish only a role read from an admitted source Runtime declaration.
+    pub fn source_execution_role(
+        &mut self,
+        callable: etas_code::CallableId,
+        role: crate::StdExecutionRole,
+    ) {
+        assert!(
+            role.accepts_identity(&callable),
+            "source execution role requires its canonical callable identity"
+        );
+        if let Some(previous) = self.registry.execution_roles.insert(callable, role) {
+            assert_eq!(previous, role, "source callable has one execution contract");
+        }
+    }
+
     pub fn source_flow(
         &mut self,
         module: StdModuleId,
@@ -78,19 +107,55 @@ impl StdRegistryBuilder {
         )
     }
 
+    /// Add a source overload together with its own checked body identity.
+    pub fn source_flow_overload(
+        &mut self,
+        symbol: StdSymbolId,
+        declaration: crate::FlowDecl,
+        callable: etas_code::CallableId,
+    ) -> Result<(), StdRegistryValidationError> {
+        assert!(
+            self.registry.body_binding(symbol).is_some(),
+            "source overload owner"
+        );
+        self.flow_overload(symbol, declaration)?;
+        let body = self.registry.bodies.last_key_value().map_or(0, |(id, _)| {
+            id.checked_add(1).expect("std body identity capacity")
+        });
+        self.registry
+            .bodies
+            .insert(body, crate::StdBodyBinding { callable });
+        self.registry
+            .flow_overload_bodies
+            .entry(symbol)
+            .or_default()
+            .push(body);
+        Ok(())
+    }
+
     /// Publish a checked source signature with its validated primitive binding.
     pub fn source_primitive_flow(
         &mut self,
         symbol: StdSymbolId,
+        module: StdModuleId,
         declaration: crate::FlowDecl,
         definition: etas_code::DefinitionKey,
     ) {
+        let mut path = self.registry.module(module).unwrap().path.clone();
+        path.push(declaration.name.clone());
         let entry = self.registry.symbols[symbol.0 as usize].as_mut().unwrap();
         assert!(
             matches!(entry.decl, StdDecl::Flow(_)) && entry.intrinsic.is_some(),
             "checked native flow binding"
         );
+        entry.module = module;
+        entry.name = declaration.name.clone();
+        entry.qualified_path = path.clone();
         entry.decl = StdDecl::Flow(declaration);
+        // Public paths belong to the source package. Native contract paths
+        // remain in the intrinsic ABI; source re-exports are published later.
+        self.registry.qualified.retain(|_, id| *id != symbol);
+        self.registry.qualified.insert(path, symbol);
         self.bind_declaration(symbol, definition);
     }
 
@@ -109,7 +174,7 @@ impl StdRegistryBuilder {
     }
 
     /// Publish checked source request types and selectors. Stable dispatch,
-    /// permissions and default-handler effects remain execution contracts.
+    /// permissions remain execution contracts; source owns default Effect rows.
     pub fn source_action_signature(
         &mut self,
         symbol: StdSymbolId,
@@ -118,6 +183,7 @@ impl StdRegistryBuilder {
         selector_names: Vec<String>,
         inputs: Vec<crate::StdType>,
         output: crate::StdType,
+        default_handler_effects: Option<crate::StdEffectRowExpr>,
     ) {
         let StdDecl::EffectAction(action) = &mut self.registry.symbols[symbol.0 as usize]
             .as_mut()
@@ -126,15 +192,10 @@ impl StdRegistryBuilder {
         else {
             unreachable!("checked native action binding");
         };
-        // The host rule names its row by binder position; source owns spelling.
-        if let Some(tail) = &action.default_handler_effect_tail {
-            let index = action
-                .type_params
-                .iter()
-                .position(|parameter| &parameter.name == tail)
-                .expect("validated native default-handler effect binder");
-            action.default_handler_effect_tail = Some(parameters[index].name.clone());
-        }
+        action.default_handler_effect_tail = default_handler_effects
+            .as_ref()
+            .and_then(|row| row.tail.clone());
+        action.default_handler_effects = default_handler_effects.map(|row| row.effects);
         action.type_params = parameters;
         action.effect_args = selectors;
         action.selector_param_names = selector_names;
@@ -142,7 +203,51 @@ impl StdRegistryBuilder {
         action.output = output;
     }
 
+    /// Keep execution entries backed by action declarations in this source
+    /// library. Removed slots preserve the checked native dispatch addresses.
+    pub fn retain_source_actions(&mut self, actions: &std::collections::BTreeSet<StdSymbolId>) {
+        let removed = self
+            .registry
+            .symbols()
+            .filter_map(|symbol| {
+                (matches!(symbol.decl, StdDecl::EffectAction(_)) && !actions.contains(&symbol.id))
+                    .then_some(symbol.id)
+            })
+            .collect::<std::collections::BTreeSet<_>>();
+        for id in &removed {
+            self.registry.symbols[id.0 as usize] = None;
+        }
+        self.registry
+            .qualified
+            .retain(|_, id| !removed.contains(id));
+        self.registry.prelude.remove_symbols(&removed);
+        self.registry
+            .action_overloads
+            .retain(|id, _| !removed.contains(id));
+        self.registry
+            .declarations
+            .retain(|id, _| !removed.contains(id));
+    }
+
+    pub fn source_action_overloads(
+        &mut self,
+        symbol: StdSymbolId,
+        overloads: Vec<crate::EffectActionDecl>,
+    ) {
+        self.registry.action_overloads.insert(symbol, overloads);
+    }
+
+    /// Source parts and query projections share one namespace per full path.
     pub fn module(&mut self, path: &[&str], summary: &str) -> StdModuleId {
+        if let Some(module) = self.registry.modules().find(|module| {
+            module
+                .path
+                .iter()
+                .map(String::as_str)
+                .eq(path.iter().copied())
+        }) {
+            return module.id;
+        }
         let id = StdModuleId(self.registry.modules().count() as u32);
         self.registry.push_module(StdModule {
             id,
@@ -176,6 +281,23 @@ impl StdRegistryBuilder {
             declaration.canonical_type = role.declaration(parameters.clone()).canonical_type;
         }
         declaration.params = parameters;
+    }
+
+    pub fn source_type_shape(
+        &mut self,
+        symbol: StdSymbolId,
+        kind: crate::TypeDeclKind,
+        canonical_type: Option<crate::StdType>,
+    ) {
+        let source = self.registry.symbols[symbol.0 as usize].as_mut().unwrap();
+        let StdDecl::Type(declaration) = &mut source.decl else {
+            panic!("checked source type declaration");
+        };
+        declaration.kind = kind;
+        declaration.canonical_type = canonical_type;
+        if kind == crate::TypeDeclKind::Enum {
+            declaration.representation = None;
+        }
     }
 
     /// Source declares effect binders and inheritance; execution tags stay native.
@@ -247,6 +369,19 @@ impl StdRegistryBuilder {
         summary: &str,
     ) -> StdSymbolId {
         self.symbol_with_intrinsic(module, name, kind, decl, summary, None)
+    }
+
+    /// Visibility comes from the checked source declaration. The private
+    /// symbol remains a type-dependency query, not a module export.
+    pub fn source_visibility(
+        &mut self,
+        symbol: StdSymbolId,
+        visibility: crate::StdSymbolVisibility,
+    ) {
+        self.registry.symbols[symbol.0 as usize]
+            .as_mut()
+            .unwrap()
+            .visibility = visibility;
     }
 
     pub fn symbol_with_intrinsic(
@@ -325,6 +460,7 @@ impl StdRegistryBuilder {
             name: name.to_owned(),
             qualified_path,
             kind,
+            visibility: crate::StdSymbolVisibility::Public,
             decl,
             intrinsic,
             implementation,
@@ -355,6 +491,7 @@ impl StdRegistryBuilder {
             });
         }
         let module = symbol.module;
+        let visibility = symbol.visibility;
         let mut qualified_path = symbol.qualified_path.clone();
         qualified_path.push(declaration.name.clone());
         let id = StdSymbolId(self.registry.symbols.len() as u32);
@@ -365,6 +502,7 @@ impl StdRegistryBuilder {
             name: declaration.name.clone(),
             qualified_path,
             kind: StdSymbolKind::Constructor,
+            visibility,
             completion: CompletionMetadata::new(&declaration.name, summary),
             decl: StdDecl::Flow(declaration),
             intrinsic: None,
@@ -560,6 +698,13 @@ impl StdRegistryBuilder {
 
     pub fn finish(self) -> StdRegistry {
         self.try_finish().unwrap_or_else(|error| panic!("{error}"))
+    }
+
+    /// The compiler ships execution signatures whose value types are declared
+    /// by std source. Source-HIR binding completes those heads before ordinary
+    /// `try_finish` validation; registry image publication also validates.
+    pub fn finish_bootstrap(self) -> StdRegistry {
+        self.registry
     }
 
     pub fn try_finish(self) -> Result<StdRegistry, StdRegistryValidationError> {

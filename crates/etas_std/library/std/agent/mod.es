@@ -4,6 +4,7 @@ import std.json.JsonValue;
 import std.agent.session.Conversation;
 import std.agent.schema.Schema;
 
+
 public type StepResult<C, O> = {
     turn: AssistantTurn,
     decision: StepDecision<C, O>,
@@ -62,7 +63,9 @@ public type Usage = {
     cost: Option<{ micros: u128, currency: string }>,
 }
 
-// C is the checked agent-method context. These bindings must preserve its
+// C is the checked agent-method context. The action must preserve its
 // latent tool/error/trace contract; transparent protocol records grant no authority.
-@std.binding("std.agent.step")
-public flow step<C, O>(conversation: Conversation, schema: Schema<O>) -> StepResult<C, O> ![] {}
+
+public flow step<C, O>(conversation: Conversation, schema: Schema<O>) -> StepResult<C, O> ![] {
+    return perform std.effects.Agentic.step<C, O>(conversation, schema);
+}

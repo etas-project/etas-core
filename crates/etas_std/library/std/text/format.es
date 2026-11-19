@@ -1,7 +1,7 @@
 module std.text;
 
-import std.collections.array_get;
 import std.text.{InvalidFormat, TextError, chars, from_char, parse_usize};
+
 
 public flow format(template: string, arguments: Array<string>) -> Result<string, TextError> {
     var output = "";
@@ -17,7 +17,7 @@ public flow format(template: string, arguments: Array<string>) -> Result<string,
                     Ok(value) => value,
                     Err(_) => { return Err(InvalidFormat); },
                 };
-                match array_get(arguments, index) {
+                match arguments.get(index) {
                     Some(value) => { output = output + value; },
                     None => { return Err(InvalidFormat); },
                 }

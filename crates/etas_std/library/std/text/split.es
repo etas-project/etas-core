@@ -1,7 +1,7 @@
 module std.text;
 
-import std.collections.{array_get, array_push};
 import std.text.{chars, char_count, from_char, character_array, matches_at, match_position};
+
 
 public flow splitn(text: string, separator: string, limit: usize) -> Array<string> ![] {
     var output: Array<string> = [];
@@ -11,15 +11,15 @@ public flow splitn(text: string, separator: string, limit: usize) -> Array<strin
     var remaining = limit - 1;
     var segment = "";
     if width == 0 {
-        output = array_push(output, "");
+        output = output.push("");
         remaining = remaining - 1;
         for scalar in chars(text) limit Iterations(18446744073709551615) {
             if remaining > 0 {
-                output = array_push(output, from_char(scalar));
+                output = output.push(from_char(scalar));
                 remaining = remaining - 1;
             } else { segment = segment + from_char(scalar); }
         }
-        return array_push(output, segment);
+        return output.push(segment);
     }
     let values = character_array(text);
     let expected = character_array(separator);
@@ -27,16 +27,16 @@ public flow splitn(text: string, separator: string, limit: usize) -> Array<strin
     var index: usize = 0;
     while index < length limit Iterations(18446744073709551615) {
         if remaining > 0 && matches_at(values, expected, index) {
-            output = array_push(output, segment);
+            output = output.push(segment);
             segment = "";
             remaining = remaining - 1;
             index = index + width;
         } else {
-            segment = segment + from_char(array_get(values, index).unwrap());
+            segment = segment + from_char(values.get(index).unwrap());
             index = index + 1;
         }
     }
-    return array_push(output, segment);
+    return output.push(segment);
 }
 
 public flow split(text: string, separator: string) -> Array<string> ![] {

@@ -15,7 +15,7 @@ pub mod sandbox;
 pub mod secret;
 pub mod session;
 mod storage;
-pub use storage::limits::StorageLimits;
+pub use storage::limits::{StorageLimits, ValueBudget};
 pub use storage::outcome::{
     CommitStatus, ConfirmedOutcome, ReceiptLookup, StorageDurability, StorageWriteEvidence,
     WriteOutcome,

@@ -12,7 +12,7 @@ use crate::MetadataArtifactError;
 
 pub const PACKAGE_METADATA_FILE: &str = ".etas/package.etasmeta";
 pub const MAGIC: &[u8; 8] = b"ETASMETA";
-pub const ARTIFACT_SCHEMA_VERSION: u32 = 52;
+pub const ARTIFACT_SCHEMA_VERSION: u32 = 67;
 pub const COMPRESSION_ZSTD: u8 = 1;
 const SECTION_TABLE_ENTRY_SIZE: usize = 2 + 1 + 8 + 8 + 8 + 32;
 pub const MAX_METADATA_ARTIFACT_SIZE: usize = 64 * 1024 * 1024;
@@ -20,7 +20,11 @@ pub const MAX_METADATA_HEADER_SIZE: usize = 64 * 1024;
 pub const MAX_METADATA_SECTION_COUNT: usize = 64;
 pub const MAX_METADATA_COMPRESSED_SECTION_SIZE: usize = 32 * 1024 * 1024;
 pub const MAX_METADATA_UNCOMPRESSED_SECTION_SIZE: usize = 64 * 1024 * 1024;
-pub const MAX_METADATA_TOTAL_UNCOMPRESSED_SIZE: usize = 128 * 1024 * 1024;
+// Checked bodies include the complete library and its private implementation
+// graph. Public interface sections retain their smaller per-section limit.
+const MAX_METADATA_LIBRARY_BODIES_SIZE: usize = 512 * 1024 * 1024;
+pub const MAX_METADATA_TOTAL_UNCOMPRESSED_SIZE: usize =
+    MAX_METADATA_LIBRARY_BODIES_SIZE + 128 * 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u16)]
@@ -39,6 +43,13 @@ pub enum MetadataSectionKind {
 }
 
 impl MetadataSectionKind {
+    fn uncompressed_size_limit(self) -> usize {
+        match self {
+            Self::LibraryBodies => MAX_METADATA_LIBRARY_BODIES_SIZE,
+            _ => MAX_METADATA_UNCOMPRESSED_SECTION_SIZE,
+        }
+    }
+
     pub fn from_u16(value: u16) -> Result<Self, MetadataArtifactError> {
         match value {
             1 => Ok(Self::Exports),
@@ -97,10 +108,12 @@ pub fn section_from_message<M: Message>(
     kind: MetadataSectionKind,
     message: M,
 ) -> Result<EncodedMetadataSection, MetadataArtifactError> {
-    if message.encoded_len() > MAX_METADATA_UNCOMPRESSED_SECTION_SIZE {
+    let size = message.encoded_len();
+    let limit = kind.uncompressed_size_limit();
+    if size > limit {
         return Err(MetadataArtifactError::invalid(
             PACKAGE_METADATA_FILE,
-            format!("metadata section {kind:?} exceeds the size limit"),
+            format!("metadata section {kind:?} has {size} bytes; maximum is {limit}"),
         ));
     }
     Ok(EncodedMetadataSection {
@@ -138,10 +151,15 @@ pub fn encode_metadata_artifact(
     }
     let mut total_uncompressed = 0usize;
     for section in &sections {
-        if section.payload.len() > MAX_METADATA_UNCOMPRESSED_SECTION_SIZE {
+        let limit = section.kind.uncompressed_size_limit();
+        if section.payload.len() > limit {
             return Err(MetadataArtifactError::invalid(
                 PACKAGE_METADATA_FILE,
-                format!("metadata section {:?} exceeds the size limit", section.kind),
+                format!(
+                    "metadata section {:?} has {} bytes; maximum is {limit}",
+                    section.kind,
+                    section.payload.len()
+                ),
             ));
         }
         total_uncompressed = total_uncompressed
@@ -176,8 +194,9 @@ pub fn encode_metadata_artifact(
             return Err(MetadataArtifactError::invalid(
                 PACKAGE_METADATA_FILE,
                 format!(
-                    "compressed metadata section {:?} exceeds the size limit",
-                    section.kind
+                    "compressed metadata section {:?} has {} bytes; maximum is {MAX_METADATA_COMPRESSED_SECTION_SIZE}",
+                    section.kind,
+                    compressed.len()
                 ),
             ));
         }
@@ -263,7 +282,7 @@ pub fn decode_metadata_artifact(
             )
         })?;
         if compressed_len > MAX_METADATA_COMPRESSED_SECTION_SIZE
-            || uncompressed_len > MAX_METADATA_UNCOMPRESSED_SECTION_SIZE
+            || uncompressed_len > entry.kind.uncompressed_size_limit()
         {
             return Err(MetadataArtifactError::invalid(
                 path,

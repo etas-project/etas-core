@@ -105,6 +105,9 @@ pub struct ParameterCallInfo {
     pub callable: CallableId,
     pub signature: TypeInfoRef,
     pub position: u32,
+    /// A checked position within the parameter's aggregate value.
+    #[serde(default)]
+    pub projection: Vec<super::ValueProjectionStep>,
     /// None means argument values were not proved, not a zero-argument call.
     pub arguments: Option<Vec<ParameterArgumentInfo>>,
     /// Checked surrounding handlers, ordered from innermost to outermost.
@@ -240,6 +243,7 @@ pub enum TraceInfo {
     etas_core::RetainedSize,
 )]
 pub struct CallableAnalysisInfo {
+    pub suspension: Option<SuspensionInfo>,
     pub effects: EffectSummaryInfo,
     pub determinism: Option<DeterminismInfo>,
     /// The checked contribution excluding unresolved callback parameters.
@@ -247,4 +251,12 @@ pub struct CallableAnalysisInfo {
     pub independent_determinism: Option<DeterminismInfo>,
     pub trace: Option<TraceInfoRef>,
     pub outcomes: Option<TraceInfoRef>,
+}
+
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub struct SuspensionInfo {
+    pub may_suspend: bool,
+    pub unknown: bool,
 }

@@ -1,43 +1,51 @@
 module std.browser.protocol;
 
-// Public declarations migrated from the legacy API inventory.
-// Maintained as Etas source; native bindings retain existing execution during migration.
+// Browser protocol substrate support type.
+public type BrowserError = { code: string, message: string };
 
 // Browser protocol substrate support type.
-public type BrowserError;
+public type BrowserMessage = std.json.JsonValue;
 
 // Browser protocol substrate support type.
-public type BrowserMessage;
+public type BrowserProfile = {
+    name: string,
+    endpoint: Option<std.host.url.Url>,
+    headless: bool,
+};
 
 // Browser protocol substrate support type.
-public type BrowserProfile;
+public type BrowserScreenshot = {
+    content: bytes,
+    mime_type: string,
+    width: Option<usize>,
+    height: Option<usize>,
+};
 
 // Browser protocol substrate support type.
-public type BrowserScreenshot;
+type BrowserConnection;
 
-// Browser protocol substrate support type.
-public type BrowserSession;
+public type BrowserSession = { private connection: BrowserConnection };
 
-// Attach to an existing browser protocol session.
-@std.binding("std.browser.protocol.attach")
-public flow attach(arg0: std.browser.protocol.BrowserProfile) -> std.browser.protocol.BrowserSession ![Error<std.browser.protocol.BrowserError>] {}
+public flow attach(profile: BrowserProfile) -> BrowserSession ![Error<BrowserError>] {
+    return perform std.effects.Browser.attach(profile);
+}
 
-// Close a browser protocol session.
-@std.binding("std.browser.protocol.close")
-public flow close(arg0: std.browser.protocol.BrowserSession) -> unit ![Error<std.browser.protocol.BrowserError>] {}
+public flow create(profile: BrowserProfile) -> BrowserSession ![Error<BrowserError>] {
+    return perform std.effects.Browser.create(profile);
+}
 
-// Create a new browser protocol session.
-@std.binding("std.browser.protocol.create")
-public flow create(arg0: std.browser.protocol.BrowserProfile) -> std.browser.protocol.BrowserSession ![Error<std.browser.protocol.BrowserError>] {}
+public flow close(session: BrowserSession) -> unit ![Error<BrowserError>] {
+    perform std.effects.Browser.close(session);
+}
 
-// Receive a browser protocol message.
-@std.binding("std.browser.protocol.recv")
-public flow recv(arg0: std.browser.protocol.BrowserSession) -> std.browser.protocol.BrowserMessage ![Error<std.browser.protocol.BrowserError>] {}
+public flow recv(session: BrowserSession) -> BrowserMessage ![Error<BrowserError>] {
+    return perform std.effects.Browser.recv(session);
+}
 
-// Capture a screenshot payload for a browser protocol session.
-@std.binding("std.browser.protocol.screenshot")
-public flow screenshot(arg0: std.browser.protocol.BrowserSession) -> std.browser.protocol.BrowserScreenshot ![Error<std.browser.protocol.BrowserError>] {}
+public flow screenshot(session: BrowserSession) -> BrowserScreenshot ![Error<BrowserError>] {
+    return perform std.effects.Browser.screenshot(session);
+}
 
-// Send a browser protocol message.
-@std.binding("std.browser.protocol.send")
-public flow send(arg0: std.browser.protocol.BrowserSession, arg1: std.browser.protocol.BrowserMessage) -> unit ![Error<std.browser.protocol.BrowserError>] {}
+public flow send(session: BrowserSession, message: BrowserMessage) -> unit ![Error<BrowserError>] {
+    perform std.effects.Browser.send(session, message);
+}

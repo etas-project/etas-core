@@ -2,6 +2,7 @@ module std.text;
 
 import std.text.{TextError, ParseFailure};
 
+
 public flow parse_bool(text: string) -> Result<bool, TextError> ![] {
     if text == "true" { return Ok(true); }
     if text == "false" { return Ok(false); }

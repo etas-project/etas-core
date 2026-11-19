@@ -118,6 +118,7 @@ public type ModuleOriginInfo = {
 };
 
 public type ParameterInfo = {
+    default: Option<std.compiler.ParameterDefaultInfo>,
     name: Option<string>,
     ty: std.compiler.TypeInfo,
 };

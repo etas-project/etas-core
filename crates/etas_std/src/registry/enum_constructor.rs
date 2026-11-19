@@ -26,8 +26,9 @@ pub(super) fn validate(
     let StdDecl::Flow(flow) = &symbol.decl else {
         return Err(invalid("enum constructor must have a callable signature"));
     };
-    let result_role = owner.qualified_path == ["std", "result", "Result"];
-    let option_role = owner.qualified_path == ["std", "option", "Option"];
+    let native_owner = registry.declaration_key(owner.id).is_none();
+    let result_role = native_owner && owner.qualified_path == ["std", "result", "Result"];
+    let option_role = native_owner && owner.qualified_path == ["std", "option", "Option"];
     if result_role && decl.params.len() != 2 {
         return Err(invalid("Result role requires two type parameters"));
     }
@@ -40,6 +41,7 @@ pub(super) fn validate(
         || symbol.module != owner.module
         || symbol.name != flow.name
         || symbol.qualified_path != expected_path
+        || symbol.visibility != owner.visibility
     {
         return Err(invalid(
             "enum constructor identity does not match its owner and declaration",

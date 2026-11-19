@@ -1,5 +1,7 @@
 //! Invocation-local ownership and cancellation. No live state is serializable.
 mod cancellation;
+mod entropy;
+pub use entropy::fresh_nonce;
 mod operation;
 mod scope;
 mod shutdown;

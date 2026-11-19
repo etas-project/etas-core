@@ -32,6 +32,33 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
     validate_prelude(registry)?;
     validate_stable_ids(registry)?;
     validate_source_declarations(registry)?;
+    for parameters in registry.parameter_interfaces.values() {
+        for (slot, parameter) in parameters.iter().enumerate() {
+            if let Some(default) = &parameter.default {
+                default
+                    .owner
+                    .validate()
+                    .map_err(|error| StdRegistryValidationError {
+                        symbol: parameter.name.clone().unwrap_or_default(),
+                        reason: error.to_string(),
+                    })?;
+                if default.parameter as usize != slot {
+                    return Err(StdRegistryValidationError {
+                        symbol: parameter.name.clone().unwrap_or_default(),
+                        reason: "default origin disagrees with its parameter slot".into(),
+                    });
+                }
+            }
+        }
+    }
+    for (callable, role) in &registry.execution_roles {
+        if !role.accepts_identity(callable) {
+            return Err(StdRegistryValidationError {
+                symbol: role.source_path().into(),
+                reason: "source execution role has a different canonical callable identity".into(),
+            });
+        }
+    }
     let logical_effects = LogicalEffectIndex::build(registry)?;
     let mut code_roles = BTreeSet::new();
     let mut runtime_roles = BTreeSet::new();
@@ -75,14 +102,17 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                 if let Some(role) = declaration.code_role
                     && (!code_roles.insert(role)
                         || symbol.kind != StdSymbolKind::Type
-                        || declaration.kind != TypeDeclKind::Struct
-                        || declaration.construction != crate::StdTypeConstruction::IntrinsicOnly
-                        || declaration.representation.is_some()
+                        || symbol.qualified_path.join(".") != role.source_path()
+                        || !matches!(declaration.kind, TypeDeclKind::Struct | TypeDeclKind::Enum)
                         || declaration.canonical_type.is_some()
-                        || declaration.params.len() != role.type_parameter_count())
+                        || declaration.params.len() != role.type_parameter_count()
+                        || declaration
+                            .params
+                            .iter()
+                            .any(|parameter| parameter.kind != StdGenericParamKind::Type))
                 {
                     return Err(StdRegistryValidationError { symbol: symbol.qualified_path.join("."),
-                        reason: "code descriptor role requires a unique opaque nominal type with matching arity".into() });
+                        reason: "compiler data requires its unique canonical source record or enum and matching type parameter arity".into() });
                 }
                 validate_generic_params(registry, &symbol.qualified_path, &declaration.params)?;
                 if let Some(item) = declaration.iterable_item
@@ -99,18 +129,31 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                 }
                 let generics = generic_names(&declaration.params);
                 let effect_generics = effect_generic_names(&declaration.params);
+                if declaration.kind == TypeDeclKind::Alias
+                    && (declaration.canonical_type.is_none()
+                        || registry.declaration_key(symbol.id).is_none())
+                {
+                    return invalid(
+                        symbol.qualified_path.join("."),
+                        "source alias requires its checked declaration identity and target",
+                    );
+                }
                 if let Some(ty) = &declaration.canonical_type {
-                    if declaration.kind != TypeDeclKind::Support
-                        || declaration.representation.is_some()
+                    if !matches!(
+                        declaration.kind,
+                        TypeDeclKind::Support | TypeDeclKind::Alias
+                    ) || declaration.representation.is_some()
                     {
                         return Err(StdRegistryValidationError {
                             symbol: symbol.qualified_path.join("."),
                             reason:
-                                "canonical compiler type requires a non-nominal support declaration"
+                                "canonical type requires a non-nominal support or source alias declaration"
                                     .into(),
                         });
                     }
-                    super::canonical_type::validate(&symbol.qualified_path.join("."), ty)?;
+                    if declaration.kind == TypeDeclKind::Support {
+                        super::canonical_type::validate(&symbol.qualified_path.join("."), ty)?;
+                    }
                     validate_type_expr(
                         registry,
                         &symbol.qualified_path.join("."),
@@ -162,10 +205,16 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
             StdDecl::Flow(primary) => {
                 let mut signatures = Vec::new();
                 for flow in registry.flow_declarations(symbol.id) {
-                    if flow != primary && symbol.intrinsic.is_none() {
+                    if flow != primary
+                        && symbol.intrinsic.is_none()
+                        && !matches!(
+                            symbol.implementation,
+                            Some(StdImplementationRef::Artifact { .. })
+                        )
+                    {
                         return invalid(
                             symbol.qualified_path.join("."),
-                            "standard flow overloads require one shared intrinsic identity",
+                            "flow overloads require checked source bodies or a shared primitive execution identity",
                         );
                     }
                     if flow.name != primary.name
@@ -297,11 +346,13 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                                         crate::StdGenericParam::new("C"),
                                         crate::StdGenericParam::new("O"),
                                     ]
-                                    && action.params
-                                        == [
-                                            StdType::parse("std.agent.session.Conversation"),
-                                            StdType::parse("Schema[O]"),
-                                        ]
+                                    && action.params.len() == 2
+                                    && action.params[0]
+                                        == StdType::parse("std.agent.session.Conversation")
+                                    && schema_argument_matches(
+                                        &action.params[1],
+                                        &StdType::Var("O".into()),
+                                    )
                                     && action.output == StdType::parse("std.agent.StepResult[C, O]")
                                     && action.effect_args
                                         == [EffectActionArgKind::Type, EffectActionArgKind::Type]
@@ -315,9 +366,10 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                                         parameter.kind == StdGenericParamKind::Type
                                     })
                                     && action.params.len() == 2
-                                    && action.params[0] == StdType::Prompt
-                                    && action.params[1]
-                                        == StdType::Schema(Box::new(action.output.clone()))
+                                    && (action.params[0] == StdType::Prompt
+                                        || action.params[0]
+                                            == StdType::Named("std.agent.prompt.Prompt".into()))
+                                    && schema_argument_matches(&action.params[1], &action.output)
                                     && matches!(&action.output, StdType::Var(name) if *name == action.type_params[1].name)
                                     && matches!(
                                         action.effect_args.as_slice(),
@@ -354,10 +406,8 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                                             kind: StdGenericParamKind::EffectRow,
                                             ..
                                         }
-                                    ] if action.params.as_slice() == [StdType::Task {
-                                        output: Box::new(StdType::Var(output.clone())),
-                                        effects: crate::StdEffectRowExpr::param(effects),
-                                    }]
+                                    ] if matches!(action.params.as_slice(), [task]
+                                        if task_argument_matches(task, output, effects))
                                         && action.output == StdType::Var(output.clone())
                                         && action.default_handler_effects.as_deref() == Some(&[])
                                         && action.default_handler_effect_tail.as_deref() == Some(effects.as_str())
@@ -414,6 +464,34 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
     validate_spec_impls(registry)?;
     validate_effect_extension_cycles(&logical_effects)?;
     Ok(())
+}
+
+// Legacy queries use a dedicated Schema constructor. Checked source queries
+// retain the canonical source-owned declaration instead.
+fn schema_argument_matches(argument: &StdType, output: &StdType) -> bool {
+    match argument {
+        StdType::Schema(inner) => inner.as_ref() == output,
+        StdType::NamedApplied { name, args } => {
+            name == "std.agent.schema.Schema" && args.len() == 1 && args[0] == *output
+        }
+        _ => false,
+    }
+}
+
+fn task_argument_matches(argument: &StdType, output: &str, effects: &str) -> bool {
+    let output = StdType::Var(output.into());
+    let effects = crate::StdEffectRowExpr::param(effects);
+    match argument {
+        StdType::Task {
+            output: result,
+            effects: row,
+        } => result.as_ref() == &output && *row == effects,
+        StdType::NamedApplied { name, args } if name == "std.task.Task" => {
+            matches!(args.as_slice(), [result, StdType::Handler { handled, produced: None, result: None }]
+                if *result == output && *handled == effects)
+        }
+        _ => false,
+    }
 }
 
 fn validate_source_declarations(registry: &StdRegistry) -> Result<(), StdRegistryValidationError> {
@@ -514,17 +592,28 @@ fn validate_implementation(
                     "artifact source callable requires a flow declaration without a primitive shortcut",
                 ));
             }
-            let binding = registry
-                .body_binding(symbol.id)
-                .ok_or_else(|| invalid("source callable has no body binding"))?;
-            if binding
-                .callable
-                .as_declaration()
-                .is_some_and(|definition| definition.kind() != etas_code::DefinitionKind::Flow)
+            let alternatives = registry.flow_overloads.get(&symbol.id).map_or(0, Vec::len);
+            if registry
+                .flow_overload_bodies
+                .get(&symbol.id)
+                .map_or(0, Vec::len)
+                != alternatives
             {
-                return Err(invalid(
-                    "source flow body binding has the wrong declaration kind",
-                ));
+                return Err(invalid("source flow overload signatures and bodies differ"));
+            }
+            for overload in 0..=alternatives {
+                let binding = registry
+                    .flow_body_binding(symbol.id, overload)
+                    .ok_or_else(|| invalid("source callable overload has no body binding"))?;
+                if binding
+                    .callable
+                    .as_declaration()
+                    .is_some_and(|definition| definition.kind() != etas_code::DefinitionKind::Flow)
+                {
+                    return Err(invalid(
+                        "source flow body binding has the wrong declaration kind",
+                    ));
+                }
             }
         }
     }
@@ -813,6 +902,12 @@ fn validate_prelude(registry: &StdRegistry) -> Result<(), StdRegistryValidationE
                 symbol: binding.name.clone(),
                 reason: "prelude binding refers to an unregistered symbol".into(),
             })?;
+        if symbol.visibility != crate::StdSymbolVisibility::Public {
+            return invalid(
+                &binding.name,
+                "private source declaration cannot enter the prelude",
+            );
+        }
         if !bindings.insert((&binding.name, symbol.kind.namespace())) {
             return Err(StdRegistryValidationError {
                 symbol: binding.name.clone(),
@@ -833,7 +928,7 @@ fn validate_unique_symbols(registry: &StdRegistry) -> Result<(), StdRegistryVali
             );
         }
         if registry
-            .lookup_qualified(&symbol.qualified_path)
+            .lookup_qualified_internal(&symbol.qualified_path)
             .map(|found| found.id)
             != Some(symbol.id)
         {
@@ -966,7 +1061,7 @@ fn validate_spec_ref(
     spec: &StdSpecRef,
     generics: &BTreeSet<&str>,
 ) -> Result<(), StdRegistryValidationError> {
-    let Some(symbol) = registry.lookup_qualified(&spec.path) else {
+    let Some(symbol) = registry.lookup_type_dependency(&spec.path) else {
         return invalid(
             owner.to_owned(),
             format!("unknown spec `{}`", spec.path.join(".")),
@@ -1009,6 +1104,34 @@ fn validate_type_expr(
     effect_generics: &BTreeSet<&str>,
 ) -> Result<(), StdRegistryValidationError> {
     match ty {
+        StdType::Existential { bounds } => {
+            for bound in bounds {
+                validate_spec_ref(registry, owner, bound, generics)?;
+            }
+            Ok(())
+        }
+        StdType::Handler {
+            handled,
+            produced,
+            result,
+        } => {
+            if let Some(result) = result {
+                validate_type_expr(registry, owner, result, generics, effect_generics)?;
+            }
+            for row in std::iter::once(handled).chain(produced.iter()) {
+                validate_effect_row(
+                    registry,
+                    &LogicalEffectIndex::build(registry)?,
+                    &owner.split('.').map(str::to_owned).collect::<Vec<_>>(),
+                    &row.effects,
+                    row.tail.as_deref(),
+                    EffectReferenceKind::Effect,
+                    generics,
+                    effect_generics,
+                )?;
+            }
+            Ok(())
+        }
         StdType::Named(name) => validate_named_type(registry, owner, name, 0),
         StdType::NamedApplied { name, args } => {
             validate_named_type(registry, owner, name, args.len())?;
@@ -1103,7 +1226,7 @@ fn validate_named_type(
 ) -> Result<(), StdRegistryValidationError> {
     let declaration = if name.contains('.') {
         registry
-            .lookup_qualified(&name.split('.').collect::<Vec<_>>())
+            .lookup_type_dependency(&name.split('.').collect::<Vec<_>>())
             .and_then(|symbol| match &symbol.decl {
                 StdDecl::Type(declaration) => Some(declaration),
                 _ => None,

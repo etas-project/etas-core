@@ -1,25 +1,25 @@
 module std.tls;
 
-// Public declarations migrated from the legacy API inventory.
-// Maintained as Etas source; native bindings retain existing execution during migration.
+public import std.net.tcp.TcpStream;
 
 // TLS substrate support type.
 public type Host = { host: string };
 
 // TLS substrate support type.
-public type TcpStream;
 
 // TLS substrate support type.
 public type TlsConfig = {  };
 
 // TLS substrate support type.
-public type TlsError;
+public type TlsError = { code: string, message: string };
 
 // TLS substrate support type.
-public type TlsStream;
+type TlsConnection;
+public type TlsStream = { private connection: TlsConnection };
 
 // Open a host-mediated TLS client session over a TCP stream.
-@std.binding("std.tls.connect")
-public flow connect(arg0: std.net.tcp.TcpStream, arg1: std.tls.Host, arg2: std.tls.TlsConfig) -> std.tls.TlsStream ![Error<std.tls.TlsError>] {}
 
+public flow connect(stream: std.net.tcp.TcpStream, host: Host, config: TlsConfig) -> TlsStream ![Error<TlsError>] {
+    return perform std.effects.Tls.handshake(stream, host, config);
+}
 impl std.tls.TlsStream ~ std.stream.ByteStream {}

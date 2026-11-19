@@ -1,22 +1,37 @@
 module std.collections;
 
-@std.role("std.collections.Array")
-public type Array<Element>;
+// Native recursive sum: [] constructs the empty value; :: constructs a cell.
+public type List<T> = [] | T :: List<T>;
 
-@std.role("std.collections.List")
-public type List<Element>;
+// [T] is the language's contiguous array value representation. The std name
+// aliases that representation; its methods are implemented in Etas below.
+public alias Array<T> = [T];
 
-@std.role("std.collections.Map")
-public type Map<Key, Value>;
+// Insertion order is retained in the value. Key equality and collection
+// operations are implemented by the owning impl, not by a runtime map object.
+public type Map<K, V> = {
+    private entries: List<(K, V)>,
+    length: usize,
+};
 
-@std.role("std.collections.Set")
-public type Set<Element>;
+public type Set<T> = {
+    private elements: List<T>,
+    length: usize,
+};
 
-@std.role("std.collections.Range")
-public type Range<Position>;
+public type Range<Position ~ Index> = {
+    start: Position,
+    end: Position,
+    include_start: bool,
+    include_end: bool,
+};
 
-@std.role("std.collections.Slice")
-public type Slice<Element>;
+public type Slice<T> = {
+    private source: Array<T>,
+    private start: usize,
+    length: usize,
+};
 
-@std.role("std.collections.Iter")
-public type Iter<Element>;
+public type Iter<T> = {
+    next: () -> Option<(T, Iter<T>)> ![],
+};

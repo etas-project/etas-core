@@ -2,6 +2,7 @@ module std.text;
 
 import std.text.{TextError, char_count, chars, from_char};
 
+
 public flow concat(parts: Array<string>) -> string {
     var output = "";
     for part in parts limit Iterations(18446744073709551615) {

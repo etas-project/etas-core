@@ -1,7 +1,7 @@
 module std.text;
 
-import std.char.is_whitespace;
 import std.text.{chars, from_char};
+
 
 public flow char_count(value: string) -> usize ![] {
     var count: usize = 0;
@@ -19,7 +19,7 @@ public flow trim_start(value: string) -> string ![] {
     var output = "";
     var started = false;
     for scalar in chars(value) limit Iterations(18446744073709551615) {
-        if started || !is_whitespace(scalar) {
+        if started || !scalar.is_whitespace() {
             output = output + from_char(scalar);
             started = true;
         }
@@ -31,7 +31,7 @@ public flow trim_end(value: string) -> string ![] {
     var output = "";
     var pending = "";
     for scalar in chars(value) limit Iterations(18446744073709551615) {
-        if is_whitespace(scalar) {
+        if scalar.is_whitespace() {
             pending = pending + from_char(scalar);
         } else {
             output = output + pending + from_char(scalar);
@@ -41,13 +41,13 @@ public flow trim_end(value: string) -> string ![] {
     return output;
 }
 
-// Keep text policy in Etas. Only the Unicode scalar property is primitive.
+// Whitespace policy and Unicode property lookup both run as Etas code.
 public flow trim(value: string) -> string ![] {
     var output = "";
     var pending = "";
     var started = false;
     for scalar in chars(value) limit Iterations(18446744073709551615) {
-        if is_whitespace(scalar) {
+        if scalar.is_whitespace() {
             if started { pending = pending + from_char(scalar); }
         } else {
             output = output + pending + from_char(scalar);

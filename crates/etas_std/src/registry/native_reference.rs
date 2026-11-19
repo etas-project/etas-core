@@ -31,11 +31,14 @@ pub struct StdNativeEnumReference {
     pub required_payload_variants: std::collections::BTreeMap<String, Vec<crate::StdPrimitiveType>>,
 }
 
-/// A host payload's ABI import. The checked source owns its opaque declaration;
-/// the host only requires a canonical, non-generic value without exposed storage.
+/// A nominal host payload import. Source owns its declaration. The optional
+/// primitive representation describes a scalar carrier emitted by the host;
+/// otherwise the value has opaque storage.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, etas_core::RetainedSize)]
 pub struct StdNativeOpaqueReference {
     pub path: Vec<String>,
+    #[serde(default)]
+    pub representation: Option<crate::StdPrimitiveType>,
 }
 
 impl StdNativeOpaqueReference {
@@ -43,7 +46,7 @@ impl StdNativeOpaqueReference {
         matches!(declaration, crate::StdDecl::Type(declaration)
             if matches!(declaration.kind, crate::TypeDeclKind::Support | crate::TypeDeclKind::Struct)
                 && declaration.params.is_empty()
-                && declaration.representation.is_none()
+                && declaration.representation == self.representation.map(crate::StdType::Primitive)
                 && declaration.canonical_type.is_none()
                 && !declaration.derivable)
     }
