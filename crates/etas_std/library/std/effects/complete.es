@@ -78,7 +78,7 @@ public effect Session extends Memory {
     @default_handler
     action<T> append(message: std.agent.message.Message<T>) -> std.agent.message.Message<T> ![];
     @default_handler
-    action read(config: std.agent.session.SessionConfig, cursor: Option<std.agent.session.SessionCursor>, limit: Option<u32>) -> std.agent.session.SessionHistoryPage ![];
+    action read(config: std.agent.session.SessionConfig, cursor: Option<std.agent.session.SessionCursor>, limit: Option<u32>) -> std.agent.session.SessionHistoryPage ![Error<std.memory.StorageError>];
     @default_handler
     action publish(config: std.agent.session.SessionConfig, fence: std.agent.session.SessionHistoryFence, content: std.agent.session.SessionContextContent, operation: std.memory.StorageOperationRef) -> std.memory.WriteOutcome<std.agent.session.SessionContextReceipt, std.agent.session.SessionContextRejection> ![Error<std.memory.StorageError>];
     @default_handler

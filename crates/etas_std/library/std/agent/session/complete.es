@@ -63,7 +63,13 @@ impl std.agent.session.Conversation {
         let session = perform std.effects.Session.resolve(config);
         var selected = config;
         selected.id = session;
-        let page = perform std.effects.Session.read(selected, None, None);
+        let page = handle {
+            perform std.effects.Session.read(selected, None, None)
+        } with {
+            Error<std.memory.StorageError>.raise(error) => {
+                std.core.abort(error.message);
+            }
+        };
         let cursor = match page.cursor {
             None => None,
             Some(value) => Some(value.opaque),
