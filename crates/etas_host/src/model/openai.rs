@@ -726,7 +726,7 @@ fn decode_openai_tool_calls(
         let payload_error = |error| {
             super::payload_error::ModelPayloadError::for_tool(&tool, OPENAI_OUTPUT_TOOL, error)
         };
-        let arguments = required_string(function, "arguments").map_err(&payload_error)?;
+        let arguments = required_string(function, "arguments").map_err(payload_error)?;
         let args_json = serde_json::from_str::<Value>(&arguments)
             .map_err(|error| {
                 HostError::new(
@@ -735,7 +735,7 @@ fn decode_openai_tool_calls(
                 )
                 .with_detail("error", error.to_string())
             })
-            .map_err(&payload_error)?;
+            .map_err(payload_error)?;
         if tool == OPENAI_OUTPUT_TOOL {
             structured.push(ModelContent::Value(
                 host_json_to_value(args_json).map_err(payload_error)?,
@@ -757,7 +757,7 @@ fn decode_openai_legacy_function_call(
     let tool = required_string(function_call, "name")?;
     let payload_error =
         |error| super::payload_error::ModelPayloadError::for_tool(&tool, OPENAI_OUTPUT_TOOL, error);
-    let arguments = required_string(function_call, "arguments").map_err(&payload_error)?;
+    let arguments = required_string(function_call, "arguments").map_err(payload_error)?;
     let args_json = serde_json::from_str::<Value>(&arguments)
         .map_err(|error| {
             HostError::new(
@@ -766,7 +766,7 @@ fn decode_openai_legacy_function_call(
             )
             .with_detail("error", error.to_string())
         })
-        .map_err(&payload_error)?;
+        .map_err(payload_error)?;
     if tool == OPENAI_OUTPUT_TOOL {
         Ok((
             vec![ModelContent::Value(

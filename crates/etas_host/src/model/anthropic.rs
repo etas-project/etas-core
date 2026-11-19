@@ -510,7 +510,7 @@ fn decode_anthropic_tool_call(
                 "Anthropic-compatible tool_use block is missing input",
             )
         })
-        .map_err(&payload_error)?;
+        .map_err(payload_error)?;
     let args = host_json_to_value(input).map_err(payload_error)?;
     Ok(ModelToolCall { id, tool, args })
 }

@@ -776,22 +776,17 @@ impl Validator<'_> {
                     })
                     .collect(),
                 TypeInfo::Builtin {
-                    constructor,
-                    arguments,
-                } if matches!(
-                    constructor,
-                    super::BuiltinTypeInfo::CallableDefinition
+                    constructor:
+                        super::BuiltinTypeInfo::CallableDefinition
                         | super::BuiltinTypeInfo::Array
                         | super::BuiltinTypeInfo::List
                         | super::BuiltinTypeInfo::Set
                         | super::BuiltinTypeInfo::Slice
                         | super::BuiltinTypeInfo::Option
                         | super::BuiltinTypeInfo::Map
-                        | super::BuiltinTypeInfo::Result
-                ) =>
-                {
-                    arguments.clone()
-                }
+                        | super::BuiltinTypeInfo::Result,
+                    arguments,
+                } => arguments.clone(),
                 _ => vec![],
             };
             pending.extend(children.into_iter().map(|child| (child, bindings.clone())));

@@ -178,12 +178,7 @@ impl StdRegistryBuilder {
     pub fn source_action_signature(
         &mut self,
         symbol: StdSymbolId,
-        parameters: Vec<crate::StdGenericParam>,
-        selectors: Vec<crate::EffectActionArgKind>,
-        selector_names: Vec<String>,
-        inputs: Vec<crate::StdType>,
-        output: crate::StdType,
-        default_handler_effects: Option<crate::StdEffectRowExpr>,
+        signature: crate::EffectActionDecl,
     ) {
         let StdDecl::EffectAction(action) = &mut self.registry.symbols[symbol.0 as usize]
             .as_mut()
@@ -192,15 +187,16 @@ impl StdRegistryBuilder {
         else {
             unreachable!("checked native action binding");
         };
-        action.default_handler_effect_tail = default_handler_effects
+        action.default_handler_effect_tail = signature
+            .default_handler_effects
             .as_ref()
-            .and_then(|row| row.tail.clone());
-        action.default_handler_effects = default_handler_effects.map(|row| row.effects);
-        action.type_params = parameters;
-        action.effect_args = selectors;
-        action.selector_param_names = selector_names;
-        action.params = inputs;
-        action.output = output;
+            .and(signature.default_handler_effect_tail);
+        action.default_handler_effects = signature.default_handler_effects;
+        action.type_params = signature.type_params;
+        action.effect_args = signature.effect_args;
+        action.selector_param_names = signature.selector_param_names;
+        action.params = signature.params;
+        action.output = signature.output;
     }
 
     /// Keep execution entries backed by action declarations in this source
