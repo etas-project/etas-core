@@ -23,6 +23,23 @@ pub(super) fn parse_session_timestamp(value: &str) -> Option<i128> {
     parse_rfc3339_timestamp(value)
 }
 
+pub fn session_timestamp_millis(value: &str) -> Option<u128> {
+    let seconds = u128::try_from(parse_session_timestamp(value)?).ok()?;
+    let fractional_millis = value
+        .split_once('T')
+        .and_then(|(_, time)| time.split_once('.'))
+        .map_or(0, |(_, fraction)| {
+            fraction
+                .bytes()
+                .take(3)
+                .zip([100, 10, 1])
+                .take_while(|(byte, _)| byte.is_ascii_digit())
+                .map(|(digit, place)| u128::from(digit - b'0') * place)
+                .sum()
+        });
+    seconds.checked_mul(1_000)?.checked_add(fractional_millis)
+}
+
 fn parse_rfc3339_timestamp(value: &str) -> Option<i128> {
     let (timestamp, offset_seconds) = if let Some(timestamp) = value.strip_suffix('Z') {
         (timestamp, 0)

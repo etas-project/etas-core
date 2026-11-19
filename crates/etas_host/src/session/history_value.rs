@@ -7,6 +7,16 @@ pub fn session_history_page_value(
     limit: u32,
     limits: &StorageLimits,
 ) -> Result<HostValue, HostError> {
+    session_history_selection_value(result, expected, Some(limit), limits)
+}
+
+/// Project one bounded page or an already collected history selection.
+pub fn session_history_selection_value(
+    result: &SessionResult,
+    expected: &SessionRef,
+    limit: Option<u32>,
+    limits: &StorageLimits,
+) -> Result<HostValue, HostError> {
     limits.validate()?;
     let SessionResult::History {
         session,
@@ -19,14 +29,16 @@ pub fn session_history_page_value(
     else {
         return Err(invalid("expected a session history page"));
     };
-    if limit == 0
-        || limit as usize > limits.max_page_entries
-        || session != expected
+    let bound = match limit {
+        Some(limit) if limit > 0 && limit as usize <= limits.max_page_entries => limit as usize,
+        Some(_) => return Err(invalid("session page limit is outside checked bounds")),
+        None => limits.max_scan_rows,
+    };
+    if session != expected
         || fence.session_id() != expected.id
         || fence.as_token().len() > limits.max_value_bytes
         || messages.iter().any(|message| &message.session != expected)
-        || messages.len() > limit as usize
-        || messages.len() > limits.max_page_entries
+        || messages.len() > bound
         || cursor.as_ref().is_some_and(|cursor| {
             messages.is_empty() || cursor.opaque.len() > limits.max_value_bytes
         })
