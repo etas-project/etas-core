@@ -22,7 +22,7 @@ pub use container::{
     MetadataSectionKind, PACKAGE_METADATA_FILE, blake3_hash, decode_metadata_artifact,
     encode_metadata_artifact, file_checksum, optional_file_checksum,
     package_metadata_artifact_path, section_from_message, source_payload_checksum,
-    validate_artifact_schema, write_metadata_artifact_file,
+    source_payload_checksum_for_entries, validate_artifact_schema, write_metadata_artifact_file,
 };
 pub use error::MetadataArtifactError;
 pub use model::*;

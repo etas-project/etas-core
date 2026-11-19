@@ -377,6 +377,19 @@ pub fn source_payload_checksum(
     hash_files(package_root, &files)
 }
 
+/// Hash the exact package-relative source bytes already captured by a compiler.
+pub fn source_payload_checksum_for_entries<'a>(
+    entries: impl IntoIterator<Item = (&'a Path, &'a [u8])>,
+) -> String {
+    let mut entries = entries.into_iter().collect::<Vec<_>>();
+    entries.sort_unstable_by_key(|(path, _)| *path);
+    let mut hasher = blake3::Hasher::new();
+    for (path, bytes) in entries {
+        hash_source_entry(&mut hasher, path, bytes);
+    }
+    format!("blake3:{}", hasher.finalize().to_hex())
+}
+
 pub fn file_checksum(path: &Path) -> Result<String, MetadataArtifactError> {
     if !path.exists() {
         return Ok("blake3:missing".to_owned());
@@ -559,16 +572,20 @@ fn hash_files(package_root: &Path, files: &[PathBuf]) -> Result<String, Metadata
     let mut hasher = blake3::Hasher::new();
     for file in files {
         let relative = file.strip_prefix(package_root).unwrap_or(file);
-        hasher.update(relative.to_string_lossy().as_bytes());
-        hasher.update(&[0]);
         let bytes = fs::read(file).map_err(|source| MetadataArtifactError::Io {
             path: file.clone(),
             message: source.to_string(),
         })?;
-        hasher.update(&bytes);
-        hasher.update(&[0]);
+        hash_source_entry(&mut hasher, relative, &bytes);
     }
     Ok(format!("blake3:{}", hasher.finalize().to_hex()))
+}
+
+fn hash_source_entry(hasher: &mut blake3::Hasher, path: &Path, bytes: &[u8]) {
+    hasher.update(path.to_string_lossy().as_bytes());
+    hasher.update(&[0]);
+    hasher.update(bytes);
+    hasher.update(&[0]);
 }
 
 fn unique_temp_path(parent: &Path, prefix: &str) -> PathBuf {
