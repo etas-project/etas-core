@@ -90,6 +90,11 @@ pub(crate) fn validate_registry(registry: &StdRegistry) -> Result<(), StdRegistr
                                 )
                                 .is_some_and(|source| {
                                     source.runtime_role() == Some(role)
+                                        && declaration
+                                            .params
+                                            .iter()
+                                            .map(|parameter| parameter.kind)
+                                            .eq(source.parameter_kinds().iter().copied())
                                         && *declaration
                                             == source.declaration(declaration.params.clone())
                                 }))))

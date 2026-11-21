@@ -1,5 +1,7 @@
 use std::{future::Future, pin::Pin};
 
+mod validation;
+
 use crate::{
     AuthorityContext, ExecutionBudget, HostError, HostErrorCode, HostRequestId, TraceContext,
 };
