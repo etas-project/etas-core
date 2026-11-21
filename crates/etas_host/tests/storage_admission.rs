@@ -120,10 +120,17 @@ async fn memory_admission(limits: StorageLimits) {
         report.operations()[1].outcome(),
         Some(&ExternalOutcome::Confirmed)
     );
-    assert!(matches!(
-        shared.write(request).await.unwrap().result.unwrap(),
-        MemoryWriteResult::Outcome(WriteOutcome::Committed(_))
-    ));
+    // Joining registrations does not wait for Tokio to drop an undelivered
+    // return value. This single-worker barrier observes that response cleanup.
+    tokio::task::spawn_blocking(|| ()).await.unwrap();
+    let outcome = shared.write(request).await.unwrap().result.unwrap();
+    assert!(
+        matches!(
+            outcome,
+            MemoryWriteResult::Outcome(WriteOutcome::Committed(_))
+        ),
+        "{outcome:?}"
+    );
 }
 
 async fn session_admission(limits: StorageLimits) {
@@ -207,10 +214,15 @@ async fn session_admission(limits: StorageLimits) {
         report.operations()[1].outcome(),
         Some(&ExternalOutcome::Confirmed)
     );
-    assert!(matches!(
-        shared.write(request).await.unwrap().result.unwrap(),
-        SessionWriteResult::Outcome(WriteOutcome::Committed(_))
-    ));
+    tokio::task::spawn_blocking(|| ()).await.unwrap();
+    let outcome = shared.write(request).await.unwrap().result.unwrap();
+    assert!(
+        matches!(
+            outcome,
+            SessionWriteResult::Outcome(WriteOutcome::Committed(_))
+        ),
+        "{outcome:?}"
+    );
 }
 
 #[test]

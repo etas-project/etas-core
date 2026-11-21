@@ -1,5 +1,8 @@
 use etas_host::{session::*, *};
 
+#[path = "support/sqlite_contention.rs"]
+mod sqlite_contention;
+
 fn config() -> SessionConfig {
     SessionConfig {
         id: "resolve-receipt".into(),
@@ -200,24 +203,34 @@ async fn concurrent_resolve_has_one_atomic_creator_and_same_key_replay_is_stable
     let path = workspace.path().join("db");
     let left = SqliteSessionClient::open(&path).unwrap();
     let right = SqliteSessionClient::open(&path).unwrap();
+    let keys = [key(), key()];
+    let configuration = config();
+    let operations = keys
+        .clone()
+        .map(|key| resolve_operation_ref(&configuration, key, &StorageLimits::default()).unwrap());
+    let mutations = keys.map(|key| SessionWriteOperation::Resolve {
+        key,
+        config: configuration.clone(),
+    });
     let (a, b) = tokio::join!(
-        write(
-            &left,
-            SessionWriteOperation::Resolve {
-                key: key(),
-                config: config()
-            }
-        ),
-        write(
-            &right,
-            SessionWriteOperation::Resolve {
-                key: key(),
-                config: config()
-            }
-        )
+        write(&left, mutations[0].clone()),
+        write(&right, mutations[1].clone())
     );
-    let a = committed(a);
-    let b = committed(b);
+    let mut outcomes = [a, b];
+    assert!(outcomes.iter().any(|outcome| matches!(
+        outcome,
+        SessionWriteResult::Outcome(WriteOutcome::Committed(_))
+    )));
+    for (index, result) in outcomes.iter_mut().enumerate() {
+        if let SessionWriteResult::Outcome(WriteOutcome::NotCommitted { operation, reason }) =
+            result
+        {
+            sqlite_contention::assert_writer_lock(reason);
+            assert_eq!(*operation, operations[index]);
+            *result = write([&left, &right][index], mutations[index].clone()).await;
+        }
+    }
+    let [a, b] = outcomes.map(committed);
     assert_ne!(a.created, b.created);
     assert_eq!(a.generation, b.generation);
     for receipt in [a, b] {
@@ -225,9 +238,21 @@ async fn concurrent_resolve_has_one_atomic_creator_and_same_key_replay_is_stable
             key: receipt.operation.key.clone(),
             config: config(),
         };
-        let (first, second) = tokio::join!(write(&left, mutation.clone()), write(&right, mutation));
-        assert_eq!(committed(first), receipt);
-        assert_eq!(committed(second), receipt);
+        let (first, second) = tokio::join!(
+            write(&left, mutation.clone()),
+            write(&right, mutation.clone())
+        );
+        for (client, result) in [(&left, first), (&right, second)] {
+            let result = match result {
+                SessionWriteResult::Outcome(WriteOutcome::NotCommitted { operation, reason }) => {
+                    assert_eq!(operation, receipt.operation);
+                    sqlite_contention::assert_writer_lock(&reason);
+                    write(client, mutation.clone()).await
+                }
+                result => result,
+            };
+            assert_eq!(committed(result), receipt);
+        }
     }
 }
 

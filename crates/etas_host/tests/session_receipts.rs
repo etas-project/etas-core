@@ -1,6 +1,9 @@
 use etas_host::session::*;
 use etas_host::*;
 
+#[path = "support/sqlite_contention.rs"]
+mod sqlite_contention;
+
 fn session() -> SessionRef {
     SessionRef {
         id: "receipts".into(),
@@ -351,12 +354,43 @@ async fn sqlite_same_operation_concurrent_connections_append_once() {
     let first = SqliteSessionClient::open(&path).unwrap();
     initialize(&first).await;
     let second = SqliteSessionClient::open(&path).unwrap();
+    let key = key();
+    let message = message("first");
+    let operation = append_operation_ref(&message, key.clone(), &StorageLimits::default()).unwrap();
     let op = SessionWriteOperation::Append {
-        key: key(),
-        message: message("first").into(),
+        key,
+        message: message.into(),
     };
-    let (a, b) = tokio::join!(write(&first, op.clone()), write(&second, op));
-    assert_eq!(committed(a), committed(b));
+    let (a, b) = tokio::join!(write(&first, op.clone()), write(&second, op.clone()));
+    let receipts = [a, b].map(|result| match result {
+        SessionWriteResult::Outcome(WriteOutcome::Committed(SessionWriteReceipt::Append(
+            receipt,
+        ))) => Some(receipt),
+        SessionWriteResult::Outcome(WriteOutcome::NotCommitted {
+            operation: rejected,
+            reason,
+        }) => {
+            assert_eq!(rejected, operation);
+            sqlite_contention::assert_writer_lock(&reason);
+            None
+        }
+        other => {
+            panic!("expected an append receipt or bounded writer-lock contention, got {other:?}")
+        }
+    });
+    let receipt = receipts
+        .iter()
+        .flatten()
+        .next()
+        .expect("one writer must commit");
+    for delivered in receipts.iter().flatten() {
+        assert_eq!(delivered, receipt);
+    }
+    // The worker deliberately bounds lock waits. A competing request may have
+    // been rejected before starting; replay the same identity after settlement
+    // to verify idempotency without relying on either writer finishing in 100ms.
+    assert_eq!(committed(write(&first, op.clone()).await), *receipt);
+    assert_eq!(committed(write(&second, op).await), *receipt);
     let connection = rusqlite::Connection::open(path).unwrap();
     assert_eq!(
         connection

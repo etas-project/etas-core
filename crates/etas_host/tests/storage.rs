@@ -5,6 +5,9 @@ use etas_host::{
     TraceId, WriteCondition,
 };
 
+#[path = "support/sqlite_contention.rs"]
+mod sqlite_contention;
+
 fn store(name: &str) -> StoreRef {
     StoreRef {
         region: MemoryRegionRef {
@@ -168,34 +171,44 @@ async fn separate_sqlite_connections_have_one_cas_winner() {
     let path = workspace.path().join("db");
     let first = SqliteMemoryClient::open(&path).unwrap();
     let version = put(&first, store("values"), "a").await;
+    let operation = MemoryOperation::Put {
+        key: HostValue::String("a".into()),
+        value: HostValue::Unit,
+        condition: WriteCondition::Match(version),
+    };
     let gate = std::sync::Arc::new(tokio::sync::Barrier::new(8));
     let mut tasks = Vec::new();
     for _ in 0..8 {
         let client = SqliteMemoryClient::open(&path).unwrap();
-        let version = version.clone();
+        let operation = operation.clone();
         let gate = gate.clone();
         tasks.push(tokio::spawn(async move {
             gate.wait().await;
-            run(
-                &client,
-                store("values"),
-                MemoryOperation::Put {
-                    key: HostValue::String("a".into()),
-                    value: HostValue::Unit,
-                    condition: WriteCondition::Match(version),
-                },
-            )
-            .await
+            run(&client, store("values"), operation).await
         }));
     }
     let mut writes = 0;
     let mut conflicts = 0;
+    let mut contended = 0;
     for task in tasks {
-        match task.await.unwrap().unwrap() {
-            MemoryResult::Written { .. } => writes += 1,
-            MemoryResult::Conflict(_) => conflicts += 1,
+        match task.await.unwrap() {
+            Ok(MemoryResult::Written { .. }) => writes += 1,
+            Ok(MemoryResult::Conflict(_)) => conflicts += 1,
+            Err(error) => {
+                sqlite_contention::assert_writer_lock(&error);
+                contended += 1;
+            }
             other => panic!("{other:?}"),
         }
+    }
+    for _ in 0..contended {
+        assert!(matches!(
+            run(&first, store("values"), operation.clone())
+                .await
+                .unwrap(),
+            MemoryResult::Conflict(_)
+        ));
+        conflicts += 1;
     }
     assert_eq!((writes, conflicts), (1, 7));
 }
@@ -468,6 +481,7 @@ async fn cross_process_compare_and_swap_has_one_winner() {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
     let mut written = 0;
     let mut conflicts = 0;
+    let mut contended = 0;
     for child in &mut children.0 {
         loop {
             if let Some(status) = child.try_wait().unwrap() {
@@ -489,6 +503,7 @@ async fn cross_process_compare_and_swap_has_one_winner() {
                 assert!(status.success(), "{output}\n{errors}");
                 written += usize::from(output.contains("STORAGE_WRITTEN"));
                 conflicts += usize::from(output.contains("STORAGE_CONFLICT"));
+                contended += usize::from(output.contains("STORAGE_CONTENDED"));
                 break;
             }
             assert!(
@@ -497,6 +512,24 @@ async fn cross_process_compare_and_swap_has_one_winner() {
             );
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         }
+    }
+    assert_eq!((written, conflicts + contended), (1, 3));
+    for _ in 0..contended {
+        assert!(matches!(
+            run(
+                &client,
+                store("values"),
+                MemoryOperation::Put {
+                    key: HostValue::String("a".into()),
+                    value: HostValue::Unit,
+                    condition: WriteCondition::Match(version.clone()),
+                }
+            )
+            .await
+            .unwrap(),
+            MemoryResult::Conflict(_)
+        ));
+        conflicts += 1;
     }
     assert_eq!((written, conflicts), (1, 3));
 }
@@ -523,11 +556,14 @@ fn storage_process_cas_helper() {
                 value: HostValue::Unit,
                 condition: WriteCondition::Match(version),
             },
-        ))
-        .unwrap();
+        ));
     match result {
-        MemoryResult::Written { .. } => println!("STORAGE_WRITTEN"),
-        MemoryResult::Conflict(_) => println!("STORAGE_CONFLICT"),
+        Ok(MemoryResult::Written { .. }) => println!("STORAGE_WRITTEN"),
+        Ok(MemoryResult::Conflict(_)) => println!("STORAGE_CONFLICT"),
+        Err(error) => {
+            sqlite_contention::assert_writer_lock(&error);
+            println!("STORAGE_CONTENDED");
+        }
         other => panic!("{other:?}"),
     }
 }
