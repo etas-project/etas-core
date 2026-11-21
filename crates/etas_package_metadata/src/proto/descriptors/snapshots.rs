@@ -130,28 +130,30 @@ pub(super) fn decode(snapshots: schema::Snapshots) -> Result<DefinitionSnapshots
             },
         })
     };
-    Ok(DefinitionSnapshots {
-        agents: snapshots
-            .agents
-            .into_iter()
-            .map(&decode)
-            .collect::<Result<_, Error>>()?,
-        flows: snapshots
-            .flows
-            .into_iter()
-            .map(&decode)
-            .collect::<Result<_, Error>>()?,
-        tools: snapshots
-            .tools
-            .into_iter()
-            .map(&decode)
-            .collect::<Result<_, Error>>()?,
-        methods: snapshots
-            .methods
-            .into_iter()
-            .map(decode)
-            .collect::<Result<_, Error>>()?,
-    })
+    Ok(DefinitionSnapshots::new(
+        etas_code::descriptor::SnapshotValues {
+            agents: snapshots
+                .agents
+                .into_iter()
+                .map(&decode)
+                .collect::<Result<_, Error>>()?,
+            flows: snapshots
+                .flows
+                .into_iter()
+                .map(&decode)
+                .collect::<Result<_, Error>>()?,
+            tools: snapshots
+                .tools
+                .into_iter()
+                .map(&decode)
+                .collect::<Result<_, Error>>()?,
+            methods: snapshots
+                .methods
+                .into_iter()
+                .map(decode)
+                .collect::<Result<_, Error>>()?,
+        },
+    ))
 }
 
 pub(super) fn validate_wire(

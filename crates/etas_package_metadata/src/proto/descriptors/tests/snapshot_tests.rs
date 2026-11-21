@@ -12,64 +12,66 @@ pub(super) fn with_snapshot() -> DefinitionDescriptorSet {
         generic_context,
         CodeFingerprint::from_bytes([10; 32]),
     );
-    headers.snapshots = Some(DefinitionSnapshots {
-        tools: Vec::new(),
-        methods: vec![],
-        flows: vec![DefinitionSnapshotInfo {
-            identity: flow.clone(),
-            revision: RevisionInputs {
-                definition: headers.callables[0].id.clone(),
-                content: CodeFingerprint::from_bytes([9; 32]),
-                environment: flow_environment,
-                contract: CodeFingerprint::from_bytes([10; 32]),
-                compilation: CodeFingerprint::from_bytes([6; 32]),
-                parent: None,
-            },
-            dependencies: DependencyInfo {
-                environment: flow_environment,
-                lexical_owner: flow.clone(),
-                standard_package: key("std", DefinitionKind::Type).package(),
-                modules: vec![ModuleOriginInfo {
-                    module: flow.module().to_vec(),
-                    package: flow.package(),
-                }],
-                bindings: vec![],
-                artifacts: vec![],
-            },
-            generic_environment_context: Some(generic_context),
-        }],
-        agents: vec![DefinitionSnapshotInfo {
-            identity: agent.identity.clone(),
-            revision: RevisionInputs {
-                definition: agent.default_entry.clone().unwrap(),
-                content: CodeFingerprint::from_bytes([4; 32]),
-                environment,
-                contract: CodeFingerprint::from_bytes([5; 32]),
-                compilation: CodeFingerprint::from_bytes([6; 32]),
-                parent: Some(RevisionKey::from_canonical_fingerprint(
-                    CodeFingerprint::from_bytes([7; 32]),
-                )),
-            },
-            dependencies: DependencyInfo {
-                environment,
-                lexical_owner: agent.identity.clone(),
-                standard_package: key("std", DefinitionKind::Type).package(),
-                modules: vec![ModuleOriginInfo {
-                    module: agent.identity.module().to_vec(),
-                    package: agent.identity.package(),
-                }],
-                bindings: vec![DefinitionBindingInfo {
-                    path: vec!["dependency".into(), "read".into()],
-                    definition: key("read", DefinitionKind::Flow),
-                }],
-                artifacts: vec![DependencyArtifactInfo {
-                    import_root: "dependency".into(),
-                    fingerprint: "aa".repeat(32),
-                }],
-            },
-            generic_environment_context: None,
-        }],
-    });
+    headers.snapshots = Some(DefinitionSnapshots::new(
+        etas_code::descriptor::SnapshotValues {
+            tools: Vec::new(),
+            methods: vec![],
+            flows: vec![DefinitionSnapshotInfo {
+                identity: flow.clone(),
+                revision: RevisionInputs {
+                    definition: headers.callables[0].id.clone(),
+                    content: CodeFingerprint::from_bytes([9; 32]),
+                    environment: flow_environment,
+                    contract: CodeFingerprint::from_bytes([10; 32]),
+                    compilation: CodeFingerprint::from_bytes([6; 32]),
+                    parent: None,
+                },
+                dependencies: DependencyInfo {
+                    environment: flow_environment,
+                    lexical_owner: flow.clone(),
+                    standard_package: key("std", DefinitionKind::Type).package(),
+                    modules: vec![ModuleOriginInfo {
+                        module: flow.module().to_vec(),
+                        package: flow.package(),
+                    }],
+                    bindings: vec![],
+                    artifacts: vec![],
+                },
+                generic_environment_context: Some(generic_context),
+            }],
+            agents: vec![DefinitionSnapshotInfo {
+                identity: agent.identity.clone(),
+                revision: RevisionInputs {
+                    definition: agent.default_entry.clone().unwrap(),
+                    content: CodeFingerprint::from_bytes([4; 32]),
+                    environment,
+                    contract: CodeFingerprint::from_bytes([5; 32]),
+                    compilation: CodeFingerprint::from_bytes([6; 32]),
+                    parent: Some(RevisionKey::from_canonical_fingerprint(
+                        CodeFingerprint::from_bytes([7; 32]),
+                    )),
+                },
+                dependencies: DependencyInfo {
+                    environment,
+                    lexical_owner: agent.identity.clone(),
+                    standard_package: key("std", DefinitionKind::Type).package(),
+                    modules: vec![ModuleOriginInfo {
+                        module: agent.identity.module().to_vec(),
+                        package: agent.identity.package(),
+                    }],
+                    bindings: vec![DefinitionBindingInfo {
+                        path: vec!["dependency".into(), "read".into()],
+                        definition: key("read", DefinitionKind::Flow),
+                    }],
+                    artifacts: vec![DependencyArtifactInfo {
+                        import_root: "dependency".into(),
+                        fingerprint: "aa".repeat(32),
+                    }],
+                },
+                generic_environment_context: None,
+            }],
+        },
+    ));
     set
 }
 
