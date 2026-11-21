@@ -377,3 +377,10 @@ impl RetainedSize for serde_json::Number {
         visitor.allocation(self as *const Self as usize, 6, self.to_string().len());
     }
 }
+
+impl RetainedSize for Box<serde_json::value::RawValue> {
+    fn visit_retained<'a>(&'a self, visitor: &mut MemoryVisitor<'a>) {
+        let text = self.get();
+        visitor.allocation(text.as_ptr() as usize, 0, text.len());
+    }
+}

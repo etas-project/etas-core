@@ -37,7 +37,7 @@ pub use callable::{
 pub use definitions::{
     AgentHeaderInfo, AgentMethodInfo, BodyAccess, CallableBodyInfo, CallableHeaderInfo,
     DefinitionBodies, DefinitionDescriptorSet, DefinitionHeaders, DefinitionSnapshotInfo,
-    DefinitionSnapshots, DefinitionTypeBinding,
+    DefinitionSnapshots, DefinitionTypeBinding, SnapshotValues,
 };
 pub use graph::{DescriptorGraph, DescriptorGraphInput, DescriptorLimits};
 pub use projection::{DescriptorArgument, DescriptorGraphOffsets};

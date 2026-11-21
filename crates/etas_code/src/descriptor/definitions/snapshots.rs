@@ -1,20 +1,101 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    ops::Deref,
+};
 
 use crate::{DefinitionKey, RevisionInfo, RevisionInputs, report::DependencyInfo};
 
 use super::{super::DescriptorError, DefinitionHeaders};
 
-/// Producer snapshot coordinates. Neither these hashes nor saved analysis
-/// authorize execution or reconstruct a native lexical environment.
+/// Producer coordinates are decoded only when reflection requests them. JSON
+/// query archives retain their validated raw representation during ordinary run.
+#[derive(Clone, Debug, etas_core::RetainedSize)]
+pub struct DefinitionSnapshots(std::sync::Arc<SnapshotStorage>);
+
+#[derive(Clone, Debug)]
+struct SnapshotStorage {
+    raw: Option<Box<serde_json::value::RawValue>>,
+    values: std::sync::OnceLock<SnapshotValues>,
+}
+
 #[derive(
     Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
 )]
 #[serde(deny_unknown_fields)]
-pub struct DefinitionSnapshots {
+pub struct SnapshotValues {
     pub agents: Vec<DefinitionSnapshotInfo>,
     pub flows: Vec<DefinitionSnapshotInfo>,
     pub tools: Vec<DefinitionSnapshotInfo>,
     pub methods: Vec<DefinitionSnapshotInfo>,
+}
+
+impl DefinitionSnapshots {
+    pub fn new(values: SnapshotValues) -> Self {
+        Self(std::sync::Arc::new(SnapshotStorage {
+            raw: None,
+            values: values.into(),
+        }))
+    }
+}
+impl std::ops::Deref for DefinitionSnapshots {
+    type Target = SnapshotValues;
+    fn deref(&self) -> &Self::Target {
+        self.0.values.get_or_init(|| {
+            serde_json::from_str(self.0.raw.as_ref().expect("deferred snapshot JSON").get())
+                .expect("published snapshot coordinates")
+        })
+    }
+}
+impl std::ops::DerefMut for DefinitionSnapshots {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        let _ = self.deref();
+        let storage = std::sync::Arc::make_mut(&mut self.0);
+        storage.raw = None;
+        storage.values.get_mut().expect("materialized snapshots")
+    }
+}
+impl PartialEq for DefinitionSnapshots {
+    fn eq(&self, other: &Self) -> bool {
+        std::sync::Arc::ptr_eq(&self.0, &other.0)
+            || match (&self.0.raw, &other.0.raw) {
+                (Some(a), Some(b)) if a.get() == b.get() => true,
+                _ => self.deref() == other.deref(),
+            }
+    }
+}
+impl Eq for DefinitionSnapshots {}
+impl serde::Serialize for DefinitionSnapshots {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        if serializer.is_human_readable()
+            && let Some(raw) = &self.0.raw
+        {
+            return raw.serialize(serializer);
+        }
+        self.deref().serialize(serializer)
+    }
+}
+impl<'de> serde::Deserialize<'de> for DefinitionSnapshots {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        if deserializer.is_human_readable() {
+            let raw = Box::<serde_json::value::RawValue>::deserialize(deserializer)?;
+            Ok(Self(std::sync::Arc::new(SnapshotStorage {
+                raw: Some(raw),
+                values: Default::default(),
+            })))
+        } else {
+            SnapshotValues::deserialize(deserializer).map(Self::new)
+        }
+    }
+}
+impl etas_core::memory::RetainedSize for SnapshotStorage {
+    fn visit_retained<'a>(&'a self, visitor: &mut etas_core::memory::MemoryVisitor<'a>) {
+        if let Some(raw) = &self.raw {
+            visitor.enqueue(raw);
+        }
+        if let Some(values) = self.values.get() {
+            etas_core::memory::RetainedSize::visit_retained(values, visitor);
+        }
+    }
 }
 
 #[derive(
