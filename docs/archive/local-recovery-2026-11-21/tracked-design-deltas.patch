@@ -1,0 +1,475 @@
+# Historical local delta; base: 1b5f7b9a0ff37d5be167f930128a6ad769768381
+--- a/docs/architect/etas-builtin-design.md
++++ b/docs/architect/etas-builtin-design.md
+@@ -4,8 +4,30 @@
+ 
+ Owner: `Architect`
+ 
+-Last updated: `2026-06-21`
++Last updated: `2026-11-04`
+ 
++## Checked Code Operations Boundary
++
++SPEC chapter 18 includes pure code inspection, parsing, formatting, editing and
++diff. Purity does not require all those operations to live in etas_builtin.
++Frontend-dependent parsing/AST formatting use the in-memory CodeSyntaxOperations
++port implemented by frontend. Do not add an etas_builtin -> frontend dependency,
++a second parser, or hidden Host I/O inside a pure kernel.
++
++Reusable pure transformations of neutral etas_code descriptors may live here
++when they remove actual duplication and preserve analysis availability,
++nominal/binder identities and resource bounds. with_body changes code data and
++invalidates old analysis; no kernel manufactures type/spec/checked-artifact proof.
++
++The same pure operation boundary applies to AgentDef<A> and CallableDef<F>;
++bare CallableDef is read-only and cannot recover F or enable editing. Parsing
++and formatting still obey active execution resource limits.
++
++Code.check/compile and candidate execution are outside the pure builtin boundary.
++Public source restoration uses authorized storage plus parse/with_body/compile;
++there is no public binary load/export API. See
++[etas-code-design](etas-code-design.md).
++
+ ## 1. Purpose
+ 
+ `etas_builtin` is the shared implementation crate for pure deterministic
+@@ -115,7 +137,28 @@
+     text/
+       mod.rs
+       string.rs
++      query.rs
++      search.rs
++      split.rs
++      bounds.rs
++      slice.rs
++      transform.rs
++      join.rs
++      parse.rs
++      format.rs
+       char.rs
++      iteration/
++        mod.rs
++        plan.rs
++        cursor.rs
++        step.rs
++      unicode/
++        mod.rs
++        version.rs
++        segment.rs
++        normalize.rs
++        casefold.rs
++        data/
+ 
+     bytes/
+       mod.rs
+@@ -238,6 +281,13 @@
+ 
+ This keeps HIR-only values and runtime-only values out of `etas_builtin`.
+ 
++The owned `BuiltinValue` API is a convenience boundary, not a requirement to
++copy every input. Production text calls reuse borrowed projections and the
++existing `text::join::join_projected` pattern. Lazy text sequences use the
++neutral plan/cursor/step boundary in section 10, not an owned array hidden in
++`BuiltinValue`. Runtime string owners and checkpoint encoding remain outside
++this crate. The same rule applies to future AIR value adapters.
++
+ ## 6. Dispatch API
+ 
+ Recommended API shape:
+@@ -347,3 +397,153 @@
+ 
+ Tests should not load Etas source fixtures. Parser, HIR, and CLI integration
+ tests belong in downstream repositories.
++
++## 10. Text Kernels And Lazy Sequences
++
++The [chapter 19 string contract](../../../etas/docs/design/19-standard-library.md#1-strings-and-text-apis)
++and [std architecture](../../../etas-frontend/docs/architect/etas-std-design.md#65-stdtext)
++define the complete API inventory. Reuse `etas_builtin`, `etas_std`,
++`etas_core` and engine adapters; do not create text/Unicode/iterator crates or
++add new dependencies as part of this architecture update.
++
++### 10.1 Kernel Ownership
++
++Extend the existing `text/` domain by function, as shown in section 4:
++
++| File / subdomain | Responsibility |
++|---|---|
++| `query.rs` | Byte length/emptiness, scalar count, ASCII queries; no numeric parsing |
++| `search.rs` | Exact matching, forward/reverse search, shared finite empty-pattern progression |
++| `split.rs` | Eager/lazy splitting and line/whitespace segmentation using shared scanners |
++| `bounds.rs`, `slice.rs` | Checked position conversion and normalized interval/boundary validation; byte/scalar coordinates stay distinct |
++| `transform.rs` | Locale-independent case/trim/replace primitives; no eager conversion of every sequence output |
++| `join.rs`, `string.rs` | Borrowed sizing/bulk assembly and explicitly bounded primitive string operations; preserve existing unique-buffer optimizations |
++| `parse.rs` | Complete numeric/bool token parsing, concrete width/range checks and stable rendering |
++| `format.rs` | Bounded template scanning/substitution primitive used by the ordinary std implementation |
++| `char.rs` | Scalar properties, ASCII digit and scalar/u32 conversion |
++| `iteration/` | Engine-neutral sequence recipe, cursor state and incremental step semantics |
++| `unicode/` | Pinned segmentation/normalization/full casefold behavior and versioned data |
++| Existing `codec/text.rs` | UTF-8 bytes/text conversion and explicit malformed-input policy |
++
++Move the existing `TextQuery::ParseI32` logic into `parse.rs`; it must no longer
++emit a host-language error string as the source `TextError`. Replace the old
++`TextTransform::Lines -> TextOutput::Array` contract with a lazy sequence
++recipe. `split` remains eager, while `split_iter` uses the same scanner lazily.
++Do not leave competing authoritative implementations in these old branches.
++
++Ordinary std algorithms remain Etas flows where expressible. Kernels provide
++storage/scanning/Unicode primitives and explicit optimizations, not a private
++host operation for every public API. A kernel replacement of an ordinary std
++flow must preserve its checked return/effect contract and edge cases.
++
++### 10.2 Shared Cursor Contract
++
++Use neutral Rust data inside this crate, conceptually:
++
++```rust
++pub enum TextSequenceKind {
++    Chars,
++    CharIndices,
++    Lines,
++    Split,
++    Whitespace,
++    Matches,
++    Graphemes,
++    GraphemeIndices,
++}
++
++pub enum TextElement {
++    Scalar(char),
++    IndexedScalar { byte: usize, scalar: char },
++    Segment { start: usize, end: usize },
++    IndexedSegment { byte: usize, start: usize, end: usize },
++    Match { start: usize, end: usize },
++}
++```
++
++`TextSequencePlan` carries the operation and immutable configuration, such as
++the separator, not an engine value or native iterator pointer.
++`TextCursorState` records the next byte position, terminal/empty-match phase
++and operation-specific scanner state. Its state is operation-tagged, validated
++against the plan and source, and cannot be an arbitrary unchecked byte offset.
++`step(source: &str, plan, cursor, control)` yields one `TextElement`, end, or
++an explicit continue-at-safe-point result. It never materializes all elements.
++
++The engine retains immutable source/configuration ownership and owns a separate
++cursor per loop. The kernel borrows source only for one bounded step, returning
++ranges/scalars rather than storing a self-referential `std::str` iterator.
++Constructing/copying a sequence does not scan/copy the whole source or share a
++mutable cursor. Sequential traversal advances from saved state, not repeated
++`chars().nth(n)` or a prefix rescan per element. Empty-pattern state must allow
++the final empty match exactly once and then terminate.
++
++No HIR, AIR, frame, closure, Host service, checkpoint writer or cancellation
++source is stored here. Long scanners/transformations receive a narrow engine
++work-control interface for byte/node/output accounting and safe-point polling;
++the engine still owns limits, cancellation, scheduling and terminal arbitration.
++If a single element spans a large input, incremental scanner state permits
++yield/cancel without publishing a partial element. Iteration purity does not
++make it exempt from execution limits.
++
++### 10.3 Bounds And Typed Outcomes
++
++Reuse the existing checked integer/Index conversion and collection interval
++rules; text adds byte/scalar/grapheme boundary interpretation. Compare wide
++integer bounds before conversion to `usize`, normalize endpoints with checked
++arithmetic, and validate before slicing. Rust indexing panics, wrapping casts,
++clamping and lossy UTF-8 repair are not source semantics.
++
++`TextFailure` is a structured kernel outcome mapping one-to-one to the seven
++`std.text.TextError` variants. Preserve the difference between:
++
++- a successful absent match/optional access: `None`;
++- a checked slice/index/search-start failure: raised `Error<TextError>`;
++- a parser/formatter rejection: `Result::Err(TextError)`;
++- resource exhaustion, cancellation, invalid checked ABI or allocation failure:
++  the existing execution/adapter failure channel, not a fabricated TextError.
++
++The ABI adapter resolves the expected std enum/variant identity through checked
++type information. A Rust display string, arbitrary record or same-named user
++enum is not a substitute. An existing carrier using a variant tag must validate
++that tag against this expected identity before constructing an Etas value.
++`InvalidIndex`, `InvalidRange`, `NotCharBoundary` and `LengthOverflow` follow
++chapter 19's distinctions. `TextCodecError` remains separate.
++
++Search is exact UTF-8 content matching. Share its non-overlapping and finite
++empty-pattern rule with split/count/replace. Numeric parsing consumes all input,
++does not trim, uses the declared concrete numeric width and distinguishes syntax
++failure from representability overflow. Formatting supports only numeric
++placeholders/escaped braces and already-rendered strings; there are no implicit
++callbacks, reflection or interpolation evaluation.
++
++### 10.4 Unicode And Resource Contracts
++
++Unicode scalar properties, whitespace, case conversion, full casefold,
++normalization and extended grapheme segmentation must use a coherent pinned
++data release. Keep its data/algorithm fingerprint in `unicode/version.rs` and
++publish it through std compatibility metadata. Reuse existing implementation
++components only if their supported version and behavior match that contract;
++the presence of ICU transitively elsewhere is not an implementation proof.
++Missing coverage uses release-pinned data/algorithms within this existing
++module, with provenance and conformance tests, not a new crate, runtime download
++or OS locale backend. Toolchain Unicode helpers require the same version check.
++
++Normalization forms are selected by the checked `Normalization` enum, not an
++unvalidated string. Full casefold is not lowercase; grapheme reverse is not
++scalar reverse. Do not normalize ordinary equality/search or translate offsets
++from transformed text back to the input silently.
++
++`len` and emptiness are constant-time; scans and ordinal conversion may be
++linear. Reuse/extend `join_projected` for checked total-size calculation plus
++bulk assembly, without cloning a temporary parts array or repeatedly copying
++an accumulated prefix. `repeat` checks multiplication and fast-paths empty
++input/zero count; an arithmetic overflow is `LengthOverflow`, not allocation
++failure. Padding width counts scalars. All allocating/scanning operations honor
++active limits before growth and during work, not after a full allocation.
++
++Tests cover every API family, all integer/float widths, Unicode conformance
++vectors, malformed/large inputs, exact errors, empty patterns, line endings,
++range bounds, cursor independence/progress and input/output allocation scaling.
++Use the same pure vectors with interpreter and future AIR adapters; test actual
++bytes/counters/allocations rather than only wall-clock thresholds. Source-level
++fixtures remain in the existing downstream test crates.
+
+# Historical local delta; base: 1b5f7b9a0ff37d5be167f930128a6ad769768381
+--- a/docs/architect/etas-host-design.md
++++ b/docs/architect/etas-host-design.md
+@@ -4,7 +4,7 @@
+ 
+ Owner: `Architect`
+ 
+-Last updated: `2026-09-10`
++Last updated: `2026-11-03`
+ 
+ ## 1. Purpose
+ 
+@@ -1224,7 +1224,58 @@
+ - browser session/origin binding and denial of unapproved profile/session use;
+ - fake clients for deterministic unit tests and opt-in live tests only when a
+   local or explicitly configured service is available.
++
++## 9.6 Compiler Service
++
++SPEC chapter 18 adds Code.check/Code.compile. Add compiler/ as a domain beside
++network/filesystem/memory, with protocol/{request,response,error}.rs,
++service/client.rs, validation/identity.rs and limits/accounting.rs.
++Use shared etas_code descriptors, IDs, reports and artifact references; Host
++does not own AST, HIR, checking or engine preparation.
++
++Compiler requests carry existing request/authority/trace/cancellation/budget
++context. Services use managed bounded work queues and existing operation
++completion/cleanup ownership. Cancelling a Future alone must not leave untracked
++compilation work. Late output is accounted/disposed, not reported as accepted.
++
++The native adapter lives in etas_driver::compiler and uses the real frontend
++candidate pipeline plus an engine-supplied CandidatePublisher. It validates
++immutable draft/base/contract/dependency/config identities, with no hidden
++package download, mutable-path reread or subprocess compiler.
+ 
++Check/Compile protocols carry a checked target family: AgentDef<A> or ordinary
++flow CallableDef<F>, plus stable identity and frozen callable-contract references.
++Both families share service/worker/publication paths; no flow-as-agent adapter
++or signature-string dispatch. Erased CallableDef is not an executable target.
++The publisher prepares an ordinary A/F without invoking it; Host never transports
++frontend TypeId, engine values or caller-local captured frames.
++
++Invalid source or unproved contract compatibility for check is a rejected
++CheckReport, distinct from service failure. Reports use rejected/accepted/guarded;
++guarded requires validated residual plans and target installability, without
++starting an invocation. Compile additionally requires the engine publisher's
++revision-bound installation evidence before returning A/F. Compile rejection raises
++Error<CompileError>(kind=rejected); operational failure of either service uses
++kind=service. Authority denial, cancellation and limit exhaustion retain their
++own enforcement semantics rather than being disguised as reparable source errors.
++
++Inherit active limits and cancellation. Include service-queue wait in WallTime;
++cache misses/retries/revisions do not reset parent budgets. Configure CPU/memory
++ceilings using durations/bytes and verify actual work/allocation/cleanup bounds.
++Tokens/ContextTokens cover model use, not normal compilation. Applicable limit
++exhaustion follows BudgetExceeded semantics, not a generic CompileError.
++
++Pure in-memory code inspection/parsing/editing uses a separate CodeSyntaxOperations
++port in etas_code. Do not add unapproved Code.parse/reflection actions or perform
++I/O behind ^. There is no public std.compiler.load/Code.load or binary export
++surface. Source restoration uses ordinary storage then typed target validation,
++parse/with_body/compile with locked environment and current authority/limits.
++
++Connect CompilerClient to the interpreter's existing host/services.rs port and
++future engine equivalents. Host requests/responses contain no InterpValue,
++CheckedProject or AIR frame. Protocol and layered contracts are detailed in
++[etas-code-design](etas-code-design.md).
++
+ ## 10. Sandbox And Workspace
+ 
+ The authoritative identity, operation, platform, recovery and test contracts
+@@ -1366,7 +1417,73 @@
+ it cannot mediate the requested action safely. The runtime may enforce the same
+ values through its scheduler and host controller. Both use the same protocol
+ values.
++
++### 11.1 Residual Evidence And Trace Monitors
++
++The normative structured obligation/plan contract is
++[Residual Checks And Runtime Trace Monitors](etas-residual-checks-design.md).
++The execution engine owns language scope activation, ordered semantic events,
++monitor state and all exit checks. Host adapters supply typed correlated outcomes
++and trusted evidence, and continue enforcing current authority, exact sandbox
++constraints, cancellation and budgets at the real I/O boundary.
+ 
++An approval attempt or source-constructed result is not an accepted Host grant.
++Evidence must retain request/action/payload identity, actual outcome, issuer,
++scope and validity; unknown external completion cannot be reported as success.
++Reuse existing request/trace IDs and typed redaction/lossless-codec mechanisms.
++One semantic action may produce several Host requests, so physical request IDs
++must not be substituted for semantic action correlation.
++
++The existing `policy::TraceSpecRuntimeClient` and its label-based rule handling
++are not a complete language monitor. Remove such fallback interpretation from
++the residual enforcement path; explicit unsafe/development policy modes cannot
++prove residual coverage. A stateless PolicyClient decision may still be an
++additional deployment check, but cannot replace typed prior-evidence validity,
++scope lifecycle or exact checked event semantics. Do not move a second stateful
++language automaton into Host or CLI. A permit cannot bypass an OS resource guard.
++
++Host trace exporters are observability sinks, not the semantic monitor's input.
++Turning export off or sampling records cannot turn enforcement off. Do not infer
++permissions or approval completion by parsing formatted logs or operation names.
++
++### 11.2 Default Approval Lifetime
++
++Approval is run-scoped and in-memory by default. Bind accepted responses to the
++current root run, checked action/input and applicable narrower scope; a request
++ID/grants record alone is not proof of lifetime or transferable authority.
++Successful completion, failure or cancellation expires that run's approvals.
++Late responses cannot install grants into another run. Memory ownership and
++run identity must enforce this even when caller options/contexts are cloned.
++
++Checkpoint resume, including same-process resume, uses current authority and
++does not inherit old approvals. Preserve historical decisions/completion records
++for audit, not authorization. The engine must invalidate approval-dependent
++monitor Approved/armed readiness as well as live grants and permits. Ordinary
++await/yield, checkpoint creation in a continuing run and source-handler `resume`
++do not create a new root run. Follow the complete
++[run-scoped evidence protocol](etas-residual-checks-design.md#33-run-scoped-approval-and-explicit-reuse).
++
++Reapproval is explicit application/source/handler behavior at a safe continuation;
++neither a Host verifier nor failed restoration may automatically request approval,
++repeat external work or convert historical approval into current permission.
++An unsafe/unrepresentable continuation must be rejected before the side effect.
++
++Persistent approval reuse is disabled by default. Only application configuration
++and an injected trusted reuse provider can enable it. The provider verifies the
++issuer, accepted decision, principal, action/resource/input binding, permitted
++scope mapping, validity and applicable revocation before producing current-run
++evidence. It cannot enlarge current authority or be selected/enabled by a
++checkpoint's data. Missing/failed support fails closed, not back to old grants.
++Use the current authority/policy service layer for this optional port, with typed
++protocol values in context/authority; do not add a stateful CLI monitor or a new
++mandatory Host storage domain.
++
++Default checkpoint/resume does not require SQLite approval tables, signing keys,
++a receipt service or a generic trusted evidence store. Applications own any
++optional persistent approval backend and its retention policy. Storage write
++receipts and retained audit logs are not approval authority. No new std API or
++source syntax is introduced by this lifetime policy.
++
+ ## 12. Trace And Budget
+ 
+ Trace and budget values should also be shared because model, tool, and memory
+@@ -1449,6 +1566,9 @@
+ - tool request argument encoding and response decoding;
+ - memory request/response encoding, version metadata, and conflict behavior;
+ - authority context preservation;
++- run-scoped approval expiry and no grant leakage through cloned contexts or
++  late responses; optional reuse requires explicit configuration and verified
++  current bindings, not a historical record/request ID;
+ - trace id and request id preservation;
+ - rendering-neutral host error construction.
+ - workspace binding, root replacement and handle-relative path confinement;
+
+# Historical local delta; base: 1b5f7b9a0ff37d5be167f930128a6ad769768381
+--- a/docs/architect/phase1-core-design.md
++++ b/docs/architect/phase1-core-design.md
+@@ -16,6 +16,8 @@
+     etas_core/
+     etas_utils/
+     etas_cache/      # generic artifact cache and dependency primitives
++    etas_code/       # neutral definition/revision/descriptor/code-artifact contracts
++    etas_package_metadata/ # versioned compiler-produced public package metadata
+     etas_std/        # declaration-only standard language support surface
+     etas_builtin/    # reusable pure builtin implementations
+     etas_host/       # shared host protocols, adapters, execution lifecycle
+@@ -26,6 +28,37 @@
+ Prefer moving domain-specific concepts out of `etas-core` unless at least two
+ repositories need the same stable representation or pure implementation.
+ 
++### Checked Code Contract Ownership
++
++SPEC chapter 18 is covered by [etas-code-design](etas-code-design.md).
++etas_code is a shared-contract crate, not a compiler implementation: canonical
++definition/revision IDs, immutable descriptor/draft references, frozen contract
++references, structured reports and bounded artifact envelopes. It depends only
++on Core primitives and reusable libraries, never syntax/HIR/checking/engines.
++
++etas_std declares the approved std.compiler APIs and Code actions; etas_host
++adds the compiler protocol/service domain; etas_package_metadata transports
++versioned definition descriptors and explicitly retained bodies. Native parsing
++and compilation stay in frontend, engine preparation stays in the chosen
++runtime, and driver composes those services through supplied ports.
++
++AgentDef<A> and typed CallableDef<F> share code protocols and compile to A/F;
++bare CallableDef is only the specified erased inspection view. Chapter 18 now
++defines support/error contracts, owned retention/export, invalidated-summary
++None values, frozen behavioral inclusion and compiler-resource accounting.
++Public persistence restores source plus locked environment and recompiles;
++there is no public binary load/export API. Neutral metadata is not type/proof
++evidence or authority to execute an agent or flow.
++
++Structured residual contracts also live in the existing `etas_code` crate;
++see [Residual Checks And Runtime Trace Monitors](etas-residual-checks-design.md).
++It owns typed obligations, data-only monitor plans and one pure normalized-clause
++builder/stepper reusing `etas_utils::automaton`. Effects owns source binding and
++abstract proofs; engines own checked-site installation and live scope state.
++Host owns trusted service evidence and actual resource guards. No additional
++residual crate, engine-specific state in Core, or string-based runtime checker
++is introduced. Public reports are descriptions, never installation evidence.
++
+ ### 2.1 `etas_core`
+ 
+ Responsibilities:
+
+# Historical local delta; base: 1b5f7b9a0ff37d5be167f930128a6ad769768381
+--- a/docs/architect/repository-boundary.md
++++ b/docs/architect/repository-boundary.md
+@@ -9,6 +9,9 @@
+ - ids, arenas, interners, result helpers;
+ - generic `fixpoint`, `graph`, and pass-pipeline utilities;
+ - generic artifact cache, fingerprint, dependency, and invalidation primitives;
++- neutral checked-code contracts in etas_code: definition/revision identity,
++  immutable descriptor/draft references, reports, typed residual obligations,
++  neutral monitor plans/pure automaton kernel and bounded artifact envelopes;
+ - standard-library declarations and intrinsic descriptors;
+ - pure deterministic builtin implementations shared by interpreter and
+   runtime;
+@@ -19,6 +22,21 @@
+ Phase 1 crate-level design is recorded in
+ `docs/architect/phase1-core-design.md`.
+ 
++The proposed reflection/compiler-service boundary is detailed in
++[etas-code-design](etas-code-design.md). Compiler implementation stays in
++frontend, native service composition in driver and executable preparation in
++the selected engine. Core transports references and declarations, not HIR or
++checker logic.
++Both AgentDef<A> -> A and CallableDef<F> -> F use that service boundary; erased
++CallableDef is read-only inspection. Source restoration uses ordinary authorized
++storage plus the frontend compiler, not a Core binary loader or runtime-signature
++cast. Package metadata/cache bytes alone never authorize executable publication.
++
++[Residual enforcement](etas-residual-checks-design.md) follows the same boundary:
++shared normalized plans/algorithms, frontend proofs and engine-owned installation/
++execution state. A Host policy client or descriptive check string is not a
++runtime monitor. The pure kernel in Core does not own an invocation or scheduler.
++
+ ## Forbidden
+ 
+ This repository must not own:

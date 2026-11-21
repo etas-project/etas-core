@@ -465,6 +465,7 @@ fn generic_flow() -> DescriptorGraphInput {
                 parameters: vec![ParameterInfo {
                     name: Some("path".into()),
                     ty: TypeInfoRef(0),
+                    default: None,
                 }],
                 output: TypeInfoRef(0),
                 declared_output: None,

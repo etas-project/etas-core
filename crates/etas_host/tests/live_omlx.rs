@@ -13,9 +13,11 @@ const SMALL_LOCAL_MODEL: &str = "Qwen3.5-0.8B-MLX-4bit";
 #[tokio::test]
 #[ignore = "requires local omlx server, ETAS_HOST_LIVE_OMLX=1, and ETAS_HOST_OMLX_API_KEY"]
 async fn local_omlx_openai_adapter_can_complete_when_enabled() {
-    if std::env::var(LIVE_FLAG).as_deref() != Ok("1") {
-        return;
-    }
+    assert_eq!(
+        std::env::var(LIVE_FLAG).as_deref(),
+        Ok("1"),
+        "live test must be explicitly enabled"
+    );
 
     assert_eq!(
         OpenAiProtocolAdapter::LOCAL_OMLX_BASE_URL,
@@ -36,9 +38,11 @@ async fn local_omlx_openai_adapter_can_complete_when_enabled() {
 #[tokio::test]
 #[ignore = "requires local omlx server, ETAS_HOST_LIVE_OMLX=1, and ETAS_HOST_OMLX_API_KEY"]
 async fn local_omlx_anthropic_adapter_can_complete_when_enabled() {
-    if std::env::var(LIVE_FLAG).as_deref() != Ok("1") {
-        return;
-    }
+    assert_eq!(
+        std::env::var(LIVE_FLAG).as_deref(),
+        Ok("1"),
+        "live test must be explicitly enabled"
+    );
 
     assert_eq!(
         AnthropicProtocolAdapter::LOCAL_OMLX_BASE_URL,
@@ -58,11 +62,13 @@ async fn local_omlx_anthropic_adapter_can_complete_when_enabled() {
 
 fn local_completion_request(id: HostRequestId) -> ModelRequest {
     ModelRequest {
+        action: etas_host::ModelAction::Infer,
         id,
         provider: None,
         model: ModelName(SMALL_LOCAL_MODEL.to_owned()),
         messages: vec![
             ModelMessage {
+                provider_data: Vec::new(),
                 role: ModelRole::System,
                 content: vec![ModelContent::Text(
                     "Answer with one short sentence.".to_owned(),
@@ -71,6 +77,7 @@ fn local_completion_request(id: HostRequestId) -> ModelRequest {
                 tool_calls: Vec::new(),
             },
             ModelMessage {
+                provider_data: Vec::new(),
                 role: ModelRole::User,
                 content: vec![ModelContent::Text("Say hello from Etas.".to_owned())],
                 tool_call_id: None,
@@ -82,6 +89,7 @@ fn local_completion_request(id: HostRequestId) -> ModelRequest {
         response_schema: None,
         policy_ref: None,
         options: ModelOptions {
+            attempt_policy: Default::default(),
             temperature: Some(0.0),
             max_output_tokens: Some(1024),
             metadata: Vec::new(),
@@ -139,7 +147,7 @@ fn assert_non_empty_completion(response: ModelResponse) {
         .collect::<Vec<_>>()
         .join("");
     assert!(
-        !text.trim().is_empty() || !response.tool_calls.is_empty(),
+        !text.trim().is_empty() || !response.message.tool_calls.is_empty(),
         "live completion should return assistant text or a tool call"
     );
 }
