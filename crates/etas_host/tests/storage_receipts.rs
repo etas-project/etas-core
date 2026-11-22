@@ -1,6 +1,9 @@
 use etas_host::memory::*;
 use etas_host::*;
 
+#[path = "support/sqlite_contention.rs"]
+mod sqlite_contention;
+
 fn store() -> StoreRef {
     StoreRef {
         region: MemoryRegionRef {
@@ -445,17 +448,46 @@ async fn sqlite_concurrent_same_operation_has_one_revision_and_receipt() {
     let path = workspace.path().join("db");
     let left = SqliteMemoryClient::open(&path).unwrap();
     let right = SqliteMemoryClient::open(&path).unwrap();
-    let operation = MemoryWriteOperation::Mutate {
-        key: key(),
-        mutation: put("once"),
-    };
-    let (a, b) = tokio::join!(write(&left, operation.clone()), write(&right, operation));
-    assert_eq!(committed(a), committed(b));
+    let key = key();
+    let mutation = put("once");
+    let expected = mutation
+        .operation_ref(&store(), key.clone(), &StorageLimits::default())
+        .unwrap();
+    let operation = MemoryWriteOperation::Mutate { key, mutation };
+    let (a, b) = tokio::join!(
+        write(&left, operation.clone()),
+        write(&right, operation.clone())
+    );
+    let mut outcomes = [a, b];
+    assert!(outcomes.iter().any(|outcome| matches!(
+        outcome,
+        MemoryWriteResult::Outcome(WriteOutcome::Committed(_))
+    )));
+    for (index, outcome) in outcomes.iter_mut().enumerate() {
+        if let MemoryWriteResult::Outcome(WriteOutcome::NotCommitted {
+            operation: rejected,
+            reason: MemoryNotCommitted::Rejected(error),
+        }) = outcome
+        {
+            assert_eq!(*rejected, expected);
+            sqlite_contention::assert_writer_lock(error);
+            *outcome = write([&left, &right][index], operation.clone()).await;
+        }
+    }
+    let [a, b] = outcomes.map(committed);
+    assert_eq!(a, b);
     let connection = rusqlite::Connection::open(path).unwrap();
     let revision: i64 = connection
         .query_row("SELECT revision FROM memory_stores", [], |r| r.get(0))
         .unwrap();
     assert_eq!(revision, 1);
+    assert_eq!(
+        connection
+            .query_row("SELECT COUNT(*) FROM memory_receipts", [], |r| r
+                .get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
 }
 
 #[tokio::test]

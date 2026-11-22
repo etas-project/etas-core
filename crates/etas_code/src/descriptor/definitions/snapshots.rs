@@ -48,7 +48,7 @@ impl std::ops::Deref for DefinitionSnapshots {
 }
 impl std::ops::DerefMut for DefinitionSnapshots {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        let _ = self.deref();
+        let _ = <Self as std::ops::Deref>::deref(self);
         let storage = std::sync::Arc::make_mut(&mut self.0);
         storage.raw = None;
         storage.values.get_mut().expect("materialized snapshots")
@@ -400,4 +400,22 @@ fn path(path: &[String]) -> Result<(), DescriptorError> {
 
 fn invalid(reason: &'static str) -> DescriptorError {
     DescriptorError::InvalidDescription { reason }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DefinitionSnapshots;
+
+    #[test]
+    fn shared_deferred_snapshots_can_be_mutated() {
+        let original: DefinitionSnapshots =
+            serde_json::from_str(r#"{"agents":[],"flows":[],"tools":[],"methods":[]}"#).unwrap();
+        let mut edited = original.clone();
+        edited.flows.clear();
+        assert_eq!(original, edited);
+        assert_eq!(
+            serde_json::to_value(&edited).unwrap(),
+            serde_json::to_value(&original).unwrap()
+        );
+    }
 }

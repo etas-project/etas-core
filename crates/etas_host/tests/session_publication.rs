@@ -1,6 +1,9 @@
 use etas_host::session::*;
 use etas_host::*;
 
+#[path = "support/sqlite_contention.rs"]
+mod sqlite_contention;
+
 #[test]
 fn publication_canonical_validation_runs_inside_admitted_worker() {
     use std::future::Future;
@@ -383,10 +386,25 @@ async fn two_sqlite_publishers_cannot_both_commit_against_one_fence() {
     let a = SqliteSessionClient::open(&path).unwrap();
     let b = SqliteSessionClient::open(&path).unwrap();
     setup(&a).await;
-    let one = prepare(&a, "one").await;
-    let two = prepare(&b, "two").await;
-    let (one, two) = tokio::join!(publish(&a, one), publish(&b, two));
-    let outcomes = [one, two];
+    let publications = [prepare(&a, "one").await, prepare(&b, "two").await];
+    let (one, two) = tokio::join!(
+        publish(&a, publications[0].clone()),
+        publish(&b, publications[1].clone())
+    );
+    let mut outcomes = [one, two];
+    for (index, outcome) in outcomes.iter_mut().enumerate() {
+        if let WriteOutcome::NotCommitted {
+            operation,
+            reason: SessionContextRejection::Rejected(error),
+        } = outcome
+        {
+            assert_eq!(*operation, publications[index].operation);
+            sqlite_contention::assert_writer_lock(error);
+            // Once the winning writer has settled, the losing fence must be
+            // stale even if its first attempt timed out before acquiring a lock.
+            *outcome = publish([&a, &b][index], publications[index].clone()).await;
+        }
+    }
     assert_eq!(
         outcomes
             .iter()
