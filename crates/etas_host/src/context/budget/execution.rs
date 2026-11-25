@@ -193,7 +193,7 @@ impl BudgetAccount {
         amount_micros: u128,
         currency: &str,
     ) -> Result<CostReservation, HostError> {
-        validate_currency(&ledger, &self.limits, currency)?;
+        validate_currency(ledger, &self.limits, currency)?;
         let local_max = self.limits.cost.as_ref().map(|cost| cost.max_micros);
         let max = minimum_limit(ledger.max_cost_micros, local_max);
         let next = ledger
@@ -217,7 +217,7 @@ impl BudgetAccount {
         reservation: CostReservation,
         consumed_micros: u128,
     ) -> Result<(), HostError> {
-        validate_currency(&ledger, &self.limits, &reservation.currency)?;
+        validate_currency(ledger, &self.limits, &reservation.currency)?;
         if ledger.reserved_cost_micros < reservation.amount_micros {
             return Err(corrupt_budget_state(
                 "cost reservation exceeds the run-owned reserved cost count",
@@ -245,7 +245,7 @@ impl BudgetAccount {
         ledger: &mut BudgetLedger,
         reservation: CostReservation,
     ) -> Result<(), HostError> {
-        validate_currency(&ledger, &self.limits, &reservation.currency)?;
+        validate_currency(ledger, &self.limits, &reservation.currency)?;
         if ledger.reserved_cost_micros < reservation.amount_micros {
             return Err(corrupt_budget_state(
                 "cost reservation exceeds the run-owned reserved cost count",
@@ -287,7 +287,7 @@ impl BudgetAccount {
         let mut next_cost = ledger.consumed_cost_micros;
         let mut reserved_cost = ledger.reserved_cost_micros;
         if let Some((reservation, consumed_micros)) = &cost {
-            validate_currency(&ledger, &self.limits, &reservation.currency)?;
+            validate_currency(ledger, &self.limits, &reservation.currency)?;
             if reserved_cost < reservation.amount_micros {
                 return Err(corrupt_budget_state(
                     "cost reservation exceeds the run-owned reserved cost count",
@@ -329,7 +329,7 @@ impl BudgetAccount {
             ));
         }
         if let Some(reservation) = &cost_reservation {
-            validate_currency(&ledger, &self.limits, &reservation.currency)?;
+            validate_currency(ledger, &self.limits, &reservation.currency)?;
             if ledger.reserved_cost_micros < reservation.amount_micros {
                 return Err(corrupt_budget_state(
                     "cost reservation exceeds the run-owned reserved cost count",
