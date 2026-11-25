@@ -364,7 +364,12 @@ impl ModelGraphValidator {
                     .as_ref()
                     .is_some_and(|owner| method.implementation() != owner)
                     || (implementation.owner.is_some()
-                        && published.owner_params != implementation.generic_params)
+                        && !published.owner_params.iter().map(GenericParam::binder).eq(
+                            implementation
+                                .generic_params
+                                .iter()
+                                .map(GenericParam::binder),
+                        ))
                 {
                     return Err(invalid(
                         "spec implementation method has a different owner binder",

@@ -280,6 +280,13 @@ pub struct GenericParam {
     pub requires_copy: Option<bool>,
 }
 
+impl GenericParam {
+    // Copy obligations belong to the method body using the owner's parameter.
+    pub(crate) fn binder(&self) -> (&str, GenericParamKind, &[SpecBound]) {
+        (&self.name, self.kind, &self.bounds)
+    }
+}
+
 #[derive(
     Clone,
     Copy,
