@@ -274,6 +274,10 @@ pub struct GenericParam {
     pub name: String,
     pub kind: GenericParamKind,
     pub bounds: Vec<SpecBound>,
+    /// Set by the checker for type parameters of an executable declaration.
+    /// Older artifacts do not carry an ownership contract.
+    #[serde(default)]
+    pub requires_copy: Option<bool>,
 }
 
 #[derive(

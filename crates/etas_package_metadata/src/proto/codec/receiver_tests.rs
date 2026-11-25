@@ -9,6 +9,7 @@ fn method() -> SpecMethod {
         signature: Some(CallableSignature {
             path: vec!["library".into(), "SnapshotEncoder".into(), "encode".into()],
             generic_params: vec![GenericParam {
+                requires_copy: None,
                 name: "Receiver".into(),
                 kind: GenericParamKind::Type,
                 bounds: Vec::new(),

@@ -245,6 +245,7 @@ fn package_parameter_references_require_the_declared_owner_position_and_kind() {
         ..Default::default()
     };
     method.owner_params = vec![GenericParam {
+        requires_copy: None,
         name: "T".into(),
         kind: GenericParamKind::Type,
         bounds: vec![],
@@ -336,6 +337,7 @@ fn inherent_and_associated_methods_preserve_distinct_owner_and_method_binders() 
         let mut method = published_method();
         method.receiver = receiver;
         method.owner_params = vec![GenericParam {
+            requires_copy: None,
             name: "T".into(),
             kind: GenericParamKind::Type,
             bounds: Vec::new(),

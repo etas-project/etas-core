@@ -532,6 +532,8 @@ pub struct ProtoActionGenericParam {
     pub bounds: Vec<ProtoSpecBound>,
     #[prost(string, tag = "3")]
     pub kind: String,
+    #[prost(bool, optional, tag = "4")]
+    pub requires_copy: Option<bool>,
 }
 
 #[derive(Clone, PartialEq, Message)]

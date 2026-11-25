@@ -49,6 +49,7 @@ fn selector_codec_requires_declared_type_parameter_identity_and_kind() {
     }
     let mut action = signature(ActionArgKind::Type, "T");
     action.generic_params.push(GenericParam {
+        requires_copy: None,
         name: "T".into(),
         kind: GenericParamKind::Effect,
         bounds: Vec::new(),

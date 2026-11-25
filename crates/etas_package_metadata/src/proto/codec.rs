@@ -1636,6 +1636,7 @@ fn action_signature_from_proto(
 
 fn generic_param_to_proto(param: &GenericParam) -> ProtoActionGenericParam {
     ProtoActionGenericParam {
+        requires_copy: param.requires_copy,
         name: param.name.clone(),
         bounds: param.bounds.iter().map(spec_bound_to_proto).collect(),
         kind: match param.kind {
@@ -1650,6 +1651,7 @@ fn generic_param_from_proto(
     param: ProtoActionGenericParam,
 ) -> Result<GenericParam, MetadataArtifactError> {
     Ok(GenericParam {
+        requires_copy: param.requires_copy,
         name: required(param.name, "callable generic parameter name")?,
         kind: match param.kind.as_str() {
             "type" => GenericParamKind::Type,

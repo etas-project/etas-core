@@ -124,6 +124,7 @@ mod tests {
         let contract = ConstructorContract {
             path: vec!["library".into(), "Config".into()],
             generic_params: vec![GenericParam {
+                requires_copy: None,
                 name: "T".into(),
                 ..Default::default()
             }],

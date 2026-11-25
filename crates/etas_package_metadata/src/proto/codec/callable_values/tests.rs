@@ -81,6 +81,7 @@ fn callable_graph_round_trips_captures_scoped_generics_and_recursive_returns() {
     let mut graph = graph();
     let value = &mut graph.values[0];
     value.generic_params.push(GenericParam {
+        requires_copy: None,
         name: "T".into(),
         kind: GenericParamKind::Type,
         bounds: vec![],

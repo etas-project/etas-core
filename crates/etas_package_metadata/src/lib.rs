@@ -164,6 +164,7 @@ mod tests {
                 path: vec!["demo".into(), "Within".into()],
                 param_names: vec!["R".into()],
                 generic_params: vec![GenericParam {
+                    requires_copy: None,
                     name: "R".into(),
                     kind: GenericParamKind::Type,
                     bounds: vec![SpecBound {
@@ -443,6 +444,7 @@ mod tests {
         metadata.public_metadata.flows[0]
             .generic_params
             .push(GenericParam {
+                requires_copy: None,
                 name: "E".into(),
                 kind: GenericParamKind::Effect,
                 bounds: Vec::new(),
@@ -493,6 +495,7 @@ mod tests {
             path: vec!["demo".into(), "Wrapper".into()],
             generic_params: vec![
                 GenericParam {
+                    requires_copy: None,
                     name: "T".into(),
                     kind: GenericParamKind::Type,
                     bounds: vec![SpecBound {
@@ -501,6 +504,7 @@ mod tests {
                     }],
                 },
                 GenericParam {
+                    requires_copy: None,
                     name: "Unused".into(),
                     ..Default::default()
                 },
@@ -683,6 +687,7 @@ mod tests {
         let mut metadata = sample_metadata();
         let action = &mut metadata.public_metadata.actions[0];
         action.generic_params = vec![ActionGenericParam {
+            requires_copy: None,
             name: "S".to_owned(),
             kind: GenericParamKind::Type,
             bounds: vec![SpecBound {
@@ -720,6 +725,7 @@ mod tests {
         let flow = &mut metadata.public_metadata.flows[0];
         flow.generic_params = vec![
             GenericParam {
+                requires_copy: Some(true),
                 name: "R".to_owned(),
                 kind: GenericParamKind::Type,
                 bounds: vec![SpecBound {
@@ -728,6 +734,7 @@ mod tests {
                 }],
             },
             GenericParam {
+                requires_copy: None,
                 name: "E".to_owned(),
                 kind: GenericParamKind::Effect,
                 bounds: Vec::new(),
