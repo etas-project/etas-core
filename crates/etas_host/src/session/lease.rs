@@ -9,11 +9,19 @@ use crate::execution::{ExternalOutcome, OperationContext};
 
 /// Runtime-owned identity used to revoke a lease chain when its latest
 /// generation is unknown. This identity is never a language value.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct SessionLeaseScope {
     session: SessionRef,
     key: StorageOperationKey,
+    released: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
+
+impl PartialEq for SessionLeaseScope {
+    fn eq(&self, other: &Self) -> bool {
+        self.session == other.session && self.key == other.key
+    }
+}
+impl Eq for SessionLeaseScope {}
 
 impl SessionLeaseScope {
     pub fn new(session: SessionRef, lifetime: Duration) -> Result<Self, HostError> {
@@ -26,6 +34,7 @@ impl SessionLeaseScope {
         Ok(Self {
             session,
             key: StorageOperationKey::new(lifetime)?,
+            released: Default::default(),
         })
     }
 
@@ -147,6 +156,17 @@ where
     F: Fn(SessionRequest, Option<OperationContext>) -> Fut + Send + 'static,
     Fut: Future<Output = Result<SessionResponse, HostError>> + Send + 'static,
 {
+    if let SessionOperation::Lease(SessionLeaseOperation::Release(lease)) = &request.operation {
+        let released = lease.scope().released.clone();
+        let response = dispatch(request, Some(operation.clone())).await?;
+        if matches!(
+            response.result,
+            Ok(SessionResult::Lease(SessionLeaseResult::Released))
+        ) {
+            released.store(true, std::sync::atomic::Ordering::Release);
+        }
+        return Ok(response);
+    }
     let SessionOperation::Lease(SessionLeaseOperation::Acquire(scope)) = &request.operation else {
         return dispatch(request, Some(operation.clone())).await;
     };
@@ -161,6 +181,7 @@ where
     revoke.operation = SessionOperation::Lease(SessionLeaseOperation::Revoke(scope.clone()));
     revoke.budget = crate::ExecutionBudget::default();
     let resource = registration.context().clone();
+    let released = scope.released.clone();
     let operation = operation.clone();
     let (send, receive) = tokio::sync::oneshot::channel();
     tokio::spawn(async move {
@@ -170,6 +191,10 @@ where
             .signal()
             .release_requested(resource.operation())
             .await;
+        if release.is_ok() && released.load(std::sync::atomic::Ordering::Acquire) {
+            let _ = registration.complete(ExternalOutcome::Confirmed, Vec::new());
+            return;
+        }
         let cleanup = dispatch(revoke, None)
             .await
             .and_then(|response| match response.result? {

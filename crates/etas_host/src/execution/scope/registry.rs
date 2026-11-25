@@ -15,6 +15,7 @@ use crate::{HostError, HostErrorCode, HostRequestId, TraceContext};
 
 #[derive(Debug)]
 struct Node {
+    cleanup_body: bool,
     parent: Option<ScopeId>,
     children: Vec<ScopeId>,
     token: CancellationToken,
@@ -30,6 +31,7 @@ struct Node {
 impl Node {
     fn new(parent: Option<ScopeId>, token: CancellationToken) -> Self {
         Self {
+            cleanup_body: false,
             parent,
             token,
             children: Vec::new(),
@@ -159,11 +161,28 @@ impl ExecutionScope {
     }
 
     pub fn child(&self) -> Result<Self, HostError> {
+        self.create_child(false)
+    }
+
+    /// Reserve teardown while the owner is live. The owner joins this child
+    /// before native resources may release, even after the owner is stopped.
+    pub fn reserve_cleanup_body(&self) -> Result<Self, HostError> {
+        self.create_child(true)
+    }
+
+    fn create_child(&self, cleanup_body: bool) -> Result<Self, HostError> {
         let mut registry = self.lock()?;
         registry.check_admission(self.id, false)?;
         let id = ScopeId(registry.nodes.len() as u64);
-        let token = registry.nodes[self.id.0 as usize].token.child_token();
-        registry.nodes.push(Node::new(Some(self.id), token));
+        let token = if cleanup_body {
+            CancellationToken::new()
+        } else {
+            registry.nodes[self.id.0 as usize].token.child_token()
+        };
+        let mut child = Node::new(Some(self.id), token);
+        child.cleanup_body = cleanup_body;
+        child.body_claimed = cleanup_body;
+        registry.nodes.push(child);
         registry.nodes[self.id.0 as usize].children.push(id);
         drop(registry);
         self.notify();
@@ -331,7 +350,7 @@ impl ExecutionScope {
         let mut notifications = Vec::new();
         while let Some(id) = pending.pop() {
             let node = &mut registry.nodes[id.0 as usize];
-            if node.state == ScopeState::Terminated {
+            if node.state == ScopeState::Terminated || (id != self.id && node.cleanup_body) {
                 continue;
             }
             node.state = ScopeState::Stopping;
@@ -443,7 +462,7 @@ impl Registry {
                 }
                 _ => {}
             }
-            next = node.parent;
+            next = if node.cleanup_body { None } else { node.parent };
         }
         Ok(())
     }

@@ -11,13 +11,15 @@ type LeaseScopeReport<R> = { value: R, failures: Array<std.resource.CleanupFailu
 
 impl LeaseScope {
     @std.role("std.resource.Scope.enter")
-    flow enter<R, effect E>(body: () -> R ![E]) -> LeaseScopeReport<R> ![E];
+    flow enter<R, effect E>(body: () -> R ![E], release: (SessionLease) -> unit ![Error<StorageError>]) -> LeaseScopeReport<R> ![E, Error<StorageError>];
 }
 
 public flow with_lease<R, effect E>(config: SessionConfig, body: (SessionLease) -> R ![E]) -> R ![E, Error<StorageError>] {
     let report = LeaseScope.enter(() => {
         let lease = perform std.effects.Session.acquire(config);
         return body(lease);
+    }, current => {
+        perform std.effects.Session.release(current);
     });
     if !report.failures.is_empty() {
         perform Error.raise<StorageError>(StorageError {
