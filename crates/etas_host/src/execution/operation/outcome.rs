@@ -36,6 +36,11 @@ impl ExternalOutcome {
 }
 
 #[derive(Clone, Debug)]
+pub enum ResourceCleanup {
+    RevokeSessionLease(crate::session::SessionRef),
+}
+
+#[derive(Clone, Debug)]
 pub struct OperationReport {
     pub(crate) id: OperationId,
     pub(crate) scope: ScopeId,
@@ -44,11 +49,16 @@ pub struct OperationReport {
     pub(crate) dispatched: bool,
     pub(crate) outcome: Option<ExternalOutcome>,
     pub(crate) cleanup_errors: Vec<HostError>,
+    pub(crate) cleanup: Option<ResourceCleanup>,
     pub(crate) owner_lost: bool,
     pub(crate) completed_units: Option<u64>,
 }
 
 impl OperationReport {
+    pub fn cleanup(&self) -> Option<&ResourceCleanup> {
+        self.cleanup.as_ref()
+    }
+
     pub fn completed_units(&self) -> Option<u64> {
         self.completed_units
     }

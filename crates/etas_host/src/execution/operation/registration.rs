@@ -29,12 +29,25 @@ impl OperationRegistration {
 
     /// Publish exactly once, after owned local work and cleanup have settled.
     pub fn complete(
-        mut self,
+        self,
         outcome: ExternalOutcome,
         cleanup_errors: Vec<HostError>,
     ) -> Result<(), HostError> {
-        self.scope
-            .complete_operation(self.context.operation(), outcome, cleanup_errors)?;
+        self.complete_with_cleanup(outcome, cleanup_errors, None)
+    }
+
+    pub(crate) fn complete_with_cleanup(
+        mut self,
+        outcome: ExternalOutcome,
+        cleanup_errors: Vec<HostError>,
+        cleanup: Option<super::ResourceCleanup>,
+    ) -> Result<(), HostError> {
+        self.scope.complete_operation(
+            self.context.operation(),
+            outcome,
+            cleanup_errors,
+            cleanup,
+        )?;
         self.completed = true;
         Ok(())
     }

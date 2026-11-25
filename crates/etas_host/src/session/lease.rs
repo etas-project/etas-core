@@ -156,6 +156,8 @@ where
         return Err(error);
     }
     let mut revoke = request.clone();
+    let cleanup_action =
+        crate::execution::ResourceCleanup::RevokeSessionLease(scope.session().clone());
     revoke.operation = SessionOperation::Lease(SessionLeaseOperation::Revoke(scope.clone()));
     revoke.budget = crate::ExecutionBudget::default();
     let resource = registration.context().clone();
@@ -188,7 +190,7 @@ where
             .chain(cleanup.err())
             .map(|error| error.with_detail("resource_kind", "session_lease"))
             .collect();
-        let _ = registration.complete(outcome, errors);
+        let _ = registration.complete_with_cleanup(outcome, errors, Some(cleanup_action));
     });
     receive.await.map_err(|_| {
         HostError::new(

@@ -207,6 +207,7 @@ impl ExecutionScope {
                 dispatched: false,
                 outcome: None,
                 cleanup_errors: Vec::new(),
+                cleanup: None,
                 owner_lost: false,
                 completed_units: None,
             },
@@ -237,6 +238,7 @@ impl ExecutionScope {
         operation: OperationId,
         outcome: ExternalOutcome,
         errors: Vec<HostError>,
+        cleanup: Option<crate::execution::ResourceCleanup>,
     ) -> Result<(), HostError> {
         let mut registry = self.lock()?;
         let record = registry.operation_mut(self.id, operation)?;
@@ -259,6 +261,7 @@ impl ExecutionScope {
             }
             (outcome, _) => outcome,
         });
+        record.cleanup = cleanup;
         record.cleanup_errors.extend(errors);
         registry.settle(self.id);
         drop(registry);

@@ -11,7 +11,7 @@ pub(crate) use operation::DispatchError;
 pub(crate) use operation::run_blocking_managed;
 pub use operation::{
     ExternalOutcome, OperationContext, OperationId, OperationRegistration, OperationReport,
-    OperationResponse,
+    OperationResponse, ResourceCleanup,
 };
 pub use scope::{ExecutionScope, ScopeId, ScopeState};
 pub use shutdown::{PendingWork, ScopeOutcome, StopWait, TerminationReport};
