@@ -13,7 +13,7 @@ public flow format(body: SyntaxBlock) -> string ![] {
     };
     var index: usize = 0;
     var current: Option<SyntaxToken> = None;
-    while index < body.tokens.length limit Iterations(18446744073709551615) {
+    while index < body.tokens.length {
         let next = body.tokens.get(index).unwrap();
         index = index + 1;
         if next.kind != SyntaxTokenKind.Trivia {

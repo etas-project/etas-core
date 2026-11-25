@@ -651,6 +651,7 @@ async fn tcp_client_rejects_unallowlisted_endpoint_before_provider_lookup() {
         .execute(TcpConnectRequest {
             id: HostRequestId(11),
             operation: TcpConnectOperation::Connect {
+                options: Default::default(),
                 endpoint: TcpEndpoint {
                     host: "127.0.0.1".to_owned(),
                     port: 6553,

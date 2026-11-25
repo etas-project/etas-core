@@ -8,7 +8,7 @@ impl CaseMap {
         let code = scalar.to_u32();
         var low: usize = 0;
         var high = self.entries.length;
-        while low < high limit Iterations(32) {
+        while low < high {
             let middle = low + (high - low) / 2;
             let entry = self.entries.get(middle).unwrap();
             if code < entry.code {
@@ -25,7 +25,7 @@ impl CaseMap {
 
 public flow casefold(value: string) -> string ![] {
     var output: Array<string> = [];
-    for scalar in std.text.chars(value) limit Iterations(18446744073709551615) {
+    for scalar in std.text.chars(value) {
         let mapped = match CASEFOLD_MAP.lookup(scalar) {
             Some(text) => text,
             None => std.text.from_char(scalar),

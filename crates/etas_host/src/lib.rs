@@ -1,4 +1,5 @@
 pub mod browser;
+pub mod clock;
 pub mod command;
 pub mod compiler;
 pub mod console;
@@ -10,6 +11,7 @@ pub mod model;
 pub mod network;
 mod network_address;
 pub mod policy;
+pub mod random;
 pub mod replay;
 pub mod sandbox;
 pub mod secret;
@@ -21,6 +23,7 @@ pub use storage::outcome::{
     WriteOutcome,
 };
 pub use storage::receipt::{StorageOperationKey, StorageOperationRef};
+pub use storage::storage_error_value;
 pub mod stream;
 pub mod testing;
 pub mod tls;
@@ -32,6 +35,7 @@ pub use browser::{
     BrowserProtocolClient, BrowserProtocolOperation, BrowserProtocolPayload,
     BrowserProtocolRequest, BrowserProtocolResponse, UnavailableBrowserProtocolClient,
 };
+pub use clock::{ClockObservation, ClockOperation, ClockRequest, ClockResponse};
 pub use command::{
     CommandClient, CommandExecutionPolicy, CommandOutput, CommandProcessClient,
     CommandProcessEvent, CommandProcessOperation, CommandProcessPayload, CommandProcessRequest,
@@ -47,8 +51,9 @@ pub use context::{
     TimeBudget, TokenBudget, TokenReservation, TraceContext, TraceEvent, TraceId, TraceSpanId,
 };
 pub use filesystem::{
-    BoundedDirectoryList, BoundedFileRead, FilesystemClient, FilesystemEntry, FilesystemOperation,
-    FilesystemRequest, FilesystemResponse, FilesystemStat, LocalFilesystemClient,
+    BoundedDirectoryList, BoundedFileRead, FileMode, FileStreamRef, FilesystemClient,
+    FilesystemEntry, FilesystemOperation, FilesystemRequest, FilesystemResponse, FilesystemStat,
+    LocalFilesystemClient,
 };
 pub use memory::{
     InMemoryMemoryClient, MemoryClient, MemoryConflict, MemoryCursor, MemoryEntry, MemoryOperation,
@@ -64,14 +69,15 @@ pub use model::{
     OpenAiTypedOutputEncoding,
 };
 pub use network::{
-    LocalTcpClient, TcpClient, TcpConnectOperation, TcpConnectRequest, TcpConnectResponse,
-    TcpEndpoint, TcpStreamRef, UnavailableTcpClient,
+    LocalTcpClient, TcpClient, TcpConnectOperation, TcpConnectOptions, TcpConnectRequest,
+    TcpConnectResponse, TcpEndpoint, TcpStreamRef, UnavailableTcpClient,
 };
 pub use policy::{
     DenyUnknownPolicyClient, HttpPolicyClient, LocalPolicyDecision, LocalPolicyRule,
     LocalStaticPolicyClient, PolicyClient, PolicyDecision, PolicyEvaluationRequest, PolicyResponse,
     PolicySubject, TRACE_SPEC_RUNTIME_REF, TraceSpecRuntimeClient, UnsafeAllowAllLocalPolicyClient,
 };
+pub use random::{EntropyRequest, EntropyResponse};
 pub use sandbox::{
     CommandIsolation, CommandIsolationReport, CommandPolicy, CommandSandbox, DestructiveOpPolicy,
     FilesystemPolicy, FilesystemSandbox, IsolationRequirements, NetworkEndpoint, NetworkPolicy,
@@ -80,6 +86,7 @@ pub use sandbox::{
     WorkspacePathRef, WorkspaceRegionId, WorkspaceRegionRegistry, WorkspaceRoot, WorkspaceSnapshot,
     WorkspaceSnapshotEntry, WorkspaceStage,
 };
+
 pub use secret::{
     SecretClient, SecretOperation, SecretPayload, SecretRef, SecretRequest, SecretResponse,
     SecretValue, UnavailableSecretClient,
@@ -91,13 +98,13 @@ pub use session::{
 };
 pub use stream::{
     ByteStreamOrigin, ByteStreamRef, ByteStreamStore, LocalStreamClient, StreamClient,
-    StreamFailure, StreamHandleRef, StreamOperation, StreamPayload, StreamRead, StreamRequest,
-    StreamResponse, UnavailableStreamClient,
+    StreamFailure, StreamHandleRef, StreamOperation, StreamPayload, StreamRead, StreamReadScope,
+    StreamRequest, StreamResponse, UnavailableStreamClient,
 };
 pub use testing::{TestWorkspace, assert_host_error_code};
 pub use tls::{
-    LocalTlsClient, TlsClient, TlsConnectOperation, TlsConnectRequest, TlsConnectResponse,
-    TlsStreamRef, UnavailableTlsClient,
+    LocalTlsClient, TlsClient, TlsConnectOperation, TlsConnectOptions, TlsConnectRequest,
+    TlsConnectResponse, TlsStreamRef, TlsTrust, TlsVersion, UnavailableTlsClient,
 };
 pub use tool::{
     HttpToolProtocolAdapter, HttpToolRequestEnvelope, HttpToolResponseEnvelope,

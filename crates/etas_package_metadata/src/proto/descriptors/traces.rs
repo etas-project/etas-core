@@ -262,6 +262,10 @@ pub(super) fn encode(trace: &TraceInfo) -> p::Trace {
                 values: values.iter().map(|r| r.0).collect(),
             }),
             TraceInfo::Repeat(value) => K::Repeat(value.0),
+            TraceInfo::Recursive { id, body } => K::Recursive(p::RecursiveTrace {
+                id: id.as_bytes().to_vec(),
+                body: body.map(|body| body.0),
+            }),
             TraceInfo::UnknownOrder(value) => K::UnknownOrder(value.0),
             TraceInfo::Widened {
                 actions,
@@ -287,6 +291,15 @@ pub(super) fn decode(trace: p::Trace) -> Result<TraceInfo, Error> {
             TraceInfo::Choice(values.values.into_iter().map(TraceInfoRef).collect())
         }
         K::Repeat(value) => TraceInfo::Repeat(TraceInfoRef(value)),
+        K::Recursive(value) => TraceInfo::Recursive {
+            id: etas_code::CodeFingerprint::from_bytes(
+                value
+                    .id
+                    .try_into()
+                    .map_err(|_| invalid("recursive trace identity"))?,
+            ),
+            body: value.body.map(TraceInfoRef),
+        },
         K::UnknownOrder(value) => TraceInfo::UnknownOrder(EffectRowInfoRef(value)),
         K::Widened(value) => TraceInfo::Widened {
             actions: EffectRowInfoRef(value.actions),

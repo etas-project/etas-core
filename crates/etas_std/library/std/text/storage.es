@@ -14,7 +14,7 @@ public flow chars(value: string) -> Iter<char> ![] {
             let width: usize = if lead < 128 { 1 } else if lead < 224 { 2 } else if lead < 240 { 3 } else { 4 };
             var scalar = if width == 1 { lead } else if width == 2 { lead % 32 } else if width == 3 { lead % 16 } else { lead % 8 };
             var index: usize = 1;
-            while index < width limit Iterations(3) {
+            while index < width {
                 scalar = scalar * 64 + input.get(0 + index).unwrap().bits % 64;
                 index = index + 1;
             }
@@ -38,7 +38,7 @@ impl ScalarCursor {
                 let width: usize = if lead < 128 { 1 } else if lead < 224 { 2 } else if lead < 240 { 3 } else { 4 };
                 var scalar = if width == 1 { lead } else if width == 2 { lead % 32 } else if width == 3 { lead % 16 } else { lead % 8 };
                 var index: usize = 1;
-                while index < width limit Iterations(3) {
+                while index < width {
                     scalar = scalar * 64 + input.get(offset + index).unwrap().bits % 64;
                     index = index + 1;
                 }

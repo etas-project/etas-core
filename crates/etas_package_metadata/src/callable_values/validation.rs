@@ -144,6 +144,7 @@ fn validate_parts(
                         &footprint.requested_actions,
                         &footprint.default_actions,
                         &footprint.handled_actions,
+                        &footprint.required_authority,
                     ]
                     .into_iter()
                     .map(Part::Row),
@@ -274,6 +275,11 @@ fn validate_parts(
                 ActionTrace::ParameterCall { parameter } => {
                     has_parameter_calls = true;
                     work.push(Part::Target(parameter));
+                }
+                ActionTrace::Recursive { body, .. } => {
+                    if let Some(body) = body {
+                        work.push(Part::Trace(body));
+                    }
                 }
                 ActionTrace::Empty => {}
             },

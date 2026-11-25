@@ -32,7 +32,7 @@ public flow decode_response_head_prefix(input: bytes, limit: usize) -> HttpDecod
     };
     var offset = next;
     var headers: List<HttpHeader> = [];
-    while true limit Iterations(18446744073709551615) {
+    while true {
         match reader.line(offset) {
             Complete(line, next) => {
                 if line.length() == 0 {
@@ -88,7 +88,7 @@ public flow decode_response_head_incremental(input: bytes, end_of_stream: bool)
     };
     var headers: List<HttpHeader> = [];
     var offset = next;
-    while true limit Iterations(18446744073709551615) {
+    while true {
         match bounded.line(offset) {
             Complete(line, next) => {
                 if line.length() == 0 {
@@ -120,9 +120,9 @@ public flow decode_response_head(input: bytes) -> Result<HttpWireResponseHead, H
 impl HttpWireResponseHead {
     flow framing(self) -> Result<(bool, Option<usize>), HttpCodecFailureKind> ![] {
         var transfer: usize = 0;
-        for header in self.headers limit Iterations(18446744073709551615) {
+        for header in self.headers {
             if std.text.eq_ignore_ascii_case(header.name, "transfer-encoding") {
-                for spelling in std.text.split(header.value, ",") limit Iterations(18446744073709551615) {
+                for spelling in std.text.split(header.value, ",") {
                     let encoding = std.text.trim(spelling);
                     if encoding == "" { continue; }
                     if transfer != 0 || !std.text.eq_ignore_ascii_case(encoding, "chunked") {
@@ -133,12 +133,12 @@ impl HttpWireResponseHead {
             }
         }
         var length: Option<usize> = None;
-        for header in self.headers limit Iterations(18446744073709551615) {
+        for header in self.headers {
             if std.text.eq_ignore_ascii_case(header.name, "content-length") {
-                for spelling in std.text.split(header.value, ",") limit Iterations(18446744073709551615) {
+                for spelling in std.text.split(header.value, ",") {
                     let text = std.text.trim(spelling);
                     if text == "" { return Err(InvalidContentLength); }
-                    for scalar in std.text.chars(text) limit Iterations(18446744073709551615) {
+                    for scalar in std.text.chars(text) {
                         if !scalar.is_ascii_digit() { return Err(InvalidContentLength); }
                     }
                     let parsed = match std.text.parse_usize(text) {

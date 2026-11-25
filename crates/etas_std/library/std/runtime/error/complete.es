@@ -1,5 +1,7 @@
 module std.runtime.error;
 
+public import std.io.IOError;
+
 // Standard runtime error support type.
 public type BudgetExceeded = { resource: string, limit: u128, consumed: u128 };
 
@@ -9,8 +11,6 @@ public type EffectBoundaryViolation = { effect: string, boundary: string };
 // Standard runtime error support type.
 public type HumanRejected = { reason: Option<string> };
 
-// Standard runtime error support type.
-public type IOError = { code: string, message: string };
 
 // Standard runtime error support type.
 public type IndexError = { index: usize, length: usize };

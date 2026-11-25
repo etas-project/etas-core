@@ -13,6 +13,16 @@ pub struct FilesystemRequest {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FilesystemOperation {
+    Open {
+        path: WorkspacePathRef,
+        mode: FileMode,
+    },
+    Sync {
+        file: FileStreamRef,
+    },
+    Canonicalize {
+        path: WorkspacePathRef,
+    },
     Read {
         path: WorkspacePathRef,
     },
@@ -26,6 +36,20 @@ pub enum FilesystemOperation {
         create_dirs: bool,
     },
     Delete {
+        path: WorkspacePathRef,
+    },
+    CreateDir {
+        path: WorkspacePathRef,
+        recursive: bool,
+    },
+    Rename {
+        source: WorkspacePathRef,
+        destination: WorkspacePathRef,
+    },
+    RemoveFile {
+        path: WorkspacePathRef,
+    },
+    RemoveDir {
         path: WorkspacePathRef,
     },
     ReadDir {
@@ -68,6 +92,8 @@ pub enum BoundedDirectoryList<T = WorkspacePathRef> {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FilesystemEntry {
+    FileStream(FileStreamRef),
+    Path(WorkspacePathRef),
     Bytes(Vec<u8>),
     LimitedRead(crate::BoundedFileRead),
     LimitedEntries(BoundedDirectoryList),
@@ -81,4 +107,74 @@ pub struct FilesystemStat {
     pub is_file: bool,
     pub is_dir: bool,
     pub len: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum FileMode {
+    Read,
+    WriteTruncate,
+    Append,
+    ReadWrite,
+    CreateNew,
+}
+impl FileMode {
+    pub fn readable(self) -> bool {
+        matches!(self, Self::Read | Self::ReadWrite)
+    }
+    pub fn writable(self) -> bool {
+        self != Self::Read
+    }
+    pub fn rights(self) -> impl Iterator<Item = &'static str> {
+        [
+            self.readable().then_some("read"),
+            self.writable().then_some("write"),
+        ]
+        .into_iter()
+        .flatten()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FileStreamRef {
+    stream: crate::ByteStreamRef,
+}
+impl FileStreamRef {
+    pub fn issued(handle: crate::StreamHandleRef, path: WorkspacePathRef, mode: FileMode) -> Self {
+        Self {
+            stream: crate::ByteStreamRef::issued(
+                handle,
+                crate::ByteStreamOrigin::File {
+                    path: path.relative,
+                    region: path.region,
+                    mode,
+                },
+            ),
+        }
+    }
+    pub fn handle(&self) -> &crate::StreamHandleRef {
+        self.stream.handle()
+    }
+    pub fn as_byte_stream(&self) -> crate::ByteStreamRef {
+        self.stream.clone()
+    }
+    pub fn path(&self) -> WorkspacePathRef {
+        let crate::ByteStreamOrigin::File { path, region, .. } = self.stream.origin() else {
+            unreachable!()
+        };
+        WorkspacePathRef {
+            region: region.clone(),
+            relative: path.clone(),
+        }
+    }
+    pub fn mode(&self) -> FileMode {
+        let crate::ByteStreamOrigin::File { mode, .. } = self.stream.origin() else {
+            unreachable!()
+        };
+        *mode
+    }
+    pub fn with_read_scope(&self, scope: &crate::StreamReadScope) -> Self {
+        Self {
+            stream: self.stream.clone().with_read_scope(scope),
+        }
+    }
 }

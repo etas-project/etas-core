@@ -5,8 +5,47 @@ use crate::{
     ExistentialMemberWitness, ExistentialValueNode, ExistentialWitnessTarget,
 };
 
-pub(super) fn to_proto(graph: &CallableValueGraph) -> ProtoCallableValueGraph {
+pub(in crate::proto) fn to_proto(graph: &CallableValueGraph) -> ProtoCallableValueGraph {
     ProtoCallableValueGraph {
+        call_inputs: graph
+            .call_inputs
+            .iter()
+            .map(|inputs| ProtoCallableCallInputs {
+                scope: Some(scope_to_proto(inputs.scope)),
+                arguments: inputs
+                    .arguments
+                    .iter()
+                    .map(|argument| ProtoCallableCallArgument {
+                        name: argument.name.clone(),
+                        sources: argument.sources.as_ref().map(|sources| {
+                            ProtoCallableValueSources {
+                                sources: sources.iter().copied().map(source_to_proto).collect(),
+                            }
+                        }),
+                        projections: argument
+                            .projections
+                            .iter()
+                            .map(|projection| ProtoCallableReturnedProjection {
+                                path: projection
+                                    .path
+                                    .iter()
+                                    .map(super::super::value_projection::encode)
+                                    .collect(),
+                                sources: projection.sources.as_ref().map(|sources| {
+                                    ProtoCallableValueSources {
+                                        sources: sources
+                                            .iter()
+                                            .copied()
+                                            .map(source_to_proto)
+                                            .collect(),
+                                    }
+                                }),
+                            })
+                            .collect(),
+                    })
+                    .collect(),
+            })
+            .collect(),
         source_projections: graph
             .source_projections
             .iter()
@@ -107,10 +146,59 @@ pub(super) fn to_proto(graph: &CallableValueGraph) -> ProtoCallableValueGraph {
     }
 }
 
-pub(super) fn from_proto(
+pub(in crate::proto) fn from_proto(
     graph: ProtoCallableValueGraph,
 ) -> Result<CallableValueGraph, MetadataArtifactError> {
     let graph = CallableValueGraph {
+        call_inputs: graph
+            .call_inputs
+            .into_iter()
+            .map(|inputs| {
+                Ok(crate::CallableCallInputs {
+                    scope: scope_from_proto(inputs.scope.ok_or_else(|| {
+                        invalid("callback inputs are missing their lexical scope")
+                    })?)?,
+                    arguments: inputs
+                        .arguments
+                        .into_iter()
+                        .map(|argument| {
+                            Ok(crate::CallableCallArgument {
+                                name: argument.name,
+                                sources: argument
+                                    .sources
+                                    .map(|sources| {
+                                        sources.sources.into_iter().map(source_from_proto).collect()
+                                    })
+                                    .transpose()?,
+                                projections: argument
+                                    .projections
+                                    .into_iter()
+                                    .map(|projection| {
+                                        Ok(crate::CallableReturnedProjection {
+                                            path: projection
+                                                .path
+                                                .into_iter()
+                                                .map(super::super::value_projection::decode)
+                                                .collect::<Result<_, _>>()?,
+                                            sources: projection
+                                                .sources
+                                                .map(|sources| {
+                                                    sources
+                                                        .sources
+                                                        .into_iter()
+                                                        .map(source_from_proto)
+                                                        .collect()
+                                                })
+                                                .transpose()?,
+                                        })
+                                    })
+                                    .collect::<Result<_, MetadataArtifactError>>()?,
+                            })
+                        })
+                        .collect::<Result<_, MetadataArtifactError>>()?,
+                })
+            })
+            .collect::<Result<_, MetadataArtifactError>>()?,
         source_projections: graph
             .source_projections
             .into_iter()
@@ -365,6 +453,12 @@ pub(super) fn behavior_to_proto(
     behavior: &crate::CallableValueBehavior,
 ) -> ProtoCallableValueBehavior {
     ProtoCallableValueBehavior {
+        suspension: behavior
+            .suspension
+            .map(|summary| ProtoCallableValueSuspension {
+                may_suspend: summary.may_suspend,
+                unknown: summary.unknown,
+            }),
         determinism: Some(behavior.determinism as i32),
         independent_determinism: behavior.independent_determinism.map(|value| value as i32),
         host_requirements: behavior
@@ -384,6 +478,12 @@ pub(super) fn behavior_from_proto(
     behavior: ProtoCallableValueBehavior,
 ) -> Result<crate::CallableValueBehavior, MetadataArtifactError> {
     let behavior = crate::CallableValueBehavior {
+        suspension: behavior
+            .suspension
+            .map(|summary| etas_code::descriptor::SuspensionInfo {
+                may_suspend: summary.may_suspend,
+                unknown: summary.unknown,
+            }),
         determinism: crate::CallableValueDeterminism::try_from(
             behavior
                 .determinism

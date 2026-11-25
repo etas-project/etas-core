@@ -23,18 +23,32 @@ impl OperationContext {
     /// Give resources returned by a request the lifetime of its enclosing scope.
     /// Work performed to obtain those resources remains owned by the request.
     pub fn retain_resources_in_parent_scope(mut self) -> Result<Self, crate::HostError> {
-        self.resource_scope = self.signal.parent_scope()?;
+        if self.resource_scope.is_none() {
+            self.resource_scope = self.signal.parent_scope()?;
+        }
         Ok(self)
+    }
+
+    /// The runtime passes its nearest explicit managed owner. The capability
+    /// is local to the host; Etas values cannot manufacture an execution scope.
+    pub fn retain_resources_in_scope(mut self, scope: &ExecutionScope) -> Self {
+        self.resource_scope = Some(scope.clone());
+        self
     }
 
     pub(crate) fn register_resource(
         &self,
     ) -> Result<super::OperationRegistration, crate::HostError> {
         self.signal.check()?;
-        match &self.resource_scope {
+        let registration = match &self.resource_scope {
             Some(scope) => scope.register(None, self.request, self.trace.clone()),
             None => self.register_work(),
-        }
+        }?;
+        registration
+            .context()
+            .signal()
+            .mark_resource(registration.context().operation())?;
+        Ok(registration)
     }
 
     /// Transfer backend work to an owned task. Dropping the receiver never drops

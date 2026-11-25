@@ -216,6 +216,11 @@ impl Remapper<'_> {
                 }
             }
             TraceInfo::Repeat(inner) => self.trace_ref(inner)?,
+            TraceInfo::Recursive { body, .. } => {
+                if let Some(body) = body {
+                    self.trace_ref(body)?;
+                }
+            }
             TraceInfo::UnknownOrder(row) => self.row_ref(row)?,
             TraceInfo::Widened {
                 actions,

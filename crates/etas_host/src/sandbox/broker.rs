@@ -17,6 +17,23 @@ pub struct SandboxBroker {
 }
 
 impl SandboxBroker {
+    pub fn open_file(
+        &self,
+        root: &WorkspaceRoot,
+        path: &std::path::Path,
+        mode: crate::FileMode,
+    ) -> Result<std::fs::File, HostError> {
+        self.filesystem.open_file(root, path, mode)
+    }
+
+    pub fn canonicalize_file(
+        &self,
+        root: &WorkspaceRoot,
+        path: &std::path::Path,
+    ) -> Result<std::path::PathBuf, HostError> {
+        self.filesystem.canonicalize_file(root, path)
+    }
+
     pub fn new(policy: SandboxPolicy) -> Self {
         Self {
             filesystem: FilesystemSandbox::new(policy.filesystem.clone()),
@@ -74,6 +91,30 @@ impl SandboxBroker {
     ) -> Result<WorkspacePath, HostError> {
         self.ensure_not_deny_all()?;
         self.filesystem.create_dir_all(root, path)
+    }
+
+    pub fn create_dir(
+        &self,
+        root: &WorkspaceRoot,
+        path: &Path,
+    ) -> Result<WorkspacePath, HostError> {
+        self.ensure_not_deny_all()?;
+        self.filesystem.create_dir(root, path)
+    }
+
+    pub fn rename(
+        &self,
+        root: &WorkspaceRoot,
+        source: &Path,
+        destination: &Path,
+    ) -> Result<(), HostError> {
+        self.ensure_not_deny_all()?;
+        self.filesystem.rename(root, source, destination)
+    }
+
+    pub fn remove_dir(&self, root: &WorkspaceRoot, path: &Path) -> Result<(), HostError> {
+        self.ensure_destructive_ops_allowed(&self.policy.destructive_ops)?;
+        self.filesystem.remove_dir(root, path)
     }
 
     pub fn read_dir(&self, root: &WorkspaceRoot, path: &Path) -> Result<Vec<String>, HostError> {

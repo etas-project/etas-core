@@ -177,19 +177,7 @@ impl TraceLabel {
                 handlers,
                 ..
             } => callable_work(callable)
-                .saturating_add(
-                    projection
-                        .iter()
-                        .map(|step| match step {
-                            crate::descriptor::ValueProjectionStep::Field(name)
-                            | crate::descriptor::ValueProjectionStep::VariantPayload {
-                                variant: name,
-                                ..
-                            } => 1 + name.len(),
-                            _ => 1,
-                        })
-                        .sum::<usize>(),
-                )
+                .saturating_add(crate::descriptor::ValueProjectionStep::work(projection))
                 .saturating_add(arguments.as_ref().map_or(1, Vec::len))
                 .saturating_add(handlers_work(handlers)),
             Self::Returned {

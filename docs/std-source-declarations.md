@@ -1,5 +1,196 @@
 # Etas standard-library implementation migration
 
+## Active Agent declarations
+
+`std.agent.Active` and `Autonomous` are declared in Etas and exported by the
+prelude. Active membership is compiler evidence for nominal Agent declarations;
+an explicit user impl cannot grant it to a passive type. Generic bounds and
+role super-specs retain this evidence.
+
+The frontend accepts `agent Counter = { value: i32 };` and keeps its private
+state layout separate from the opaque reference type. Ordinary impl methods
+retain Agent ownership and their `self`/`var self` receiver mode. Construction,
+generic state fields, bound methods and external field rejection have frontend
+checks. State layout contributes to the checked session fingerprint.
+
+Source std 0.6.0 installs successfully with native schema 274, body schema 90
+and compiler contract 42. The installed CLI checks a generic `Box<T>` Agent
+using the prelude's Active bound, and rejects a passive type's explicit Active
+impl. The three focused frontend checks pass, including extraction of both
+read and updating request methods.
+
+Checked method calls distinguish ordinary synchronous calls, Agent requests
+and direct self helpers within an update. Helper evidence follows structural
+HIR ownership and stops at Lambda/Handler boundaries. Modern Agent methods
+retain protected method contexts and use ordinary impl method identities for
+definition projection, rather than the legacy impl-agent header path.
+
+Managed construction and requests retain Agentic.create/call in requested and
+default action rows and ordered static traces. Their selectors are checked
+type/method identities; these metadata actions have no user-perform payload
+ABI. Selector specialization therefore uses their checked selector contracts,
+without requiring an executable action signature. Agent state observations
+remain non-deterministic even when the escaping Effect row is empty.
+
+Interpreter 0.21.0 allocates scoped instance references and keeps their private
+committed state in the scheduler. Calls submit child requests and suspend their
+caller. Read admission captures a persistent snapshot; writers queue for one
+exclusive pending state, retaining it across suspension. Normal completion,
+including a returned Err value, commits before reply delivery. Cancellation,
+escaping errors and enclosing Handler finish discard the pending state. The
+trace records instance/request identities and admission/commit versions.
+
+The installed CLI runs `active_counter.es` and `active_counter_suspend.es` at
+O0 and O3. They verify shared aliases, bound read/update methods, independent
+instances, reads during a suspended update, queued writers, commit-before-reply,
+returned Err values, race cancellation and Handler finish rollback. A generic
+Box<i32> also runs under both optimization levels. Counter's initial execution
+milestone is complete; these checks do not establish the full Agent contract.
+The installed active_request_context.es example also runs at both levels:
+two concurrent callers install different Provider handlers for one Service
+instance and receive 101 and 202 from their respective request environments.
+
+Request contexts now own their authority and approval records. A task inherits
+its caller's current grants; subsequent approvals do not spread to its siblings
+or parent. Checked program scopes reuse that same task context. Agent admission
+retains caller and owner constraints. Native boundaries in that request task
+conjoin their grant predicates and sandbox capabilities and check each policy
+separately. Receiver approvals do not become caller approval evidence. Console
+dispatch refreshes authority after mediation.
+
+Host 0.3.0 retains live caller and owner budget accounts. Admission deduplicates
+shared accounts, preserves each account's earlier consumption and absolute
+deadline, and reserves/settles/releases against all accounts atomically. Scope
+observations report the originating account instead of summing duplicate usage.
+The focused host checks and six interpreter context checks pass, including real
+mailbox admission with two accounts and enforcement of an owner-only policy.
+The installed CLI passes 16 runs across O0 and O3. The peer-cancellation entry
+cancels a caller and its parked Agent request, keeps the other caller alive with
+reply 202, and accepts a subsequent request with reply 303. Cancellation follows
+the task lifetime tree across communication groups. Running children retain
+their in-flight completion/error reporting; parked children are notified to
+settle and native resource drains remain in force. All nine existing scheduler
+checks pass, including primary-error preservation during child cancellation.
+Composite account checkpoints are explicitly unsupported rather than flattened.
+
+Evaluator context switches reuse the HIR revision's existing tree index. They
+no longer rebuild the full index at every scheduled task or scoped call. The
+installed verification executable has normal 0755 permissions and a verified
+SDK receipt, so execution reuses the already solved standard-library data.
+
+Delegated Handler authority/budget propagation still needs a complete audit.
+Runtime policy/trace enforcement of managed Agentic boundaries, complete scope
+escape checks/cleanup, construction-time injection, Autonomous startup, member
+tools, erased roles, wait-cycle diagnostics and SessionLease remain unfinished.
+Checkpoint capture of live instances/requests currently reports unsupported;
+it does not persist references without the scheduler's state.
+
+## File streams and acquisition
+
+`std.fs` declares `FileMode`, the source record `FileStream<R>` with a private
+connection capability, and its `ByteStream` implementation. `open`, `sync` and
+`canonicalize` perform the corresponding source `Fs` actions. The host retains
+OS acquisition, contained path resolution, file I/O and stable-storage sync.
+ReadWrite acquisition checks both region grants and sandbox roots before open.
+File reads and writes share one admission slot and file position. Close waits
+for already dispatched file work; it does not imply fsync.
+
+The interpreter preserves region and mode in a sealed file reference. Explicit
+`Fs.open` handlers must resume with the requested region and exact mode. Native
+standard impl owner bounds resolve against checked target declarations when
+linking an SDK generic with a consumer region; portable canonical facts still
+reject source-local bounds.
+
+The normal SDK installation succeeds with native schema 272, body schema 88,
+metadata schema 75 and compiler contract 41. Its artifact hash is
+`blake3:7b1ba00399e0f7256f0c84b18f682ef6fe99908fe134e26b6ba88ae7c07ed28a`.
+The current installed CLI reuses that checked SDK after consumer linking fixes.
+`examples/spec_file_stream.es` completes real writes, sync, shared-position
+read/write, handler resumption and canonicalization inside a resource scope;
+the resulting file contains `heylo`. The existing 22 stream checks also pass.
+
+This is not the complete file authority contract. Mode-dependent required
+authority still needs checked summary propagation and language contract
+enforcement, separately from requested actions and byte-transfer traces. A
+pending native file handler contract also cannot yet cross a checkpoint.
+
+## TCP/TLS values and configuration
+
+`Host.parse`, `Host.to_string`, `Port.new` and `Port.value` are implemented in
+Etas inside their owning impl blocks. Host fields are private. Parsing accepts
+ASCII/punycode DNS labels and IPv4/IPv6 literals, normalizes DNS case and IPv6
+spelling, and preserves an absolute DNS name's trailing dot. It does not resolve
+DNS. Ports store a nonzero u16. `std.tls.Host` re-exports the TCP Host identity.
+
+`DefaultTcpOptions` and `DefaultTlsConfig` are source values used by ordinary
+default parameters. The host protocol carries their timeout, nodelay, minimum
+TLS version, trust anchors and ALPN settings. DNS and all TCP address attempts
+share one local deadline. TLS configuration is validated before taking ownership
+of the TCP connection; the handshake retains the parent deadline and does not
+fall back to plaintext. V13 offers TLS 1.3 only. Certificate and server-name
+checks remain enabled. Bundle accepts PEM certificates or a DER certificate;
+Platform uses the host's existing WebPKI root profile. Requested ALPN must be
+negotiated. Source NetworkError/TlsError records expose the specified stable
+codes and redacted messages.
+
+The normal SDK producer checks and installs these declarations with native
+schema 271, body schema 87, metadata schema 75 and compiler contract 40. The
+artifact hash is
+`blake3:7873b5d69fb8d77513526eb60cf56ec82f9ff20f65d30e357ca2febcf4af20ea`.
+The installed CLI runs `examples/spec_network_config.es` successfully. A local
+TLS 1.3 server also verifies `examples/spec_tls_echo.es`: the client trusts a
+test CA Bundle, negotiates `etas/1`, exchanges ping/pong and closes the stream.
+The existing 22 stream checks pass with explicit protocol defaults and the
+current idempotent-close assertion.
+
+File authority summaries, managed Source cursors and full resource escape/cleanup
+summaries remain unfinished parts of the std spec migration.
+
+## Resource scope source and runtime ownership
+
+`std.resource.scope` now has a real Etas body. It invokes the private
+`Scope.enter` execution capability, examines the returned source
+`ScopeReport<R>`, raises the source `ResourceError.CleanupFailed` on cleanup
+failure, and otherwise returns the body value. Rust retains scope admission,
+child joining, native ownership and typed diagnostic materialization. It does
+not duplicate the public cleanup-error algorithm.
+
+The native scope summary also retains `ScopeReport.value` as the checked result
+of invoking its zero-argument body callback. This relation uses the existing
+`CallResult` parameter projection, including when R is a callable or an
+aggregate carrying one. An `Any` result loses that provenance and cannot justify
+invoking a returned function from its escaping Effect row alone.
+
+Checked callback contracts distinguish a fresh resource boundary from an
+ordinary drained task callback. The compiler derives the resource boundary
+from the private scope role and direct source forwarding, then publishes the
+callback slots for both flows and associated methods. Metadata schema 75 and
+native schema 270 retain those slots through SDK publication and import path
+relocation. This identifies the owner boundary; it does not by itself prove
+that the callback result or an outer assignment is free of newly owned handles.
+Both the published interface fingerprint and the importing project's dependency
+fingerprint include these contracts. A boundary change therefore invalidates
+cached checking even when the ordinary type and Effect signature is unchanged.
+
+The whole standard library checks and installs through the normal SDK producer
+with native schema 270, metadata schema 75 and compiler contract 39. An external cache-off run of
+`examples/spec_resource_scope.es` through that installed CLI succeeds: an
+unawaited child completes before scope return, its explicit outer Handler
+updates the original mutable binding, and the body value is preserved. A second
+scope returns a lambda capturing an immutable local; invoking it after scope
+completion returns 42. The
+installed SDK artifact hash is
+`blake3:5b5193b916303730381cdf47c8dae89b210f827307f980064443c12be999f7cb`.
+
+This is the scope execution batch, not acceptance of the full resource
+contract. Compile-time escape summaries, implicit cleanup action/effect and
+provenance accounting, filesystem-stream ownership, and restoration of active
+explicit resource owners remain open. Active-owner checkpoint capture reports
+unsupported rather than dropping the ownership graph. Completed scope values
+are ordinary typed source data.
+
+## Earlier migration receipts
+
 The maintained std contains 122 Etas files and 600 bodies. A fresh strict
 frontend220 build checks all 600 bodies for types and Effects in 20.763 seconds
 with caching disabled and the complete legacy registry compiled out. The SDK

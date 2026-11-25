@@ -12,7 +12,7 @@ impl ChunkLine {
     }
 
     flow whitespace(var self) -> unit ![] {
-        while self.offset < self.input.length() limit Iterations(18446744073709551615) {
+        while self.offset < self.input.length() {
             let byte = self.input.byte(self.offset);
             if byte != 32 && byte != 9 { return; }
             self.offset = self.offset + 1;
@@ -21,8 +21,7 @@ impl ChunkLine {
 
     flow token(var self) -> bool ![] {
         let start = self.offset;
-        while self.offset < self.input.length() && self.input.byte(self.offset).is_http_token()
-            limit Iterations(18446744073709551615) {
+        while self.offset < self.input.length() && self.input.byte(self.offset).is_http_token() {
             self.offset = self.offset + 1;
         }
         return self.offset != start;
@@ -30,7 +29,7 @@ impl ChunkLine {
 
     flow parse(var self) -> HttpDecodeStep<u64> ![] {
         var size: u64 = 0;
-        while self.offset < self.input.length() limit Iterations(18446744073709551615) {
+        while self.offset < self.input.length() {
             let byte = self.input.byte(self.offset);
             let digit: u64 = if byte >= 48 && byte <= 57 {
                 u64 { bits= byte.bits - 48 }
@@ -50,7 +49,7 @@ impl ChunkLine {
         if self.offset == 0 {
             return self.failure(InvalidChunkSize, 0, self.input.length() == 0);
         }
-        while self.offset < self.input.length() limit Iterations(18446744073709551615) {
+        while self.offset < self.input.length() {
             self.whitespace();
             if self.offset == self.input.length() {
                 return self.failure(InvalidChunkExtension, self.offset, true);
@@ -70,7 +69,7 @@ impl ChunkLine {
                 self.whitespace();
                 if self.offset < self.input.length() && self.input.byte(self.offset) == 34 {
                     self.offset = self.offset + 1;
-                    while true limit Iterations(18446744073709551615) {
+                    while true {
                         if self.offset == self.input.length() {
                             return self.failure(InvalidChunkExtension, self.offset, true);
                         }

@@ -1,7 +1,13 @@
 mod bootstrap;
 pub use bootstrap::{compiler_contract_identity, compiler_contract_registry};
 mod source_role;
+mod storage;
+mod value_equality;
 pub use source_role::StdSourceRole;
+pub use storage::{
+    SOURCE_STORAGE_BUILD, SOURCE_STORAGE_VIEW, source_storage_method, source_storage_owner,
+};
+pub use value_equality::{SOURCE_VALUE_EQUALITY_METHOD, source_value_equality_owner};
 mod execution_role;
 pub use execution_role::StdExecutionRole;
 mod collection;

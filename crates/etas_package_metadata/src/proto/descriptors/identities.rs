@@ -34,6 +34,9 @@ pub(super) fn encode_method(method: &MethodId) -> p::Method {
         selected_spec: implementation.selected_spec().map(encode_key),
         header: implementation.header().as_bytes().to_vec(),
         name: method.name().into(),
+        overload: method
+            .overload()
+            .map(|signature| signature.as_bytes().to_vec()),
     }
 }
 
@@ -77,7 +80,17 @@ pub(super) fn decode_method(method: p::Method) -> Result<MethodId, Error> {
         CodeFingerprint::from_bytes(header),
     )
     .map_err(|error| invalid(error.to_string()))?;
-    MethodId::new(implementation, method.name).map_err(|error| invalid(error.to_string()))
+    let identity =
+        MethodId::new(implementation, method.name).map_err(|error| invalid(error.to_string()))?;
+    match method.overload {
+        None => Ok(identity),
+        Some(bytes) => {
+            let signature = bytes
+                .try_into()
+                .map_err(|_| invalid("method overload fingerprint must contain 32 bytes"))?;
+            Ok(identity.with_overload(CodeFingerprint::from_bytes(signature)))
+        }
+    }
 }
 
 pub(super) fn encode_callable(callable: &CallableId) -> p::Callable {

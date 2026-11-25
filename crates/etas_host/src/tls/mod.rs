@@ -11,25 +11,32 @@ pub use local::LocalTlsClient;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TlsStreamRef {
-    handle: StreamHandleRef,
-    origin: ByteStreamOrigin,
+    stream: crate::ByteStreamRef,
 }
 
 impl TlsStreamRef {
     pub fn issued(handle: StreamHandleRef, origin: ByteStreamOrigin) -> Self {
-        Self { handle, origin }
+        Self {
+            stream: crate::ByteStreamRef::issued(handle, origin),
+        }
     }
 
     pub fn handle(&self) -> &StreamHandleRef {
-        &self.handle
+        self.stream.handle()
     }
 
     pub fn origin(&self) -> &ByteStreamOrigin {
-        &self.origin
+        self.stream.origin()
     }
 
     pub fn as_byte_stream(&self) -> crate::ByteStreamRef {
-        crate::ByteStreamRef::issued(self.handle.clone(), self.origin.clone())
+        self.stream.clone()
+    }
+
+    pub fn with_read_scope(&self, scope: &crate::StreamReadScope) -> Self {
+        Self {
+            stream: self.stream.clone().with_read_scope(scope),
+        }
     }
 }
 
@@ -47,7 +54,28 @@ pub enum TlsConnectOperation {
     Connect {
         stream: TcpStreamRef,
         server_name: String,
+        options: TlsConnectOptions,
     },
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum TlsVersion {
+    #[default]
+    V12,
+    V13,
+}
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum TlsTrust {
+    #[default]
+    Platform,
+    Bundle(Vec<u8>),
+}
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TlsConnectOptions {
+    pub timeout_ms: Option<u128>,
+    pub minimum: TlsVersion,
+    pub trust: TlsTrust,
+    pub alpn: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -3,6 +3,7 @@ mod context;
 mod dedup;
 mod history_value;
 mod in_memory;
+mod lease;
 mod maintenance;
 mod message;
 mod paging;
@@ -24,6 +25,7 @@ pub use history_value::{
     published_context_value, session_history_page_value, session_history_selection_value,
 };
 pub use in_memory::InMemorySessionClient;
+pub use lease::{SessionLease, SessionLeaseOperation, SessionLeaseResult, SessionLeaseScope};
 pub use maintenance::{
     RetentionProgress, SessionMaintenanceClient, SessionMaintenanceOperation,
     SessionMaintenanceRequest, SessionMaintenanceResponse, SessionMaintenanceResult,

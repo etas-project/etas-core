@@ -8,7 +8,7 @@ impl CaseMap {
         let code = scalar.to_u32();
         var low: usize = 0;
         var high = self.entries.length;
-        while low < high limit Iterations(32) {
+        while low < high {
             let middle = low + (high - low) / 2;
             let entry = self.entries.get(middle).unwrap();
             if code < entry.code {
@@ -30,7 +30,7 @@ impl CaseSet {
         let code = scalar.to_u32();
         var low: usize = 0;
         var high = self.ranges.length;
-        while low < high limit Iterations(32) {
+        while low < high {
             let middle = low + (high - low) / 2;
             let (start, end) = self.ranges.get(middle).unwrap();
             if code < start {
@@ -47,14 +47,14 @@ impl CaseSet {
 
 public flow lowercase(value: string) -> string ![] {
     var changed = false;
-    for scalar in chars(value) limit Iterations(18446744073709551615) {
+    for scalar in chars(value) {
         if LOWERCASE_MAP.lookup(scalar).is_some() { changed = true; break; }
     }
     if !changed { return value; }
     var output: Array<string> = [];
     var preceded_by_cased = false;
     var pending_sigma: Option<usize> = None;
-    for scalar in chars(value) limit Iterations(18446744073709551615) {
+    for scalar in chars(value) {
         if !CASE_IGNORABLE_SET.contains(scalar) {
             let following_is_cased = CASED_SET.contains(scalar);
             match pending_sigma {
@@ -84,12 +84,12 @@ public flow lowercase(value: string) -> string ![] {
 
 public flow uppercase(value: string) -> string ![] {
     var changed = false;
-    for scalar in chars(value) limit Iterations(18446744073709551615) {
+    for scalar in chars(value) {
         if UPPERCASE_MAP.lookup(scalar).is_some() { changed = true; break; }
     }
     if !changed { return value; }
     var output: Array<string> = [];
-    for scalar in chars(value) limit Iterations(18446744073709551615) {
+    for scalar in chars(value) {
         let mapped = match UPPERCASE_MAP.lookup(scalar) {
             Some(text) => text,
             None => from_char(scalar),

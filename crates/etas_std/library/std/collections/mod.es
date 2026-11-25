@@ -7,17 +7,15 @@ public type List<T> = [] | T :: List<T>;
 // aliases that representation; its methods are implemented in Etas below.
 public alias Array<T> = [T];
 
-// Insertion order is retained in the value. Key equality and collection
-// operations are implemented by the owning impl, not by a runtime map object.
-public type Map<K, V> = {
-    private entries: List<(K, V)>,
-    length: usize,
+// Hash buckets index insertion-ordered live slots. Storage is private.
+public type Map<K ~ Hash, V> = {
+    private buckets: Array<List<usize>>,
+    private slots: Array<Option<MapEntry<K, V>>>,
+    private length: usize,
+    private base: Hasher,
 };
-
-public type Set<T> = {
-    private elements: List<T>,
-    length: usize,
-};
+public type Set<T ~ Hash> = { private values: Map<T, unit> };
+type MapEntry<K, V> = { key: K, value: V, hash: u64 };
 
 public type Range<Position ~ Index> = {
     start: Position,
@@ -29,7 +27,7 @@ public type Range<Position ~ Index> = {
 public type Slice<T> = {
     private source: Array<T>,
     private start: usize,
-    length: usize,
+    private length: usize,
 };
 
 public type Iter<T> = {

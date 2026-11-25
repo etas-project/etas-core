@@ -7,7 +7,7 @@ public flow constant_time_eq(left: bytes, right: bytes) -> bool ![] {
     let length = if left.length > right.length { left.length } else { right.length };
     var difference: u128 = if left.length == right.length { 0 } else { 1 };
     var index: usize = 0;
-    while index < length limit Iterations(18446744073709551615) {
+    while index < length {
         let a: u8 = match left.get(index) { Some(value) => value, None => 0 };
         let b: u8 = match right.get(index) { Some(value) => value, None => 0 };
         let delta = i32 { bits= a.bits } - i32 { bits= b.bits };
@@ -30,36 +30,36 @@ public flow sha256(input: bytes) -> Digest ![] {
     var state = Sha256State.new();
     let prefix = input.length - input.length % 64;
     var offset: usize = 0;
-    while offset < prefix limit Iterations(18446744073709551615) {
+    while offset < prefix {
         state = state.compress(input, offset);
         offset = offset + 64;
     }
 
     var padding: Array<u8> = [];
-    while offset < input.length limit Iterations(63) {
+    while offset < input.length {
         padding = padding.push(input.get(offset).unwrap());
         offset = offset + 1;
     }
     padding = padding.push(128);
-    while padding.length % 64 != 56 limit Iterations(64) {
+    while padding.length % 64 != 56 {
         padding = padding.push(0);
     }
     let bit_length = (input.length.bits * 8) % 18446744073709551616;
     var length_byte: usize = 0;
-    while length_byte < 8 limit Iterations(8) {
+    while length_byte < 8 {
         let divisor = BYTE_POWERS.get(7 - length_byte).unwrap();
         padding = padding.push(u8 { bits= (bit_length / divisor) % 256 });
         length_byte = length_byte + 1;
     }
     let tail = bytes { data= padding };
     offset = 0;
-    while offset < tail.length limit Iterations(2) {
+    while offset < tail.length {
         state = state.compress(tail, offset);
         offset = offset + 64;
     }
 
     var output: Array<u8> = [];
-    for word in state.words limit Iterations(8) {
+    for word in state.words {
         output = output.extend([
             u8 { bits= word.raw / 16777216 },
             u8 { bits= (word.raw / 65536) % 256 },

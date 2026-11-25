@@ -8,6 +8,34 @@ pub(crate) fn validate(graph: &CallableValueGraph) -> Result<usize, MetadataArti
 }
 
 impl ModelGraphValidator {
+    fn value_projection(
+        &mut self,
+        path: &[etas_code::descriptor::ValueProjectionStep],
+        depth: usize,
+    ) -> Result<(), MetadataArtifactError> {
+        use etas_code::descriptor::ValueProjectionStep as Step;
+        let mut pending = vec![(path, depth)];
+        while let Some((path, depth)) = pending.pop() {
+            self.budget.enter(depth + path.len(), "value projection")?;
+            self.budget.charge(path.len(), "value projection steps")?;
+            for step in path {
+                match step {
+                    Step::Field(name) | Step::VariantPayload { variant: name, .. } => {
+                        self.budget.charge(name.len(), "value projection name")?;
+                    }
+                    Step::Repeat { alternatives } => {
+                        self.budget
+                            .charge(alternatives.len(), "value projection alternatives")?;
+                        pending
+                            .extend(alternatives.iter().map(|path| (path.as_slice(), depth + 1)));
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub(super) fn residual_references(
         &mut self,
         references: &[etas_code::residual::identity::ResidualObligationRef],
@@ -35,19 +63,38 @@ impl ModelGraphValidator {
     ) -> Result<(), MetadataArtifactError> {
         self.budget.enter(depth, "callable value graph")?;
         self.budget
+            .charge(graph.call_inputs.len(), "callback inputs")?;
+        for inputs in &graph.call_inputs {
+            self.budget
+                .charge(inputs.arguments.len(), "callback arguments")?;
+            for argument in &inputs.arguments {
+                self.budget.charge(
+                    argument.name.as_ref().map_or(0, String::len)
+                        + argument.sources.as_ref().map_or(0, Vec::len),
+                    "callback argument data",
+                )?;
+                for projection in &argument.projections {
+                    self.budget.charge(
+                        1 + projection.sources.as_ref().map_or(0, Vec::len),
+                        "callback argument projections",
+                    )?;
+                    self.value_projection(&projection.path, depth)?;
+                }
+            }
+        }
+
+        self.budget
             .charge(graph.parameter_projections.len(), "parameter projections")?;
         for path in &graph.parameter_projections {
-            self.budget
-                .enter(depth + path.len(), "parameter projection")?;
-            self.budget
-                .charge(path.len(), "parameter projection steps")?;
+            self.value_projection(path, depth)?;
         }
 
         for projection in &graph.source_projections {
             self.budget.charge(
-                1 + projection.path.len() + projection.sources.as_ref().map_or(0, Vec::len),
+                1 + projection.sources.as_ref().map_or(0, Vec::len),
                 "returned value projections",
             )?;
+            self.value_projection(&projection.path, depth)?;
         }
         self.budget
             .charge(graph.sources.len(), "callable return sources")?;
@@ -92,9 +139,10 @@ impl ModelGraphValidator {
             )?;
             for projection in &node.returned_projections {
                 self.budget.charge(
-                    1 + projection.path.len() + projection.sources.as_ref().map_or(0, Vec::len),
+                    1 + projection.sources.as_ref().map_or(0, Vec::len),
                     "returned value projections",
                 )?;
+                self.value_projection(&projection.path, depth + 1)?;
             }
             for generic in &node.generic_params {
                 self.generic_param_at_depth(generic, depth + 1)?;
@@ -122,6 +170,30 @@ impl ModelGraphValidator {
 }
 
 impl ProtoGraphValidator {
+    fn value_projection(
+        &mut self,
+        path: &[crate::proto::descriptors::ProtoValueProjectionStep],
+        depth: usize,
+    ) -> Result<(), MetadataArtifactError> {
+        let mut pending = vec![(path, depth)];
+        while let Some((path, depth)) = pending.pop() {
+            self.budget.enter(depth + path.len(), "value projection")?;
+            self.budget.charge(path.len(), "value projection steps")?;
+            for step in path {
+                self.budget.charge(
+                    step.name.len() + step.alternatives.len(),
+                    "value projection data",
+                )?;
+                pending.extend(
+                    step.alternatives
+                        .iter()
+                        .map(|path| (path.steps.as_slice(), depth + 1)),
+                );
+            }
+        }
+        Ok(())
+    }
+
     pub(super) fn residual_references(
         &mut self,
         references: &proto::ProtoResidualReferenceSet,
@@ -148,23 +220,47 @@ impl ProtoGraphValidator {
     ) -> Result<(), MetadataArtifactError> {
         self.budget.enter(depth, "callable value graph")?;
         self.budget
+            .charge(graph.call_inputs.len(), "callback inputs")?;
+        for inputs in &graph.call_inputs {
+            self.budget
+                .charge(inputs.arguments.len(), "callback arguments")?;
+            for argument in &inputs.arguments {
+                self.budget.charge(
+                    argument.name.as_ref().map_or(0, String::len)
+                        + argument
+                            .sources
+                            .as_ref()
+                            .map_or(0, |sources| sources.sources.len()),
+                    "callback argument data",
+                )?;
+                for projection in &argument.projections {
+                    self.budget.charge(
+                        1 + projection
+                            .sources
+                            .as_ref()
+                            .map_or(0, |sources| sources.sources.len()),
+                        "callback argument projections",
+                    )?;
+                    self.value_projection(&projection.path, depth)?;
+                }
+            }
+        }
+
+        self.budget
             .charge(graph.parameter_projections.len(), "parameter projections")?;
         for path in &graph.parameter_projections {
-            self.budget
-                .enter(depth + path.steps.len(), "parameter projection")?;
-            self.budget
-                .charge(path.steps.len(), "parameter projection steps")?;
+            self.value_projection(&path.steps, depth)?;
         }
 
         for projection in &graph.source_projections {
             self.budget.charge(
-                1 + projection.path.len()
-                    + projection
-                        .sources
-                        .as_ref()
-                        .map_or(0, |sources| sources.sources.len()),
+                1 + projection
+                    .sources
+                    .as_ref()
+                    .map_or(0, |sources| sources.sources.len()),
                 "returned value projections",
             )?;
+            self.value_projection(&projection.path, depth)?;
         }
         self.budget
             .charge(graph.sources.len(), "callable return sources")?;
@@ -215,13 +311,13 @@ impl ProtoGraphValidator {
             )?;
             for projection in &node.returned_projections {
                 self.budget.charge(
-                    1 + projection.path.len()
-                        + projection
-                            .sources
-                            .as_ref()
-                            .map_or(0, |sources| sources.sources.len()),
+                    1 + projection
+                        .sources
+                        .as_ref()
+                        .map_or(0, |sources| sources.sources.len()),
                     "returned value projections",
                 )?;
+                self.value_projection(&projection.path, depth + 1)?;
             }
             for generic in &node.generic_params {
                 self.generic_param_at_depth(generic, depth + 1)?;

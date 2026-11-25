@@ -225,6 +225,10 @@ pub enum TraceInfo {
     Seq(Vec<TraceInfoRef>),
     Choice(Vec<TraceInfoRef>),
     Repeat(TraceInfoRef),
+    Recursive {
+        id: crate::CodeFingerprint,
+        body: Option<TraceInfoRef>,
+    },
     UnknownOrder(EffectRowInfoRef),
     Widened {
         actions: EffectRowInfoRef,

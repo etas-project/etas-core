@@ -13,25 +13,32 @@ pub struct TcpEndpoint {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TcpStreamRef {
-    handle: StreamHandleRef,
-    origin: ByteStreamOrigin,
+    stream: crate::ByteStreamRef,
 }
 
 impl TcpStreamRef {
     pub fn issued(handle: StreamHandleRef, origin: ByteStreamOrigin) -> Self {
-        Self { handle, origin }
+        Self {
+            stream: crate::ByteStreamRef::issued(handle, origin),
+        }
     }
 
     pub fn handle(&self) -> &StreamHandleRef {
-        &self.handle
+        self.stream.handle()
     }
 
     pub fn origin(&self) -> &ByteStreamOrigin {
-        &self.origin
+        self.stream.origin()
     }
 
     pub fn as_byte_stream(&self) -> crate::ByteStreamRef {
-        crate::ByteStreamRef::issued(self.handle.clone(), self.origin.clone())
+        self.stream.clone()
+    }
+
+    pub fn with_read_scope(&self, scope: &crate::StreamReadScope) -> Self {
+        Self {
+            stream: self.stream.clone().with_read_scope(scope),
+        }
     }
 }
 
@@ -46,7 +53,25 @@ pub struct TcpConnectRequest {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TcpConnectOperation {
-    Connect { endpoint: TcpEndpoint },
+    Connect {
+        endpoint: TcpEndpoint,
+        options: TcpConnectOptions,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TcpConnectOptions {
+    pub timeout_ms: Option<u128>,
+    pub nodelay: bool,
+}
+
+impl Default for TcpConnectOptions {
+    fn default() -> Self {
+        Self {
+            timeout_ms: None,
+            nodelay: true,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -75,7 +100,7 @@ impl TcpClient for UnavailableTcpClient {
     fn execute(&self, request: TcpConnectRequest) -> Self::ExecuteFuture<'_> {
         Box::pin(async move {
             let policy_check = match &request.operation {
-                TcpConnectOperation::Connect { endpoint } => {
+                TcpConnectOperation::Connect { endpoint, .. } => {
                     SandboxBroker::new(request.authority.sandbox.clone())
                         .resolve_network_endpoint("tcp", &endpoint.host, endpoint.port)
                         .map(|_| ())

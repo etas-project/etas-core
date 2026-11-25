@@ -25,6 +25,7 @@ fn invocation() -> CallableRequestTarget {
         callable_arguments: vec![SpecMethodCallableArgument {
             position: 1,
             sources: CallableValueGraph {
+                call_inputs: Vec::new(),
                 source_projections: Vec::new(),
                 parameter_projections: Vec::new(),
                 objects: Vec::new(),
@@ -164,6 +165,7 @@ fn nested_method_callback_graphs_do_not_reset_the_depth_budget() {
             unreachable!()
         };
         method.callable_arguments[0].sources = CallableValueGraph {
+            call_inputs: Vec::new(),
             source_projections: Vec::new(),
             parameter_projections: Vec::new(),
             objects: Vec::new(),
@@ -173,6 +175,7 @@ fn nested_method_callback_graphs_do_not_reset_the_depth_budget() {
                 residual_checks: Default::default(),
                 handler_requests: None,
                 behavior: CallableValueBehavior {
+                    suspension: None,
                     independent_determinism: Default::default(),
                     determinism: CallableValueDeterminism::Deterministic,
                     host_requirements: Vec::new(),

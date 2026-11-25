@@ -5,7 +5,7 @@ type JsonWriter = {};
 impl JsonWriter {
     flow quote(self, text: string) -> string ![] {
         var output = "\"";
-        for scalar in std.text.chars(text) limit Iterations(18446744073709551615) {
+        for scalar in std.text.chars(text) {
             output = output + match scalar.bits {
                 34 => "\\\"",
                 92 => "\\\\",
@@ -37,14 +37,14 @@ impl JsonWriter {
         var digits = "";
         var decimal: Option<usize> = None;
         var sign = "";
-        for scalar in std.text.chars(fixed) limit Iterations(400) {
+        for scalar in std.text.chars(fixed) {
             if scalar == '-' { sign = "-"; }
             else if scalar == '.' { decimal = Some(digits.length); }
             else { digits = digits + std.text.from_char(scalar); }
         }
         let point = match decimal { Some(at) => at, None => digits.length };
         var first: usize = 0;
-        while first < digits.length && digits.utf8.get(first) == Some(48) limit Iterations(400) {
+        while first < digits.length && digits.utf8.get(first) == Some(48) {
             first = first + 1;
         }
         if first == digits.length { return sign + "0.0"; }
@@ -55,7 +55,7 @@ impl JsonWriter {
             return if decimal.is_some() { fixed } else { fixed + ".0" };
         }
         var last = digits.length;
-        while last > first + 1 && digits.utf8.get(last - 1) == Some(48) limit Iterations(400) {
+        while last > first + 1 && digits.utf8.get(last - 1) == Some(48) {
             last = last - 1;
         }
         var mantissa = std.text.get_byte_slice(digits, [first, first + 1)).unwrap();
@@ -75,7 +75,7 @@ impl JsonWriter {
             JsonValue.Array(values) => {
                 var text = "[";
                 var separator = "";
-                for value in values limit Iterations(18446744073709551615) {
+                for value in values {
                     text = text + separator + self.value(value);
                     separator = ",";
                 }
@@ -83,12 +83,12 @@ impl JsonWriter {
             },
             JsonValue.Object(values) => {
                 var ordered: std.collections.OrderedMap<string, JsonValue> = std.collections.OrderedMap.new();
-                for (key, value) in values limit Iterations(18446744073709551615) {
+                for (key, value) in values {
                     ordered = ordered.insert(key, value);
                 }
                 var text = "{";
                 var separator = "";
-                for (key, value) in ordered.iter() limit Iterations(18446744073709551615) {
+                for (key, value) in ordered.iter() {
                     text = text + separator + self.quote(key) + ":" + self.value(value);
                     separator = ",";
                 }

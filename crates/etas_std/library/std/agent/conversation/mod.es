@@ -55,7 +55,7 @@ public flow append_step<C, O>(conversation: Conversation, step: StepResult<C, O>
                 return Err(StepDiagnostic.protocol_error("a tool request turn must contain at least one call"));
             }
             var seen: OrderedMap<string, bool> = OrderedMap.new();
-            for call in calls limit Iterations(18446744073709551615) {
+            for call in calls {
                 if call.id == "" || seen.contains_key(call.id) {
                     return Err(StepDiagnostic.protocol_error("tool call IDs must be nonempty and unique within a turn"));
                 }
@@ -87,14 +87,14 @@ public flow append_results<C>(conversation: Conversation, results: Array<ToolRes
         return Err(StepDiagnostic.protocol_error("tool results must complete exactly the pending call set"));
     }
     var by_id: OrderedMap<string, ProtocolResult> = OrderedMap.new();
-    for result in results limit Iterations(18446744073709551615) {
+    for result in results {
         if by_id.contains_key(result.call_id) {
             return Err(StepDiagnostic.protocol_error("tool results contain duplicate call IDs"));
         }
         by_id = by_id.insert(result.call_id, ProtocolResult { call_id= result.call_id, result= result.result });
     }
     var ordered: Array<ProtocolResult> = [];
-    for call in protocol_state.pending limit Iterations(18446744073709551615) {
+    for call in protocol_state.pending {
         match by_id.get(call.id) {
             None => { return Err(StepDiagnostic.protocol_error("tool results contain a missing or foreign call ID")); },
             Some(result) => { ordered = ordered.push(result); },

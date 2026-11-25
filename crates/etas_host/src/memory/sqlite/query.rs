@@ -7,13 +7,23 @@ impl MemoryDatabase<'_> {
         query: MemoryQuery,
         limit: Option<u32>,
     ) -> Result<MemoryResult, HostError> {
-        if !query.order_by.is_empty() {
+        let MemoryQuery::Predicate {
+            predicate,
+            order_by,
+        } = query
+        else {
+            return Err(HostError::new(
+                HostErrorCode::Unsupported,
+                "memory query language/version is not registered for this store",
+            ));
+        };
+        if !order_by.is_empty() {
             return Err(HostError::new(
                 HostErrorCode::InvalidRequest,
                 "ordered memory query is unsupported",
             ));
         }
-        self.select(store, None, limit, query.predicate, None)
+        self.select(store, None, limit, predicate, None)
     }
     pub(super) fn vector_search(
         &mut self,

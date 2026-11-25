@@ -43,23 +43,9 @@ impl List<T> ~ Iterable<T> {
     }
 }
 
-impl Map<K, V> ~ Iterable<(K, V)> {
-    public flow iter(self) -> Iter<(K, V)> ![] {
-        return Iter { next= () => match self.entries {
-            [] => None,
-            entry :: tail => Some((entry, tail.iter())),
-        } };
-    }
-}
 
-impl Set<T> ~ Iterable<T> {
-    public flow iter(self) -> Iter<T> ![] {
-        return Iter { next= () => match self.elements {
-            [] => None,
-            value :: tail => Some((value, tail.iter())),
-        } };
-    }
-}
+
+
 
 impl Slice<T> ~ Iterable<T> {
     public flow iter(self) -> Iter<T> ![] {

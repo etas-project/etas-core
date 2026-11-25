@@ -20,21 +20,45 @@ impl MemoryRequest {
                 .checked_add(condition_size(condition))
                 .ok_or_else(write::limit_error)?,
             MemoryOperation::Scan { cursor, .. } => cursor.as_ref().map_or(0, |c| c.opaque.len()),
-            MemoryOperation::Query { query, .. } => {
-                if query.order_by.len() > limits.max_nodes {
-                    return Err(write::limit_error());
+            MemoryOperation::Query { query, .. } => match query {
+                MemoryQuery::Encoded {
+                    language,
+                    version,
+                    payload,
+                } => {
+                    if language.is_empty() || *version == 0 {
+                        return Err(HostError::new(
+                            crate::HostErrorCode::InvalidRequest,
+                            "query requires a nonempty language and positive version",
+                        ));
+                    }
+                    let bytes = language
+                        .len()
+                        .checked_add(payload.len())
+                        .ok_or_else(write::limit_error)?;
+                    if bytes > limits.max_value_bytes {
+                        return Err(write::limit_error());
+                    }
+                    bytes
                 }
-                let mut bytes = query
-                    .predicate
-                    .as_ref()
-                    .map(|v| limits.value_size(v))
-                    .transpose()?
-                    .unwrap_or(0);
-                for order in &query.order_by {
-                    add(&mut bytes, path_size(&order.field_path, limits)?, limits)?;
+                MemoryQuery::Predicate {
+                    predicate,
+                    order_by,
+                } => {
+                    if order_by.len() > limits.max_nodes {
+                        return Err(write::limit_error());
+                    }
+                    let mut bytes = predicate
+                        .as_ref()
+                        .map(|v| limits.value_size(v))
+                        .transpose()?
+                        .unwrap_or(0);
+                    for order in order_by {
+                        add(&mut bytes, path_size(&order.field_path, limits)?, limits)?;
+                    }
+                    bytes
                 }
-                bytes
-            }
+            },
             MemoryOperation::VectorSearch {
                 embedding, filter, ..
             } => {

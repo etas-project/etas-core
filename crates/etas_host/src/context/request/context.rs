@@ -12,6 +12,8 @@ pub enum HostRequestKind {
     Tls,
     Filesystem,
     Secret,
+    Random,
+    Clock,
     Browser,
     Command,
     Policy,

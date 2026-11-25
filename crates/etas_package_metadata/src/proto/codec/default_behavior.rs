@@ -51,6 +51,9 @@ fn footprint_to_proto(value: &EffectFootprint) -> ProtoEffectFootprint {
         requested_actions: Some(effect_row_to_proto(&value.requested_actions)),
         default_actions: Some(effect_row_to_proto(&value.default_actions)),
         handled_actions: Some(effect_row_to_proto(&value.handled_actions)),
+        required_authority: (!value.required_authority.effects.is_empty()
+            || value.required_authority.tail.is_some())
+        .then(|| effect_row_to_proto(&value.required_authority)),
         handler_requests: value
             .handler_requests
             .as_ref()
@@ -102,6 +105,11 @@ fn footprint_from_proto(
                 .handled_actions
                 .ok_or_else(|| invalid("effect footprint has no handled row"))?,
         )?,
+        required_authority: value
+            .required_authority
+            .map(effect_row_from_proto)
+            .transpose()?
+            .unwrap_or_default(),
         handler_requests: value
             .handler_requests
             .map(request_template_from_proto)

@@ -12,6 +12,7 @@ use crate::{
 };
 
 mod context;
+mod lease;
 mod maintenance;
 mod paging;
 mod resolve;
@@ -21,6 +22,7 @@ mod write;
 pub struct InMemorySessionClient {
     executor: crate::storage::volatile::VolatileExecutor,
     sessions: Arc<RwLock<BTreeMap<String, SessionState>>>,
+    leases: Arc<RwLock<lease::RoutingLeases>>,
     limits: crate::StorageLimits,
 }
 
@@ -47,7 +49,12 @@ impl InMemorySessionClient {
         request: SessionRequest,
         operation: &crate::execution::OperationContext,
     ) -> Result<SessionResponse, HostError> {
-        self.dispatch(request, Some(operation)).await
+        let client = self.clone();
+        crate::session::lease::execute_scoped(request, operation, move |request, operation| {
+            let client = client.clone();
+            async move { client.dispatch(request, operation.as_ref()).await }
+        })
+        .await
     }
     async fn dispatch(
         &self,
@@ -63,9 +70,10 @@ impl InMemorySessionClient {
                 request.trace.clone(),
                 request.budget.clone(),
                 bytes,
-                move |_| {
+                move |context| {
                     let id = request.id;
-                    let result = client.execute_operation(request.operation);
+                    let result =
+                        client.execute_operation(request.operation, &context, &request.budget);
                     Ok(SessionResponse { id, result })
                 },
             )
@@ -80,6 +88,7 @@ impl InMemorySessionClient {
         Ok(Self {
             executor: crate::storage::volatile::VolatileExecutor::new(limits.clone()),
             sessions: Default::default(),
+            leases: Default::default(),
             limits,
         })
     }
@@ -102,8 +111,14 @@ impl SessionClient for InMemorySessionClient {
 }
 
 impl InMemorySessionClient {
-    fn execute_operation(&self, operation: SessionOperation) -> Result<SessionResult, HostError> {
+    fn execute_operation(
+        &self,
+        operation: SessionOperation,
+        context: &crate::execution::OperationContext,
+        budget: &crate::ExecutionBudget,
+    ) -> Result<SessionResult, HostError> {
         match operation {
+            SessionOperation::Lease(request) => self.execute_lease(request, context, budget),
             SessionOperation::Resolve { config } => self.resolve(config),
             SessionOperation::Append { message } => self.append(message),
             SessionOperation::Load {

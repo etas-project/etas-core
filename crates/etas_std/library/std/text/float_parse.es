@@ -45,7 +45,7 @@ impl FloatLayout {
         var nonzero = false;
         var decimal = false;
         var exponent = false;
-        while position < input.length limit Iterations(18446744073709551615) {
+        while position < input.length {
             let byte = input.get(position).unwrap();
             if byte >= 48 && byte <= 57 {
                 number = number.multiply_small(10).add_small(byte.bits - 48);
@@ -77,7 +77,7 @@ impl FloatLayout {
             // Beyond input length + 4096, no decimal point or leading zeros
             // in this same input can bring a nonzero value into either format.
             let cap = input.length.bits + 4096;
-            while position < input.length limit Iterations(18446744073709551615) {
+            while position < input.length {
                 let byte = input.get(position).unwrap();
                 if byte < 48 || byte > 57 { return Err(ParseFailure); }
                 if magnitude < cap {

@@ -5,7 +5,7 @@ import std.text.{chars, from_char};
 
 public flow ascii_lowercase(text: string) -> string ![] {
     var output = "";
-    for scalar in chars(text) limit Iterations(18446744073709551615) {
+    for scalar in chars(text) {
         let folded = match scalar {
             'A' => 'a',
             'B' => 'b',
@@ -42,7 +42,7 @@ public flow ascii_lowercase(text: string) -> string ![] {
 
 public flow ascii_uppercase(text: string) -> string ![] {
     var output = "";
-    for scalar in chars(text) limit Iterations(18446744073709551615) {
+    for scalar in chars(text) {
         let folded = match scalar {
             'a' => 'A',
             'b' => 'B',

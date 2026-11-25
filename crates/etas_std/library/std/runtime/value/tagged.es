@@ -16,7 +16,7 @@ impl TaggedWriter {
 
     flow quote(var self, value: string) -> unit ![Error<DataError>] {
         self.raw("\"");
-        for scalar in std.text.chars(value) limit Iterations(18446744073709551615) {
+        for scalar in std.text.chars(value) {
             self.raw(match scalar.bits {
                 34 => "\\\"",
                 92 => "\\\\",
@@ -54,7 +54,7 @@ impl TaggedWriter {
     flow sequence(var self, values: Array<Data>) -> unit ![Error<DataError>] {
         self.raw("[");
         var separator = "";
-        for value in values limit Iterations(18446744073709551615) {
+        for value in values {
             self.raw(separator);
             self.value(value);
             separator = ",";
@@ -85,7 +85,7 @@ impl TaggedWriter {
             Data.Bytes(value) => {
                 self.scalar_header("bytes"); self.raw("[");
                 var separator = "";
-                for byte in value limit Iterations(18446744073709551615) {
+                for byte in value {
                     self.raw(separator); self.raw(std.text.from_u8(byte)); separator = ",";
                 }
                 self.raw("]}");
@@ -96,7 +96,7 @@ impl TaggedWriter {
             Data.Map(entries) => {
                 self.raw("{\"entries\":[");
                 var separator = "";
-                for (key, value) in entries limit Iterations(18446744073709551615) {
+                for (key, value) in entries {
                     self.raw(separator); self.raw("{\"key\":"); self.value(key);
                     self.raw(",\"value\":"); self.value(value); self.raw("}"); separator = ",";
                 }
@@ -106,7 +106,7 @@ impl TaggedWriter {
                 self.raw("{\"fields\":[");
                 var seen: std.collections.OrderedSet<string> = std.collections.OrderedSet.new();
                 var separator = "";
-                for (name, value) in fields limit Iterations(18446744073709551615) {
+                for (name, value) in fields {
                     if seen.contains(name) {
                         perform Error.raise<DataError>(DataError { code= "schema_mismatch", message= "duplicate stored record field" });
                     }
@@ -134,18 +134,18 @@ impl TaggedWriter {
             JsonValue.String(value) => self.quote(value),
             JsonValue.Array(values) => {
                 self.raw("["); var separator = "";
-                for value in values limit Iterations(18446744073709551615) {
+                for value in values {
                     self.raw(separator); self.json(value); separator = ",";
                 }
                 self.raw("]");
             },
             JsonValue.Object(fields) => {
                 var ordered: std.collections.OrderedMap<string, JsonValue> = std.collections.OrderedMap.new();
-                for (name, value) in fields limit Iterations(18446744073709551615) {
+                for (name, value) in fields {
                     ordered = ordered.insert(name, value);
                 }
                 self.raw("{"); var separator = "";
-                for (name, value) in ordered.iter() limit Iterations(18446744073709551615) {
+                for (name, value) in ordered.iter() {
                     self.raw(separator); self.quote(name); self.raw(":"); self.json(value); separator = ",";
                 }
                 self.raw("}");
@@ -155,7 +155,7 @@ impl TaggedWriter {
 
     flow finish(self) -> string ![] {
         var output = "";
-        for part in self.parts.reverse() limit Iterations(18446744073709551615) { output = output + part; }
+        for part in self.parts.reverse() { output = output + part; }
         return output;
     }
 }

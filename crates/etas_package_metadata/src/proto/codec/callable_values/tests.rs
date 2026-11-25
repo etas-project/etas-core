@@ -22,6 +22,10 @@ fn node() -> CallableValueNode {
         residual_checks: Vec::new(),
         handler_requests: Some(Default::default()),
         behavior: crate::CallableValueBehavior {
+            suspension: Some(etas_code::descriptor::SuspensionInfo {
+                may_suspend: false,
+                unknown: false,
+            }),
             determinism: crate::CallableValueDeterminism::Deterministic,
             independent_determinism: Some(crate::CallableValueDeterminism::Deterministic),
             host_requirements: vec![],
@@ -45,6 +49,7 @@ fn node() -> CallableValueNode {
 
 fn graph() -> CallableValueGraph {
     CallableValueGraph {
+        call_inputs: Vec::new(),
         source_projections: Vec::new(),
         parameter_projections: Vec::new(),
         objects: Vec::new(),
@@ -137,6 +142,44 @@ fn callable_graph_round_trips_captures_scoped_generics_and_recursive_returns() {
         },
     ]);
     value.returned_sources = Some(vec![CallableValueSource::Value(0)]);
+    graph.call_inputs.push(crate::CallableCallInputs {
+        scope: CallableValueScope::Value(0),
+        arguments: vec![crate::CallableCallArgument {
+            name: Some("value".into()),
+            sources: Some(vec![parameter(CallableValueScope::Root, 0)]),
+            projections: vec![crate::CallableReturnedProjection {
+                path: vec![etas_code::descriptor::ValueProjectionStep::TupleElement(0)],
+                sources: Some(vec![parameter(CallableValueScope::Value(0), 0)]),
+            }],
+        }],
+    });
+    graph.call_inputs.push(graph.call_inputs[0].clone());
+    graph.parameter_projections.push(vec![
+        etas_code::descriptor::ValueProjectionStep::Repeat {
+            alternatives: vec![
+                vec![etas_code::descriptor::ValueProjectionStep::Invocation { inputs: 0 }],
+                vec![etas_code::descriptor::ValueProjectionStep::Invocation { inputs: 1 }],
+            ],
+        },
+        etas_code::descriptor::ValueProjectionStep::CallWithArguments { inputs: 0 },
+    ]);
+    // Bundle assembly may assign input IDs in another order. A regular
+    // dependency path must remain canonical after this relocation.
+    etas_code::descriptor::ValueProjectionStep::map_call_inputs(
+        &mut graph.parameter_projections[0],
+        &mut |id| Ok::<_, std::convert::Infallible>(1 - id),
+    )
+    .unwrap();
+    graph.call_inputs.reverse();
+    graph.values[0]
+        .returned_sources
+        .as_mut()
+        .unwrap()
+        .push(CallableValueSource::Parameter(CallableValueParameter {
+            scope: CallableValueScope::Root,
+            position: 0,
+            projection: Some(0),
+        }));
     let root = vec![GenericParamKind::Type, GenericParamKind::Effect];
     graph.validate_references(Some((1, &root))).unwrap();
     crate::validate_callable_value_graph(&graph).unwrap();
@@ -260,6 +303,7 @@ fn residual_reference_budget_is_shared_across_the_artifact() {
     let mut value = node();
     value.residual_checks = references;
     let graph = CallableValueGraph {
+        call_inputs: Vec::new(),
         source_projections: Vec::new(),
         parameter_projections: Vec::new(),
         objects: Vec::new(),
@@ -450,6 +494,7 @@ fn root_parameter_positions_and_generic_kinds_are_rechecked_after_binary_decode(
     let error = decoded.validate_references(Some((1, &root))).unwrap_err();
     assert!(error.to_string().contains("wrong kind"), "{error}");
     let bad = CallableValueGraph {
+        call_inputs: Vec::new(),
         source_projections: Vec::new(),
         parameter_projections: Vec::new(),
         objects: Vec::new(),
@@ -494,6 +539,7 @@ fn root_parameter_positions_and_generic_kinds_are_rechecked_after_binary_decode(
     );
     package.public_metadata.as_mut().unwrap().effect_summaries[0].returned_callables =
         Some(to_proto(&CallableValueGraph {
+            call_inputs: Vec::new(),
             source_projections: Vec::new(),
             parameter_projections: Vec::new(),
             objects: Vec::new(),
@@ -507,6 +553,7 @@ fn root_parameter_positions_and_generic_kinds_are_rechecked_after_binary_decode(
 fn long_callable_reference_cycles_are_flat_not_recursive_wire_graphs() {
     let count = 2000;
     let graph = CallableValueGraph {
+        call_inputs: Vec::new(),
         source_projections: Vec::new(),
         parameter_projections: Vec::new(),
         objects: Vec::new(),
@@ -575,6 +622,7 @@ fn multiple_return_graphs_consume_one_whole_artifact_node_budget() {
         .map(|position| parameter(CallableValueScope::Root, position))
         .collect();
     let graph = CallableValueGraph {
+        call_inputs: Vec::new(),
         source_projections: Vec::new(),
         parameter_projections: Vec::new(),
         sources,
@@ -658,6 +706,7 @@ fn object_evidence_round_trips_bound_and_concrete_member_witnesses() {
         ..Default::default()
     };
     let mut graph = CallableValueGraph {
+        call_inputs: Vec::new(),
         source_projections: Vec::new(),
         parameter_projections: Vec::new(),
         sources: vec![

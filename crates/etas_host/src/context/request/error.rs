@@ -47,6 +47,7 @@ pub enum HostErrorCode {
     /// A failed resource I/O operation, not an authority, protocol, or execution-control error.
     IoFailure,
     SchemaMismatch,
+    Unsupported,
     BudgetExceeded,
     AuthorityDenied,
     TimedOut,
@@ -67,6 +68,7 @@ impl HostErrorCode {
             Self::IncompleteResponse => "IncompleteResponse",
             Self::IoFailure => "IoFailure",
             Self::SchemaMismatch => "SchemaMismatch",
+            Self::Unsupported => "Unsupported",
             Self::BudgetExceeded => "BudgetExceeded",
             Self::AuthorityDenied => "AuthorityDenied",
             Self::TimedOut => "TimedOut",

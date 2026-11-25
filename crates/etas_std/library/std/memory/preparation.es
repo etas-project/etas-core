@@ -10,12 +10,12 @@ type StoreDescription = { region: string, path: Array<string>, schema_fingerprin
 
 impl StoreDescription {
     flow validate(self) -> unit ![Error<StorageError>] {
-        if self.region == "" { perform Error.raise<StorageError>(StorageError { code= "invalid_request", message= "invalid memory write intent" }); }
-        for part in self.path limit Iterations(18446744073709551615) {
-            if part == "" { perform Error.raise<StorageError>(StorageError { code= "invalid_request", message= "invalid memory write intent" }); }
+        if self.region == "" { perform Error.raise<StorageError>(StorageError { code= "invalid_request", message= "invalid memory write intent", operation= None }); }
+        for part in self.path {
+            if part == "" { perform Error.raise<StorageError>(StorageError { code= "invalid_request", message= "invalid memory write intent", operation= None }); }
         }
         if self.schema_fingerprint == Some("") {
-            perform Error.raise<StorageError>(StorageError { code= "invalid_request", message= "invalid memory write intent" });
+            perform Error.raise<StorageError>(StorageError { code= "invalid_request", message= "invalid memory write intent", operation= None });
         }
     }
 }
@@ -24,7 +24,7 @@ impl StorageContext {
     public flow operation_key(self) -> string ![Error<StorageError>] {
         let expires = self.now_seconds.bits + self.receipt_retention_seconds.bits;
         if self.receipt_retention_seconds == 0 || expires > 9223372036854775807 {
-            perform Error.raise<StorageError>(StorageError { code= "invalid_request", message= "invalid or expired storage operation key" });
+            perform Error.raise<StorageError>(StorageError { code= "invalid_request", message= "invalid or expired storage operation key", operation= None });
         }
         let nonce = match StorageContext.nonce() {
             Ok(value) => value,
@@ -39,8 +39,14 @@ impl u128 {
         var output = "";
         var value = self;
         var index: usize = 0;
-        while index < width limit Iterations(64) {
-            output = std.text.from_char(std.text.char_get("0123456789abcdef", value % 16).unwrap()) + output;
+        while index < width {
+            let digit = match value % 16 {
+                0 => "0", 1 => "1", 2 => "2", 3 => "3",
+                4 => "4", 5 => "5", 6 => "6", 7 => "7",
+                8 => "8", 9 => "9", 10 => "a", 11 => "b",
+                12 => "c", 13 => "d", 14 => "e", _ => "f",
+            };
+            output = digit + output;
             value = value / 16;
             index = index + 1;
         }
@@ -53,22 +59,22 @@ impl MemoryVersion {
         let text = self.opaque;
         let bytes = text.utf8;
         if bytes.length != 118 || !std.text.starts_with(text, "mv1:") || bytes.get(68) != Some(58) || bytes.get(101) != Some(58) {
-            perform Error.raise<StorageError>(StorageError { code= "invalid_request", message= "invalid or obsolete memory version token" });
+            perform Error.raise<StorageError>(StorageError { code= "invalid_request", message= "invalid or obsolete memory version token", operation= None });
         }
         var at: usize = 4;
         var revision: u128 = 0;
-        while at < bytes.length limit Iterations(114) {
+        while at < bytes.length {
             if at != 68 && at != 101 {
                 let byte = bytes.get(at).unwrap();
                 let digit = if byte >= 48 && byte <= 57 { byte.bits - 48 }
                     else if byte >= 97 && byte <= 102 { byte.bits - 87 }
-                    else { perform Error.raise<StorageError>(StorageError { code= "invalid_request", message= "invalid or obsolete memory version token" }); };
+                    else { perform Error.raise<StorageError>(StorageError { code= "invalid_request", message= "invalid or obsolete memory version token", operation= None }); };
                 if at >= 102 { revision = revision * 16 + digit; }
             }
             at = at + 1;
         }
         if revision == 0 || revision > 9223372036854775807 {
-            perform Error.raise<StorageError>(StorageError { code= "invalid_request", message= "invalid or obsolete memory version token" });
+            perform Error.raise<StorageError>(StorageError { code= "invalid_request", message= "invalid or obsolete memory version token", operation= None });
         }
         return text;
     }
@@ -101,7 +107,7 @@ impl MutationFingerprint {
         var remaining = value;
         var output: Array<u8> = [];
         var index: usize = 0;
-        while index < 8 limit Iterations(8) {
+        while index < 8 {
             output = output.push(u8 { bits= remaining % 256 });
             remaining = remaining / 256;
             index = index + 1;
@@ -121,14 +127,14 @@ impl MutationFingerprint {
             Some(schema) => output.part(schema),
             None => {},
         };
-        for part in store.path limit Iterations(18446744073709551615) { output.part(part); }
+        for part in store.path { output.part(part); }
         output.part(kind);
         return output;
     }
 
     flow part(var self, text: string) -> unit ![Error<StorageError>] {
         if text.length > self.maximum - self.used {
-            perform Error.raise<StorageError>(StorageError { code= "budget_exceeded", message= "memory mutation or receipt storage limit exceeded" });
+            perform Error.raise<StorageError>(StorageError { code= "limit_exceeded", message= "memory mutation or receipt storage limit exceeded", operation= None });
         }
         self.used = self.used + text.length;
         self.input = self.input + MutationFingerprint.little_endian(text.length.bits) + text.utf8;
@@ -137,7 +143,7 @@ impl MutationFingerprint {
     flow value(var self, value: Data) -> unit ![Error<StorageError>] {
         let text = match value.tagged(self.maximum) {
             Ok(value) => value,
-            Err(error) => perform Error.raise<StorageError>(StorageError { code= error.code, message= error.message }),
+            Err(error) => perform Error.raise<StorageError>(StorageError { code= error.code, message= error.message, operation= None }),
         };
         self.part(text);
     }
@@ -145,7 +151,7 @@ impl MutationFingerprint {
     flow finish(self) -> string ![] {
         let digest = Blake3.hash(self.input);
         var output = "";
-        for byte in digest limit Iterations(32) { output = output + byte.bits.hex_fixed(2); }
+        for byte in digest { output = output + byte.bits.hex_fixed(2); }
         return output;
     }
 }
@@ -156,7 +162,7 @@ impl IntentEnvelope {
     flow encode(store: StoreDescription, mutation: Data, operation: StorageOperationRef, maximum: usize) -> string ![Error<StorageError>] {
         let schema = match store.schema_fingerprint { None => Data.Unit, Some(value) => Data.String(value) };
         var path: Array<Data> = [];
-        for part in store.path limit Iterations(18446744073709551615) { path = path.push(Data.String(part)); }
+        for part in store.path { path = path.push(Data.String(part)); }
         let envelope = Data.Record([
             ("format", Data.String("etas.memory.write-intent.v1")),
             ("region", Data.String(store.region)),
@@ -168,7 +174,7 @@ impl IntentEnvelope {
         ]);
         return match envelope.tagged(maximum) {
             Ok(text) => text,
-            Err(error) => perform Error.raise<StorageError>(StorageError { code= error.code, message= error.message }),
+            Err(error) => perform Error.raise<StorageError>(StorageError { code= error.code, message= error.message, operation= None }),
         };
     }
 }
@@ -177,29 +183,29 @@ impl StorageOperationRef {
     public flow validate(self) -> unit ![Error<StorageError>] {
         let token = self.key.utf8;
         if token.length != 53 || !std.text.starts_with(self.key, "so1:") || token.get(20) != Some(58) {
-            perform Error.raise<StorageError>(StorageError { code= "invalid_request", message= "invalid or expired storage operation key" });
+            perform Error.raise<StorageError>(StorageError { code= "invalid_request", message= "invalid or expired storage operation key", operation= None });
         }
         var expires: u128 = 0;
         var at: usize = 4;
-        while at < token.length limit Iterations(49) {
+        while at < token.length {
             if at != 20 {
                 let byte = token.get(at).unwrap();
                 let digit = if byte >= 48 && byte <= 57 { byte.bits - 48 }
                     else if byte >= 97 && byte <= 102 { byte.bits - 87 }
-                    else { perform Error.raise<StorageError>(StorageError { code= "invalid_request", message= "invalid or expired storage operation key" }); };
+                    else { perform Error.raise<StorageError>(StorageError { code= "invalid_request", message= "invalid or expired storage operation key", operation= None }); };
                 if at < 20 { expires = expires * 16 + digit; }
             }
             at = at + 1;
         }
         if expires == 0 || expires > 9223372036854775807 {
-            perform Error.raise<StorageError>(StorageError { code= "invalid_request", message= "invalid or expired storage operation key" });
+            perform Error.raise<StorageError>(StorageError { code= "invalid_request", message= "invalid or expired storage operation key", operation= None });
         }
         if self.fingerprint.length != 64 {
-            perform Error.raise<StorageError>(StorageError { code= "invalid_request", message= "invalid storage request fingerprint" });
+            perform Error.raise<StorageError>(StorageError { code= "invalid_request", message= "invalid storage request fingerprint", operation= None });
         }
-        for byte in self.fingerprint.utf8 limit Iterations(64) {
+        for byte in self.fingerprint.utf8 {
             if !((byte >= 48 && byte <= 57) || (byte >= 97 && byte <= 102)) {
-                perform Error.raise<StorageError>(StorageError { code= "invalid_request", message= "invalid storage request fingerprint" });
+                perform Error.raise<StorageError>(StorageError { code= "invalid_request", message= "invalid storage request fingerprint", operation= None });
             }
         }
         // Expiry is deliberately not a local claim of non-commit. Reconcile

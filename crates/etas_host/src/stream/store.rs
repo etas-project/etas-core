@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, VecDeque, hash_map::Entry},
+    collections::{HashMap, hash_map::Entry},
     fmt::Write,
     future::{Future, pending},
     sync::{
@@ -10,14 +10,15 @@ use std::{
 };
 
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
-    sync::{Mutex, MutexGuard, RwLock},
+    sync::{Mutex, Notify, RwLock},
     time::{Instant, sleep_until},
 };
 use tokio_rustls::client::TlsStream;
 use tokio_util::sync::CancellationToken;
 
+use super::admission::{AdmittedStream, OperationPermit, StreamAccess, StreamPermit, stream_busy};
+pub(crate) use super::connection::ManagedStream;
 use crate::{ByteStreamOrigin, HostError, HostErrorCode, StreamHandleRef};
 
 #[derive(Clone, Default)]
@@ -29,6 +30,11 @@ pub(crate) struct StreamSlot {
     state: Mutex<ManagedStreamState>,
     lifecycle: AtomicU8,
     generation: AtomicU64,
+    pub(super) admission: AtomicU8,
+    pub(super) admission_changed: Notify,
+    pub(super) scoped_reads: std::sync::atomic::AtomicUsize,
+    pub(super) read_scopes:
+        std::sync::Mutex<Vec<std::sync::Weak<super::read_scope::ReadScopeState>>>,
     pub(crate) cancellation: CancellationToken,
 }
 
@@ -47,98 +53,9 @@ pub(crate) enum StreamLifecycle {
     OpenTcp = 0,
     Upgrading = 1,
     OpenTls = 2,
+    OpenFile = 5,
     Closing = 3,
     Closed = 4,
-}
-
-pub(crate) enum ManagedStream {
-    Tcp {
-        stream: TcpStream,
-        read_buffer: VecDeque<u8>,
-    },
-    Tls {
-        stream: Box<TlsStream<TcpStream>>,
-        read_buffer: VecDeque<u8>,
-    },
-}
-
-impl ManagedStream {
-    pub(crate) fn tcp(stream: TcpStream) -> Self {
-        Self::Tcp {
-            stream,
-            read_buffer: VecDeque::new(),
-        }
-    }
-
-    pub(crate) fn tls(stream: TlsStream<TcpStream>) -> Self {
-        Self::Tls {
-            stream: Box::new(stream),
-            read_buffer: VecDeque::new(),
-        }
-    }
-
-    pub(crate) async fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
-        if buffer.is_empty() {
-            return Ok(0);
-        }
-        let buffered = self.read_from_buffer(buffer);
-        if buffered != 0 {
-            return Ok(buffered);
-        }
-        match self {
-            ManagedStream::Tcp { stream, .. } => stream.read(buffer).await,
-            ManagedStream::Tls { stream, .. } => stream.read(buffer).await,
-        }
-    }
-
-    pub(crate) fn prepend_read_buffer(&mut self, bytes: Vec<u8>) {
-        let read_buffer = match self {
-            Self::Tcp { read_buffer, .. } | Self::Tls { read_buffer, .. } => read_buffer,
-        };
-        for byte in bytes.into_iter().rev() {
-            read_buffer.push_front(byte);
-        }
-    }
-
-    fn read_from_buffer(&mut self, output: &mut [u8]) -> usize {
-        let read_buffer = match self {
-            Self::Tcp { read_buffer, .. } | Self::Tls { read_buffer, .. } => read_buffer,
-        };
-        let requested = output.len().min(read_buffer.len());
-        let mut read = 0;
-        for output in &mut output[..requested] {
-            let Some(byte) = read_buffer.pop_front() else {
-                break;
-            };
-            *output = byte;
-            read += 1;
-        }
-        read
-    }
-
-    fn is_plain_tcp_without_buffered_data(&self) -> bool {
-        matches!(
-            self,
-            Self::Tcp {
-                read_buffer,
-                ..
-            } if read_buffer.is_empty()
-        )
-    }
-
-    pub(crate) async fn write(&mut self, body: &[u8]) -> std::io::Result<usize> {
-        match self {
-            Self::Tcp { stream, .. } => stream.write(body).await,
-            Self::Tls { stream, .. } => stream.write(body).await,
-        }
-    }
-
-    pub(crate) async fn flush(&mut self) -> std::io::Result<()> {
-        match self {
-            ManagedStream::Tcp { stream, .. } => stream.flush().await,
-            ManagedStream::Tls { stream, .. } => stream.flush().await,
-        }
-    }
 }
 
 impl StreamSlot {
@@ -146,11 +63,16 @@ impl StreamSlot {
         let lifecycle = match stream {
             ManagedStream::Tcp { .. } => StreamLifecycle::OpenTcp,
             ManagedStream::Tls { .. } => StreamLifecycle::OpenTls,
+            ManagedStream::File { .. } => StreamLifecycle::OpenFile,
         };
         Self {
             state: Mutex::new(ManagedStreamState::Open { stream, origin }),
             lifecycle: AtomicU8::new(lifecycle as u8),
             generation: AtomicU64::new(0),
+            admission: AtomicU8::new(0),
+            admission_changed: Notify::new(),
+            scoped_reads: std::sync::atomic::AtomicUsize::new(0),
+            read_scopes: Default::default(),
             cancellation: CancellationToken::new(),
         }
     }
@@ -160,12 +82,20 @@ impl StreamSlot {
             value if value == StreamLifecycle::OpenTcp as u8 => StreamLifecycle::OpenTcp,
             value if value == StreamLifecycle::Upgrading as u8 => StreamLifecycle::Upgrading,
             value if value == StreamLifecycle::OpenTls as u8 => StreamLifecycle::OpenTls,
+            value if value == StreamLifecycle::OpenFile as u8 => StreamLifecycle::OpenFile,
             value if value == StreamLifecycle::Closing as u8 => StreamLifecycle::Closing,
             _ => StreamLifecycle::Closed,
         }
     }
 
-    fn validate_generation(&self, handle: &StreamHandleRef) -> Result<(), HostError> {
+    pub(super) fn is_open(&self) -> bool {
+        matches!(
+            self.lifecycle(),
+            StreamLifecycle::OpenTcp | StreamLifecycle::OpenTls | StreamLifecycle::OpenFile
+        )
+    }
+
+    pub(super) fn validate_generation(&self, handle: &StreamHandleRef) -> Result<(), HostError> {
         let actual = self.generation.load(Ordering::Acquire);
         if actual == handle.generation() {
             Ok(())
@@ -181,7 +111,8 @@ impl StreamSlot {
             match lifecycle {
                 StreamLifecycle::OpenTcp
                 | StreamLifecycle::Upgrading
-                | StreamLifecycle::OpenTls => {
+                | StreamLifecycle::OpenTls
+                | StreamLifecycle::OpenFile => {
                     if self
                         .lifecycle
                         .compare_exchange(
@@ -197,30 +128,49 @@ impl StreamSlot {
                     }
                 }
                 StreamLifecycle::Closing | StreamLifecycle::Closed => {
-                    return Err(stream_closed());
+                    return Ok(());
                 }
             }
         }
     }
 
     pub(crate) async fn finish_close(&self) {
+        self.lifecycle
+            .store(StreamLifecycle::Closing as u8, Ordering::Release);
+        self.cancellation.cancel();
+        let scopes = std::mem::take(&mut *self.read_scopes.lock().unwrap());
+        for scope in scopes {
+            if let Some(scope) = scope.upgrade() {
+                scope.revoke().await;
+            }
+        }
+        loop {
+            let changed = self.admission_changed.notified();
+            tokio::pin!(changed);
+            changed.as_mut().enable();
+            if self.admission.load(Ordering::Acquire) == 0
+                && self.scoped_reads.load(Ordering::Acquire) == 0
+            {
+                break;
+            }
+            changed.await;
+        }
+        // Concurrent close callers share completion of the same descriptor close.
         let mut state = self.state.lock().await;
-        *state = ManagedStreamState::Closed;
+        let previous = std::mem::replace(&mut *state, ManagedStreamState::Closed);
+        if let ManagedStreamState::Open { stream, .. } = previous {
+            stream.finish_file().await;
+        }
         self.lifecycle
             .store(StreamLifecycle::Closed as u8, Ordering::Release);
     }
 
     pub(crate) fn begin_tls_upgrade(
-        &self,
+        self: &Arc<Self>,
         handle: &StreamHandleRef,
-    ) -> Result<(tokio::net::TcpStream, ByteStreamOrigin), HostError> {
-        self.validate_generation(handle)?;
-        let mut state = self.state.try_lock().map_err(|_| {
-            HostError::new(
-                HostErrorCode::InvalidRequest,
-                "TLS handshake requires an idle TCP stream",
-            )
-        })?;
+    ) -> Result<(tokio::net::TcpStream, ByteStreamOrigin, StreamPermit), HostError> {
+        let permit = self.admit(handle, StreamAccess::Exclusive)?;
+        let mut state = self.state.try_lock().map_err(|_| stream_busy())?;
         if self.lifecycle() != StreamLifecycle::OpenTcp {
             return Err(stream_closed());
         }
@@ -249,7 +199,11 @@ impl StreamSlot {
             ManagedStreamState::Open {
                 stream: ManagedStream::Tcp { stream, .. },
                 origin,
-            } => Ok((stream, origin)),
+            } => Ok((
+                Arc::try_unwrap(stream).expect("exclusive TCP admission retains one connection"),
+                origin,
+                permit,
+            )),
             other => {
                 *state = other;
                 self.lifecycle
@@ -267,12 +221,10 @@ impl StreamSlot {
         handle: &StreamHandleRef,
     ) -> Result<ByteStreamOrigin, HostError> {
         self.validate_generation(handle)?;
-        let state = self.state.try_lock().map_err(|_| {
-            HostError::new(
-                HostErrorCode::InvalidRequest,
-                "TLS handshake requires an idle TCP stream",
-            )
-        })?;
+        if self.admission.load(Ordering::Acquire) != 0 {
+            return Err(stream_busy());
+        }
+        let state = self.state.try_lock().map_err(|_| stream_busy())?;
         if self.lifecycle() != StreamLifecycle::OpenTcp {
             return Err(stream_closed());
         }
@@ -389,13 +341,12 @@ impl ByteStreamStore {
             return Err(error);
         }
         let context = registration.context().clone();
-        let request_signal = operation.signal().clone();
         let streams = self.streams.clone();
         let token = handle.token().to_owned();
         tokio::spawn(async move {
             let release = tokio::select! {
-                release = context.signal().release_requested() => release,
-                cancelled = request_signal.cancelled() => cancelled.map(|_| ()),
+                release = context.signal().release_requested(context.operation()) => release,
+                _ = slot.cancellation.cancelled() => Ok(()),
             };
             slot.cancellation.cancel();
             slot.finish_close().await;
@@ -405,6 +356,45 @@ impl ByteStreamStore {
         });
         Ok(())
     }
+    pub(crate) async fn sync_file(
+        &self,
+        file: &crate::FileStreamRef,
+        budget: &crate::ExecutionBudget,
+        operation: Option<&crate::execution::OperationContext>,
+    ) -> Result<(), HostError> {
+        let slot = self
+            .stream_slot(file.handle())
+            .await
+            .ok_or_else(|| unknown_stream(file.handle()))?;
+        let deadlines = OperationDeadlines::new(budget, None).with_operation(operation);
+        let admitted = admit_stream(
+            &slot,
+            file.handle(),
+            StreamAccess::Exclusive,
+            deadlines.clone(),
+        )
+        .await?;
+        {
+            let state = slot.state.lock().await;
+            let ManagedStreamState::Open { origin, .. } = &*state else {
+                return Err(stream_closed());
+            };
+            if origin != file.as_byte_stream().origin() {
+                return Err(HostError::new(
+                    HostErrorCode::InvalidRequest,
+                    "file stream provenance differs from its registered owner",
+                ));
+            }
+        }
+        await_io(
+            admitted.stream.sync_file(),
+            Some(&slot.cancellation),
+            deadlines,
+            "file synchronization failed",
+        )
+        .await
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
@@ -494,23 +484,44 @@ pub(crate) fn stream_io_error(message: &'static str, error: std::io::Error) -> H
         | std::io::ErrorKind::WriteZero => HostErrorCode::Closed,
         _ => HostErrorCode::ProviderUnavailable,
     };
-    HostError::new(code, message).with_detail("error", error.to_string())
+    let network_error = match error.kind() {
+        std::io::ErrorKind::ConnectionRefused => Some("refused"),
+        _ => None,
+    };
+    let tls_error = error
+        .get_ref()
+        .and_then(|inner| inner.downcast_ref::<rustls::Error>())
+        .map(|error| match error {
+            rustls::Error::InvalidCertificate(rustls::CertificateError::NotValidForName)
+            | rustls::Error::InvalidCertificate(
+                rustls::CertificateError::NotValidForNameContext { .. },
+            ) => "hostname",
+            rustls::Error::InvalidCertificate(_) | rustls::Error::NoCertificatesPresented => {
+                "certificate"
+            }
+            _ => "protocol",
+        });
+    let mut result = HostError::new(code, message)
+        .with_detail("error", error.to_string())
+        .with_detail("io_kind", format!("{:?}", error.kind()));
+    if let Some(kind) = network_error {
+        result = result.with_detail("network_error", kind);
+    }
+    if let Some(kind) = tls_error {
+        result = result.with_detail("tls_error", kind);
+    }
+    result
 }
 
-pub(crate) async fn lock_stream_state<'a>(
-    slot: &'a StreamSlot,
+pub(crate) async fn admit_stream(
+    slot: &Arc<StreamSlot>,
     handle: &StreamHandleRef,
+    access: StreamAccess,
     deadlines: OperationDeadlines,
-) -> Result<MutexGuard<'a, ManagedStreamState>, HostError> {
-    slot.validate_generation(handle)?;
-    if !matches!(
-        slot.lifecycle(),
-        StreamLifecycle::OpenTcp | StreamLifecycle::OpenTls
-    ) {
-        return Err(stream_closed());
-    }
+) -> Result<AdmittedStream, HostError> {
     check_expired_deadlines(&deadlines)?;
-    tokio::select! {
+    let permit = slot.admit(handle, access)?;
+    let state = tokio::select! {
         biased;
         _ = scope_cancelled(&deadlines) => Err(stream_cancelled()),
         _ = slot.cancellation.cancelled() => Err(stream_cancelled()),
@@ -518,13 +529,20 @@ pub(crate) async fn lock_stream_state<'a>(
         _ = wait_until(deadlines.operation) => Err(stream_timeout(deadlines.operation_timeout_ms)),
         state = slot.state.lock() => {
             slot.validate_generation(handle)?;
-            if matches!(slot.lifecycle(), StreamLifecycle::OpenTcp | StreamLifecycle::OpenTls) {
+            if matches!(slot.lifecycle(), StreamLifecycle::OpenTcp | StreamLifecycle::OpenTls | StreamLifecycle::OpenFile) {
                 Ok(state)
             } else {
                 Err(stream_closed())
             }
         },
-    }
+    }?;
+    let ManagedStreamState::Open { stream, .. } = &*state else {
+        return Err(stream_closed());
+    };
+    Ok(AdmittedStream {
+        stream: stream.clone(),
+        _permit: OperationPermit::Native { _permit: permit },
+    })
 }
 
 pub(crate) async fn await_io<T>(
@@ -639,7 +657,8 @@ mod tests {
 
     #[test]
     fn tls_client_config_builder_does_not_panic() {
-        let result = std::panic::catch_unwind(AssertUnwindSafe(tls_client_config));
+        let result =
+            std::panic::catch_unwind(AssertUnwindSafe(|| tls_client_config(&Default::default())));
         assert!(result.is_ok(), "TLS client config construction panicked");
         result.expect("panic checked above");
     }
@@ -663,6 +682,7 @@ mod tests {
             .execute(TcpConnectRequest {
                 id: HostRequestId(1),
                 operation: TcpConnectOperation::Connect {
+                    options: Default::default(),
                     endpoint: TcpEndpoint {
                         host: "127.0.0.1".to_owned(),
                         port: address.port(),
@@ -681,6 +701,7 @@ mod tests {
             .execute(TlsConnectRequest {
                 id: HostRequestId(2),
                 operation: TlsConnectOperation::Connect {
+                    options: Default::default(),
                     stream: tcp,
                     server_name: "127.0.0.1".to_owned(),
                 },
@@ -720,6 +741,7 @@ mod tests {
             .execute(TcpConnectRequest {
                 id: HostRequestId(50),
                 operation: TcpConnectOperation::Connect {
+                    options: Default::default(),
                     endpoint: TcpEndpoint {
                         host: "127.0.0.1".to_owned(),
                         port: address.port(),
@@ -745,6 +767,7 @@ mod tests {
             .execute(TlsConnectRequest {
                 id: HostRequestId(51),
                 operation: TlsConnectOperation::Connect {
+                    options: Default::default(),
                     stream: forged_reference,
                     server_name: "127.0.0.1".to_owned(),
                 },
@@ -786,6 +809,7 @@ mod tests {
             .execute(TcpConnectRequest {
                 id: HostRequestId(52),
                 operation: TcpConnectOperation::Connect {
+                    options: Default::default(),
                     endpoint: TcpEndpoint {
                         host: "127.0.0.1".to_owned(),
                         port: address.port(),
@@ -804,6 +828,7 @@ mod tests {
             .execute(TlsConnectRequest {
                 id: HostRequestId(53),
                 operation: TlsConnectOperation::Connect {
+                    options: Default::default(),
                     stream: tcp.clone(),
                     server_name: "127.0.0.1".to_owned(),
                 },
@@ -823,6 +848,7 @@ mod tests {
                 StreamOperation::WriteAll {
                     stream: tcp.as_byte_stream(),
                     body: b"ok".to_vec(),
+                    timeout_ms: None,
                 },
             ))
             .await
@@ -838,6 +864,7 @@ mod tests {
             .execute(TcpConnectRequest {
                 id: HostRequestId(3),
                 operation: TcpConnectOperation::Connect {
+                    options: Default::default(),
                     endpoint: TcpEndpoint {
                         host: "0x7f000001".to_owned(),
                         port: 8848,
@@ -990,6 +1017,7 @@ mod tests {
                 StreamOperation::WriteAll {
                     stream: ByteStreamRef::issued(writable_handle, crate::ByteStreamOrigin::Opaque),
                     body: b"ok".to_vec(),
+                    timeout_ms: None,
                 },
             )),
         )
@@ -1066,8 +1094,8 @@ mod tests {
         assert_eq!(
             repeated_close
                 .result
-                .expect_err("repeated close must report closed state"),
-            StreamFailure::Closed
+                .expect("repeated close must remain idempotent"),
+            StreamPayload::Unit
         );
     }
 
@@ -1184,6 +1212,7 @@ mod tests {
             .execute(TcpConnectRequest {
                 id: HostRequestId(32),
                 operation: TcpConnectOperation::Connect {
+                    options: Default::default(),
                     endpoint: TcpEndpoint {
                         host: "127.0.0.1".to_owned(),
                         port: address.port(),
@@ -1207,6 +1236,7 @@ mod tests {
                 .execute(TlsConnectRequest {
                     id: HostRequestId(33),
                     operation: TlsConnectOperation::Connect {
+                        options: Default::default(),
                         stream: tls_tcp,
                         server_name: "127.0.0.1".to_owned(),
                     },
@@ -1259,6 +1289,7 @@ mod tests {
             .execute(TcpConnectRequest {
                 id: HostRequestId(40),
                 operation: TcpConnectOperation::Connect {
+                    options: Default::default(),
                     endpoint: TcpEndpoint {
                         host: "127.0.0.1".to_owned(),
                         port: address.port(),
@@ -1301,6 +1332,7 @@ mod tests {
             .execute(TcpConnectRequest {
                 id: HostRequestId(41),
                 operation: TcpConnectOperation::Connect {
+                    options: Default::default(),
                     endpoint: TcpEndpoint {
                         host: "127.0.0.1".to_owned(),
                         port: address.port(),
@@ -1318,6 +1350,7 @@ mod tests {
             .execute(TlsConnectRequest {
                 id: HostRequestId(42),
                 operation: TlsConnectOperation::Connect {
+                    options: Default::default(),
                     stream: tcp,
                     server_name: "127.0.0.1".to_owned(),
                 },
@@ -1351,6 +1384,218 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    async fn read_scope_holds_admission_between_chunks_and_close_revokes_it() {
+        use std::sync::atomic::Ordering;
+        let (stream, mut peer) = connected_stream().await;
+        let store = ByteStreamStore::new();
+        let handle = store
+            .insert_stream(stream, ByteStreamOrigin::Opaque)
+            .await
+            .unwrap();
+        let original = ByteStreamRef::issued(handle.clone(), ByteStreamOrigin::Opaque);
+        let scope = crate::StreamReadScope::new(&original, "reader".into());
+        let scoped = original.clone().with_read_scope(&scope);
+        let slot = store.stream_slot(&handle).await.unwrap();
+        let client = LocalStreamClient::new(store);
+        peer.write_all(b"ab").await.unwrap();
+        let read = |stream| {
+            stream_request(
+                401,
+                StreamOperation::Read {
+                    stream,
+                    max_bytes: 1,
+                    timeout_ms: None,
+                },
+            )
+        };
+        assert_eq!(
+            client.execute(read(scoped.clone())).await.unwrap().result,
+            Ok(StreamPayload::Read(StreamRead::Data(b"a".to_vec())))
+        );
+        assert_eq!(
+            client.execute(read(original.clone())).await.unwrap().result,
+            Err(StreamFailure::Busy)
+        );
+        assert_eq!(
+            client
+                .execute(read(scoped.clone().for_read_owner("other-task")))
+                .await
+                .unwrap()
+                .result,
+            Err(StreamFailure::Busy)
+        );
+        assert_eq!(
+            client.execute(read(scoped.clone())).await.unwrap().result,
+            Ok(StreamPayload::Read(StreamRead::Data(b"b".to_vec())))
+        );
+        drop(scope);
+        peer.write_all(b"c").await.unwrap();
+        assert_eq!(
+            client.execute(read(original.clone())).await.unwrap().result,
+            Ok(StreamPayload::Read(StreamRead::Data(b"c".to_vec())))
+        );
+        let owner = crate::StreamReadScope::new(&original, "reader".into());
+        let scoped = original.clone().with_read_scope(&owner);
+        let pending = {
+            let client = client.clone();
+            tokio::spawn(async move {
+                client
+                    .execute(stream_request(
+                        402,
+                        StreamOperation::Read {
+                            stream: scoped,
+                            max_bytes: 1,
+                            timeout_ms: None,
+                        },
+                    ))
+                    .await
+                    .unwrap()
+            })
+        };
+        timeout(Duration::from_secs(1), async {
+            while slot.scoped_reads.load(Ordering::Acquire) == 0 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        let close = timeout(
+            Duration::from_secs(1),
+            client.execute(stream_request(
+                403,
+                StreamOperation::Close { stream: original },
+            )),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(close.result, Ok(StreamPayload::Unit));
+        assert_eq!(pending.await.unwrap().result, Err(StreamFailure::Cancelled));
+        drop(owner);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn same_stream_admission_allows_duplex_and_preserves_tls_transfer() {
+        use crate::stream::admission::StreamAccess;
+        use std::sync::atomic::Ordering;
+        let (stream, mut peer) = connected_stream().await;
+        let store = ByteStreamStore::new();
+        let handle = store
+            .insert_stream(
+                stream,
+                ByteStreamOrigin::Tcp {
+                    host: "127.0.0.1".into(),
+                    port: peer.local_addr().unwrap().port(),
+                },
+            )
+            .await
+            .unwrap();
+        let reference = ByteStreamRef::issued(handle.clone(), ByteStreamOrigin::Opaque);
+        let slot = store.stream_slot(&handle).await.unwrap();
+        let client = LocalStreamClient::new(store);
+        let reading = {
+            let client = client.clone();
+            let reference = reference.clone();
+            tokio::spawn(async move {
+                client
+                    .execute(stream_request(
+                        301,
+                        StreamOperation::Read {
+                            stream: reference,
+                            max_bytes: 1,
+                            timeout_ms: None,
+                        },
+                    ))
+                    .await
+                    .unwrap()
+            })
+        };
+        timeout(Duration::from_secs(1), async {
+            while slot.admission.load(Ordering::Acquire) != 1 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        let second_read = timeout(
+            Duration::from_secs(1),
+            client.execute(stream_request(
+                302,
+                StreamOperation::Read {
+                    stream: reference.clone(),
+                    max_bytes: 1,
+                    timeout_ms: None,
+                },
+            )),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(second_read.result, Err(StreamFailure::Busy));
+        assert!(
+            slot.validate_tls_upgrade(&handle)
+                .unwrap_err()
+                .details
+                .iter()
+                .any(|detail| detail.key == "stream_failure" && detail.value == "busy")
+        );
+        assert_eq!(slot.lifecycle(), StreamLifecycle::OpenTcp);
+        let write = timeout(
+            Duration::from_secs(1),
+            client.execute(stream_request(
+                303,
+                StreamOperation::WriteAll {
+                    stream: reference.clone(),
+                    body: b"ok".to_vec(),
+                    timeout_ms: None,
+                },
+            )),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(write.result, Ok(StreamPayload::Unit));
+        let mut received = [0; 2];
+        peer.read_exact(&mut received).await.unwrap();
+        assert_eq!(&received, b"ok");
+        let writing = slot.admit(&handle, StreamAccess::Write).unwrap();
+        let second_write = client
+            .execute(stream_request(
+                304,
+                StreamOperation::WriteAll {
+                    stream: reference.clone(),
+                    body: b"no".to_vec(),
+                    timeout_ms: None,
+                },
+            ))
+            .await
+            .unwrap();
+        assert_eq!(second_write.result, Err(StreamFailure::Busy));
+        drop(writing);
+        peer.write_all(b"x").await.unwrap();
+        assert_eq!(
+            reading.await.unwrap().result,
+            Ok(StreamPayload::Read(StreamRead::Data(b"x".to_vec())))
+        );
+        let (connection, _, upgrade) = slot.begin_tls_upgrade(&handle).unwrap();
+        assert_eq!(slot.lifecycle(), StreamLifecycle::Upgrading);
+        drop(connection);
+        slot.fail_tls_upgrade().await;
+        drop(upgrade);
+        assert_eq!(
+            client
+                .execute(stream_request(
+                    305,
+                    StreamOperation::Close { stream: reference }
+                ))
+                .await
+                .unwrap()
+                .result,
+            Ok(StreamPayload::Unit)
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
     async fn cancelled_partial_write_records_progress_and_invalidates_stream() {
         use crate::execution::{CancellationReason, ExecutionScope, ExternalOutcome};
         let store = ByteStreamStore::new();
@@ -1379,6 +1624,7 @@ mod tests {
                         StreamOperation::WriteAll {
                             stream,
                             body: vec![42; 32 * 1024 * 1024],
+                            timeout_ms: None,
                         },
                     ),
                     &context,

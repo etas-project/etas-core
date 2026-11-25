@@ -19,11 +19,11 @@ type FenceReader = { private text: string, private position: usize, private max_
 
 impl FenceReader {
     flow fail(self) -> never ![Error<StorageError>] {
-        perform Error.raise<StorageError>(StorageError { code= "invalid_request", message= "invalid session history fence" });
+        perform Error.raise<StorageError>(StorageError { code= "invalid_request", message= "invalid session history fence", operation= None });
     }
 
     flow whitespace(var self) -> unit ![] {
-        while self.position < self.text.length limit Iterations(18446744073709551615) {
+        while self.position < self.text.length {
             let byte = self.text.utf8.get(self.position).unwrap();
             if byte != 32 && byte != 9 && byte != 10 && byte != 13 { return; }
             self.position = self.position + 1;
@@ -42,7 +42,7 @@ impl FenceReader {
     flow quoted(var self) -> string ![Error<StorageError>] {
         let start = self.position;
         self.expect(34);
-        while self.position < self.text.length limit Iterations(18446744073709551615) {
+        while self.position < self.text.length {
             let byte = self.text.utf8.get(self.position).unwrap();
             self.position = self.position + 1;
             if byte == 92 {
@@ -67,7 +67,7 @@ impl FenceReader {
 
     flow value(var self, depth: usize) -> FenceValue ![Error<StorageError>] {
         if depth > self.max_depth {
-            perform Error.raise<StorageError>(StorageError { code= "budget_exceeded", message= "session history fence exceeds depth limit" });
+            perform Error.raise<StorageError>(StorageError { code= "limit_exceeded", message= "session history fence exceeds depth limit", operation= None });
         }
         self.whitespace();
         return match self.peek() {
@@ -80,7 +80,7 @@ impl FenceReader {
                 self.whitespace();
                 var items: Array<FenceValue> = [];
                 if self.peek() == Some(93) { self.position = self.position + 1; return FenceValue.Array(items); }
-                while true limit Iterations(18446744073709551615) {
+                while true {
                     items = items.push(self.value(depth + 1));
                     self.whitespace();
                     if self.peek() == Some(93) { self.position = self.position + 1; return FenceValue.Array(items); }
@@ -93,7 +93,7 @@ impl FenceReader {
                 self.whitespace();
                 var fields: Map<string, FenceValue> = {};
                 if self.peek() == Some(125) { self.position = self.position + 1; return FenceValue.Object(fields); }
-                while true limit Iterations(18446744073709551615) {
+                while true {
                     let name = self.quoted();
                     if fields.contains_key(name) { self.fail(); }
                     self.whitespace(); self.expect(58);
@@ -106,7 +106,7 @@ impl FenceReader {
             },
             Some(_) => {
                 let start = self.position;
-                while self.position < self.text.length limit Iterations(18446744073709551615) {
+                while self.position < self.text.length {
                     let byte = self.text.utf8.get(self.position).unwrap();
                     if (byte >= 48 && byte <= 57) || byte == 45 || byte == 43 || byte == 46 || byte == 101 || byte == 69 {
                         self.position = self.position + 1;
@@ -119,7 +119,7 @@ impl FenceReader {
                 if integral {
                     let digits = if std.text.starts_with(token, "-") { std.text.get_byte_slice(token, [1, token.length)).unwrap() } else { token };
                     if digits == "" || (digits.length > 1 && std.text.starts_with(digits, "0")) { self.fail(); }
-                    for byte in digits.utf8 limit Iterations(18446744073709551615) {
+                    for byte in digits.utf8 {
                         if byte < 48 || byte > 57 { self.fail(); }
                     }
                 } else {
@@ -142,18 +142,18 @@ impl FenceValue {
     }
 
     flow invalid(self) -> never ![Error<StorageError>] {
-        perform Error.raise<StorageError>(StorageError { code= "invalid_request", message= "invalid session history fence" });
+        perform Error.raise<StorageError>(StorageError { code= "invalid_request", message= "invalid session history fence", operation= None });
     }
 
     flow object(self, required: Array<string>, optional: Array<string>) -> Map<string, FenceValue> ![Error<StorageError>] {
         let fields = match self { FenceValue.Object(fields) => fields, _ => self.invalid(), };
         var allowed: std.collections.OrderedSet<string> = std.collections.OrderedSet.new();
-        for name in required limit Iterations(32) {
+        for name in required {
             if !fields.contains_key(name) { self.invalid(); }
             allowed = allowed.insert(name);
         }
-        for name in optional limit Iterations(32) { allowed = allowed.insert(name); }
-        for (name, value) in fields limit Iterations(32) { if !allowed.contains(name) { self.invalid(); } }
+        for name in optional { allowed = allowed.insert(name); }
+        for (name, value) in fields { if !allowed.contains(name) { self.invalid(); } }
         return fields;
     }
 
@@ -180,7 +180,7 @@ impl FenceValue {
     flow hex(self, width: usize) -> unit ![Error<StorageError>] {
         let text = self.text();
         if text.length != width { self.invalid(); }
-        for byte in text.utf8 limit Iterations(64) {
+        for byte in text.utf8 {
             if !((byte >= 48 && byte <= 57) || (byte >= 97 && byte <= 102)) { self.invalid(); }
         }
     }

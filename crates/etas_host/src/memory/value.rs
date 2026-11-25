@@ -18,7 +18,10 @@ pub fn memory_write_result_value(result: MemoryWriteResult) -> HostValue {
         }
         MemoryWriteResult::Outcome(WriteOutcome::NotCommitted { operation, reason }) => variant(
             "NotCommitted",
-            vec![operation_value(operation), rejection_value(reason)],
+            vec![
+                operation_value(operation.clone()),
+                rejection_value(reason, operation),
+            ],
         ),
         MemoryWriteResult::Outcome(WriteOutcome::Unknown { operation, .. }) => {
             variant("Unknown", vec![operation_value(operation)])
@@ -36,7 +39,10 @@ fn confirmed_value(outcome: MemoryConfirmedOutcome) -> HostValue {
         ConfirmedOutcome::Committed(receipt) => variant("Committed", vec![receipt_value(receipt)]),
         ConfirmedOutcome::NotCommitted { operation, reason } => variant(
             "NotCommitted",
-            vec![operation_value(operation), rejection_value(reason)],
+            vec![
+                operation_value(operation.clone()),
+                rejection_value(reason, operation),
+            ],
         ),
     }
 }
@@ -89,7 +95,7 @@ fn receipt_value(receipt: MemoryWriteReceipt) -> HostValue {
             variant(
                 match receipt.durability {
                     StorageDurability::Volatile => "Volatile",
-                    StorageDurability::SqliteWalFull => "SqliteWalFull",
+                    StorageDurability::SqliteWalFull => "Durable",
                 },
                 vec![],
             ),
@@ -97,7 +103,7 @@ fn receipt_value(receipt: MemoryWriteReceipt) -> HostValue {
     ])
 }
 
-fn rejection_value(reason: MemoryNotCommitted) -> HostValue {
+fn rejection_value(reason: MemoryNotCommitted, operation: StorageOperationRef) -> HostValue {
     match reason {
         MemoryNotCommitted::Conflict {
             expected, actual, ..
@@ -111,10 +117,7 @@ fn rejection_value(reason: MemoryNotCommitted) -> HostValue {
         MemoryNotCommitted::Unchanged => variant("Unchanged", vec![]),
         MemoryNotCommitted::Rejected(error) => variant(
             "Rejected",
-            vec![record(vec![
-                ("code", HostValue::String(error.code.as_str().into())),
-                ("message", HostValue::String(error.message)),
-            ])],
+            vec![crate::storage_error_value(error, Some(operation))],
         ),
     }
 }

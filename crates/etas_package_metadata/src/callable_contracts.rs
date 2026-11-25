@@ -8,6 +8,10 @@ use etas_code::MethodId;
 pub struct ScopedCallbackContract {
     pub target: CallableContractTarget,
     pub parameters: Vec<u32>,
+    /// Callback slots whose returned values cross a fresh resource owner.
+    /// Their results and nonlocal writes must not retain newly owned handles.
+    #[serde(default)]
+    pub resource_boundaries: Vec<u32>,
 }
 
 impl ScopedCallbackContract {
@@ -42,6 +46,14 @@ impl ScopedCallbackContract {
         };
         if self.parameters.is_empty()
             || self.parameters.windows(2).any(|pair| pair[0] >= pair[1])
+            || self
+                .resource_boundaries
+                .windows(2)
+                .any(|pair| pair[0] >= pair[1])
+            || self
+                .resource_boundaries
+                .iter()
+                .any(|slot| !self.parameters.contains(slot))
             || self.parameters.iter().any(|slot| {
                 parameters
                     .get(*slot as usize)

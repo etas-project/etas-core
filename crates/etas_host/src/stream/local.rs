@@ -9,7 +9,8 @@ use crate::{
 
 use super::{
     ByteStreamStore,
-    store::{ManagedStream, OperationDeadlines, await_io, lock_stream_state, unknown_stream},
+    admission::StreamAccess,
+    store::{ManagedStream, OperationDeadlines, admit_stream, await_io, unknown_stream},
 };
 
 #[derive(Clone, Default)]
@@ -52,12 +53,14 @@ impl LocalStreamClient {
             StreamOperation::Read { stream, .. }
             | StreamOperation::ReadUntilLimit { stream, .. }
             | StreamOperation::WriteAll { stream, .. }
-            | StreamOperation::Flush { stream }
+            | StreamOperation::Flush { stream, .. }
             | StreamOperation::Close { stream } => stream,
         };
         let timeout_ms = match &request.operation {
             StreamOperation::Read { timeout_ms, .. }
-            | StreamOperation::ReadUntilLimit { timeout_ms, .. } => *timeout_ms,
+            | StreamOperation::ReadUntilLimit { timeout_ms, .. }
+            | StreamOperation::WriteAll { timeout_ms, .. }
+            | StreamOperation::Flush { timeout_ms, .. } => *timeout_ms,
             _ => None,
         };
         let deadlines =
@@ -68,8 +71,24 @@ impl LocalStreamClient {
                 result: Err(StreamFailure::Host(unknown_stream(stream.handle()))),
             });
         };
-        let mut state = match lock_stream_state(&slot, stream.handle(), deadlines.clone()).await {
-            Ok(state) => state,
+        let access = match request.operation {
+            StreamOperation::Read { .. } | StreamOperation::ReadUntilLimit { .. } => {
+                StreamAccess::Read
+            }
+            StreamOperation::WriteAll { .. } | StreamOperation::Flush { .. } => StreamAccess::Write,
+            StreamOperation::Close { .. } => unreachable!("close bypasses I/O admission"),
+        };
+        let scope = if matches!(access, StreamAccess::Read) {
+            stream.read_scope.as_ref().and_then(|scope| scope.upgrade())
+        } else {
+            None
+        };
+        let admission = match scope {
+            Some(scope) => scope.admit(&slot, stream.handle(), deadlines.clone()).await,
+            None => admit_stream(&slot, stream.handle(), access, deadlines.clone()).await,
+        };
+        let admitted = match admission {
+            Ok(admitted) => admitted,
             Err(error) => {
                 return Ok(StreamResponse {
                     id: request.id,
@@ -77,15 +96,31 @@ impl LocalStreamClient {
                 });
             }
         };
-        let super::store::ManagedStreamState::Open {
-            stream: connection, ..
-        } = &mut *state
-        else {
+        let connection = &admitted.stream;
+        if let Err(error) = connection.validate_access(matches!(access, StreamAccess::Write)) {
             return Ok(StreamResponse {
                 id: request.id,
-                result: Err(StreamFailure::Closed),
+                result: Err(StreamFailure::from_host(error)),
             });
-        };
+        }
+        if let crate::ByteStreamOrigin::File { region, .. } = stream.origin() {
+            let right = if matches!(access, StreamAccess::Read) {
+                "read"
+            } else {
+                "write"
+            };
+            let action = crate::ActionInstance::new(
+                "Fs",
+                right,
+                vec![crate::HostValue::String(region.as_str().into())],
+            );
+            if !request.authority.allows(&action) {
+                return Err(HostError::new(
+                    HostErrorCode::AuthorityDenied,
+                    "file stream operation lacks its region authority",
+                ));
+            }
+        }
         let response = match &request.operation {
             StreamOperation::Read {
                 stream: _,
@@ -120,7 +155,7 @@ impl LocalStreamClient {
                 limit_bytes,
                 timeout_ms: _,
             } => read_until_limit(connection, *limit_bytes, &slot.cancellation, deadlines).await,
-            StreamOperation::WriteAll { stream: _, body } => {
+            StreamOperation::WriteAll { body, .. } => {
                 write_body(
                     connection,
                     body,
@@ -130,7 +165,7 @@ impl LocalStreamClient {
                 )
                 .await
             }
-            StreamOperation::Flush { stream: _ } => match await_io(
+            StreamOperation::Flush { .. } => match await_io(
                 connection.flush(),
                 Some(&slot.cancellation),
                 deadlines.clone(),
@@ -149,7 +184,7 @@ impl LocalStreamClient {
         // A partially written frame cannot be reused. Read cancellation preserves
         // buffered input and does not close a stream shared with other requests.
         if response.is_err() && matches!(request.operation, StreamOperation::WriteAll { .. }) {
-            drop(state);
+            drop(admitted);
             match slot.begin_close(stream.handle()) {
                 Ok(()) => slot.finish_close().await,
                 Err(error) if error.code == HostErrorCode::Closed => slot.finish_close().await,
@@ -187,7 +222,7 @@ impl StreamClient for LocalStreamClient {
 }
 
 async fn write_body(
-    connection: &mut ManagedStream,
+    connection: &ManagedStream,
     body: &[u8],
     cancellation: &CancellationToken,
     deadlines: OperationDeadlines,
@@ -225,7 +260,7 @@ async fn write_body(
 }
 
 pub(super) async fn read_until_limit(
-    connection: &mut ManagedStream,
+    connection: &ManagedStream,
     limit_bytes: usize,
     cancellation: &CancellationToken,
     deadlines: OperationDeadlines,
@@ -261,13 +296,13 @@ pub(super) async fn read_until_limit(
             Ok(read) => {
                 if body.len().saturating_add(read) > limit_bytes {
                     body.extend_from_slice(&chunk[..read]);
-                    connection.prepend_read_buffer(body);
+                    connection.prepend_read_buffer(body).await;
                     return Err(StreamFailure::LimitExceeded { limit_bytes });
                 }
                 body.extend_from_slice(&chunk[..read]);
             }
             Err(error) => {
-                connection.prepend_read_buffer(body);
+                connection.prepend_read_buffer(body).await;
                 return Err(StreamFailure::from_host(error));
             }
         }

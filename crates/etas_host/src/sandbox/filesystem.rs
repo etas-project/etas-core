@@ -10,6 +10,7 @@ use crate::{BoundedFileRead, HostError, HostErrorCode, WorkspacePath, WorkspaceR
 
 mod bounded_list;
 mod bounded_read;
+mod mutation;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WorkspaceFileMetadata {
@@ -90,6 +91,78 @@ impl FilesystemSandbox {
         bounded_read::read_controlled(&mut file, max_bytes, check)
     }
 
+    pub fn open_file(
+        &self,
+        root: &WorkspaceRoot,
+        path: &Path,
+        mode: crate::FileMode,
+    ) -> Result<std::fs::File, HostError> {
+        if mode.readable() {
+            ensure_root_allowed(
+                &self.policy.read_roots,
+                root,
+                "filesystem read is not allowed",
+            )?;
+        }
+        if mode.writable() {
+            ensure_root_allowed(
+                &self.policy.write_roots,
+                root,
+                "filesystem write is not allowed",
+            )?;
+        }
+        let relative = normalize_relative(path)?;
+        let mut options = OpenOptions::new();
+        options.read(mode.readable()).write(mode.writable());
+        match mode {
+            crate::FileMode::WriteTruncate => {
+                options.create(true).truncate(true);
+            }
+            crate::FileMode::Append => {
+                options.create(true).append(true);
+            }
+            crate::FileMode::CreateNew => {
+                options.create_new(true);
+            }
+            _ => {}
+        }
+        let file = root
+            .directory()
+            .open_with(&relative, &options)
+            .map_err(workspace_io_error)?;
+        let metadata = file.metadata().map_err(workspace_io_error)?;
+        if !metadata.is_file() {
+            return Err(HostError::new(
+                HostErrorCode::IoFailure,
+                "workspace stream target is not a file",
+            )
+            .with_detail(
+                "io_kind",
+                if metadata.is_dir() {
+                    "IsADirectory"
+                } else {
+                    "Unsupported"
+                },
+            ));
+        }
+        Ok(file.into_std())
+    }
+
+    pub fn canonicalize_file(
+        &self,
+        root: &WorkspaceRoot,
+        path: &Path,
+    ) -> Result<std::path::PathBuf, HostError> {
+        ensure_root_allowed(
+            &self.policy.read_roots,
+            root,
+            "filesystem canonicalization is not allowed",
+        )?;
+        root.directory()
+            .canonicalize(normalize_relative(path)?)
+            .map_err(workspace_io_error)
+    }
+
     fn open_read_file(
         &self,
         root: &WorkspaceRoot,
@@ -105,10 +178,19 @@ impl FilesystemSandbox {
             .directory()
             .open_with(&relative, &read_options())
             .map_err(workspace_io_error)?;
-        if !file.metadata().map_err(workspace_io_error)?.is_file() {
+        let metadata = file.metadata().map_err(workspace_io_error)?;
+        if !metadata.is_file() {
             return Err(HostError::new(
                 HostErrorCode::IoFailure,
                 "workspace read target is not a file",
+            )
+            .with_detail(
+                "io_kind",
+                if metadata.is_dir() {
+                    "IsADirectory"
+                } else {
+                    "Unsupported"
+                },
             ));
         }
         #[cfg(test)]
@@ -148,7 +230,7 @@ impl FilesystemSandbox {
             root,
             "filesystem write is not allowed",
         )?;
-        let relative = normalize_relative(path)?;
+        let relative = super::workspace::normalize_directory_relative(path)?;
         // Each component is created and opened relative to the retained parent.
         let mut parent = root.directory().try_clone().map_err(workspace_io_error)?;
         for component in &relative {
@@ -262,7 +344,7 @@ impl FilesystemSandbox {
         )?;
         let metadata = root
             .directory()
-            .metadata(normalize_relative(path)?)
+            .metadata(super::workspace::normalize_directory_relative(path)?)
             .map_err(workspace_io_error)?;
         #[cfg(test)]
         tests::after_resolution();
@@ -290,6 +372,14 @@ impl FilesystemSandbox {
             return Err(HostError::new(
                 HostErrorCode::IoFailure,
                 "workspace delete target is not a file",
+            )
+            .with_detail(
+                "io_kind",
+                if metadata.is_dir() {
+                    "IsADirectory"
+                } else {
+                    "Unsupported"
+                },
             ));
         }
         #[cfg(test)]

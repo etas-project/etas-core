@@ -1,6 +1,6 @@
 use crate::type_validation::{type_kind_to_wire, validate_type_shape};
 use prost::Message;
-mod callable_values;
+pub(super) mod callable_values;
 mod default_behavior;
 pub(crate) fn default_behavior_fingerprint(
     value: &crate::DefaultBehavior,
@@ -10,6 +10,7 @@ pub(crate) fn default_behavior_fingerprint(
         &default_behavior::to_proto(value).encode_to_vec(),
     )
 }
+mod constructors;
 mod methods;
 mod request_templates;
 pub(super) mod spec_invocations;
@@ -757,6 +758,11 @@ fn external_export_from_proto(
 
 fn public_metadata_to_proto(metadata: &PublicMetadata) -> ProtoPublicMetadataSection {
     ProtoPublicMetadataSection {
+        constructor_contracts: metadata
+            .constructor_contracts
+            .iter()
+            .map(constructors::to_proto)
+            .collect(),
         scoped_callbacks: metadata
             .scoped_callbacks
             .iter()
@@ -881,6 +887,11 @@ fn public_metadata_from_proto(
     metadata: ProtoPublicMetadataSection,
 ) -> Result<PublicMetadata, MetadataArtifactError> {
     let metadata = PublicMetadata {
+        constructor_contracts: metadata
+            .constructor_contracts
+            .into_iter()
+            .map(constructors::from_proto)
+            .collect::<Result<_, _>>()?,
         scoped_callbacks: metadata
             .scoped_callbacks
             .into_iter()
@@ -888,6 +899,7 @@ fn public_metadata_from_proto(
                 Ok(crate::ScopedCallbackContract {
                     target: callable_contract_target_from_proto(value.target)?,
                     parameters: value.parameters,
+                    resource_boundaries: value.resource_boundaries,
                 })
             })
             .collect::<Result<_, MetadataArtifactError>>()?,
@@ -1520,6 +1532,7 @@ fn scoped_callback_to_proto(value: &crate::ScopedCallbackContract) -> ProtoScope
     ProtoScopedCallbackContract {
         target: Some(callable_contract_target_to_proto(&value.target)),
         parameters: value.parameters.clone(),
+        resource_boundaries: value.resource_boundaries.clone(),
     }
 }
 
@@ -1997,6 +2010,10 @@ fn effect_metadata_from_proto(
 
 fn effect_summary_to_proto(summary: &EffectSummary) -> ProtoEffectSummary {
     ProtoEffectSummary {
+        callable_body: summary
+            .callable_body
+            .as_ref()
+            .map(callable_values::to_proto),
         definition: summary
             .definition
             .as_ref()
@@ -2035,6 +2052,10 @@ fn effect_summary_from_proto(
     summary: ProtoEffectSummary,
 ) -> Result<EffectSummary, MetadataArtifactError> {
     Ok(EffectSummary {
+        callable_body: summary
+            .callable_body
+            .map(callable_values::from_proto)
+            .transpose()?,
         definition: summary
             .definition
             .map(super::descriptors::identities::decode_key)
@@ -2148,9 +2169,18 @@ fn action_trace_to_proto(trace: &ActionTrace) -> ProtoActionTrace {
         children: Vec::new(),
         actions: Vec::new(),
         parameter_calls: Vec::new(),
+        recursion_id: None,
     };
     match trace {
         ActionTrace::Empty => {}
+        ActionTrace::Recursive { id, body } => {
+            proto.kind = ProtoActionTraceKind::Recursive as i32;
+            proto.recursion_id = Some(id.as_bytes().to_vec());
+            proto.children = body
+                .iter()
+                .map(|body| action_trace_to_proto(body))
+                .collect();
+        }
         ActionTrace::DefaultHandler { guards, body } => {
             proto.kind = ProtoActionTraceKind::DefaultHandler as i32;
             proto.actions = guards.iter().map(effect_ref_to_proto).collect();
@@ -2214,6 +2244,23 @@ fn action_trace_from_proto_with_budget(
         .map_err(|_| invalid("effect summary action trace has unknown kind"))?;
     match kind {
         ProtoActionTraceKind::Empty => Ok(ActionTrace::Empty),
+        ProtoActionTraceKind::Recursive => Ok(ActionTrace::Recursive {
+            id: etas_code::CodeFingerprint::from_bytes(
+                trace
+                    .recursion_id
+                    .ok_or_else(|| invalid("recursive trace identity is missing"))?
+                    .try_into()
+                    .map_err(|_| invalid("recursive trace identity"))?,
+            ),
+            body: trace
+                .children
+                .into_iter()
+                .next()
+                .map(|body| {
+                    action_trace_from_proto_with_budget(body, depth + 1, budget).map(Box::new)
+                })
+                .transpose()?,
+        }),
         ProtoActionTraceKind::DefaultHandler => {
             let [body] = trace
                 .children
@@ -2747,6 +2794,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn recursive_action_trace_roundtrip_keeps_equation_edges() {
+        let id = etas_code::CodeFingerprint::of_bytes("test.trace-equation", b"f");
+        let trace = ActionTrace::Recursive {
+            id,
+            body: Some(Box::new(ActionTrace::Choice(vec![
+                ActionTrace::Empty,
+                ActionTrace::Seq(vec![
+                    ActionTrace::ParameterCall {
+                        parameter: crate::CallableRequestTarget::Parameter("body".into()),
+                    },
+                    ActionTrace::Recursive { id, body: None },
+                ]),
+            ]))),
+        };
+        assert_eq!(
+            action_trace_from_proto(action_trace_to_proto(&trace)).unwrap(),
+            trace
+        );
+    }
+
+    #[test]
     fn decoder_rejects_empty_action_trace_choice_before_lowering() {
         let mut graph = valid_graph();
         graph.public_metadata = Some(ProtoPublicMetadataSection {
@@ -3188,6 +3256,7 @@ mod tests {
         let summary = EffectSummary {
             item: vec!["demo".into(), "relay".into()],
             behavior: Some(CallableValueBehavior {
+                suspension: None,
                 determinism: CallableValueDeterminism::RuntimeMediated,
                 independent_determinism: Some(CallableValueDeterminism::Deterministic),
                 host_requirements: vec![],
@@ -3234,6 +3303,7 @@ mod tests {
             position: 0,
         });
         let valid = CallableValueGraph {
+            call_inputs: Vec::new(),
             source_projections: Vec::new(),
             parameter_projections: Vec::new(),
             objects: Vec::new(),
@@ -3259,6 +3329,7 @@ mod tests {
                 effect_summaries: vec![ProtoEffectSummary {
                     residual_checks: Some(callable_values::residual_to_proto(&[])),
                     returned_callables: Some(callable_values::to_proto(&CallableValueGraph {
+                        call_inputs: Vec::new(),
                         source_projections: Vec::new(),
                         parameter_projections: Vec::new(),
                         objects: Vec::new(),
@@ -3277,6 +3348,7 @@ mod tests {
                 public_metadata: PublicMetadata {
                     effect_summaries: vec![EffectSummary {
                         returned_callables: Some(CallableValueGraph {
+                            call_inputs: Vec::new(),
                             source_projections: Vec::new(),
                             parameter_projections: Vec::new(),
                             sources,
@@ -3296,6 +3368,7 @@ mod tests {
         graph.public_metadata = Some(ProtoPublicMetadataSection {
             effect_summaries: vec![ProtoEffectSummary {
                 returned_callables: Some(callable_values::to_proto(&CallableValueGraph {
+                    call_inputs: Vec::new(),
                     source_projections: Vec::new(),
                     parameter_projections: Vec::new(),
                     objects: Vec::new(),

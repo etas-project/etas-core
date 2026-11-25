@@ -5,6 +5,7 @@ impl SessionRequest {
     pub(crate) fn storage_size(&self, limits: &StorageLimits) -> Result<usize, HostError> {
         bounded(
             match &self.operation {
+                SessionOperation::Lease(operation) => operation.storage_size()?,
                 SessionOperation::Resolve { config } => config.id.len(),
                 SessionOperation::Append { message } => message.storage_size(limits)?,
                 SessionOperation::Load {

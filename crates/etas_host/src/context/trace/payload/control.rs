@@ -43,9 +43,18 @@ impl HostTraceRequest for ApprovalRequest {
     }
 }
 
-fn grant(grant: &HostActionGrant) -> HostValue {
-    match grant {
+fn grant(value: &HostActionGrant) -> HostValue {
+    match value {
         HostActionGrant::Allow(pattern) => variant("Allow", vec![action_pattern(pattern)]),
+        HostActionGrant::Conjunction(groups) => variant(
+            "Conjunction",
+            vec![HostValue::List(
+                groups
+                    .iter()
+                    .map(|group| HostValue::List(group.iter().map(grant).collect()))
+                    .collect(),
+            )],
+        ),
     }
 }
 

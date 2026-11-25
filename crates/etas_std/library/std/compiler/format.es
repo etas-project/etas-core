@@ -25,7 +25,7 @@ impl FormatBuffer {
     }
 
     flow trim_spaces(var self) -> unit ![] {
-        while self.last() == " " limit Iterations(18446744073709551615) {
+        while self.last() == " " {
             match self.parts {
                 head :: tail => {
                     self.parts = tail;
@@ -37,7 +37,7 @@ impl FormatBuffer {
     }
 
     flow finish(var self) -> string ![] {
-        while self.last() == " " || self.last() == "\n" limit Iterations(18446744073709551615) {
+        while self.last() == " " || self.last() == "\n" {
             match self.parts {
                 head :: tail => {
                     self.parts = tail;
@@ -47,7 +47,7 @@ impl FormatBuffer {
             };
         }
         var output = "";
-        for part in self.parts.reverse() limit Iterations(18446744073709551615) {
+        for part in self.parts.reverse() {
             output = output + part;
         }
         return output;
@@ -65,7 +65,7 @@ impl BodyFormatter {
         var buffer = self.buffer;
         if buffer.last() == "\n" {
             var level: usize = 0;
-            while level < self.indent limit Iterations(18446744073709551615) {
+            while level < self.indent {
                 buffer.append("    ");
                 level = level + 1;
             }

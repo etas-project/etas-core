@@ -19,7 +19,7 @@ struct Encoder(blake3::Hasher);
 impl Encoder {
     fn new() -> Self {
         Self(blake3::Hasher::new_derive_key(
-            "etas.metadata.callable-value-input.v9",
+            "etas.metadata.callable-value-input.v10",
         ))
     }
     fn byte(&mut self, value: u8) {
@@ -56,6 +56,21 @@ impl Encoder {
                 S::MapKey => self.byte(6),
                 S::MapValue => self.byte(7),
                 S::CallResult => self.byte(8),
+                S::CallWithArguments { inputs } => {
+                    self.byte(10);
+                    self.number(*inputs as usize);
+                }
+                S::Invocation { inputs } => {
+                    self.byte(11);
+                    self.number(*inputs as usize);
+                }
+                S::Repeat { alternatives } => {
+                    self.byte(9);
+                    self.number(alternatives.len());
+                    for path in alternatives {
+                        self.value_projection_path(path);
+                    }
+                }
             }
         }
     }
@@ -232,6 +247,14 @@ impl Encoder {
                     self.byte(5);
                     match trace {
                         ActionTrace::Empty => self.byte(0),
+                        ActionTrace::Recursive { id, body } => {
+                            self.byte(9);
+                            self.text(&id.to_string());
+                            self.option(body.is_some());
+                            if let Some(body) = body {
+                                pending.push(Task::Trace(body));
+                            }
+                        }
                         ActionTrace::DefaultHandler { guards, body } => {
                             self.byte(8);
                             self.number(guards.len());
@@ -297,6 +320,35 @@ pub fn callable_value_graph_input_fingerprint(
     graph: &CallableValueGraph,
 ) -> etas_code::CodeFingerprint {
     let mut e = Encoder::new();
+    e.number(graph.call_inputs.len());
+    for inputs in &graph.call_inputs {
+        e.scope(inputs.scope);
+        e.number(inputs.arguments.len());
+        for argument in &inputs.arguments {
+            e.option(argument.name.is_some());
+            if let Some(name) = &argument.name {
+                e.text(name);
+            }
+            e.option(argument.sources.is_some());
+            if let Some(sources) = &argument.sources {
+                e.number(sources.len());
+                for source in sources {
+                    e.source(*source);
+                }
+            }
+            e.number(argument.projections.len());
+            for projection in &argument.projections {
+                e.value_projection_path(&projection.path);
+                e.option(projection.sources.is_some());
+                if let Some(sources) = &projection.sources {
+                    e.number(sources.len());
+                    for source in sources {
+                        e.source(*source);
+                    }
+                }
+            }
+        }
+    }
     e.number(graph.parameter_projections.len());
     for path in &graph.parameter_projections {
         e.value_projection_path(path);
@@ -352,6 +404,11 @@ pub fn callable_value_graph_input_fingerprint(
                     e.encode(Task::Effect(effect));
                 }
             }
+        }
+        e.option(node.behavior.suspension.is_some());
+        if let Some(summary) = node.behavior.suspension {
+            e.option(summary.may_suspend);
+            e.option(summary.unknown);
         }
         e.number(node.behavior.determinism as usize);
         e.option(node.behavior.independent_determinism.is_some());
@@ -476,8 +533,17 @@ pub fn published_method_input_fingerprint(
     method: &crate::PublishedMethod,
 ) -> etas_code::CodeFingerprint {
     let mut e = Encoder::new();
-    e.text("published-method.v2");
+    e.text("published-method.v3");
     e.0.update(method.identity.fingerprint().as_bytes());
+    e.number(method.parameter_defaults.len());
+    for default in &method.parameter_defaults {
+        e.number(default.slot as usize);
+        e.0.update(default.reference.fingerprint().as_bytes());
+        e.option(default.callable_value.is_some());
+        if let Some(graph) = &default.callable_value {
+            e.0.update(crate::proto::callable_value_graph_fingerprint(graph).as_bytes());
+        }
+    }
     e.encode(Task::Type(&method.self_type));
     match method.receiver {
         crate::MethodReceiver::Value { slot } => {
@@ -587,6 +653,7 @@ mod tests {
 
     fn graph() -> CallableValueGraph {
         CallableValueGraph {
+            call_inputs: Vec::new(),
             source_projections: Vec::new(),
             parameter_projections: Vec::new(),
             objects: Vec::new(),
@@ -596,6 +663,7 @@ mod tests {
                 residual_checks: Vec::new(),
                 handler_requests: None,
                 behavior: CallableValueBehavior {
+                    suspension: None,
                     determinism: CallableValueDeterminism::Deterministic,
                     independent_determinism: None,
                     host_requirements: vec![],
@@ -631,6 +699,12 @@ mod tests {
         changed = original.clone();
         changed.values[0].behavior.independent_determinism =
             Some(CallableValueDeterminism::Deterministic);
+        assert_ne!(before, callable_value_graph_input_fingerprint(&changed));
+        changed = original.clone();
+        changed.values[0].behavior.suspension = Some(etas_code::descriptor::SuspensionInfo {
+            may_suspend: false,
+            unknown: false,
+        });
         assert_ne!(before, callable_value_graph_input_fingerprint(&changed));
         changed = original.clone();
         changed.values[0].requested_actions.tail = Some("E".into());

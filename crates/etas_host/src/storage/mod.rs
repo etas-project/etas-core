@@ -4,5 +4,7 @@ pub mod outcome;
 pub mod receipt;
 pub(crate) mod receipt_budget;
 pub(crate) mod sqlite;
+mod value;
 pub mod version;
+pub use value::storage_error_value;
 pub(crate) mod volatile;

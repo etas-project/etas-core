@@ -140,6 +140,18 @@ fn encode_policy_request(request: &PolicyEvaluationRequest) -> Result<Value, Hos
 
 fn action_grant_json(grant: &crate::HostActionGrant) -> Result<Value, HostError> {
     match grant {
+        crate::HostActionGrant::Conjunction(groups) => {
+            let groups = groups
+                .iter()
+                .map(|group| {
+                    group
+                        .iter()
+                        .map(action_grant_json)
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .collect::<Result<Vec<_>, HostError>>()?;
+            Ok(json!({ "kind": "allow_all", "groups": groups }))
+        }
         crate::HostActionGrant::Allow(pattern) => match pattern {
             ActionPattern::Exact(action) => {
                 let args = action
@@ -293,6 +305,34 @@ fn decode_approval_grant(value: &Value) -> Result<crate::HostActionGrant, HostEr
             "HTTP policy approval grant is missing kind",
         )
     })?;
+    if kind == "allow_all" {
+        let groups = value
+            .get("groups")
+            .and_then(Value::as_array)
+            .ok_or_else(|| {
+                HostError::new(
+                    HostErrorCode::InvalidResponse,
+                    "HTTP policy conjunction is missing groups",
+                )
+            })?;
+        let groups = groups
+            .iter()
+            .map(|group| {
+                group
+                    .as_array()
+                    .ok_or_else(|| {
+                        HostError::new(
+                            HostErrorCode::InvalidResponse,
+                            "HTTP policy conjunction group is not an array",
+                        )
+                    })?
+                    .iter()
+                    .map(decode_approval_grant)
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .collect::<Result<Vec<_>, HostError>>()?;
+        return Ok(crate::HostActionGrant::Conjunction(groups));
+    }
     let effect = value.get("effect").and_then(Value::as_str).ok_or_else(|| {
         HostError::new(
             HostErrorCode::InvalidResponse,

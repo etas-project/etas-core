@@ -69,28 +69,28 @@ impl Data {
             Data.String(value) => JsonValue.String(value),
             Data.Bytes(value) => {
                 var items: Array<JsonValue> = [];
-                for byte in value limit Iterations(18446744073709551615) {
+                for byte in value {
                     items = items.push(JsonValue.Number(std.text.parse_f64(std.text.from_u8(byte)).unwrap()));
                 }
                 JsonValue.Array(items)
             },
             Data.List(values) => {
                 var items: Array<JsonValue> = [];
-                for value in values limit Iterations(18446744073709551615) {
+                for value in values {
                     items = items.push(value.project_json());
                 }
                 JsonValue.Array(items)
             },
             Data.Map(entries) => {
                 var items: Array<JsonValue> = [];
-                for (key, value) in entries limit Iterations(18446744073709551615) {
+                for (key, value) in entries {
                     items = items.push(JsonValue.Array([key.project_json(), value.project_json()]));
                 }
                 JsonValue.Array(items)
             },
             Data.Record(fields) => {
                 var object: Map<string, JsonValue> = {};
-                for (name, value) in fields limit Iterations(18446744073709551615) {
+                for (name, value) in fields {
                     if object.contains_key(name) {
                         perform Error.raise<DataError>(DataError { code= "schema_mismatch", message= "record contains duplicate JSON field name" });
                     }
@@ -100,7 +100,7 @@ impl Data {
             },
             Data.Variant(name, fields) => {
                 var items: Array<JsonValue> = [];
-                for value in fields limit Iterations(18446744073709551615) {
+                for value in fields {
                     items = items.push(value.project_json());
                 }
                 var object: Map<string, JsonValue> = {};

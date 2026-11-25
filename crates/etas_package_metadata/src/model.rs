@@ -95,6 +95,7 @@ pub struct ExternalExport {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PublicMetadata {
+    pub constructor_contracts: Vec<ConstructorContract>,
     pub scoped_callbacks: Vec<crate::ScopedCallbackContract>,
     pub definition_descriptors: Option<etas_code::descriptor::DefinitionDescriptorSet>,
     pub definition_origins: Option<etas_code::identity::PackageDefinitionOrigins>,
@@ -126,7 +127,8 @@ pub struct PublicMetadata {
 
 impl PublicMetadata {
     pub fn is_empty(&self) -> bool {
-        self.scoped_callbacks.is_empty()
+        self.constructor_contracts.is_empty()
+            && self.scoped_callbacks.is_empty()
             && self.definition_descriptors.is_none()
             && self.definition_origins.is_none()
             && self.modules.is_empty()
@@ -252,6 +254,10 @@ pub struct ActionSignature {
 pub struct ParameterDefault {
     pub slot: u32,
     pub reference: etas_code::descriptor::ParameterDefaultInfo,
+    /// Checked callable payload of the default value in its declaration scope.
+    /// None means no published payload evidence, never an empty callback.
+    #[serde(default)]
+    pub callable_value: Option<crate::CallableValueGraph>,
 }
 
 #[derive(
@@ -410,6 +416,9 @@ impl EffectMetadata {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct EffectSummary {
+    /// Checked callable body, including invocation inputs and lexical bindings.
+    /// Kept separately from the callable payload of the function's result.
+    pub callable_body: Option<crate::CallableValueGraph>,
     /// Exact checked source declaration, including overload identity.
     pub definition: Option<etas_code::DefinitionKey>,
     pub residual_checks: Vec<etas_code::residual::identity::ResidualObligationRef>,
@@ -532,6 +541,9 @@ pub struct EffectFootprint {
     pub requested_actions: EffectRow,
     pub default_actions: EffectRow,
     pub handled_actions: EffectRow,
+    /// Rights required by the native defaults contributing this footprint.
+    #[serde(default)]
+    pub required_authority: EffectRow,
     pub handler_requests: Option<RequestInstantiationTemplate>,
     pub residual_checks: Vec<etas_code::residual::identity::ResidualObligationRef>,
     pub behavior: crate::CallableValueBehavior,
@@ -570,6 +582,10 @@ pub enum ActionTrace {
     Seq(Vec<ActionTrace>),
     Choice(Vec<ActionTrace>),
     Repeat(Box<ActionTrace>),
+    Recursive {
+        id: etas_code::CodeFingerprint,
+        body: Option<Box<ActionTrace>>,
+    },
     UnknownOrder(Vec<EffectRef>),
     Widened {
         actions: Vec<EffectRef>,
@@ -690,6 +706,11 @@ pub struct SpecImpl {
 )]
 pub struct PublishedMethod {
     pub identity: etas_code::MethodId,
+    /// Compiler execution contract, unavailable to source method lookup.
+    #[serde(default)]
+    pub internal: bool,
+    #[serde(default)]
+    pub parameter_defaults: Vec<ParameterDefault>,
     pub self_type: Type,
     pub receiver: MethodReceiver,
     pub owner_params: Vec<GenericParam>,
@@ -1012,4 +1033,43 @@ pub enum EffectArgKind {
     Int,
     #[default]
     Wildcard,
+}
+
+/// Definition-owned construction data. Field order is source declaration order,
+/// independent of the canonical order used for structural record types.
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub struct ConstructorContract {
+    pub path: Vec<String>,
+    pub generic_params: Vec<GenericParam>,
+    pub agent: bool,
+    pub fields: Vec<ConstructorField>,
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub struct ConstructorField {
+    pub name: String,
+    pub ty: Type,
+    pub injection: Option<ConstructorInjection>,
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub struct ConstructorInjection {
+    /// Canonical, already resolved effect/action identity and static selectors.
+    pub action: EffectRef,
+    pub generic_args: Vec<ConstructorGenericArgument>,
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub enum ConstructorGenericArgument {
+    Type(Type),
+    EffectRow(EffectRow),
+    Infer,
 }

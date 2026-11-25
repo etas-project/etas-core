@@ -24,7 +24,9 @@ pub use intrinsic::{
     StdTaskIntrinsic, intrinsic_completion_semantics, intrinsic_static_string_semantics,
 };
 pub use intrinsic::{
-    StdExecutionRole, StdSourceRole, compiler_contract_identity, compiler_contract_registry,
+    SOURCE_STORAGE_BUILD, SOURCE_STORAGE_VIEW, SOURCE_VALUE_EQUALITY_METHOD, StdExecutionRole,
+    StdSourceRole, compiler_contract_identity, compiler_contract_registry, source_storage_method,
+    source_storage_owner, source_value_equality_owner,
 };
 pub use library::{StdLibrarySource, standard_library_source, standard_library_sources};
 pub use metadata::{CompletionMetadata, DocsMetadata, StdManifest, TextCompatibilityDescriptor};

@@ -31,7 +31,7 @@ impl LineCursor {
         return Iter { next= () => {
             let input = self.source.utf8;
             var offset = self.start;
-            while offset < input.length limit Iterations(18446744073709551615) {
+            while offset < input.length {
                 if input.get(offset) == Some(10) {
                     let end = if offset > self.start && input.get(offset - 1) == Some(13) {
                         offset - 1
@@ -54,7 +54,7 @@ public flow lines(text: string) -> Iter<string> ![] {
     let input = text.utf8;
     return Iter { next= () => {
         var offset: usize = 0;
-        while offset < input.length limit Iterations(18446744073709551615) {
+        while offset < input.length {
             if input.get(offset) == Some(10) {
                 let end = if offset > 0 && input.get(offset - 1) == Some(13) { offset - 1 } else { offset };
                 let part = TextSpan { source= text, start= 0, end= end }.materialize();
@@ -158,7 +158,7 @@ impl WhitespaceCursor {
             var remaining = self.remaining;
             var offset: usize = self.offset;
             var start: Option<usize> = None;
-            while true limit Iterations(18446744073709551615) {
+            while true {
                 match (remaining.next)() {
                     None => {
                         return match start {
@@ -195,7 +195,7 @@ public flow split_whitespace(text: string) -> Iter<string> ![] {
         var remaining = input;
         var offset: usize = 0;
         var start: Option<usize> = None;
-        while true limit Iterations(18446744073709551615) {
+        while true {
             match (remaining.next)() {
                 None => {
                     return match start {

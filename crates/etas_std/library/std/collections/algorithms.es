@@ -40,7 +40,7 @@ impl Array<T> {
     public flow pop(self) -> (Array<T>, Option<T>) ![] {
         var remaining: Array<T> = [];
         var previous: Option<T> = None;
-        for value in self limit Iterations(18446744073709551615) {
+        for value in self {
             match previous {
                 Some(last) => { remaining = remaining + [last]; },
                 None => {},
@@ -59,7 +59,7 @@ impl List<T> {
     public flow len(self) -> usize ![] {
         var count: usize = 0;
         var cursor = self;
-        while true limit Iterations(18446744073709551615) {
+        while true {
             match cursor {
                 [] => { return count; },
                 _ :: tail => {
@@ -84,7 +84,7 @@ impl List<T> {
             None => { return None; },
         };
         var cursor = self;
-        while true limit Iterations(18446744073709551615) {
+        while true {
             match cursor {
                 [] => { return None; },
                 head :: tail => {
@@ -138,97 +138,18 @@ impl List<T> {
 
     public flow extend(self, prepended: List<T>) -> List<T> ![] {
         var reversed: List<T> = [];
-        for value in prepended limit Iterations(18446744073709551615) {
+        for value in prepended {
             reversed = value :: reversed;
         }
         var output = self;
-        for value in reversed limit Iterations(18446744073709551615) {
+        for value in reversed {
             output = value :: output;
         }
         return output;
     }
 }
 
-impl Map<K, V> {
-    public flow new() -> Map<K, V> ![] {
-        return Map { entries= [], length= 0 };
-    }
 
-    public flow from_entries(items: List<(K, V)>) -> Map<K, V> ![] {
-        var output: Map<K, V> = Map { entries= [], length= 0 };
-        for entry in items limit Iterations(18446744073709551615) {
-            let (key, value) = entry;
-            output = output.insert(key, value);
-        }
-        return output;
-    }
-
-    public flow len(self) -> usize ![] {
-        return self.length;
-    }
-
-    public flow is_empty(self) -> bool ![] {
-        return self.length == 0;
-    }
-
-    public flow get(self, key: K) -> Option<V> ![] {
-        var cursor = self.entries;
-        while true limit Iterations(18446744073709551615) {
-            match cursor {
-                [] => { return None; },
-                entry :: tail => {
-                    let (entry_key, value) = entry;
-                    if entry_key == key {
-                        return Some(value);
-                    }
-                    cursor = tail;
-                },
-            };
-        }
-        return std.core.abort("map traversal limit");
-    }
-
-    public flow contains_key(self, key: K) -> bool ![] {
-        return match self.get(key) {
-            Some(_) => true,
-            None => false,
-        };
-    }
-
-    public flow insert(self, key: K, value: V) -> Map<K, V> ![] {
-        var reversed: List<(K, V)> = [];
-        var replaced = false;
-        for entry in self.entries limit Iterations(18446744073709551615) {
-            let (entry_key, entry_value) = entry;
-            if entry_key == key {
-                reversed = (entry_key, value) :: reversed;
-                replaced = true;
-            } else {
-                reversed = (entry_key, entry_value) :: reversed;
-            }
-        }
-        if !replaced {
-            reversed = (key, value) :: reversed;
-        }
-        return Map {
-            entries= reversed.reverse(),
-            length= self.length + if replaced { 0 } else { 1 },
-        };
-    }
-
-    public flow remove(self, key: K) -> Map<K, V> ![] {
-        var reversed: List<(K, V)> = [];
-        var length: usize = 0;
-        for entry in self.entries limit Iterations(18446744073709551615) {
-            let (entry_key, entry_value) = entry;
-            if entry_key != key {
-                reversed = (entry_key, entry_value) :: reversed;
-                length = length + 1;
-            }
-        }
-        return Map { entries= reversed.reverse(), length= length };
-    }
-}
 
 impl Slice<T> {
     public flow len(self) -> usize ![] {
@@ -266,7 +187,7 @@ impl Slice<T> {
     public flow to_array(self) -> Array<T> ![] {
         var output: Array<T> = [];
         var index: usize = 0;
-        while index < self.length limit Iterations(18446744073709551615) {
+        while index < self.length {
             output = output.push(self.source.get(self.start + index).unwrap());
             index = index + 1;
         }
@@ -304,58 +225,7 @@ impl bytes {
     }
 }
 
-impl Set<T> {
-    public flow new() -> Set<T> ![] {
-        return Set { elements= [], length= 0 };
-    }
 
-    public flow from_list(items: List<T>) -> Set<T> ![] {
-        var output: Set<T> = Set { elements= [], length= 0 };
-        for value in items limit Iterations(18446744073709551615) {
-            if !output.contains(value) {
-                output = Set { elements= value :: output.elements, length= output.length + 1 };
-            }
-        }
-        return Set { elements= output.elements.reverse(), length= output.length };
-    }
-
-    public flow len(self) -> usize ![] {
-        return self.length;
-    }
-
-    public flow is_empty(self) -> bool ![] {
-        return self.length == 0;
-    }
-
-    public flow contains(self, value: T) -> bool ![] {
-        for element in self.elements limit Iterations(18446744073709551615) {
-            if element == value {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public flow insert(self, value: T) -> Set<T> ![] {
-        if self.contains(value) {
-            return self;
-        }
-        let reversed = value :: (self.elements.reverse());
-        return Set { elements= reversed.reverse(), length= self.length + 1 };
-    }
-
-    public flow remove(self, value: T) -> Set<T> ![] {
-        var reversed: List<T> = [];
-        var length: usize = 0;
-        for element in self.elements limit Iterations(18446744073709551615) {
-            if element != value {
-                reversed = element :: reversed;
-                length = length + 1;
-            }
-        }
-        return Set { elements= reversed.reverse(), length= length };
-    }
-}
 
 impl bytes {
     public flow get<I ~ Index>(self, index: I) -> Option<u8> ![] {
@@ -369,7 +239,7 @@ impl bytes {
 impl List<T> {
     public flow reverse(self) -> List<T> ![] {
         var output: List<T> = [];
-        for value in self limit Iterations(18446744073709551615) {
+        for value in self {
             output = value :: output;
         }
         return output;

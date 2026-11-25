@@ -8,6 +8,14 @@ pub(crate) use default_behavior::validate as validate_default_behavior;
 mod request_templates;
 mod spec_invocations;
 pub(crate) use callable_values::validate as validate_callable_values;
+pub(super) fn validate_proto_callable_values(
+    graph: &proto::ProtoCallableValueGraph,
+    budget: &mut MetadataGraphBudget,
+) -> Result<(), MetadataArtifactError> {
+    let mut validator = ProtoGraphValidator::default();
+    validator.callable_values(graph)?;
+    budget.charge(validator.budget.used(), "default callable value")
+}
 pub(crate) use spec_invocations::validate as validate_callable_request_target;
 
 pub const MAX_METADATA_GRAPH_DEPTH: usize = 64;
@@ -172,8 +180,10 @@ impl ModelGraphValidator {
     fn public_metadata(&mut self, metadata: &PublicMetadata) -> Result<(), MetadataArtifactError> {
         let mut scoped = std::collections::BTreeSet::new();
         for contract in &metadata.scoped_callbacks {
-            self.budget
-                .charge(1 + contract.parameters.len(), "scoped callback contracts")?;
+            self.budget.charge(
+                1 + contract.parameters.len() + contract.resource_boundaries.len(),
+                "scoped callback contracts",
+            )?;
             contract.validate(metadata)?;
             if !scoped.insert(&contract.target) {
                 return Err(invalid("duplicate scoped callback contract target"));
@@ -210,6 +220,32 @@ impl ModelGraphValidator {
             origins
                 .validate()
                 .map_err(|error| invalid(error.to_string()))?;
+        }
+        for contract in &metadata.constructor_contracts {
+            self.budget.enter(0, "constructor contract")?;
+            self.budget
+                .charge(contract.path.len(), "constructor path")?;
+            for param in &contract.generic_params {
+                self.generic_param(param)?;
+            }
+            for field in &contract.fields {
+                self.budget.enter(1, "constructor field")?;
+                self.ty(&field.ty, 2)?;
+                if let Some(injection) = &field.injection {
+                    self.effect_ref(&injection.action, 2)?;
+                    for arg in &injection.generic_args {
+                        match arg {
+                            ConstructorGenericArgument::Type(ty) => self.ty(ty, 2)?,
+                            ConstructorGenericArgument::EffectRow(row) => {
+                                self.effect_row(row, 2)?
+                            }
+                            ConstructorGenericArgument::Infer => {
+                                self.budget.enter(2, "inferred constructor argument")?
+                            }
+                        }
+                    }
+                }
+            }
         }
         for signature in metadata
             .types
@@ -365,7 +401,11 @@ impl ModelGraphValidator {
             if let Some(requests) = &summary.handler_requests {
                 self.request_template(requests)?;
             }
-            if let Some(graph) = &summary.returned_callables {
+            for graph in summary
+                .callable_body
+                .iter()
+                .chain(&summary.returned_callables)
+            {
                 self.callable_values(graph)?;
             }
             if let Some(effects) = &summary.default_handler_effects {
@@ -488,6 +528,22 @@ impl ModelGraphValidator {
 
     fn method(&mut self, method: &PublishedMethod) -> Result<(), MetadataArtifactError> {
         super::descriptors::validate_model_method_identity(&method.identity, &mut self.budget)?;
+        let root = method
+            .callable
+            .sources
+            .first()
+            .and_then(|source| match source {
+                crate::CallableValueSource::Value(root) => {
+                    method.callable.values.get(*root as usize)
+                }
+                _ => None,
+            })
+            .ok_or_else(|| invalid("method has no checked callable root"))?;
+        super::parameter_defaults::validate_model(
+            &method.parameter_defaults,
+            root.params.len(),
+            &mut self.budget,
+        )?;
         self.ty(&method.self_type, 0)?;
         self.budget
             .charge(method.requirements.limits.len(), "method limits")?;
@@ -621,6 +677,11 @@ impl ModelGraphValidator {
                 }
             }
             ActionTrace::Repeat(child) => self.action_trace(child, depth + 1)?,
+            ActionTrace::Recursive { body, .. } => {
+                if let Some(body) = body {
+                    self.action_trace(body, depth + 1)?;
+                }
+            }
             ActionTrace::UnknownOrder(actions) | ActionTrace::Widened { actions, .. } => {
                 for action in actions {
                     self.effect_ref(action, depth + 1)?;
@@ -714,8 +775,10 @@ impl ProtoGraphValidator {
         metadata: &proto::ProtoPublicMetadataSection,
     ) -> Result<(), MetadataArtifactError> {
         for contract in &metadata.scoped_callbacks {
-            self.budget
-                .charge(1 + contract.parameters.len(), "scoped callback contracts")?;
+            self.budget.charge(
+                1 + contract.parameters.len() + contract.resource_boundaries.len(),
+                "scoped callback contracts",
+            )?;
         }
         if let Some(graph) = &metadata.definition_descriptors {
             super::descriptors::validate_wire(graph, &mut self.budget)?;
@@ -737,6 +800,33 @@ impl ProtoGraphValidator {
                     self.budget.enter(0, "definition identity")?;
                     for _ in key.module.iter().chain(&key.declaration) {
                         self.budget.enter(0, "definition binding path")?;
+                    }
+                }
+            }
+        }
+        for contract in &metadata.constructor_contracts {
+            self.budget.enter(0, "constructor contract")?;
+            self.budget
+                .charge(contract.path.len(), "constructor path")?;
+            for param in &contract.generic_params {
+                self.generic_param(param)?;
+            }
+            for field in &contract.fields {
+                self.budget.enter(1, "constructor field")?;
+                if let Some(ty) = &field.ty {
+                    self.ty(ty, 2)?;
+                }
+                if let Some(injection) = &field.injection {
+                    if let Some(action) = &injection.action {
+                        self.effect_ref(action, 2)?;
+                    }
+                    for arg in &injection.generic_args {
+                        use proto::proto_constructor_generic_argument::Value;
+                        match &arg.value {
+                            Some(Value::Type(ty)) => self.ty(ty, 2)?,
+                            Some(Value::EffectRow(row)) => self.effect_row(row, 2)?,
+                            _ => self.budget.enter(2, "inferred constructor argument")?,
+                        }
                     }
                 }
             }
@@ -861,6 +951,20 @@ impl ProtoGraphValidator {
                 self.generic_param(param)?;
             }
             if let Some(graph) = &method.callable {
+                let arity = graph
+                    .sources
+                    .first()
+                    .and_then(|source| match &source.kind {
+                        Some(proto::source::Kind::Value(root)) => Some(*root),
+                        _ => None,
+                    })
+                    .and_then(|root| graph.values.get(root as usize))
+                    .map_or(0, |root| root.params.len());
+                super::parameter_defaults::validate_wire(
+                    &method.parameter_defaults,
+                    arity,
+                    &mut self.budget,
+                )?;
                 self.callable_values(graph)?;
             }
         }
@@ -911,7 +1015,11 @@ impl ProtoGraphValidator {
             if let Some(requests) = &summary.handler_requests {
                 self.request_template(requests)?;
             }
-            if let Some(graph) = &summary.returned_callables {
+            for graph in summary
+                .callable_body
+                .iter()
+                .chain(&summary.returned_callables)
+            {
                 self.callable_values(graph)?;
             }
             if let Some(effects) = &summary.default_handler_effects {
@@ -1194,6 +1302,9 @@ pub(super) fn validate_proto_action_trace_shape(
     use proto::ProtoActionTraceKind as K;
     let kind = K::try_from(trace.kind)
         .map_err(|_| invalid("effect summary action trace has unknown kind"))?;
+    if kind != K::Recursive && trace.recursion_id.is_some() {
+        return Err(invalid("recursion identity on a non-recursive trace"));
+    }
     let (event, parameter, children, actions, parameter_calls) = (
         trace.event.is_some(),
         trace.parameter.is_some(),
@@ -1202,6 +1313,16 @@ pub(super) fn validate_proto_action_trace_shape(
         !trace.parameter_calls.is_empty(),
     );
     match kind {
+        K::Recursive
+            if !event
+                && !parameter
+                && !actions
+                && !parameter_calls
+                && trace.recursion_id.as_ref().is_some_and(|id| id.len() == 32)
+                && trace.children.len() <= 1 =>
+        {
+            Ok(())
+        }
         K::DefaultHandler
             if !event && !parameter && !parameter_calls && actions && trace.children.len() == 1 =>
         {

@@ -12,6 +12,7 @@ pub enum StdSourceRole {
     Money,
     Index,
     Number,
+    Active,
     IndexError,
     Region,
     WorkspacePath,
@@ -102,7 +103,7 @@ pub enum StdSourceRole {
 }
 
 impl StdSourceRole {
-    pub const ALL: [Self; 111] = [
+    pub const ALL: [Self; 112] = [
         Self::Money,
         Self::Limit,
         Self::Primitive(StdPrimitiveType::Bool),
@@ -127,6 +128,7 @@ impl StdSourceRole {
         Self::Primitive(StdPrimitiveType::USize),
         Self::Index,
         Self::Number,
+        Self::Active,
         Self::IndexError,
         Self::Region,
         Self::WorkspacePath,
@@ -242,6 +244,7 @@ impl StdSourceRole {
             Self::Money => "std.runtime.budget.Money",
             Self::Index => "std.core.Index",
             Self::Number => "std.math.Number",
+            Self::Active => "std.agent.Active",
             Self::IndexError => "std.runtime.error.IndexError",
             Self::Region => "std.fs.Region",
             Self::WorkspacePath => "std.fs.WorkspacePath",
@@ -409,6 +412,7 @@ impl StdSourceRole {
             | Self::Money
             | Self::Index
             | Self::Number
+            | Self::Active
             | Self::IndexError
             | Self::Region
             | Self::Scheduler
@@ -461,6 +465,7 @@ impl StdSourceRole {
             self,
             Self::Index
                 | Self::Number
+                | Self::Active
                 | Self::Region
                 | Self::NativePromptEncode
                 | Self::NativeByteStream

@@ -76,7 +76,7 @@ pub fn compiler_contract_identity() -> String {
             role,
             role.role(),
             role.source_path(),
-            role.associated_owner(),
+            role.associated_owners(),
             role.owner_type_parameter_count(),
             role.has_receiver(),
             role.is_public(),
@@ -84,8 +84,16 @@ pub fn compiler_contract_identity() -> String {
         )
     });
     hash.update(
-        &serde_json::to_vec(&(29, effects, primitives, code_types, executions))
-            .expect("compiler role ABI"),
+        &serde_json::to_vec(&(
+            42,
+            effects,
+            primitives,
+            code_types,
+            executions,
+            super::SOURCE_STORAGE_VIEW,
+            super::SOURCE_STORAGE_BUILD,
+        ))
+        .expect("compiler role ABI"),
     );
     format!("blake3:{}", hash.finalize().to_hex())
 }

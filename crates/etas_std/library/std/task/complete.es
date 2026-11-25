@@ -44,11 +44,11 @@ public flow join<A, B, C, D, effect E>(jobs: (() -> A ![E], () -> B ![E], () -> 
 public flow join<T, effect E>(jobs: Array<() -> T ![E]>) -> Array<T> ![E] {
     return Scope.inherit((scheduler: std.task.scheduler.SchedulerHandle) => {
         var tasks: Array<Task<T, ![E]>> = [];
-        for job in jobs limit Iterations(18446744073709551615) {
+        for job in jobs {
             tasks = tasks.push(start(job));
         }
         var output: Array<T> = [];
-        for task in tasks limit Iterations(18446744073709551615) {
+        for task in tasks {
             output = output.push(await(task));
         }
         return output;
@@ -58,11 +58,11 @@ public flow join<T, effect E>(jobs: Array<() -> T ![E]>) -> Array<T> ![E] {
 public flow collect<T, X, effect E>(jobs: Array<() -> T ![Error<X>, E]>) -> Array<Result<T, X>> ![E] {
     return Scope.inherit((scheduler: std.task.scheduler.SchedulerHandle) => {
         var tasks: Array<Task<Result<T, X>, ![E]>> = [];
-        for job in jobs limit Iterations(18446744073709551615) {
+        for job in jobs {
             tasks = tasks.push(start(() => job()?));
         }
         var output: Array<Result<T, X>> = [];
-        for task in tasks limit Iterations(18446744073709551615) {
+        for task in tasks {
             output = output.push(await(task));
         }
         return output;
@@ -72,11 +72,11 @@ public flow collect<T, X, effect E>(jobs: Array<() -> T ![Error<X>, E]>) -> Arra
 public flow map_concurrent<A, B, effect E>(values: Array<A>, transform: (A) -> B ![E]) -> Array<B> ![E] {
     return Scope.inherit((scheduler: std.task.scheduler.SchedulerHandle) => {
         var tasks: Array<Task<B, ![E]>> = [];
-        for value in values limit Iterations(18446744073709551615) {
+        for value in values {
             tasks = tasks.push(start(() => transform(value)));
         }
         var output: Array<B> = [];
-        for task in tasks limit Iterations(18446744073709551615) {
+        for task in tasks {
             output = output.push(await(task));
         }
         return output;
@@ -87,11 +87,11 @@ public flow map_concurrent_collect<A, B, X, effect E>(values: Array<A>, transfor
     -> Array<Result<B, X>> ![E] {
     return Scope.inherit((scheduler: std.task.scheduler.SchedulerHandle) => {
         var tasks: Array<Task<Result<B, X>, ![E]>> = [];
-        for value in values limit Iterations(18446744073709551615) {
+        for value in values {
             tasks = tasks.push(start(() => transform(value)?));
         }
         var output: Array<Result<B, X>> = [];
-        for task in tasks limit Iterations(18446744073709551615) {
+        for task in tasks {
             output = output.push(await(task));
         }
         return output;
@@ -103,7 +103,7 @@ public flow try_join<T, X, effect E>(jobs: Array<() -> T ![Error<X>, E]>) -> Res
         var tasks: Array<Task<Result<T, X>, ![E]>> = [];
         var roots: std.collections.OrderedMap<u64, usize> = std.collections.OrderedMap.new();
         var slots: Array<Option<T>> = [];
-        for job in jobs limit Iterations(18446744073709551615) {
+        for job in jobs {
             let task: Task<Result<T, X>, ![E]> = start(() => job()?);
             roots = roots.insert(task.id, tasks.length);
             tasks = tasks.push(task);
@@ -111,7 +111,7 @@ public flow try_join<T, X, effect E>(jobs: Array<() -> T ![Error<X>, E]>) -> Res
         }
         var complete: usize = 0;
         var primary: Option<(usize, X)> = None;
-        while complete < tasks.length limit Iterations(18446744073709551615) {
+        while complete < tasks.length {
             let event = scheduler.next_completion();
             let index = match roots.get(event.task) {
                 Some(index) => index,
@@ -139,7 +139,7 @@ public flow try_join<T, X, effect E>(jobs: Array<() -> T ![Error<X>, E]>) -> Res
                         None => { primary = Some((index, error)); },
                     };
                     if first {
-                        for task in tasks limit Iterations(18446744073709551615) {
+                        for task in tasks {
                             scheduler.cancel(task);
                         }
                     }
@@ -153,7 +153,7 @@ public flow try_join<T, X, effect E>(jobs: Array<() -> T ![Error<X>, E]>) -> Res
             None => {},
         };
         var output: Array<T> = [];
-        for slot in slots limit Iterations(18446744073709551615) {
+        for slot in slots {
             output = output.push(slot.unwrap());
         }
         return Ok(output);
@@ -165,14 +165,14 @@ public flow race<T, X, effect E>(jobs: Array<() -> T ![Error<X>, E]>) -> T ![Err
     let result: Result<T, X> = Scope.inherit((scheduler: std.task.scheduler.SchedulerHandle) => {
         var tasks: Array<Task<Result<T, X>, ![E]>> = [];
         var roots: std.collections.OrderedMap<u64, usize> = std.collections.OrderedMap.new();
-        for job in jobs limit Iterations(18446744073709551615) {
+        for job in jobs {
             let task: Task<Result<T, X>, ![E]> = start(() => job()?);
             roots = roots.insert(task.id, tasks.length);
             tasks = tasks.push(task);
         }
         var complete: usize = 0;
         var primary: Option<(usize, X)> = None;
-        while complete < tasks.length limit Iterations(18446744073709551615) {
+        while complete < tasks.length {
             let event = scheduler.next_completion();
             let index = match roots.get(event.task) {
                 Some(index) => index,
@@ -181,7 +181,7 @@ public flow race<T, X, effect E>(jobs: Array<() -> T ![Error<X>, E]>) -> T ![Err
             let result = await(tasks.get(index).unwrap());
             match result {
                 Ok(value) => {
-                    for task in tasks limit Iterations(18446744073709551615) {
+                    for task in tasks {
                         scheduler.cancel(task);
                     }
                     return Ok(value);

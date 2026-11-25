@@ -75,7 +75,7 @@ impl BigNat {
     flow new(value: u128) -> BigNat ![] {
         var remaining = value;
         var words: Array<u128> = [];
-        while remaining != 0 limit Iterations(4) {
+        while remaining != 0 {
             words = words.push(remaining % 4294967296);
             remaining = remaining / 4294967296;
         }
@@ -85,14 +85,14 @@ impl BigNat {
     flow canonical(words: Array<u128>) -> BigNat ![] {
         var last: usize = 0;
         var index: usize = 0;
-        for word in words limit Iterations(18446744073709551615) {
+        for word in words {
             index = index + 1;
             if word != 0 { last = index; }
         }
         if last == words.length { return BigNat { words= words }; }
         var output: Array<u128> = [];
         index = 0;
-        while index < last limit Iterations(18446744073709551615) {
+        while index < last {
             output = output.push(words.get(index).unwrap());
             index = index + 1;
         }
@@ -107,7 +107,7 @@ impl BigNat {
         if self.words.length < other.words.length { return -1; }
         if self.words.length > other.words.length { return 1; }
         var index = self.words.length;
-        while index != 0 limit Iterations(18446744073709551615) {
+        while index != 0 {
             index = index - 1;
             let left = self.words.get(index).unwrap();
             let right = other.words.get(index).unwrap();
@@ -121,7 +121,7 @@ impl BigNat {
         if self.is_zero() { return 0; }
         var high = self.words.get(self.words.length - 1).unwrap();
         var bits: usize = 0;
-        while high != 0 limit Iterations(32) {
+        while high != 0 {
             high = high / 2;
             bits = bits + 1;
         }
@@ -132,12 +132,12 @@ impl BigNat {
         if factor == 0 { return BigNat { words= [] }; }
         var carry: u128 = 0;
         var output: Array<u128> = [];
-        for word in self.words limit Iterations(18446744073709551615) {
+        for word in self.words {
             let product = word * factor + carry;
             output = output.push(product % 4294967296);
             carry = product / 4294967296;
         }
-        while carry != 0 limit Iterations(4) {
+        while carry != 0 {
             output = output.push(carry % 4294967296);
             carry = carry / 4294967296;
         }
@@ -147,12 +147,12 @@ impl BigNat {
     flow add_small(self, value: u128) -> BigNat ![] {
         var carry = value;
         var output: Array<u128> = [];
-        for word in self.words limit Iterations(18446744073709551615) {
+        for word in self.words {
             let sum = word + carry;
             output = output.push(sum % 4294967296);
             carry = sum / 4294967296;
         }
-        while carry != 0 limit Iterations(4) {
+        while carry != 0 {
             output = output.push(carry % 4294967296);
             carry = carry / 4294967296;
         }
@@ -162,7 +162,7 @@ impl BigNat {
     flow power_scale(self, factor: u128, count: usize) -> BigNat ![] {
         var output = self;
         var index: usize = 0;
-        while index < count limit Iterations(18446744073709551615) {
+        while index < count {
             output = output.multiply_small(factor);
             index = index + 1;
         }
@@ -173,13 +173,13 @@ impl BigNat {
         if self.is_zero() { return self; }
         var output: Array<u128> = [];
         var index: usize = 0;
-        while index < distance / 32 limit Iterations(18446744073709551615) {
+        while index < distance / 32 {
             output = output.push(0);
             index = index + 1;
         }
         let factor = FLOAT_POWERS.get(distance % 32).unwrap();
         var carry: u128 = 0;
-        for word in self.words limit Iterations(18446744073709551615) {
+        for word in self.words {
             let shifted = word * factor + carry;
             output = output.push(shifted % 4294967296);
             carry = shifted / 4294967296;
@@ -192,7 +192,7 @@ impl BigNat {
         var output: Array<u128> = [];
         var borrow: u128 = 0;
         var index: usize = 0;
-        while index < self.words.length limit Iterations(18446744073709551615) {
+        while index < self.words.length {
             let left = self.words.get(index).unwrap();
             let right: u128 = match other.words.get(index) { Some(word) => word, None => 0 };
             let required = right + borrow;
@@ -215,7 +215,7 @@ impl BigNat {
         var bit = FLOAT_POWERS.get(distance).unwrap();
         var remainder = self;
         var quotient: u128 = 0;
-        while true limit Iterations(65) {
+        while true {
             let shifted = divisor.shift_left(distance);
             if remainder.compare(shifted) >= 0 {
                 remainder = remainder.subtract(shifted);
@@ -231,14 +231,14 @@ impl BigNat {
         var index = self.words.length;
         var carry: u128 = 0;
         var words: List<u128> = [];
-        while index != 0 limit Iterations(18446744073709551615) {
+        while index != 0 {
             index = index - 1;
             let dividend = carry * 4294967296 + self.words.get(index).unwrap();
             words = (dividend / divisor) :: words;
             carry = dividend % divisor;
         }
         var output: Array<u128> = [];
-        for word in words limit Iterations(18446744073709551615) {
+        for word in words {
             output = output.push(word);
         }
         return (BigNat.canonical(output), carry);
@@ -248,7 +248,7 @@ impl BigNat {
         if self.is_zero() { return "0"; }
         var remaining = self;
         var output = "";
-        while !remaining.is_zero() limit Iterations(18446744073709551615) {
+        while !remaining.is_zero() {
             let (next, digit) = remaining.divide_small(10);
             output = DECIMAL_DIGITS.get(digit).unwrap() + output;
             remaining = next;

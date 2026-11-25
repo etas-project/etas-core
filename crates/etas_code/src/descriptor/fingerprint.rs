@@ -41,6 +41,95 @@ impl DescriptorFingerprintBudget {
 }
 
 impl DescriptorGraph {
+    /// Closed type identity with nominal declarations as opaque references.
+    /// Representation schemas are separate: changing private storage layout or
+    /// sharing an anonymous node cannot change the identity of a type argument.
+    pub fn reference_type_fingerprint(
+        &self,
+        root: TypeInfoRef,
+        budget: &mut DescriptorFingerprintBudget,
+    ) -> Result<CodeFingerprint, DescriptorError> {
+        let root = DescriptorNode::Type(root);
+        let mut values = BTreeMap::new();
+        let mut active = std::collections::BTreeSet::new();
+        let mut work = vec![(root, false)];
+        while let Some((node, finish)) = work.pop() {
+            if values.contains_key(&node) {
+                continue;
+            }
+            budget.visit()?;
+            if node_index(self.data(), node).is_none() {
+                return Err(DescriptorError::MissingReference {
+                    from: node,
+                    target: node,
+                });
+            }
+            let mut encoder = CanonicalEncoder::new("etas.code.reference-type-node.v1");
+            let mut children = Vec::new();
+            match node {
+                DescriptorNode::Type(reference) => match &self.data().types[reference.0 as usize] {
+                    TypeInfo::Nominal { definition, .. } | TypeInfo::Enum { definition, .. } => {
+                        encoder.tag(0);
+                        encoder.fingerprint(definition.fingerprint());
+                    }
+                    TypeInfo::Alias { definition, .. } => {
+                        // Native value types normalize transparent aliases
+                        // before projection. A declaration reference retains
+                        // its explicit alias identity when queried directly.
+                        encoder.tag(1);
+                        encoder.fingerprint(definition.fingerprint());
+                    }
+                    TypeInfo::Record(fields) => {
+                        let mut fields = fields.iter().collect::<Vec<_>>();
+                        fields.sort_by(|a, b| a.name.cmp(&b.name));
+                        encoder.tag(2);
+                        for field in fields {
+                            encoder.bytes(field.name.as_bytes());
+                            children.push(DescriptorNode::Type(field.ty));
+                        }
+                    }
+                    TypeInfo::Parameter(_) => {
+                        return Err(DescriptorError::Invalid {
+                            node,
+                            reason: "reference type identity requires a closed type",
+                        });
+                    }
+                    _ => {
+                        encoder.tag(3);
+                        self.encode_node(node, &mut encoder);
+                        references(self.data(), node, true, |child| children.push(child));
+                    }
+                },
+                DescriptorNode::Binder(_) => {
+                    return Err(DescriptorError::Invalid {
+                        node,
+                        reason: "reference type identity requires closed generic arguments",
+                    });
+                }
+                _ => {
+                    encoder.tag(4);
+                    self.encode_node(node, &mut encoder);
+                    references(self.data(), node, true, |child| children.push(child));
+                }
+            }
+            if finish {
+                encoder.number(children.len() as u64);
+                for child in children {
+                    encoder.fingerprint(values[&child]);
+                }
+                values.insert(node, encoder.finish());
+                active.remove(&node);
+            } else {
+                if !active.insert(node) {
+                    return Err(DescriptorError::UnguardedCycle { node });
+                }
+                work.push((node, true));
+                work.extend(children.into_iter().rev().map(|child| (child, false)));
+            }
+        }
+        Ok(values[&root])
+    }
+
     /// Identifies the reachable descriptor graph, not semantic type equality.
     /// Encounter numbers are canonical traversal labels, never compiler/local IDs.
     pub fn type_fingerprint(&self, root: TypeInfoRef) -> Result<CodeFingerprint, DescriptorError> {
@@ -356,6 +445,11 @@ impl DescriptorGraph {
                         encoder.number(parts.len() as u64);
                     }
                     TraceInfo::Repeat(_) => encoder.tag(5),
+                    TraceInfo::Recursive { id, body } => {
+                        encoder.tag(9);
+                        encoder.fingerprint(*id);
+                        encoder.tag(u8::from(body.is_some()));
+                    }
                     TraceInfo::UnknownOrder(_) => encoder.tag(6),
                     TraceInfo::Widened {
                         parameter_calls, ..
@@ -378,29 +472,7 @@ fn encode_parameter_call(encoder: &mut CanonicalEncoder, call: &ParameterCallInf
     if !call.projection.is_empty() {
         encoder.tag(2);
         encoder.number(call.projection.len() as u64);
-        for step in &call.projection {
-            match step {
-                super::ValueProjectionStep::Field(name) => {
-                    encoder.tag(0);
-                    encoder.bytes(name.as_bytes());
-                }
-                super::ValueProjectionStep::TupleElement(position) => {
-                    encoder.tag(1);
-                    encoder.number(u64::from(*position));
-                }
-                super::ValueProjectionStep::VariantPayload { variant, position } => {
-                    encoder.tag(2);
-                    encoder.bytes(variant.as_bytes());
-                    encoder.number(u64::from(*position));
-                }
-                super::ValueProjectionStep::SequenceElement => encoder.tag(3),
-                super::ValueProjectionStep::ListHead => encoder.tag(4),
-                super::ValueProjectionStep::ListTail => encoder.tag(5),
-                super::ValueProjectionStep::MapKey => encoder.tag(6),
-                super::ValueProjectionStep::MapValue => encoder.tag(7),
-                super::ValueProjectionStep::CallResult => encoder.tag(8),
-            }
-        }
+        encode_projection_steps(encoder, &call.projection);
     }
     match &call.arguments {
         None => encoder.tag(0),
@@ -591,5 +663,47 @@ pub(crate) fn builtin_tag(constructor: BuiltinTypeInfo) -> u8 {
         BuiltinTypeInfo::CallableDefinition => 22,
         BuiltinTypeInfo::SchedulerHandle => 23,
         BuiltinTypeInfo::Continuation => 24,
+    }
+}
+
+fn encode_projection_steps(encoder: &mut CanonicalEncoder, path: &[super::ValueProjectionStep]) {
+    for step in path {
+        match step {
+            super::ValueProjectionStep::Field(name) => {
+                encoder.tag(0);
+                encoder.bytes(name.as_bytes());
+            }
+            super::ValueProjectionStep::TupleElement(position) => {
+                encoder.tag(1);
+                encoder.number(u64::from(*position));
+            }
+            super::ValueProjectionStep::VariantPayload { variant, position } => {
+                encoder.tag(2);
+                encoder.bytes(variant.as_bytes());
+                encoder.number(u64::from(*position));
+            }
+            super::ValueProjectionStep::SequenceElement => encoder.tag(3),
+            super::ValueProjectionStep::ListHead => encoder.tag(4),
+            super::ValueProjectionStep::ListTail => encoder.tag(5),
+            super::ValueProjectionStep::MapKey => encoder.tag(6),
+            super::ValueProjectionStep::MapValue => encoder.tag(7),
+            super::ValueProjectionStep::CallResult => encoder.tag(8),
+            super::ValueProjectionStep::CallWithArguments { inputs } => {
+                encoder.tag(10);
+                encoder.number(u64::from(*inputs));
+            }
+            super::ValueProjectionStep::Invocation { inputs } => {
+                encoder.tag(11);
+                encoder.number(u64::from(*inputs));
+            }
+            super::ValueProjectionStep::Repeat { alternatives } => {
+                encoder.tag(9);
+                encoder.number(alternatives.len() as u64);
+                for path in alternatives {
+                    encoder.number(path.len() as u64);
+                    encode_projection_steps(encoder, path);
+                }
+            }
+        }
     }
 }

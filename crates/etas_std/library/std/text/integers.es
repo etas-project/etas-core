@@ -8,7 +8,7 @@ public flow from_i8(value: i8) -> string ![] {
     if value == 0 { return "0"; }
     var remaining = value;
     var output = "";
-    while remaining != 0 limit Iterations(128) {
+    while remaining != 0 {
         var digit = remaining % 10;
         if digit < 0 {
             digit = 0 - digit;
@@ -30,7 +30,7 @@ public flow parse_i8(text: string) -> Result<i8, TextError> ![] {
     var negative = false;
     var minimum = 0 - maximum;
     var value: i8 = 0;
-    for scalar in chars(text) limit Iterations(18446744073709551615) {
+    for scalar in chars(text) {
         if first {
             first = false;
             if scalar == '+' { continue; }
@@ -71,7 +71,7 @@ public flow from_i16(value: i16) -> string ![] {
     if value == 0 { return "0"; }
     var remaining = value;
     var output = "";
-    while remaining != 0 limit Iterations(128) {
+    while remaining != 0 {
         var digit = remaining % 10;
         if digit < 0 {
             digit = 0 - digit;
@@ -93,7 +93,7 @@ public flow parse_i16(text: string) -> Result<i16, TextError> ![] {
     var negative = false;
     var minimum = 0 - maximum;
     var value: i16 = 0;
-    for scalar in chars(text) limit Iterations(18446744073709551615) {
+    for scalar in chars(text) {
         if first {
             first = false;
             if scalar == '+' { continue; }
@@ -134,7 +134,7 @@ public flow from_i32(value: i32) -> string ![] {
     if value == 0 { return "0"; }
     var remaining = value;
     var output = "";
-    while remaining != 0 limit Iterations(128) {
+    while remaining != 0 {
         var digit = remaining % 10;
         if digit < 0 {
             digit = 0 - digit;
@@ -156,7 +156,7 @@ public flow parse_i32(text: string) -> Result<i32, TextError> ![] {
     var negative = false;
     var minimum = 0 - maximum;
     var value: i32 = 0;
-    for scalar in chars(text) limit Iterations(18446744073709551615) {
+    for scalar in chars(text) {
         if first {
             first = false;
             if scalar == '+' { continue; }
@@ -197,7 +197,7 @@ public flow from_i64(value: i64) -> string ![] {
     if value == 0 { return "0"; }
     var remaining = value;
     var output = "";
-    while remaining != 0 limit Iterations(128) {
+    while remaining != 0 {
         var digit = remaining % 10;
         if digit < 0 {
             digit = 0 - digit;
@@ -219,7 +219,7 @@ public flow parse_i64(text: string) -> Result<i64, TextError> ![] {
     var negative = false;
     var minimum = 0 - maximum;
     var value: i64 = 0;
-    for scalar in chars(text) limit Iterations(18446744073709551615) {
+    for scalar in chars(text) {
         if first {
             first = false;
             if scalar == '+' { continue; }
@@ -260,7 +260,7 @@ public flow from_i128(value: i128) -> string ![] {
     if value == 0 { return "0"; }
     var remaining = value;
     var output = "";
-    while remaining != 0 limit Iterations(128) {
+    while remaining != 0 {
         var digit = remaining % 10;
         if digit < 0 {
             digit = 0 - digit;
@@ -282,7 +282,7 @@ public flow parse_i128(text: string) -> Result<i128, TextError> ![] {
     var negative = false;
     var minimum = 0 - maximum;
     var value: i128 = 0;
-    for scalar in chars(text) limit Iterations(18446744073709551615) {
+    for scalar in chars(text) {
         if first {
             first = false;
             if scalar == '+' { continue; }
@@ -323,7 +323,7 @@ public flow from_isize(value: isize) -> string ![] {
     if value == 0 { return "0"; }
     var remaining = value;
     var output = "";
-    while remaining != 0 limit Iterations(128) {
+    while remaining != 0 {
         var digit = remaining % 10;
         if digit < 0 {
             digit = 0 - digit;
@@ -341,7 +341,7 @@ public flow parse_isize(text: string) -> Result<isize, TextError> ![] {
     var maximum: isize = 0;
     var bit: usize = 0;
     let width = usize.width() - 1;
-    while bit < width limit Iterations(128) {
+    while bit < width {
         maximum = maximum * 2 + 1;
         bit = bit + 1;
     }
@@ -351,7 +351,7 @@ public flow parse_isize(text: string) -> Result<isize, TextError> ![] {
     var negative = false;
     var minimum = 0 - maximum;
     var value: isize = 0;
-    for scalar in chars(text) limit Iterations(18446744073709551615) {
+    for scalar in chars(text) {
         if first {
             first = false;
             if scalar == '+' { continue; }
@@ -392,7 +392,7 @@ public flow from_u8(value: u8) -> string ![] {
     if value == 0 { return "0"; }
     var remaining = value;
     var output = "";
-    while remaining != 0 limit Iterations(128) {
+    while remaining != 0 {
         let digit = remaining % 10;
         output = DECIMAL_DIGITS.get(digit).unwrap() + output;
         remaining = remaining / 10;
@@ -406,7 +406,7 @@ public flow parse_u8(text: string) -> Result<u8, TextError> ![] {
     var saw_digit = false;
     var overflow = false;
     var value: u8 = 0;
-    for scalar in chars(text) limit Iterations(18446744073709551615) {
+    for scalar in chars(text) {
         if first {
             first = false;
             if scalar == '+' { continue; }
@@ -443,7 +443,7 @@ public flow from_u16(value: u16) -> string ![] {
     if value == 0 { return "0"; }
     var remaining = value;
     var output = "";
-    while remaining != 0 limit Iterations(128) {
+    while remaining != 0 {
         let digit = remaining % 10;
         output = DECIMAL_DIGITS.get(digit).unwrap() + output;
         remaining = remaining / 10;
@@ -457,7 +457,7 @@ public flow parse_u16(text: string) -> Result<u16, TextError> ![] {
     var saw_digit = false;
     var overflow = false;
     var value: u16 = 0;
-    for scalar in chars(text) limit Iterations(18446744073709551615) {
+    for scalar in chars(text) {
         if first {
             first = false;
             if scalar == '+' { continue; }
@@ -494,7 +494,7 @@ public flow from_u32(value: u32) -> string ![] {
     if value == 0 { return "0"; }
     var remaining = value;
     var output = "";
-    while remaining != 0 limit Iterations(128) {
+    while remaining != 0 {
         let digit = remaining % 10;
         output = DECIMAL_DIGITS.get(digit).unwrap() + output;
         remaining = remaining / 10;
@@ -508,7 +508,7 @@ public flow parse_u32(text: string) -> Result<u32, TextError> ![] {
     var saw_digit = false;
     var overflow = false;
     var value: u32 = 0;
-    for scalar in chars(text) limit Iterations(18446744073709551615) {
+    for scalar in chars(text) {
         if first {
             first = false;
             if scalar == '+' { continue; }
@@ -545,7 +545,7 @@ public flow from_u64(value: u64) -> string ![] {
     if value == 0 { return "0"; }
     var remaining = value;
     var output = "";
-    while remaining != 0 limit Iterations(128) {
+    while remaining != 0 {
         let digit = remaining % 10;
         output = DECIMAL_DIGITS.get(digit).unwrap() + output;
         remaining = remaining / 10;
@@ -559,7 +559,7 @@ public flow parse_u64(text: string) -> Result<u64, TextError> ![] {
     var saw_digit = false;
     var overflow = false;
     var value: u64 = 0;
-    for scalar in chars(text) limit Iterations(18446744073709551615) {
+    for scalar in chars(text) {
         if first {
             first = false;
             if scalar == '+' { continue; }
@@ -596,7 +596,7 @@ public flow from_u128(value: u128) -> string ![] {
     if value == 0 { return "0"; }
     var remaining = value;
     var output = "";
-    while remaining != 0 limit Iterations(128) {
+    while remaining != 0 {
         let digit = remaining % 10;
         output = DECIMAL_DIGITS.get(digit).unwrap() + output;
         remaining = remaining / 10;
@@ -610,7 +610,7 @@ public flow parse_u128(text: string) -> Result<u128, TextError> ![] {
     var saw_digit = false;
     var overflow = false;
     var value: u128 = 0;
-    for scalar in chars(text) limit Iterations(18446744073709551615) {
+    for scalar in chars(text) {
         if first {
             first = false;
             if scalar == '+' { continue; }
@@ -647,7 +647,7 @@ public flow from_usize(value: usize) -> string ![] {
     if value == 0 { return "0"; }
     var remaining = value;
     var output = "";
-    while remaining != 0 limit Iterations(128) {
+    while remaining != 0 {
         let digit = remaining % 10;
         output = DECIMAL_DIGITS.get(digit).unwrap() + output;
         remaining = remaining / 10;
@@ -659,7 +659,7 @@ public flow parse_usize(text: string) -> Result<usize, TextError> ![] {
     var maximum: usize = 0;
     var bit: usize = 0;
     let width = usize.width();
-    while bit < width limit Iterations(128) {
+    while bit < width {
         maximum = maximum * 2 + 1;
         bit = bit + 1;
     }
@@ -667,7 +667,7 @@ public flow parse_usize(text: string) -> Result<usize, TextError> ![] {
     var saw_digit = false;
     var overflow = false;
     var value: usize = 0;
-    for scalar in chars(text) limit Iterations(18446744073709551615) {
+    for scalar in chars(text) {
         if first {
             first = false;
             if scalar == '+' { continue; }

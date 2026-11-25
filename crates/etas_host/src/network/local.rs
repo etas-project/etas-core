@@ -30,7 +30,7 @@ impl LocalTcpClient {
             operation.signal().check()?;
         }
         match &request.operation {
-            TcpConnectOperation::Connect { endpoint } => {
+            TcpConnectOperation::Connect { endpoint, options } => {
                 let broker = SandboxBroker::new(request.authority.sandbox.clone());
                 if let Err(error) =
                     broker.check_network_endpoint("tcp", &endpoint.host, endpoint.port)
@@ -40,8 +40,20 @@ impl LocalTcpClient {
                         result: Err(error),
                     });
                 }
+                let timeout = match options.timeout_ms.map(u64::try_from).transpose() {
+                    Ok(timeout) => timeout,
+                    Err(_) => {
+                        return Ok(TcpConnectResponse {
+                            id: request.id,
+                            result: Err(HostError::new(
+                                HostErrorCode::InvalidRequest,
+                                "TCP timeout exceeds the runtime clock range",
+                            )),
+                        });
+                    }
+                };
                 let deadlines =
-                    OperationDeadlines::new(&request.budget, None).with_operation(operation);
+                    OperationDeadlines::new(&request.budget, timeout).with_operation(operation);
                 let resolved = await_io(
                     tokio::net::lookup_host((endpoint.host.as_str(), endpoint.port)),
                     None,
@@ -49,6 +61,13 @@ impl LocalTcpClient {
                     "TCP endpoint resolution failed",
                 )
                 .await;
+                let resolved = resolved.map_err(|error| {
+                    if error.code == HostErrorCode::ProviderUnavailable {
+                        error.with_detail("network_error", "resolve_failed")
+                    } else {
+                        error
+                    }
+                });
                 let addresses = match resolved.and_then(|addresses| {
                     broker.validate_resolved_network_addresses(
                         "tcp",
@@ -107,7 +126,7 @@ impl LocalTcpClient {
                         })),
                     });
                 };
-                if let Err(error) = stream.set_nodelay(true) {
+                if let Err(error) = stream.set_nodelay(options.nodelay) {
                     return Ok(TcpConnectResponse {
                         id: request.id,
                         result: Err(stream_io_error("failed to configure TCP stream", error)),

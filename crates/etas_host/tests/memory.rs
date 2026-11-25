@@ -263,7 +263,7 @@ async fn sqlite_memory_query_without_predicate_uses_scan_semantics() {
         .execute(request(
             2,
             MemoryOperation::Query {
-                query: MemoryQuery {
+                query: MemoryQuery::Predicate {
                     predicate: None,
                     order_by: Vec::new(),
                 },
@@ -306,7 +306,7 @@ async fn sqlite_memory_query_predicate_filters_key_or_value() {
         .execute(request(
             2,
             MemoryOperation::Query {
-                query: MemoryQuery {
+                query: MemoryQuery::Predicate {
                     predicate: Some(HostValue::String("draft".to_owned())),
                     order_by: Vec::new(),
                 },
@@ -393,7 +393,7 @@ async fn in_memory_query_without_predicate_uses_scan_semantics() {
         .execute(request(
             2,
             MemoryOperation::Query {
-                query: MemoryQuery {
+                query: MemoryQuery::Predicate {
                     predicate: None,
                     order_by: Vec::new(),
                 },
@@ -483,7 +483,7 @@ async fn in_memory_query_predicate_filters_key_or_value() {
         .execute(request(
             2,
             MemoryOperation::Query {
-                query: MemoryQuery {
+                query: MemoryQuery::Predicate {
                     predicate: Some(HostValue::String("paper-2".to_owned())),
                     order_by: Vec::new(),
                 },
@@ -574,7 +574,7 @@ async fn in_memory_query_rejects_ordering_without_fallback() {
         .execute(request(
             1,
             MemoryOperation::Query {
-                query: MemoryQuery {
+                query: MemoryQuery::Predicate {
                     predicate: None,
                     order_by: vec![MemoryOrderKey {
                         field_path: vec!["created_at".to_owned()],

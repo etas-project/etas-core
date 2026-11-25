@@ -33,7 +33,7 @@ type TextSpan = { private source: string, private start: usize, private end: usi
 
 impl TextSpan {
     flow materialize(self) -> string ![] {
-        let view = self.source.utf8[self.start, self.end);
+        let view = self.source.utf8[self.start, self.end)?.unwrap();
         return match std.codec.text.utf8_decode(view, std.codec.text.Strict) {
             Ok(text) => text,
             Err(_) => std.core.abort("text span UTF-8 invariant"),
@@ -61,7 +61,7 @@ public flow char_slice<I ~ Index>(text: string, range: Range<I>) -> string ![Err
     if end == 0 { return ""; }
     var ordinal: usize = 0;
     var output = "";
-    for scalar in chars(text) limit Iterations(18446744073709551615) {
+    for scalar in chars(text) {
         if ordinal >= start && ordinal < end { output = output + from_char(scalar); }
         ordinal = ordinal + 1;
         if ordinal == end { return output; }

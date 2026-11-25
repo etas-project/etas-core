@@ -8,6 +8,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
 mod client;
 mod context;
+mod lease;
 pub use client::SqliteSessionClient;
 struct SessionDatabase<'a> {
     connection: &'a mut Connection,
@@ -20,6 +21,7 @@ impl SessionDatabase<'_> {
         operation: SessionOperation,
     ) -> Result<SessionResult, HostError> {
         match operation {
+            SessionOperation::Lease(request) => self.execute_lease(request),
             SessionOperation::Resolve { config } => self.resolve(config),
             SessionOperation::Append { message } => self.append(message),
             SessionOperation::Load {

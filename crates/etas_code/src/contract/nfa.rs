@@ -70,6 +70,9 @@ impl Nfa {
                 .trace(source)
                 .ok_or(TraceProofError::MissingTrace(source))?
             {
+                TraceInfo::Recursive { .. } => {
+                    return Err(TraceProofError::RecursiveTraceRequiresSemanticSummary);
+                }
                 TraceInfo::Empty => result.edge(start, end, None, source, budget)?,
                 TraceInfo::Outcome(outcome) => {
                     if matches!(

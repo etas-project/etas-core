@@ -2,6 +2,9 @@
     Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
 )]
 pub struct CallableValueBehavior {
+    /// Checked execution property. Absence is not a non-suspension proof.
+    #[serde(default)]
+    pub suspension: Option<etas_code::descriptor::SuspensionInfo>,
     pub determinism: CallableValueDeterminism,
     #[serde(default)]
     pub independent_determinism: Option<CallableValueDeterminism>,

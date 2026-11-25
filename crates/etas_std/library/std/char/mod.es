@@ -6,7 +6,7 @@ impl char {
         let scalar = u32 { bits= self.bits };
         var low: usize = 0;
         var high = WHITESPACE.length;
-        while low < high limit Iterations(32) {
+        while low < high {
             let middle = low + (high - low) / 2;
             let (start, end) = WHITESPACE.get(middle).unwrap();
             if scalar < start {
@@ -24,7 +24,7 @@ impl char {
         let scalar = u32 { bits= self.bits };
         var low: usize = 0;
         var high = ALPHABETIC.length;
-        while low < high limit Iterations(32) {
+        while low < high {
             let middle = low + (high - low) / 2;
             let (start, end) = ALPHABETIC.get(middle).unwrap();
             if scalar < start {
@@ -42,7 +42,7 @@ impl char {
         let scalar = u32 { bits= self.bits };
         var low: usize = 0;
         var high = ALPHANUMERIC.length;
-        while low < high limit Iterations(32) {
+        while low < high {
             let middle = low + (high - low) / 2;
             let (start, end) = ALPHANUMERIC.get(middle).unwrap();
             if scalar < start {

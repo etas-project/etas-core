@@ -15,7 +15,7 @@ public flow round_robin<S, effect E>(
     if stop_when(state) {
         return RoundRobinResult { state= state, turns= turns, reason= GroupStop.PredicateSatisfied };
     }
-    while turns < max_turns limit Iterations(18446744073709551615) {
+    while turns < max_turns {
         let participant = match participants.get(turns % count) {
             Some(callback) => callback,
             None => std.core.abort("checked round-robin index"),

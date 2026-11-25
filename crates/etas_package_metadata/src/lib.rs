@@ -122,6 +122,39 @@ mod tests {
     }
 
     #[test]
+    fn scoped_resource_boundaries_survive_metadata_publication() {
+        let mut metadata = sample_metadata();
+        let callback = Type {
+            kind: TypeKind::Function,
+            children: vec![Type {
+                kind: TypeKind::Primitive,
+                name: "unit".into(),
+                ..Default::default()
+            }],
+            effects: Some(EffectRow::default()),
+            ..Default::default()
+        };
+        let flow = &mut metadata.public_metadata.flows[0];
+        flow.param_names = vec!["task".into(), "resource".into()];
+        flow.input = vec![callback.clone(), callback];
+        metadata
+            .public_metadata
+            .scoped_callbacks
+            .push(ScopedCallbackContract {
+                target: CallableContractTarget::Item(flow.path.clone()),
+                parameters: vec![0, 1],
+                resource_boundaries: vec![1],
+            });
+        let bytes = encode_sample(&metadata);
+        let (_, decoded) =
+            package_metadata_from_artifact(Path::new("package.etasmeta"), &bytes).unwrap();
+        assert_eq!(
+            decoded.public_metadata.scoped_callbacks,
+            metadata.public_metadata.scoped_callbacks
+        );
+    }
+
+    #[test]
     fn spec_generic_bounds_round_trip_and_incomplete_facts_are_rejected() {
         let mut metadata = sample_metadata();
         metadata
@@ -178,6 +211,7 @@ mod tests {
             vec![reference.clone()];
         metadata.public_metadata.effect_summaries[0].returned_callables =
             Some(CallableValueGraph {
+                call_inputs: Vec::new(),
                 source_projections: Vec::new(),
                 parameter_projections: Vec::new(),
                 objects: Vec::new(),
@@ -187,6 +221,7 @@ mod tests {
                     residual_checks: vec![reference],
                     handler_requests: Some(Default::default()),
                     behavior: CallableValueBehavior {
+                        suspension: None,
                         determinism: CallableValueDeterminism::Deterministic,
                         independent_determinism: Some(CallableValueDeterminism::Deterministic),
                         host_requirements: vec![],
@@ -1101,6 +1136,7 @@ mod tests {
                     ..Default::default()
                 }],
                 effect_summaries: vec![EffectSummary {
+                    callable_body: None,
                     definition: None,
                     residual_checks: vec![],
                     behavior: None,

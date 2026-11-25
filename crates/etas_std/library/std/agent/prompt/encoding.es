@@ -141,11 +141,11 @@ impl f64 ~ PromptEncode {
     }
 }
 
-impl<T ~ PromptEncode> Array<T> ~ PromptEncode {
-    public flow encode(self) -> PromptPart ![] {
+impl Array<T ~ PromptEncode> ~ PromptEncode {
+    public flow encode(self) -> PromptPart {
         var text = "[";
         var separator = "";
-        for value in self limit Iterations(18446744073709551615) {
+        for value in self {
             let part = value::PromptEncode.encode();
             text = text + separator + part.text;
             separator = ",";
@@ -154,11 +154,11 @@ impl<T ~ PromptEncode> Array<T> ~ PromptEncode {
     }
 }
 
-impl<T ~ PromptEncode> List<T> ~ PromptEncode {
-    public flow encode(self) -> PromptPart ![] {
+impl List<T ~ PromptEncode> ~ PromptEncode {
+    public flow encode(self) -> PromptPart {
         var text = "[";
         var separator = "";
-        for value in self limit Iterations(18446744073709551615) {
+        for value in self {
             let part = value::PromptEncode.encode();
             text = text + separator + part.text;
             separator = ",";
@@ -167,11 +167,11 @@ impl<T ~ PromptEncode> List<T> ~ PromptEncode {
     }
 }
 
-impl<T ~ PromptEncode> Set<T> ~ PromptEncode {
-    public flow encode(self) -> PromptPart ![] {
+impl Set<T ~ PromptEncode> ~ PromptEncode {
+    public flow encode(self) -> PromptPart {
         var text = "[";
         var separator = "";
-        for value in self limit Iterations(18446744073709551615) {
+        for value in self {
             let part = value::PromptEncode.encode();
             text = text + separator + part.text;
             separator = ",";
@@ -180,11 +180,11 @@ impl<T ~ PromptEncode> Set<T> ~ PromptEncode {
     }
 }
 
-impl<T ~ PromptEncode> Slice<T> ~ PromptEncode {
-    public flow encode(self) -> PromptPart ![] {
+impl Slice<T ~ PromptEncode> ~ PromptEncode {
+    public flow encode(self) -> PromptPart {
         var text = "[";
         var separator = "";
-        for value in self limit Iterations(18446744073709551615) {
+        for value in self {
             let part = value::PromptEncode.encode();
             text = text + separator + part.text;
             separator = ",";
@@ -197,7 +197,7 @@ impl bytes ~ PromptEncode {
     public flow encode(self) -> PromptPart ![] {
         var text = "[";
         var separator = "";
-        for value in self limit Iterations(18446744073709551615) {
+        for value in self {
             text = text + separator + std.text.from_u8(value);
             separator = ",";
         }
@@ -205,11 +205,11 @@ impl bytes ~ PromptEncode {
     }
 }
 
-impl<K ~ PromptEncode, V ~ PromptEncode> Map<K, V> ~ PromptEncode {
-    public flow encode(self) -> PromptPart ![] {
+impl Map<K ~ PromptEncode, V ~ PromptEncode> ~ PromptEncode {
+    public flow encode(self) -> PromptPart {
         var text = "[";
         var separator = "";
-        for (key, value) in self limit Iterations(18446744073709551615) {
+        for (key, value) in self {
             let encoded_key = key::PromptEncode.encode();
             let encoded_value = value::PromptEncode.encode();
             text = text + separator + "[" + encoded_key.text + "," + encoded_value.text + "]";
@@ -219,8 +219,8 @@ impl<K ~ PromptEncode, V ~ PromptEncode> Map<K, V> ~ PromptEncode {
     }
 }
 
-impl<T ~ PromptEncode> Option<T> ~ PromptEncode {
-    public flow encode(self) -> PromptPart ![] {
+impl Option<T ~ PromptEncode> ~ PromptEncode {
+    public flow encode(self) -> PromptPart {
         return match self {
             None => PromptPart { text= "{\"fields\":[],\"name\":\"None\"}" },
             Some(value) => {
@@ -241,29 +241,29 @@ impl JsonValue ~ PromptEncode {
     }
 }
 
-impl<T ~ PromptEncode> std.security.trust.Trusted<T> ~ PromptEncode {
-    public flow encode(self) -> PromptPart ![] {
+impl std.security.trust.Trusted<T ~ PromptEncode> ~ PromptEncode {
+    public flow encode(self) -> PromptPart {
         let part = self.value::PromptEncode.encode();
         return PromptPart { text= part.text };
     }
 }
 
-impl<T ~ PromptEncode> std.security.trust.Public<T> ~ PromptEncode {
-    public flow encode(self) -> PromptPart ![] {
+impl std.security.trust.Public<T ~ PromptEncode> ~ PromptEncode {
+    public flow encode(self) -> PromptPart {
         let part = self.value::PromptEncode.encode();
         return PromptPart { text= part.text };
     }
 }
 
-impl<T ~ PromptEncode> std.security.trust.Untrusted<T> ~ PromptEncode {
-    public flow encode(self) -> PromptPart ![] {
+impl std.security.trust.Untrusted<T ~ PromptEncode> ~ PromptEncode {
+    public flow encode(self) -> PromptPart {
         let part = self.value::PromptEncode.encode();
         return PromptPart { text= part.text };
     }
 }
 
-impl<T ~ PromptEncode> std.security.trust.Sanitized<T> ~ PromptEncode {
-    public flow encode(self) -> PromptPart ![] {
+impl std.security.trust.Sanitized<T ~ PromptEncode> ~ PromptEncode {
+    public flow encode(self) -> PromptPart {
         let part = self.value::PromptEncode.encode();
         return PromptPart { text= part.text };
     }

@@ -32,10 +32,13 @@ impl CancelSignal {
         self.scope.parent()
     }
 
-    pub(crate) async fn release_requested(&self) -> Result<(), HostError> {
+    pub(crate) async fn release_requested(
+        &self,
+        operation: super::super::OperationId,
+    ) -> Result<(), HostError> {
         let mut changed = self.scope.subscribe();
         loop {
-            if self.scope.state()? != super::super::ScopeState::Running {
+            if self.scope.resource_release_ready(operation)? {
                 return Ok(());
             }
             changed
@@ -43,6 +46,13 @@ impl CancelSignal {
                 .await
                 .map_err(|_| super::super::scope::invalid_state("scope release channel closed"))?;
         }
+    }
+
+    pub(crate) fn mark_resource(
+        &self,
+        operation: super::super::OperationId,
+    ) -> Result<(), HostError> {
+        self.scope.mark_resource(operation)
     }
     pub(crate) fn register_child(
         &self,

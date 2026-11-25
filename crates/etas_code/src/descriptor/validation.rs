@@ -324,9 +324,11 @@ fn validate_inner(
     for (index, trace) in input.traces.iter().enumerate() {
         let node = DescriptorNode::Trace(TraceInfoRef(index as u32));
         let calls = match trace {
-            TraceInfo::Empty | TraceInfo::Seq(_) | TraceInfo::Choice(_) | TraceInfo::Repeat(_) => {
-                &[][..]
-            }
+            TraceInfo::Recursive { .. }
+            | TraceInfo::Empty
+            | TraceInfo::Seq(_)
+            | TraceInfo::Choice(_)
+            | TraceInfo::Repeat(_) => &[][..],
             TraceInfo::Outcome(outcome) => {
                 if let CallableOutcomeInfo::Returned { ty, observation } = outcome {
                     validator.return_observation(node, *ty, observation)?;
@@ -441,11 +443,15 @@ fn validate_inner(
                     reason: "trace parameter call has no callable signature parameter",
                 });
             };
-            for step in &call.projection {
+            let mut steps = call.projection.iter().collect::<Vec<_>>();
+            while let Some(step) = steps.pop() {
                 match step {
                     super::ValueProjectionStep::Field(name)
                     | super::ValueProjectionStep::VariantPayload { variant: name, .. } => {
                         validator.name(node, name)?
+                    }
+                    super::ValueProjectionStep::Repeat { alternatives } => {
+                        steps.extend(alternatives.iter().flatten())
                     }
                     _ => {}
                 }
@@ -664,6 +670,7 @@ impl Validator<'_> {
                     pending.extend(parts.iter().copied());
                 }
                 Some(TraceInfo::Repeat(inner)) => pending.push(*inner),
+                Some(TraceInfo::Recursive { body, .. }) => pending.extend(*body),
                 Some(
                     TraceInfo::Outcome(_) | TraceInfo::ParameterCall(_) | TraceInfo::Widened { .. },
                 ) => {

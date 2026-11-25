@@ -3,6 +3,8 @@ use crate::HostValue;
 #[derive(Clone, Debug, PartialEq)]
 pub enum HostActionGrant {
     Allow(ActionPattern),
+    /// Each group is a disjunction; every group's authority is required.
+    Conjunction(Vec<Vec<HostActionGrant>>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -53,6 +55,9 @@ impl HostActionGrant {
     pub fn allows(&self, action: &ActionInstance) -> bool {
         match self {
             Self::Allow(pattern) => pattern.matches(action),
+            Self::Conjunction(groups) => groups
+                .iter()
+                .all(|grants| grants.iter().any(|grant| grant.allows(action))),
         }
     }
 }

@@ -679,3 +679,5 @@ fn invalid(reason: impl Into<String>) -> MetadataArtifactError {
 
 #[cfg(test)]
 mod tests;
+
+pub(super) use schema::ValueProjectionPath as ProtoValueProjectionPath;

@@ -32,10 +32,17 @@ pub enum StdExecutionRole {
     MessageContextCapture,
     MessageContextRecord,
     PayloadConvert,
+    ComparatorCapture,
+    ComparatorSame,
+    ReadScopeEnter,
+    CaptureStorage,
+    RestoreStorage,
+    StorageSchema,
+    ResourceScope,
 }
 
 impl StdExecutionRole {
-    pub const ALL: [Self; 20] = [
+    pub const ALL: [Self; 27] = [
         Self::Abort,
         Self::Checkpoint,
         Self::CaptureData,
@@ -56,6 +63,13 @@ impl StdExecutionRole {
         Self::MessageContextCapture,
         Self::MessageContextRecord,
         Self::PayloadConvert,
+        Self::ComparatorCapture,
+        Self::ComparatorSame,
+        Self::ReadScopeEnter,
+        Self::CaptureStorage,
+        Self::RestoreStorage,
+        Self::StorageSchema,
+        Self::ResourceScope,
     ];
 
     pub fn role(self) -> &'static str {
@@ -63,6 +77,9 @@ impl StdExecutionRole {
             Self::Abort => "std.core.abort",
             Self::Checkpoint => "std.runtime.checkpoint",
             Self::CaptureData => "std.runtime.value.Data.capture",
+            Self::CaptureStorage => "std.memory.StorageValue.capture",
+            Self::RestoreStorage => "std.memory.StorageValue.restore",
+            Self::StorageSchema => "std.memory.StorageValue.schema",
             Self::StorageContext => "std.memory.StorageContext.current",
             Self::StorageNonce => "std.memory.StorageContext.nonce",
             Self::StreamClock => "std.stream.StreamClock.now",
@@ -72,6 +89,7 @@ impl StdExecutionRole {
             Self::TaskNextCompletion => "std.task.Scheduler.next_completion",
             Self::TaskCancel => "std.task.Scheduler.cancel",
             Self::ScopeEnter => "std.task.Scope.enter",
+            Self::ResourceScope => "std.resource.Scope.enter",
             Self::ParseBody => "std.compiler.parse_body",
             Self::AgentWithBody => "std.compiler.AgentDef.with_body",
             Self::CallableWithBody => "std.compiler.CallableDef.with_body",
@@ -80,6 +98,9 @@ impl StdExecutionRole {
             Self::MessageContextCapture => "std.agent.message.MessageContext.capture",
             Self::MessageContextRecord => "std.agent.message.MessageContext.record",
             Self::PayloadConvert => "std.agent.message.PayloadRepresentation.convert",
+            Self::ComparatorCapture => "std.collections.ComparatorIdentity.capture",
+            Self::ComparatorSame => "std.collections.ComparatorIdentity.same",
+            Self::ReadScopeEnter => "std.stream.ReadScope.enter",
         }
     }
 
@@ -88,6 +109,9 @@ impl StdExecutionRole {
             Self::Abort => "std.core.abort",
             Self::Checkpoint => "std.runtime.checkpoint.checkpoint",
             Self::CaptureData => "std.runtime.value.Data.capture",
+            Self::CaptureStorage => "std.memory.StorageValue.capture",
+            Self::RestoreStorage => "std.memory.StorageValue.restore",
+            Self::StorageSchema => "std.memory.StorageValue.schema",
             Self::StorageContext => "std.memory.StorageContext.current",
             Self::StorageNonce => "std.memory.StorageContext.nonce",
             Self::StreamClock => "std.stream.StreamClock.now",
@@ -97,6 +121,7 @@ impl StdExecutionRole {
             Self::TaskNextCompletion => "std.task.Scheduler.next_completion",
             Self::TaskCancel => "std.task.Scheduler.cancel",
             Self::ScopeEnter => "std.task.Scope.enter",
+            Self::ResourceScope => "std.resource.Scope.enter",
             Self::ParseBody => "std.compiler.parse_body",
             Self::AgentWithBody => "std.compiler.AgentDef.with_body",
             Self::CallableWithBody => "std.compiler.CallableDef.with_body",
@@ -105,6 +130,9 @@ impl StdExecutionRole {
             Self::MessageContextCapture => "std.agent.message.MessageContext.capture",
             Self::MessageContextRecord => "std.agent.message.MessageContext.record",
             Self::PayloadConvert => "std.agent.message.PayloadRepresentation.convert",
+            Self::ComparatorCapture => "std.collections.ComparatorIdentity.capture",
+            Self::ComparatorSame => "std.collections.ComparatorIdentity.same",
+            Self::ReadScopeEnter => "std.stream.ReadScope.enter",
         }
     }
 
@@ -114,6 +142,9 @@ impl StdExecutionRole {
         match self {
             Self::Abort | Self::Checkpoint => Some(self.role()),
             Self::CaptureData
+            | Self::CaptureStorage
+            | Self::RestoreStorage
+            | Self::StorageSchema
             | Self::StorageContext
             | Self::StorageNonce
             | Self::StreamClock
@@ -123,6 +154,7 @@ impl StdExecutionRole {
             | Self::TaskNextCompletion
             | Self::TaskCancel
             | Self::ScopeEnter
+            | Self::ResourceScope
             | Self::ParseBody
             | Self::AgentWithBody
             | Self::CallableWithBody
@@ -130,31 +162,47 @@ impl StdExecutionRole {
             | Self::ToolReference
             | Self::MessageContextCapture
             | Self::MessageContextRecord
-            | Self::PayloadConvert => None,
+            | Self::PayloadConvert
+            | Self::ComparatorCapture
+            | Self::ComparatorSame
+            | Self::ReadScopeEnter => None,
         }
     }
 
+    /// Canonical declaring type for the named execution role.
     pub fn associated_owner(self) -> Option<&'static str> {
+        self.associated_owners().first().copied()
+    }
+
+    pub fn associated_owners(self) -> &'static [&'static str] {
         match self {
             Self::Abort
             | Self::Checkpoint
             | Self::TaskStart
             | Self::ParseBody
             | Self::CurrentSession
-            | Self::ToolReference => None,
-            Self::CaptureData => Some("std.runtime.value.Data"),
-            Self::StorageContext | Self::StorageNonce => Some("std.memory.StorageContext"),
-            Self::StreamClock => Some("std.stream.StreamClock"),
+            | Self::ToolReference => &[],
+            Self::CaptureData => &["std.runtime.value.Data"],
+            Self::CaptureStorage | Self::RestoreStorage | Self::StorageSchema => {
+                &["std.memory.StorageValue"]
+            }
+            Self::StorageContext | Self::StorageNonce => &["std.memory.StorageContext"],
+            Self::StreamClock => &["std.stream.StreamClock"],
+            Self::ReadScopeEnter => &["std.stream.ReadScope"],
             Self::Requeue | Self::Park | Self::TaskNextCompletion | Self::TaskCancel => {
-                Some("std.task.Scheduler")
+                &["std.task.Scheduler"]
             }
-            Self::ScopeEnter => Some("std.task.Scope"),
-            Self::AgentWithBody => Some("std.compiler.AgentDef"),
-            Self::CallableWithBody => Some("std.compiler.CallableDef"),
+            Self::ScopeEnter => &["std.task.Scope"],
+            Self::ResourceScope => &["std.resource.Scope", "std.agent.session.LeaseScope"],
+            Self::AgentWithBody => &["std.compiler.AgentDef"],
+            Self::CallableWithBody => &["std.compiler.CallableDef"],
             Self::MessageContextCapture | Self::MessageContextRecord => {
-                Some("std.agent.message.MessageContext")
+                &["std.agent.message.MessageContext"]
             }
-            Self::PayloadConvert => Some("std.agent.message.PayloadRepresentation"),
+            Self::PayloadConvert => &["std.agent.message.PayloadRepresentation"],
+            Self::ComparatorCapture | Self::ComparatorSame => {
+                &["std.collections.ComparatorIdentity"]
+            }
         }
     }
 
@@ -162,12 +210,19 @@ impl StdExecutionRole {
         !matches!(
             self,
             Self::StreamClock
+                | Self::CaptureStorage
+                | Self::RestoreStorage
+                | Self::StorageSchema
+                | Self::ReadScopeEnter
                 | Self::ScopeEnter
+                | Self::ResourceScope
                 | Self::TaskNextCompletion
                 | Self::TaskCancel
                 | Self::MessageContextCapture
                 | Self::MessageContextRecord
                 | Self::PayloadConvert
+                | Self::ComparatorCapture
+                | Self::ComparatorSame
         )
     }
 
@@ -181,6 +236,7 @@ impl StdExecutionRole {
                 | Self::AgentWithBody
                 | Self::CallableWithBody
                 | Self::MessageContextRecord
+                | Self::ComparatorSame
         )
     }
 
@@ -219,14 +275,14 @@ impl StdExecutionRole {
                 .collect::<Vec<_>>()
                 .join(".")
         };
-        match self.associated_owner() {
-            None => callable.as_declaration().is_some_and(|definition| {
+        match self.associated_owners() {
+            [] => callable.as_declaration().is_some_and(|definition| {
                 definition.kind() == etas_code::DefinitionKind::Flow
                     && path(definition) == self.source_path()
             }),
-            Some(owner) => callable.as_method().is_some_and(|method| {
+            owners => callable.as_method().is_some_and(|method| {
                 method.implementation().selected_spec().is_none()
-                    && path(method.implementation().subject()) == owner
+                    && owners.contains(&path(method.implementation().subject()).as_str())
                     && self.source_path().rsplit('.').next() == Some(method.name())
             }),
         }

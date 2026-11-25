@@ -8,7 +8,7 @@ public flow len(text: string) -> usize ![] {
 }
 
 public flow is_ascii(text: string) -> bool ![] {
-    for byte in text.utf8 limit Iterations(18446744073709551615) {
+    for byte in text.utf8 {
         if byte >= 128 { return false; }
     }
     return true;
@@ -20,7 +20,7 @@ public flow char_get<I ~ Index>(text: string, index: I) -> Option<char> ![] {
         None => { return None; },
     };
     var current: usize = 0;
-    for scalar in chars(text) limit Iterations(18446744073709551615) {
+    for scalar in chars(text) {
         if current == requested { return Some(scalar); }
         current = current + 1;
     }

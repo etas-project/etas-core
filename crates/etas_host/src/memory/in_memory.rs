@@ -33,6 +33,7 @@ struct MemoryStore {
     generation: StoreGeneration,
     revision: i64,
     entries: BTreeMap<String, VersionedValue>,
+    schema_fingerprint: Option<String>,
 }
 #[derive(Clone, Debug)]
 struct VersionedValue {
@@ -42,12 +43,22 @@ struct VersionedValue {
 }
 
 impl MemoryStore {
-    fn new() -> Result<Self, HostError> {
+    fn new(store: &StoreRef) -> Result<Self, HostError> {
         Ok(Self {
             generation: StoreGeneration::new()?,
             revision: 0,
             entries: BTreeMap::new(),
+            schema_fingerprint: store.region.schema_fingerprint.clone(),
         })
+    }
+    fn validate_schema(&self, store: &StoreRef) -> Result<(), HostError> {
+        if self.schema_fingerprint != store.region.schema_fingerprint {
+            return Err(HostError::new(
+                HostErrorCode::SchemaMismatch,
+                "store codec/schema binding differs from persisted data",
+            ));
+        }
+        Ok(())
     }
     fn allocate(&mut self, store: &StoreRef) -> Result<MemoryVersion, HostError> {
         let next = next_revision(self.revision)?;
@@ -136,9 +147,11 @@ impl InMemoryMemoryClient {
         self.limits.value_size(&key)?;
         let key = canonical_key(&key, &self.limits)?;
         let stores = self.stores.read().map_err(lock_error)?;
-        let entry = stores
-            .get(&store_key(store))
-            .and_then(|store| store.entries.get(&key));
+        let state = stores.get(&store_key(store));
+        if let Some(state) = state {
+            state.validate_schema(store)?;
+        }
+        let entry = state.and_then(|state| state.entries.get(&key));
         let Some(entry) = entry else {
             return Ok(MemoryResult::None);
         };
@@ -162,6 +175,9 @@ impl InMemoryMemoryClient {
         canonical_key(&value, &self.limits)?;
         let mut stores = self.stores.write().map_err(lock_error)?;
         let identity = store_key(store);
+        if let Some(state) = stores.get(&identity) {
+            state.validate_schema(store)?;
+        }
         let actual = stores
             .get(&identity)
             .and_then(|store| store.entries.get(&key))
@@ -171,7 +187,9 @@ impl InMemoryMemoryClient {
         }
         let state = match stores.entry(identity) {
             std::collections::btree_map::Entry::Occupied(entry) => entry.into_mut(),
-            std::collections::btree_map::Entry::Vacant(entry) => entry.insert(MemoryStore::new()?),
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert(MemoryStore::new(store)?)
+            }
         };
         let version = state.allocate(store)?;
         state.entries.insert(
@@ -195,6 +213,9 @@ impl InMemoryMemoryClient {
         let key = canonical_key(&key_value, &self.limits)?;
         let mut stores = self.stores.write().map_err(lock_error)?;
         let state = stores.get_mut(&store_key(store));
+        if let Some(state) = state.as_ref() {
+            state.validate_schema(store)?;
+        }
         let actual = state
             .as_ref()
             .and_then(|store| store.entries.get(&key))

@@ -308,7 +308,7 @@ async fn schema_v3_append_receipts_survive_typed_receipt_migration() {
         db.query_row("SELECT format FROM etas_session_schema", [], |row| row
             .get::<_, i64>(0))
             .unwrap(),
-        9
+        10
     );
     assert_eq!(
         db.query_row("SELECT count(*) FROM session_messages", [], |row| row

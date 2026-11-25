@@ -1,25 +1,31 @@
 module std.tls;
 
-public import std.net.tcp.TcpStream;
+public import std.net.tcp.{Host, TcpStream};
 
-// TLS substrate support type.
-public type Host = { host: string };
+public enum TlsVersion { V12, V13, }
+public enum TlsTrust { Platform, Bundle(bytes), }
 
-// TLS substrate support type.
+public type TlsConfig = {
+    timeout: Option<std.stream.Timeout>,
+    minimum: TlsVersion,
+    trust: TlsTrust,
+    alpn: Array<string>,
+};
 
-// TLS substrate support type.
-public type TlsConfig = {  };
+public let DefaultTlsConfig = TlsConfig {
+    timeout= None,
+    minimum= TlsVersion.V12,
+    trust= TlsTrust.Platform,
+    alpn= [],
+};
 
-// TLS substrate support type.
 public type TlsError = { code: string, message: string };
 
-// TLS substrate support type.
 type TlsConnection;
 public type TlsStream = { private connection: TlsConnection };
 
-// Open a host-mediated TLS client session over a TCP stream.
-
-public flow connect(stream: std.net.tcp.TcpStream, host: Host, config: TlsConfig) -> TlsStream ![Error<TlsError>] {
+public flow connect(stream: TcpStream, host: Host, config: TlsConfig = DefaultTlsConfig) -> TlsStream ![Error<TlsError>] {
     return perform std.effects.Tls.handshake(stream, host, config);
 }
-impl std.tls.TlsStream ~ std.stream.ByteStream {}
+
+impl TlsStream ~ std.stream.ByteStream {}

@@ -99,9 +99,18 @@ pub struct MemoryCursor {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct MemoryQuery {
-    pub predicate: Option<HostValue>,
-    pub order_by: Vec<MemoryOrderKey>,
+pub enum MemoryQuery {
+    /// Internal predicate API retained for host clients.
+    Predicate {
+        predicate: Option<HostValue>,
+        order_by: Vec<MemoryOrderKey>,
+    },
+    /// Application adapters register an explicit language/version for a store.
+    Encoded {
+        language: String,
+        version: u32,
+        payload: Vec<u8>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

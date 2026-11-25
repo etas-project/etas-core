@@ -23,7 +23,7 @@ impl JsonReader {
     }
 
     flow whitespace(var self) -> unit ![] {
-        while true limit Iterations(18446744073709551615) {
+        while true {
             match self.peek() {
                 Some(' ') => {},
                 Some('\t') => {},
@@ -72,7 +72,7 @@ impl JsonReader {
     }
 
     flow literal(var self, spelling: string, value: JsonValue) -> JsonValue ![Error<JsonError>] {
-        for scalar in std.text.chars(spelling) limit Iterations(18446744073709551615) {
+        for scalar in std.text.chars(spelling) {
             self.expect(scalar);
         }
         return value;
@@ -81,7 +81,7 @@ impl JsonReader {
     flow string(var self) -> string ![Error<JsonError>] {
         self.expect('"');
         var output = "";
-        while true limit Iterations(18446744073709551615) {
+        while true {
             let scalar = self.take();
             if scalar == '"' { return output; }
             if scalar == '\\' {
@@ -126,7 +126,7 @@ impl JsonReader {
     flow hex_quad(var self) -> u32 ![Error<JsonError>] {
         var code: u32 = 0;
         var count: usize = 0;
-        while count < 4 limit Iterations(4) {
+        while count < 4 {
             let scalar = self.take();
             let digit = scalar.to_u32();
             code = code * 16 + if scalar >= '0' && scalar <= '9' {
@@ -151,7 +151,7 @@ impl JsonReader {
             self.position = self.position + 1;
             return JsonValue.Array(output);
         }
-        while true limit Iterations(18446744073709551615) {
+        while true {
             output = output.push(self.value());
             self.whitespace();
             match self.take() {
@@ -170,7 +170,7 @@ impl JsonReader {
             self.position = self.position + 1;
             return JsonValue.Object(output);
         }
-        while true limit Iterations(18446744073709551615) {
+        while true {
             self.whitespace();
             let key = self.string();
             self.whitespace();
@@ -188,7 +188,7 @@ impl JsonReader {
 
     flow digits(var self) -> string ![] {
         var text = "";
-        while true limit Iterations(18446744073709551615) {
+        while true {
             let scalar = match self.peek() {
                 Some(value) => value,
                 None => { return text; },

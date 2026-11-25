@@ -46,6 +46,41 @@ impl HostTraceRequest for ConsoleRequest {
 impl HostTraceRequest for FilesystemRequest {
     fn trace_payload(&self) -> HostTracePayload {
         let (action, operation) = match &self.operation {
+            FilesystemOperation::Open { path, mode } => {
+                return HostTracePayload::new("filesystem", "Fs.open")
+                    .with_field(
+                        "operation",
+                        variant("Open", vec![workspace_path(path)]),
+                        HostTraceFieldSensitivity::Sensitive,
+                    )
+                    .with_field(
+                        "region",
+                        HostValue::String(path.region.as_str().to_owned()),
+                        HostTraceFieldSensitivity::Public,
+                    )
+                    .with_field(
+                        "mode",
+                        HostValue::String(format!("{mode:?}")),
+                        HostTraceFieldSensitivity::Public,
+                    )
+                    .with_field(
+                        "required_rights",
+                        HostValue::List(
+                            mode.rights()
+                                .map(|right| HostValue::String(format!("Fs.{right}")))
+                                .collect(),
+                        ),
+                        HostTraceFieldSensitivity::Public,
+                    );
+            }
+            FilesystemOperation::Sync { file } => (
+                "Fs.sync",
+                variant("Sync", vec![workspace_path(&file.path())]),
+            ),
+            FilesystemOperation::Canonicalize { path } => (
+                "Fs.canonicalize",
+                variant("Canonicalize", vec![workspace_path(path)]),
+            ),
             FilesystemOperation::Read { path } => {
                 ("Fs.read", variant("Read", vec![workspace_path(path)]))
             }
@@ -74,6 +109,31 @@ impl HostTraceRequest for FilesystemRequest {
             FilesystemOperation::Delete { path } => (
                 "HostFilesystem.delete",
                 variant("Delete", vec![workspace_path(path)]),
+            ),
+            FilesystemOperation::CreateDir { path, recursive } => (
+                "Fs.create_dir",
+                variant(
+                    "CreateDir",
+                    vec![workspace_path(path), HostValue::Bool(*recursive)],
+                ),
+            ),
+            FilesystemOperation::Rename {
+                source,
+                destination,
+            } => (
+                "Fs.rename",
+                variant(
+                    "Rename",
+                    vec![workspace_path(source), workspace_path(destination)],
+                ),
+            ),
+            FilesystemOperation::RemoveFile { path } => (
+                "Fs.remove_file",
+                variant("RemoveFile", vec![workspace_path(path)]),
+            ),
+            FilesystemOperation::RemoveDir { path } => (
+                "Fs.remove_dir",
+                variant("RemoveDir", vec![workspace_path(path)]),
             ),
             FilesystemOperation::ReadDir { path } => {
                 ("Fs.list", variant("ReadDir", vec![workspace_path(path)]))
@@ -207,11 +267,16 @@ impl HostTraceRequest for CommandProcessRequest {
 impl HostTraceRequest for TcpConnectRequest {
     fn trace_payload(&self) -> HostTracePayload {
         let operation = match &self.operation {
-            TcpConnectOperation::Connect { endpoint } => variant(
+            TcpConnectOperation::Connect { endpoint, options } => variant(
                 "Connect",
                 vec![
                     HostValue::String(endpoint.host.clone()),
                     HostValue::UInt(endpoint.port as u128),
+                    options
+                        .timeout_ms
+                        .map(HostValue::UInt)
+                        .unwrap_or(HostValue::Unit),
+                    HostValue::Bool(options.nodelay),
                 ],
             ),
         };
@@ -256,16 +321,31 @@ impl HostTraceRequest for StreamRequest {
                     ],
                 ),
             ),
-            StreamOperation::WriteAll { stream, body } => (
+            StreamOperation::WriteAll {
+                stream,
+                body,
+                timeout_ms,
+            } => (
                 "Stream.write",
                 variant(
                     "WriteAll",
-                    vec![byte_stream(stream), HostValue::Bytes(body.clone())],
+                    vec![
+                        byte_stream(stream),
+                        HostValue::Bytes(body.clone()),
+                        option(timeout_ms.map(|value| HostValue::UInt(value as u128))),
+                    ],
                 ),
             ),
-            StreamOperation::Flush { stream } => {
-                ("Stream.flush", variant("Flush", vec![byte_stream(stream)]))
-            }
+            StreamOperation::Flush { stream, timeout_ms } => (
+                "Stream.flush",
+                variant(
+                    "Flush",
+                    vec![
+                        byte_stream(stream),
+                        option(timeout_ms.map(|value| HostValue::UInt(value as u128))),
+                    ],
+                ),
+            ),
             StreamOperation::Close { stream } => {
                 ("Stream.close", variant("Close", vec![byte_stream(stream)]))
             }
@@ -284,9 +364,32 @@ impl HostTraceRequest for TlsConnectRequest {
             TlsConnectOperation::Connect {
                 stream,
                 server_name,
+                options,
             } => variant(
                 "Connect",
-                vec![tcp_stream(stream), HostValue::String(server_name.clone())],
+                vec![
+                    tcp_stream(stream),
+                    HostValue::String(server_name.clone()),
+                    options
+                        .timeout_ms
+                        .map(HostValue::UInt)
+                        .unwrap_or(HostValue::Unit),
+                    HostValue::String(format!("{:?}", options.minimum)),
+                    match &options.trust {
+                        crate::TlsTrust::Platform => variant("Platform", vec![]),
+                        crate::TlsTrust::Bundle(bytes) => {
+                            variant("Bundle", vec![HostValue::Bytes(bytes.clone())])
+                        }
+                    },
+                    HostValue::List(
+                        options
+                            .alpn
+                            .iter()
+                            .cloned()
+                            .map(HostValue::String)
+                            .collect(),
+                    ),
+                ],
             ),
         };
         HostTracePayload::new("tls", "Tls.handshake").with_field(
@@ -423,7 +526,14 @@ fn stream_origin(origin: &ByteStreamOrigin) -> HostValue {
                 option(server_name.clone().map(HostValue::String)),
             ],
         ),
-        ByteStreamOrigin::File { path } => variant("File", vec![HostValue::String(path.clone())]),
+        ByteStreamOrigin::File { path, region, mode } => variant(
+            "File",
+            vec![
+                HostValue::String(path.to_string_lossy().into_owned()),
+                HostValue::String(region.as_str().to_owned()),
+                HostValue::String(format!("{mode:?}")),
+            ],
+        ),
         ByteStreamOrigin::Browser { session } => {
             variant("Browser", vec![HostValue::String(session.clone())])
         }

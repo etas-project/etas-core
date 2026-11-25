@@ -10,7 +10,7 @@ public flow format(template: string, arguments: Array<string>) -> Result<string,
     var after_close = false;
     var placeholder = false;
 
-    for scalar in chars(template) limit Iterations(18446744073709551615) {
+    for scalar in chars(template) {
         if placeholder {
             if scalar == '}' {
                 let index = match parse_usize(index_text) {

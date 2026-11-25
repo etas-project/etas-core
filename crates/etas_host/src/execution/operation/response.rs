@@ -100,6 +100,8 @@ result_response!(
     crate::TlsConnectResponse,
     crate::ToolResponse,
     crate::SecretResponse,
+    crate::EntropyResponse,
+    crate::ClockResponse,
     crate::BrowserProtocolResponse
 );
 

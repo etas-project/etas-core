@@ -6,6 +6,8 @@ use prost::Message;
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoCallableValueGraph {
+    #[prost(message, repeated, tag = "6")]
+    pub call_inputs: Vec<ProtoCallableCallInputs>,
     #[prost(message, repeated, tag = "5")]
     pub source_projections: Vec<ProtoCallableReturnedProjection>,
     #[prost(message, repeated, tag = "4")]
@@ -220,4 +222,32 @@ pub struct ProtoCallableValueBehavior {
     pub interpreter_features: Vec<i32>,
     #[prost(int32, optional, tag = "4")]
     pub independent_determinism: Option<i32>,
+    #[prost(message, optional, tag = "5")]
+    pub suspension: Option<ProtoCallableValueSuspension>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoCallableValueSuspension {
+    #[prost(bool, tag = "1")]
+    pub may_suspend: bool,
+    #[prost(bool, tag = "2")]
+    pub unknown: bool,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoCallableCallInputs {
+    #[prost(message, optional, tag = "1")]
+    pub scope: Option<ProtoCallableValueScope>,
+    #[prost(message, repeated, tag = "2")]
+    pub arguments: Vec<ProtoCallableCallArgument>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoCallableCallArgument {
+    #[prost(string, optional, tag = "1")]
+    pub name: Option<String>,
+    #[prost(message, optional, tag = "2")]
+    pub sources: Option<ProtoCallableValueSources>,
+    #[prost(message, repeated, tag = "3")]
+    pub projections: Vec<ProtoCallableReturnedProjection>,
 }

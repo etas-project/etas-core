@@ -20,7 +20,7 @@ public enum ReadRequest<K> {
 public enum ReadResult<K, V> {
     Entry(Option<MemoryEntry<K, V>>),
     Page(MemoryPage<K, V>),
-    Selected(SelectedPage),
+    Selected(MemoryPage<K, V>),
 }
 
 public enum WriteRequest<K, V> {
@@ -28,18 +28,8 @@ public enum WriteRequest<K, V> {
     Delete(K, WriteCondition),
 }
 
-// Neutral backend data is checked against the captured Store<K,V> before it
-// is exposed. Source turns these rows into prompt JSON, preserving key/version.
-public type SelectionEntry = {
-    key: std.runtime.value.Data,
-    value: std.runtime.value.Data,
-    version: MemoryVersion,
-};
-
-public type SelectedPage = { entries: Array<SelectionEntry>, cursor: Option<MemoryCursor> };
-
+// Query payloads have explicit adapter language/version identity. The backend
+// must reject an unregistered pair rather than generating an embedding.
 public enum SelectionRequest {
-    Scan(Option<MemoryCursor>, u32),
-    Query(std.runtime.value.Data, Option<u32>),
-    Vector(Array<f32>, u32),
+    Query(string, u32, bytes, Option<u32>),
 }

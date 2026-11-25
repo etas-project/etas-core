@@ -11,7 +11,7 @@ impl FloatLayout {
     flow decimal_text(self, significand: u128, exponent: i128, negative: bool) -> string ![] {
         var value = significand;
         var power = exponent;
-        while value % 10 == 0 limit Iterations(17) {
+        while value % 10 == 0 {
             value = value / 10;
             power = power + 1;
         }
@@ -20,7 +20,7 @@ impl FloatLayout {
         if power >= 0 {
             output = digits;
             var zeros: i128 = 0;
-            while zeros < power limit Iterations(308) {
+            while zeros < power {
                 output = output + "0";
                 zeros = zeros + 1;
             }
@@ -29,14 +29,14 @@ impl FloatLayout {
             if point <= 0 {
                 output = "0.";
                 var zeros: i128 = 0;
-                while zeros < 0 - point limit Iterations(324) {
+                while zeros < 0 - point {
                     output = output + "0";
                     zeros = zeros + 1;
                 }
                 output = output + digits;
             } else {
                 var index: i128 = 0;
-                for scalar in chars(digits) limit Iterations(17) {
+                for scalar in chars(digits) {
                     if index == point { output = output + "."; }
                     output = output + from_char(scalar);
                     index = index + 1;
@@ -78,8 +78,7 @@ impl FloatLayout {
         let exponent = i128 { bits= exact_digits.length.bits } - decimal_places - 1;
         var prefix: u128 = 0;
         var precision: usize = 0;
-        while precision < self.roundtrip_digits && precision < exact_digits.length
-            limit Iterations(17) {
+        while precision < self.roundtrip_digits && precision < exact_digits.length {
             prefix = prefix * 10 + exact_digits.get(precision).unwrap().bits - 48;
             precision = precision + 1;
             let power = exponent - i128 { bits= precision.bits } + 1;
@@ -93,7 +92,7 @@ impl FloatLayout {
                     if following == 53 {
                         round_up = prefix % 2 == 1;
                         var index = precision + 1;
-                        while index < exact_digits.length limit Iterations(1075) {
+                        while index < exact_digits.length {
                             if exact_digits.get(index) != Some(48) {
                                 round_up = true;
                                 break;

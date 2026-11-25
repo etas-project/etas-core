@@ -62,7 +62,7 @@ impl Word32 {
         var place: u128 = 1;
         var output: u128 = 0;
         var bit: usize = 0;
-        while bit < 32 limit Iterations(32) {
+        while bit < 32 {
             output = output + ((left % 2 + right % 2) % 2) * place;
             left = left / 2;
             right = right / 2;
@@ -78,7 +78,7 @@ impl Word32 {
         var place: u128 = 1;
         var output: u128 = 0;
         var bit: usize = 0;
-        while bit < 32 limit Iterations(32) {
+        while bit < 32 {
             output = output + (left % 2) * (right % 2) * place;
             left = left / 2;
             right = right / 2;
@@ -185,7 +185,7 @@ impl Sha256State {
     flow compress(self, input: bytes, start: usize) -> Sha256State ![] {
         var schedule: Array<Word32> = [];
         var index: usize = 0;
-        while index < 16 limit Iterations(16) {
+        while index < 16 {
             let offset = start + index * 4;
             let value = input.get(offset).unwrap().bits * 16777216
                 + input.get(offset + 1).unwrap().bits * 65536
@@ -194,7 +194,7 @@ impl Sha256State {
             schedule = schedule.push(Word32 { raw= value });
             index = index + 1;
         }
-        while index < 64 limit Iterations(48) {
+        while index < 64 {
             let a = schedule.get(index - 15).unwrap();
             let b = schedule.get(index - 2).unwrap();
             let sigma0 = a.rotate_right(7).xor(a.rotate_right(18)).xor(a.shift_right(3));
@@ -214,7 +214,7 @@ impl Sha256State {
         var g = self.words.get(6).unwrap();
         var h = self.words.get(7).unwrap();
         index = 0;
-        while index < 64 limit Iterations(64) {
+        while index < 64 {
             let sigma1 = e.rotate_right(6).xor(e.rotate_right(11)).xor(e.rotate_right(25));
             let choose = g.xor(e.and(f.xor(g)));
             let temp1 = h.add(sigma1).add(choose)

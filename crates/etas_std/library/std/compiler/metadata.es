@@ -43,6 +43,7 @@ public enum CallableId {
         owner: DefinitionId,
         implementation: Option<ImplementationId>,
         name: string,
+        overload: Option<string>,
     },
 }
 
@@ -214,6 +215,7 @@ public enum TraceExpression {
     Choice(Array<TraceExpression>),
     Parallel(Array<TraceExpression>),
     Repeat(TraceExpression),
+    Recursive { identity: string, body: Option<TraceExpression> },
     Reference(DefinitionId),
     Outcome(CallableOutcomeInfo),
     ParameterCall(ParameterCallInfo),
@@ -256,6 +258,9 @@ public enum ValueProjectionStep {
     MapKey,
     MapValue,
     CallResult,
+    CallWithArguments(usize),
+    Invocation(usize),
+    Repeat(Array<Array<ValueProjectionStep>>),
 }
 
 public enum ParameterHandlerScopeInfo {

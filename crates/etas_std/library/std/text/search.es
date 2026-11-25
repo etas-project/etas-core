@@ -14,7 +14,7 @@ flow scalar_width(scalar: char) -> usize ![] {
 
 flow character_array(text: string) -> Array<char> ![] {
     var output: Array<char> = [];
-    for scalar in chars(text) limit Iterations(18446744073709551615) {
+    for scalar in chars(text) {
         output = output.push(scalar);
     }
     return output;
@@ -22,7 +22,7 @@ flow character_array(text: string) -> Array<char> ![] {
 
 flow matches_at(text: Array<char>, pattern: Array<char>, start: usize) -> bool ![] {
     var index = start;
-    for expected in pattern limit Iterations(18446744073709551615) {
+    for expected in pattern {
         match text.get(index) {
             Some(actual) => { if actual != expected { return false; } },
             None => { return false; },
@@ -39,7 +39,7 @@ flow match_position(text: string, pattern: string, last: bool) -> Option<(usize,
     var index: usize = 0;
     var byte: usize = 0;
     var found: Option<(usize, usize)> = None;
-    while index <= length limit Iterations(18446744073709551615) {
+    while index <= length {
         if matches_at(values, expected, index) {
             if !last { return Some((index, byte)); }
             found = Some((index, byte));
@@ -71,7 +71,7 @@ public flow count(text: string, pattern: string) -> usize ![] {
     let length = char_count(text);
     var index: usize = 0;
     var total: usize = 0;
-    while index < length limit Iterations(18446744073709551615) {
+    while index < length {
         if matches_at(values, expected, index) {
             total = total + 1;
             index = index + pattern_length;
@@ -96,7 +96,7 @@ public flow contains(text: string, pattern: string) -> bool ![] {
     let expected = character_array(pattern);
     let length = char_count(text);
     var start: usize = 0;
-    while start <= length limit Iterations(18446744073709551615) {
+    while start <= length {
         if matches_at(values, expected, start) { return true; }
         start = start + 1;
     }
@@ -107,7 +107,7 @@ public flow strip_prefix(text: string, prefix: string) -> Option<string> ![] {
     if !starts_with(text, prefix) { return None; }
     var remaining = char_count(prefix);
     var output = "";
-    for scalar in chars(text) limit Iterations(18446744073709551615) {
+    for scalar in chars(text) {
         if remaining > 0 {
             remaining = remaining - 1;
         } else {
@@ -121,7 +121,7 @@ public flow strip_suffix(text: string, suffix: string) -> Option<string> ![] {
     if !ends_with(text, suffix) { return None; }
     var remaining = char_count(text) - char_count(suffix);
     var output = "";
-    for scalar in chars(text) limit Iterations(18446744073709551615) {
+    for scalar in chars(text) {
         if remaining == 0 { return Some(output); }
         output = output + from_char(scalar);
         remaining = remaining - 1;

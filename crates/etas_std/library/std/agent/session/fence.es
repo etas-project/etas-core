@@ -8,7 +8,7 @@ impl SessionHistoryFence {
     // certify freshness; the backend checks both atomically at publication.
     flow subject(self, context: StorageContext) -> string ![Error<StorageError>] {
         if self.opaque.length > context.max_value_bytes {
-            perform Error.raise<StorageError>(StorageError { code= "budget_exceeded", message= "session history fence exceeds storage limits" });
+            perform Error.raise<StorageError>(StorageError { code= "limit_exceeded", message= "session history fence exceeds storage limits", operation= None });
         }
         let document = FenceValue.parse(self.opaque, context.max_depth);
         let envelope = document.object(["claims", "seal"], []);

@@ -11,7 +11,7 @@ impl NormalizationData {
     flow combining_class(self, scalar: u32) -> usize ![] {
         var low: usize = 0;
         var high = COMBINING_CLASSES.length;
-        while low < high limit Iterations(32) {
+        while low < high {
             let middle = low + (high - low) / 2;
             let record = COMBINING_CLASSES.get(middle).unwrap();
             if scalar < record.scalar { high = middle; }
@@ -24,7 +24,7 @@ impl NormalizationData {
     flow decomposition(self, scalar: u32, compatibility: bool) -> Option<Array<u32>> ![] {
         var low: usize = 0;
         var high = DECOMPOSITIONS.length;
-        while low < high limit Iterations(32) {
+        while low < high {
             let middle = low + (high - low) / 2;
             let record = DECOMPOSITIONS.get(middle).unwrap();
             if scalar < record.scalar { high = middle; }
@@ -48,7 +48,7 @@ impl NormalizationData {
         let key = starter.bits * 2097152 + scalar.bits;
         var low: usize = 0;
         var high = COMPOSITIONS.length;
-        while low < high limit Iterations(32) {
+        while low < high {
             let middle = low + (high - low) / 2;
             let record = COMPOSITIONS.get(middle).unwrap();
             if key < record.key { high = middle; }
@@ -79,7 +79,7 @@ impl CanonicalOrder {
     flow new() -> CanonicalOrder ![] {
         var buckets: Array<List<u32>> = [];
         var class: usize = 0;
-        while class < 256 limit Iterations(256) {
+        while class < 256 {
             buckets = buckets.push([]);
             class = class + 1;
         }
@@ -89,10 +89,10 @@ impl CanonicalOrder {
     flow flush(var self) -> unit ![] {
         if self.marked == 0 { return; }
         var class: usize = 1;
-        while class < 256 limit Iterations(255) {
+        while class < 256 {
             let values = self.buckets.get(class).unwrap();
             if !values.is_empty() {
-                for scalar in values.reverse() limit Iterations(18446744073709551615) {
+                for scalar in values.reverse() {
                     self.output = self.output.push(scalar);
                 }
                 self.buckets = self.buckets.set(class, [])?.unwrap();
@@ -116,7 +116,7 @@ impl CanonicalOrder {
 
     flow decompose(var self, scalar: u32, compatibility: bool) -> unit ![] {
         var stack: List<u32> = scalar :: [];
-        while !stack.is_empty() limit Iterations(18446744073709551615) {
+        while !stack.is_empty() {
             let (head, tail) = match stack {
                 value :: rest => (value, rest),
                 [] => std.core.abort("nonempty decomposition stack invariant"),
@@ -132,7 +132,7 @@ impl CanonicalOrder {
                 match NORMALIZER.decomposition(head, compatibility) {
                     Some(parts) => {
                         var index = parts.length;
-                        while index > 0 limit Iterations(18446744073709551615) {
+                        while index > 0 {
                             index = index - 1;
                             stack = parts.get(index).unwrap() :: stack;
                         }
@@ -147,7 +147,7 @@ impl CanonicalOrder {
 public flow normalize(value: string, form: Normalization) -> string ![] {
     var order = CanonicalOrder.new();
     let compatibility = form.compatibility();
-    for scalar in std.text.chars(value) limit Iterations(18446744073709551615) {
+    for scalar in std.text.chars(value) {
         order.decompose(scalar.to_u32(), compatibility);
     }
     order.flush();
@@ -156,7 +156,7 @@ public flow normalize(value: string, form: Normalization) -> string ![] {
         var composed: Array<u32> = [];
         var starter: Option<usize> = None;
         var last_class: usize = 0;
-        for scalar in output limit Iterations(18446744073709551615) {
+        for scalar in output {
             let class = NORMALIZER.combining_class(scalar);
             match starter {
                 Some(index) => {
@@ -179,7 +179,7 @@ public flow normalize(value: string, form: Normalization) -> string ![] {
         output = composed;
     }
     var parts: Array<string> = [];
-    for scalar in output limit Iterations(18446744073709551615) {
+    for scalar in output {
         parts = parts.push(std.text.from_char(char { bits= scalar.bits }));
     }
     return std.text.concat(parts);

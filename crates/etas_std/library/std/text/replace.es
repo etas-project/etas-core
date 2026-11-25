@@ -11,7 +11,7 @@ public flow replace_n(text: string, pattern: string, replacement: string, limit:
     if width == 0 {
         output = replacement;
         remaining = remaining - 1;
-        for scalar in chars(text) limit Iterations(18446744073709551615) {
+        for scalar in chars(text) {
             output = output + from_char(scalar);
             if remaining > 0 {
                 output = output + replacement;
@@ -24,7 +24,7 @@ public flow replace_n(text: string, pattern: string, replacement: string, limit:
     let expected = character_array(pattern);
     let length = char_count(text);
     var index: usize = 0;
-    while index < length limit Iterations(18446744073709551615) {
+    while index < length {
         if remaining > 0 && matches_at(values, expected, index) {
             output = output + replacement;
             remaining = remaining - 1;

@@ -13,7 +13,7 @@ public flow splitn(text: string, separator: string, limit: usize) -> Array<strin
     if width == 0 {
         output = output.push("");
         remaining = remaining - 1;
-        for scalar in chars(text) limit Iterations(18446744073709551615) {
+        for scalar in chars(text) {
             if remaining > 0 {
                 output = output.push(from_char(scalar));
                 remaining = remaining - 1;
@@ -25,7 +25,7 @@ public flow splitn(text: string, separator: string, limit: usize) -> Array<strin
     let expected = character_array(separator);
     let length = char_count(text);
     var index: usize = 0;
-    while index < length limit Iterations(18446744073709551615) {
+    while index < length {
         if remaining > 0 && matches_at(values, expected, index) {
             output = output.push(segment);
             segment = "";
@@ -47,7 +47,7 @@ flow partition(text: string, start: usize, width: usize) -> (string, string) ![]
     var left = "";
     var right = "";
     var index: usize = 0;
-    for scalar in chars(text) limit Iterations(18446744073709551615) {
+    for scalar in chars(text) {
         if index < start { left = left + from_char(scalar); }
         else if index >= start + width { right = right + from_char(scalar); }
         index = index + 1;

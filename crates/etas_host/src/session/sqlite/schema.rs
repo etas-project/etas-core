@@ -14,7 +14,7 @@ pub(super) fn initialize_schema(connection: &mut Connection) -> Result<(), HostE
         )
         .optional()
         .map_err(sqlite_error)?;
-    if version.is_some_and(|version| !(1..=9).contains(&version)) {
+    if version.is_some_and(|version| !(1..=10).contains(&version)) {
         return Err(HostError::new(
             HostErrorCode::SchemaMismatch,
             "unsupported session schema version",
@@ -139,7 +139,15 @@ pub(super) fn initialize_schema(connection: &mut Connection) -> Result<(), HostE
         CREATE INDEX IF NOT EXISTS session_retention_receipts_expiry ON session_retention_receipts(expires);")
         .map_err(sqlite_error)?;
     transaction
-        .execute("UPDATE etas_session_schema SET format=9 WHERE id=1", [])
+        .execute_batch(
+            "CREATE TABLE IF NOT EXISTS session_routing_leases (
+            scope TEXT PRIMARY KEY, session_id TEXT NOT NULL, generation TEXT,
+            expires INTEGER NOT NULL CHECK(expires>0));
+        CREATE UNIQUE INDEX IF NOT EXISTS session_routing_leases_active
+            ON session_routing_leases(session_id) WHERE generation IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS session_routing_leases_expiry ON session_routing_leases(expires);
+        UPDATE etas_session_schema SET format=10 WHERE id=1;",
+        )
         .map_err(sqlite_error)?;
     transaction.commit().map_err(sqlite_error)
 }

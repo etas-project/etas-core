@@ -509,6 +509,8 @@ pub struct Method {
     pub header: Vec<u8>,
     #[prost(string, tag = "6")]
     pub name: String,
+    #[prost(bytes = "vec", optional, tag = "7")]
+    pub overload: Option<Vec<u8>>,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
@@ -625,6 +627,14 @@ pub struct ValueProjectionStep {
     pub name: String,
     #[prost(uint32, tag = "3")]
     pub position: u32,
+    #[prost(message, repeated, tag = "4")]
+    pub alternatives: Vec<ValueProjectionPath>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct ValueProjectionPath {
+    #[prost(message, repeated, tag = "1")]
+    pub steps: Vec<ValueProjectionStep>,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
@@ -769,7 +779,7 @@ pub struct Widened {
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct Trace {
-    #[prost(oneof = "trace::Kind", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9")]
+    #[prost(oneof = "trace::Kind", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10")]
     pub kind: Option<trace::Kind>,
 }
 pub mod trace {
@@ -793,5 +803,15 @@ pub mod trace {
         UnknownOrder(u32),
         #[prost(message, tag = "9")]
         Widened(super::Widened),
+        #[prost(message, tag = "10")]
+        Recursive(super::RecursiveTrace),
     }
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct RecursiveTrace {
+    #[prost(bytes = "vec", tag = "1")]
+    pub id: Vec<u8>,
+    #[prost(uint32, optional, tag = "2")]
+    pub body: Option<u32>,
 }

@@ -56,7 +56,7 @@ fn receipt_value(receipt: SessionContextReceipt) -> HostValue {
             variant(
                 match receipt.durability {
                     StorageDurability::Volatile => "Volatile",
-                    StorageDurability::SqliteWalFull => "SqliteWalFull",
+                    StorageDurability::SqliteWalFull => "Durable",
                 },
                 vec![],
             ),
@@ -67,15 +67,12 @@ fn rejected(operation: StorageOperationRef, reason: SessionContextRejection) -> 
     variant(
         "NotCommitted",
         vec![
-            operation_value(operation),
+            operation_value(operation.clone()),
             match reason {
                 SessionContextRejection::StaleHistory => variant("StaleHistory", vec![]),
                 SessionContextRejection::Rejected(error) => variant(
                     "Rejected",
-                    vec![HostValue::Record(vec![
-                        ("code".into(), HostValue::String(error.code.as_str().into())),
-                        ("message".into(), HostValue::String(error.message)),
-                    ])],
+                    vec![crate::storage_error_value(error, Some(operation))],
                 ),
             },
         ],

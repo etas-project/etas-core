@@ -27,42 +27,29 @@ impl Stack<T> {
     }
 }
 
+
 public type Queue<T> = { private front: List<T>, private back: List<T>, private size: usize };
 
 impl Queue<T> {
     public flow new() -> Queue<T> ![] {
         return Queue { front= [], back= [], size= 0 };
     }
-
     public flow push(self, value: T) -> Queue<T> ![] {
+        if self.size == 0 { return Queue { front= value :: [], back= [], size= 1 }; }
         return Queue { front= self.front, back= value :: self.back, size= self.size + 1 };
     }
-
     public flow pop(self) -> (Queue<T>, Option<T>) ![] {
-        if self.size == 0 {
-            return (self, None);
-        }
-        var front = self.front;
-        var back = self.back;
-        if front.is_empty() {
-            for value in back limit Iterations(18446744073709551615) {
-                front = value :: front;
-            }
-            back = [];
-        }
-        return match front {
-            head :: tail => (Queue { front= tail, back= back, size= self.size - 1 }, Some(head)),
-            [] => std.core.abort("queue size invariant"),
+        return match self.front {
+            [] => (self, None),
+            head :: tail => {
+                let front = if tail.is_empty() { self.back.reverse() } else { tail };
+                let back = if tail.is_empty() { [] } else { self.back };
+                (Queue { front= front, back= back, size= self.size - 1 }, Some(head))
+            },
         };
     }
-
-    public flow len(self) -> usize ![] {
-        return self.size;
-    }
-
-    public flow is_empty(self) -> bool ![] {
-        return self.size == 0;
-    }
+    public flow len(self) -> usize ![] { return self.size; }
+    public flow is_empty(self) -> bool ![] { return self.size == 0; }
 }
 
 public type Deque<T> = { private front: List<T>, private back: List<T>, private size: usize };
@@ -71,86 +58,52 @@ impl Deque<T> {
     public flow new() -> Deque<T> ![] {
         return Deque { front= [], back= [], size= 0 };
     }
-
+    flow balanced(self) -> Deque<T> ![] {
+        if self.size < 2 || (!self.front.is_empty() && !self.back.is_empty()) { return self; }
+        let forward = if self.front.is_empty() { self.back.reverse() } else { self.front };
+        let midpoint = self.size / 2 + self.size % 2;
+        var reversed_front: List<T> = [];
+        var back: List<T> = [];
+        var index: usize = 0;
+        for value in forward {
+            if index < midpoint { reversed_front = value :: reversed_front; }
+            else { back = value :: back; }
+            index = index + 1;
+        }
+        return Deque { front= reversed_front.reverse(), back= back, size= self.size };
+    }
     public flow push_front(self, value: T) -> Deque<T> ![] {
-        return Deque { front= value :: self.front, back= self.back, size= self.size + 1 };
+        let updated = Deque { front= value :: self.front, back= self.back, size= self.size + 1 };
+        return updated.balanced();
     }
-
     public flow push_back(self, value: T) -> Deque<T> ![] {
-        return Deque { front= self.front, back= value :: self.back, size= self.size + 1 };
+        let updated = Deque { front= self.front, back= value :: self.back, size= self.size + 1 };
+        return updated.balanced();
     }
-
     public flow pop_front(self) -> (Deque<T>, Option<T>) ![] {
-        if self.size == 0 {
-            return (self, None);
-        }
-        var front = self.front;
-        var back = self.back;
-        if front.is_empty() {
-            var forward: List<T> = [];
-            for value in back limit Iterations(18446744073709551615) {
-                forward = value :: forward;
-            }
-            let midpoint = self.size / 2 + self.size % 2;
-            var reversed_front: List<T> = [];
-            back = [];
-            var index: usize = 0;
-            for value in forward limit Iterations(18446744073709551615) {
-                if index < midpoint {
-                    reversed_front = value :: reversed_front;
-                } else {
-                    back = value :: back;
-                }
-                index = index + 1;
-            }
-            for value in reversed_front limit Iterations(18446744073709551615) {
-                front = value :: front;
-            }
-        }
-        return match front {
-            head :: tail => (Deque { front= tail, back= back, size= self.size - 1 }, Some(head)),
-            [] => std.core.abort("deque size invariant"),
+        return match self.front {
+            [] => match self.back {
+                [] => (self, None),
+                value :: _ => (Deque { front= [], back= [], size= 0 }, Some(value)),
+            },
+            value :: tail => {
+                let updated = Deque { front= tail, back= self.back, size= self.size - 1 };
+                (updated.balanced(), Some(value))
+            },
         };
     }
-
     public flow pop_back(self) -> (Deque<T>, Option<T>) ![] {
-        if self.size == 0 {
-            return (self, None);
-        }
-        var front = self.front;
-        var back = self.back;
-        if back.is_empty() {
-            var reversed: List<T> = [];
-            for value in front limit Iterations(18446744073709551615) {
-                reversed = value :: reversed;
-            }
-            let midpoint = self.size / 2 + self.size % 2;
-            var reversed_back: List<T> = [];
-            front = [];
-            var index: usize = 0;
-            for value in reversed limit Iterations(18446744073709551615) {
-                if index < midpoint {
-                    reversed_back = value :: reversed_back;
-                } else {
-                    front = value :: front;
-                }
-                index = index + 1;
-            }
-            for value in reversed_back limit Iterations(18446744073709551615) {
-                back = value :: back;
-            }
-        }
-        return match back {
-            head :: tail => (Deque { front= front, back= tail, size= self.size - 1 }, Some(head)),
-            [] => std.core.abort("deque size invariant"),
+        return match self.back {
+            [] => match self.front {
+                [] => (self, None),
+                value :: _ => (Deque { front= [], back= [], size= 0 }, Some(value)),
+            },
+            value :: tail => {
+                let updated = Deque { front= self.front, back= tail, size= self.size - 1 };
+                (updated.balanced(), Some(value))
+            },
         };
     }
-
-    public flow len(self) -> usize ![] {
-        return self.size;
-    }
-
-    public flow is_empty(self) -> bool ![] {
-        return self.size == 0;
-    }
+    public flow len(self) -> usize ![] { return self.size; }
+    public flow is_empty(self) -> bool ![] { return self.size == 0; }
 }

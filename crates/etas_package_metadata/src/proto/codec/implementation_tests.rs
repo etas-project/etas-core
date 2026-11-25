@@ -77,6 +77,8 @@ fn published_method() -> PublishedMethod {
     )
     .unwrap();
     PublishedMethod {
+        parameter_defaults: Vec::new(),
+        internal: false,
         requirements: MethodRequirements::default(),
         self_type: Type {
             kind: TypeKind::Nominal,
@@ -87,6 +89,7 @@ fn published_method() -> PublishedMethod {
         owner_params: Vec::new(),
         identity: MethodId::new(owner, "encode".into()).unwrap(),
         callable: CallableValueGraph {
+            call_inputs: Vec::new(),
             source_projections: Vec::new(),
             parameter_projections: Vec::new(),
             objects: Vec::new(),
@@ -96,6 +99,7 @@ fn published_method() -> PublishedMethod {
                 residual_checks: Default::default(),
                 handler_requests: None,
                 behavior: CallableValueBehavior {
+                    suspension: None,
                     independent_determinism: Default::default(),
                     determinism: CallableValueDeterminism::Deterministic,
                     host_requirements: Vec::new(),

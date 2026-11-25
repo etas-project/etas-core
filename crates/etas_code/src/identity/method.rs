@@ -126,6 +126,7 @@ pub struct MethodId(Arc<MethodIdentity>);
 struct MethodIdentity {
     implementation: ImplementationKey,
     name: String,
+    overload: Option<CodeFingerprint>,
 }
 
 impl MethodId {
@@ -134,6 +135,7 @@ impl MethodId {
         Ok(Self(Arc::new(MethodIdentity {
             implementation,
             name,
+            overload: None,
         })))
     }
     pub fn implementation(&self) -> &ImplementationKey {
@@ -142,9 +144,20 @@ impl MethodId {
     pub fn name(&self) -> &str {
         &self.0.name
     }
+    /// Checked input signature, independent of the method body and result.
+    pub fn overload(&self) -> Option<CodeFingerprint> {
+        self.0.overload
+    }
+    pub fn with_overload(self, signature: CodeFingerprint) -> Self {
+        Self(Arc::new(MethodIdentity {
+            implementation: self.0.implementation.clone(),
+            name: self.0.name.clone(),
+            overload: Some(signature),
+        }))
+    }
     pub fn select_spec(&self, spec: DefinitionKey) -> Result<Self, IdentityError> {
         let owner = self.implementation();
-        Self::new(
+        let selected = Self::new(
             ImplementationKey::new(
                 owner.package(),
                 owner.module().to_vec(),
@@ -153,22 +166,34 @@ impl MethodId {
                 owner.header(),
             )?,
             self.name().into(),
-        )
+        )?;
+        Ok(match self.overload() {
+            Some(signature) => selected.with_overload(signature),
+            None => selected,
+        })
     }
     pub fn fingerprint(&self) -> CodeFingerprint {
-        let mut encoder = CanonicalEncoder::new("etas.code.method.v1");
+        let mut encoder = CanonicalEncoder::new(if self.overload().is_some() {
+            "etas.code.method.v2"
+        } else {
+            "etas.code.method.v1"
+        });
         encoder.fingerprint(self.implementation().fingerprint());
         encoder.bytes(self.name().as_bytes());
+        if let Some(signature) = self.overload() {
+            encoder.fingerprint(signature);
+        }
         encoder.finish()
     }
 }
 
 impl Serialize for MethodId {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut record = serializer.serialize_struct("MethodId", 3)?;
+        let mut record = serializer.serialize_struct("MethodId", 4)?;
         record.serialize_field("schema", &IDENTITY_SCHEMA_VERSION)?;
         record.serialize_field("implementation", self.implementation())?;
         record.serialize_field("name", self.name())?;
+        record.serialize_field("overload", &self.overload())?;
         record.end()
     }
 }
@@ -179,13 +204,19 @@ struct WireMethod {
     schema: u32,
     implementation: ImplementationKey,
     name: String,
+    #[serde(default)]
+    overload: Option<CodeFingerprint>,
 }
 
 impl TryFrom<WireMethod> for MethodId {
     type Error = IdentityError;
     fn try_from(value: WireMethod) -> Result<Self, Self::Error> {
         validate_schema(value.schema)?;
-        Self::new(value.implementation, value.name)
+        let method = Self::new(value.implementation, value.name)?;
+        Ok(match value.overload {
+            Some(signature) => method.with_overload(signature),
+            None => method,
+        })
     }
 }
 

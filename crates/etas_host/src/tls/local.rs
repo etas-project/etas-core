@@ -36,7 +36,30 @@ impl LocalTlsClient {
             TlsConnectOperation::Connect {
                 stream,
                 server_name,
+                options,
             } => {
+                let config = match tls_client_config(options) {
+                    Ok(config) => config,
+                    Err(error) => {
+                        return Ok(TlsConnectResponse {
+                            id: request.id,
+                            result: Err(error),
+                        });
+                    }
+                };
+                let timeout = match options.timeout_ms.map(u64::try_from).transpose() {
+                    Ok(timeout) => timeout,
+                    Err(_) => {
+                        return Ok(TlsConnectResponse {
+                            id: request.id,
+                            result: Err(HostError::new(
+                                HostErrorCode::InvalidRequest,
+                                "TLS timeout exceeds the runtime clock range",
+                            )),
+                        });
+                    }
+                };
+                request.budget.check_time()?;
                 let server_name_value = match ServerName::try_from(server_name.clone()) {
                     Ok(server_name) => server_name,
                     Err(error) => {
@@ -91,8 +114,8 @@ impl LocalTlsClient {
                 if let Some(operation) = operation {
                     operation.signal().check()?;
                 }
-                let (tcp_stream, origin) = match slot.begin_tls_upgrade(stream.handle()) {
-                    Ok((tcp_stream, origin)) => (tcp_stream, origin),
+                let (tcp_stream, origin, _upgrade) = match slot.begin_tls_upgrade(stream.handle()) {
+                    Ok(upgrade) => upgrade,
                     Err(error) => {
                         return Ok(TlsConnectResponse {
                             id: request.id,
@@ -128,12 +151,13 @@ impl LocalTlsClient {
                     });
                 }
                 let deadlines =
-                    OperationDeadlines::new(&request.budget, None).with_operation(operation);
+                    OperationDeadlines::new(&request.budget, timeout).with_operation(operation);
                 let tls_stream = match tls_handshake(
                     tcp_stream,
                     server_name_value,
                     &slot.cancellation,
                     deadlines,
+                    config,
                 )
                 .await
                 {
@@ -149,6 +173,17 @@ impl LocalTlsClient {
                         });
                     }
                 };
+                if !options.alpn.is_empty() && tls_stream.get_ref().1.alpn_protocol().is_none() {
+                    slot.fail_tls_upgrade().await;
+                    return Ok(TlsConnectResponse {
+                        id: request.id,
+                        result: Err(HostError::new(
+                            HostErrorCode::ProviderRejected,
+                            "TLS peer did not negotiate a requested application protocol",
+                        )
+                        .with_detail("tls_error", "protocol")),
+                    });
+                }
                 let tls_origin = ByteStreamOrigin::Tls {
                     host: tcp_host.clone(),
                     port: tcp_port,
@@ -209,8 +244,8 @@ async fn tls_handshake(
     server_name: ServerName<'static>,
     cancellation: &tokio_util::sync::CancellationToken,
     deadlines: OperationDeadlines,
+    config: ClientConfig,
 ) -> Result<TlsStream<TcpStream>, HostError> {
-    let config = tls_client_config();
     let connector = TlsConnector::from(Arc::new(config));
     await_io(
         connector.connect(server_name, tcp_stream),
@@ -221,10 +256,38 @@ async fn tls_handshake(
     .await
 }
 
-pub(crate) fn tls_client_config() -> ClientConfig {
+pub(crate) fn tls_client_config(
+    options: &crate::TlsConnectOptions,
+) -> Result<ClientConfig, HostError> {
+    use rustls_pki_types::{CertificateDer, pem::PemObject};
+    let invalid = || HostError::new(HostErrorCode::InvalidRequest, "invalid TLS configuration");
     let mut roots = RootCertStore::empty();
-    roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-    ClientConfig::builder()
+    match &options.trust {
+        crate::TlsTrust::Platform => roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned()),
+        crate::TlsTrust::Bundle(bytes) => {
+            let mut certificates = CertificateDer::pem_slice_iter(bytes)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|_| invalid())?;
+            if certificates.is_empty() {
+                certificates.push(CertificateDer::from(bytes.clone()));
+            }
+            for certificate in certificates {
+                roots.add(certificate).map_err(|_| invalid())?;
+            }
+        }
+    }
+    let versions: &[&rustls::SupportedProtocolVersion] = match options.minimum {
+        crate::TlsVersion::V12 => &[&rustls::version::TLS13, &rustls::version::TLS12],
+        crate::TlsVersion::V13 => &[&rustls::version::TLS13],
+    };
+    let mut config = ClientConfig::builder_with_protocol_versions(versions)
         .with_root_certificates(roots)
-        .with_no_client_auth()
+        .with_no_client_auth();
+    for protocol in &options.alpn {
+        if protocol.is_empty() || protocol.len() > 255 {
+            return Err(invalid());
+        }
+        config.alpn_protocols.push(protocol.as_bytes().to_vec());
+    }
+    Ok(config)
 }

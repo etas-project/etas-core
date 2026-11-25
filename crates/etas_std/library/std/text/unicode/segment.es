@@ -16,7 +16,7 @@ impl GraphemeData {
         }
         var low: usize = 0;
         var high = GRAPHEME_RANGES.length;
-        while low < high limit Iterations(32) {
+        while low < high {
             let middle = low + (high - low) / 2;
             let range = GRAPHEME_RANGES.get(middle).unwrap();
             if code < range.start { high = middle; }
@@ -29,7 +29,7 @@ impl GraphemeData {
     flow indic(self, code: u32) -> Incb ![] {
         var low: usize = 0;
         var high = INDIC_RANGES.length;
-        while low < high limit Iterations(32) {
+        while low < high {
             let middle = low + (high - low) / 2;
             let range = INDIC_RANGES.get(middle).unwrap();
             if code < range.start { high = middle; }
@@ -42,7 +42,7 @@ impl GraphemeData {
     flow pictographic(self, code: u32) -> bool ![] {
         var low: usize = 0;
         var high = PICTOGRAPHIC_RANGES.length;
-        while low < high limit Iterations(32) {
+        while low < high {
             let middle = low + (high - low) / 2;
             let (start, end) = PICTOGRAPHIC_RANGES.get(middle).unwrap();
             if code < start { high = middle; }
@@ -150,7 +150,7 @@ impl ClusterCursor {
             var remaining = self.remaining;
             var offset = self.offset;
             var context = self.context;
-            while true limit Iterations(18446744073709551615) {
+            while true {
                 match (remaining.next)() {
                     None => {
                         if offset == self.start { return None; }
@@ -196,7 +196,7 @@ public flow graphemes(value: string) -> Iter<string> ![] {
 public flow grapheme_count(value: string) -> usize ![] {
     let cursor = ClusterCursor { remaining= std.text.chars(value), offset= 0, start= 0, context= GraphemeContext.new() };
     var count: usize = 0;
-    for range in cursor.ranges() limit Iterations(18446744073709551615) {
+    for range in cursor.ranges() {
         count = count + 1;
     }
     return count;
@@ -205,11 +205,11 @@ public flow grapheme_count(value: string) -> usize ![] {
 public flow reverse_graphemes(value: string) -> string ![] {
     let cursor = ClusterCursor { remaining= std.text.chars(value), offset= 0, start= 0, context= GraphemeContext.new() };
     var parts: List<string> = [];
-    for (start, end) in cursor.ranges() limit Iterations(18446744073709551615) {
+    for (start, end) in cursor.ranges() {
         parts = std.text.get_byte_slice(value, [start, end)).unwrap() :: parts;
     }
     var output = "";
-    for part in parts limit Iterations(18446744073709551615) {
+    for part in parts {
         output = output + part;
     }
     return output;
@@ -238,7 +238,7 @@ public flow grapheme_slice<I ~ std.core.Index>(value: string, range: Range<I>) -
     let cursor = ClusterCursor { remaining= std.text.chars(value), offset= 0, start= 0, context= GraphemeContext.new() };
     var ordinal: usize = 0;
     var output = "";
-    for (begin, finish) in cursor.ranges() limit Iterations(18446744073709551615) {
+    for (begin, finish) in cursor.ranges() {
         if ordinal >= start {
             output = output + std.text.get_byte_slice(value, [begin, finish)).unwrap();
         }

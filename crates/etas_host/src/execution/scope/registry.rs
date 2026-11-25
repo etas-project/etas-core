@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     sync::{Arc, Mutex, MutexGuard},
 };
 use tokio::sync::watch;
@@ -23,6 +23,7 @@ struct Node {
     body_claimed: bool,
     causes: Vec<CancellationCause>,
     operations: BTreeMap<OperationId, OperationReport>,
+    resources: BTreeSet<OperationId>,
     terminal: Option<TerminationReport>,
 }
 
@@ -37,6 +38,7 @@ impl Node {
             body_claimed: false,
             causes: Vec::new(),
             operations: BTreeMap::new(),
+            resources: BTreeSet::new(),
             terminal: None,
         }
     }
@@ -367,6 +369,33 @@ impl ExecutionScope {
 
     pub fn termination(&self) -> Result<Option<TerminationReport>, HostError> {
         Ok(self.lock()?.nodes[self.id.0 as usize].terminal.clone())
+    }
+
+    pub(crate) fn mark_resource(&self, operation: OperationId) -> Result<(), HostError> {
+        self.lock()?.nodes[self.id.0 as usize]
+            .resources
+            .insert(operation);
+        self.notify();
+        Ok(())
+    }
+
+    pub(crate) fn resource_release_ready(&self, operation: OperationId) -> Result<bool, HostError> {
+        let registry = self.lock()?;
+        let node = &registry.nodes[self.id.0 as usize];
+        if node.state == ScopeState::Running
+            || node
+                .children
+                .iter()
+                .any(|child| registry.nodes[child.0 as usize].terminal.is_none())
+        {
+            return Ok(false);
+        }
+        Ok(node
+            .resources
+            .iter()
+            .rev()
+            .find(|id| node.operations[id].outcome.is_none())
+            == Some(&operation))
     }
 
     pub fn pending(&self) -> Result<PendingWork, HostError> {

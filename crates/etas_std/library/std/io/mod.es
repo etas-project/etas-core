@@ -1,7 +1,5 @@
 module std.io;
 
-public type IOError = { code: string, message: string };
-
 public flow read_all() -> string ![Error<IOError>] {
     return perform std.effects.Console.stdin_read_all();
 }

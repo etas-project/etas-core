@@ -280,7 +280,14 @@ pub(super) fn validate(
     let methods = headers
         .callables
         .iter()
-        .filter(|header| header.id.as_method().is_some())
+        // These coordinates describe methods through an owning Agent revision.
+        // Ordinary type methods have callable headers but no Agent snapshot.
+        .filter(|header| {
+            header
+                .id
+                .as_method()
+                .is_some_and(|method| agents.contains_key(method.implementation().subject()))
+        })
         .map(|header| &header.id)
         .collect::<BTreeSet<_>>();
     let mut seen_methods = BTreeSet::new();

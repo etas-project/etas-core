@@ -57,6 +57,7 @@ pub struct SessionRequest {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SessionOperation {
+    Lease(super::SessionLeaseOperation),
     Resolve {
         config: SessionConfig,
     },
@@ -79,6 +80,7 @@ pub struct SessionResponse {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SessionResult {
+    Lease(super::SessionLeaseResult),
     Resolved {
         session: SessionRef,
         created: bool,

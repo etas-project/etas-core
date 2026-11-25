@@ -39,6 +39,7 @@ impl ModelGraphValidator {
             &value.requested_actions,
             &value.default_actions,
             &value.handled_actions,
+            &value.required_authority,
         ] {
             self.effect_row(row, depth + 1)?;
         }
@@ -123,6 +124,7 @@ impl ProtoGraphValidator {
             &value.requested_actions,
             &value.default_actions,
             &value.handled_actions,
+            &value.required_authority,
         ]
         .into_iter()
         .flatten()

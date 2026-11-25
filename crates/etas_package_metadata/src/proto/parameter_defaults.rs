@@ -5,6 +5,10 @@ pub(super) fn encode(value: &ParameterDefault) -> ProtoParameterDefault {
     ProtoParameterDefault {
         slot: value.slot,
         reference: Some(descriptors::encode_parameter_default(&value.reference)),
+        callable_value: value
+            .callable_value
+            .as_ref()
+            .map(super::codec::callable_values::to_proto),
     }
 }
 
@@ -13,6 +17,10 @@ pub(super) fn decode(
 ) -> Result<ParameterDefault, MetadataArtifactError> {
     Ok(ParameterDefault {
         slot: value.slot,
+        callable_value: value
+            .callable_value
+            .map(super::codec::callable_values::from_proto)
+            .transpose()?,
         reference: descriptors::decode_parameter_default(
             value
                 .reference
@@ -38,6 +46,12 @@ pub(super) fn validate_model(
             &descriptors::encode_parameter_default(&value.reference),
             budget,
         )?;
+        if let Some(graph) = &value.callable_value {
+            budget.charge(
+                super::budget::validate_callable_values(graph)?,
+                "default callable value",
+            )?;
+        }
     }
     Ok(())
 }
@@ -57,6 +71,9 @@ pub(super) fn validate_wire(
                 .ok_or_else(|| invalid("default slot has no canonical expression reference"))?,
             budget,
         )?;
+        if let Some(graph) = &value.callable_value {
+            super::budget::validate_proto_callable_values(graph, budget)?;
+        }
     }
     Ok(())
 }

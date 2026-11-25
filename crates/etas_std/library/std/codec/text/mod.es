@@ -14,7 +14,7 @@ public flow utf8_encode(value: string) -> bytes ![] {
 public flow utf8_decode(value: bytes, malformed: MalformedInput) -> Result<string, TextCodecError> ![] {
     var position: usize = 0;
     var output = "";
-    while position < value.length limit Iterations(18446744073709551615) {
+    while position < value.length {
         let start = position;
         let lead = value.get(position).unwrap().bits;
         var width: usize = 0;
@@ -35,7 +35,7 @@ public flow utf8_decode(value: bytes, malformed: MalformedInput) -> Result<strin
         var valid = width != 0;
         var consumed: usize = 1;
         var index: usize = 1;
-        while valid && index < width limit Iterations(3) {
+        while valid && index < width {
             if start + index >= value.length {
                 consumed = value.length - start;
                 valid = false;

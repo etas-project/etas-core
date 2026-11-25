@@ -109,7 +109,12 @@ impl SqliteSessionClient {
         request: SessionRequest,
         context: &crate::execution::OperationContext,
     ) -> Result<SessionResponse, HostError> {
-        self.dispatch(request, Some(context)).await
+        let client = self.clone();
+        crate::session::lease::execute_scoped(request, context, move |request, operation| {
+            let client = client.clone();
+            async move { client.dispatch(request, operation.as_ref()).await }
+        })
+        .await
     }
     async fn dispatch(
         &self,

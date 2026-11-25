@@ -16,7 +16,7 @@ public type PriorityQueue<T, P> = {
     private compare: (P, P) -> i32 ![],
 };
 
-impl<T, P ~ Order> PriorityQueue<T, P> {
+impl PriorityQueue<T, P ~ Order> {
     public flow new() -> PriorityQueue<T, P> ![] {
         return PriorityQueue {
             slots= [],
@@ -47,7 +47,7 @@ impl PriorityQueue<T, P> {
             heap = heap.set(self.size, slot)?.unwrap();
         }
         var child = self.size;
-        while child > 0 limit Iterations(18446744073709551615) {
+        while child > 0 {
             let parent = (child - 1) / 2;
             let child_slot = heap.get(child).unwrap();
             let parent_slot = heap.get(parent).unwrap();
@@ -80,7 +80,7 @@ impl PriorityQueue<T, P> {
         if size > 0 {
             heap = heap.set(0, heap.get(size).unwrap())?.unwrap();
             var parent: usize = 0;
-            while parent < size / 2 limit Iterations(18446744073709551615) {
+            while parent < size / 2 {
                 let left = parent * 2 + 1;
                 let right = left + 1;
                 var child = left;
@@ -103,12 +103,12 @@ impl PriorityQueue<T, P> {
                 parent = child;
             }
         }
-        return (PriorityQueue {
-            slots= slots,
-            heap= heap,
-            size= size,
-            compare= self.compare,
-        }, Some(removed.value));
+        if size == 0 {
+            return (PriorityQueue { slots= [], heap= [], size= 0, compare= self.compare }, Some(removed.value));
+        }
+        let updated = PriorityQueue { slots= slots, heap= heap, size= size, compare= self.compare };
+        if slots.length - size > size + 8 { return (updated.compacted(), Some(removed.value)); }
+        return (updated, Some(removed.value));
     }
 
     public flow len(self) -> usize ![] {
@@ -124,7 +124,7 @@ impl PriorityQueue<T, P> ~ Iterable<(P, T)> {
     public flow iter(self) -> Iter<(P, T)> ![] {
         return Iter { next= () => {
             var slot: usize = 0;
-            while slot < self.slots.length limit Iterations(18446744073709551615) {
+            while slot < self.slots.length {
                 match self.slots.get(slot).unwrap() {
                     Some(entry) => {
                         return Some(((entry.priority, entry.value), self.iter_from(slot + 1)));
@@ -141,7 +141,7 @@ impl PriorityQueue<T, P> {
     flow iter_from(self, offset: usize) -> Iter<(P, T)> ![] {
         return Iter { next= () => {
             var slot = offset;
-            while slot < self.slots.length limit Iterations(18446744073709551615) {
+            while slot < self.slots.length {
                 match self.slots.get(slot).unwrap() {
                     Some(entry) => {
                         return Some(((entry.priority, entry.value), self.iter_from(slot + 1)));

@@ -11,10 +11,9 @@ impl BytePattern {
         var prefix: Array<usize> = [0];
         var index: usize = 1;
         var matched: usize = 0;
-        while index < input.length limit Iterations(18446744073709551615) {
+        while index < input.length {
             let byte = input.get(index).unwrap();
-            while matched > 0 && input.get(matched) != Some(byte)
-                limit Iterations(18446744073709551615) {
+            while matched > 0 && input.get(matched) != Some(byte) {
                 matched = prefix.get(matched - 1).unwrap();
             }
             if input.get(matched) == Some(byte) { matched = matched + 1; }
@@ -28,10 +27,9 @@ impl BytePattern {
         if self.pattern.length == 0 { return Some((start, start)); }
         var index = start;
         var matched: usize = 0;
-        while index < input.length limit Iterations(18446744073709551615) {
+        while index < input.length {
             let byte = input.get(index).unwrap();
-            while matched > 0 && self.pattern.get(matched) != Some(byte)
-                limit Iterations(18446744073709551615) {
+            while matched > 0 && self.pattern.get(matched) != Some(byte) {
                 matched = self.prefix.get(matched - 1).unwrap();
             }
             if self.pattern.get(matched) == Some(byte) { matched = matched + 1; }

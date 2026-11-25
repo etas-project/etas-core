@@ -8,6 +8,28 @@ impl PublishedMethod {
             ));
         }
         let root = self.root()?;
+        let mut previous = None;
+        let default_kinds = root
+            .generic_params
+            .iter()
+            .chain(&self.owner_params)
+            .map(|parameter| parameter.kind)
+            .collect::<Vec<_>>();
+        for default in &self.parameter_defaults {
+            if default.slot as usize >= root.params.len()
+                || previous.is_some_and(|old| old >= default.slot)
+                || default.reference.owner
+                    != etas_code::descriptor::ParameterDefaultOwner::Method(self.identity.clone())
+            {
+                return Err(invalid(
+                    "method default has a different checked calling slot or owner",
+                ));
+            }
+            previous = Some(default.slot);
+            if let Some(graph) = &default.callable_value {
+                graph.validate_references(Some((root.params.len(), &default_kinds)))?;
+            }
+        }
         for limit in &self.requirements.limits {
             use crate::{MethodLimitKind as K, MethodLimitValue as V};
             if !matches!(

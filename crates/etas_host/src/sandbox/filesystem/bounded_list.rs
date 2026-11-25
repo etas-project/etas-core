@@ -20,6 +20,7 @@ pub(super) fn collect(
                 HostErrorCode::IoFailure,
                 "workspace directory entry name is not valid UTF-8",
             )
+            .with_detail("io_kind", "InvalidUtf8")
         })?;
         let next_bytes = bytes
             .checked_add(prefix_bytes)

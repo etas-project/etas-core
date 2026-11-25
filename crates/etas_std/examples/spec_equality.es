@@ -1,0 +1,44 @@
+import std.collections.{BoundedDeque, Hasher};
+
+flow main(args: Array<string>) -> i32 ![] {
+    let left_base: Map<string, i32> = Map.with_hasher(Hasher.new(7));
+    let right_base: Map<string, i32> = Map.with_hasher(Hasher.new(99));
+    let left = left_base.insert("beta", 2).insert("alpha", 1);
+    let right = right_base.insert("alpha", 1).insert("beta", 2);
+    std.core.assert(left == right);
+    let left_set: Set<i32> = Set.from_iter([3, 1, 2].iter());
+    let right_set: Set<i32> = Set.from_iter([1, 2, 3].iter());
+    std.core.assert(left_set == right_set);
+    let queue: Queue<i32> = Queue.from_iter([1, 2, 3].iter());
+    let empty_queue: Queue<i32> = Queue.new();
+    let pushed = empty_queue.push(1).push(2).push(3);
+    std.core.assert(queue == pushed);
+    let empty_deque: Deque<i32> = Deque.new();
+    let forward = empty_deque.push_back(1).push_back(2).push_back(3);
+    let backward = empty_deque.push_front(3).push_front(2).push_front(1);
+    std.core.assert(forward == backward);
+    let stack: Stack<i32> = Stack.from_iter([1, 2, 3].iter());
+    let empty_stack: Stack<i32> = Stack.new();
+    std.core.assert(stack == empty_stack.push(3).push(2).push(1));
+    let before: Array<i32> = [0, 1, 2, 3];
+    let after: Array<i32> = [1, 2, 3, 4];
+    let (_, suffix) = before.split_at(1)?.unwrap();
+    let (prefix, _) = after.split_at(3)?.unwrap();
+    std.core.assert(suffix == prefix);
+    let bounded: BoundedDeque<i32> = BoundedDeque.new(8)?.unwrap();
+    let (a1, _) = bounded.push_back(1)?.unwrap();
+    let (a2, _) = a1.push_back(2)?.unwrap();
+    let (a3, _) = a2.push_back(3)?.unwrap();
+    let (b1, _) = bounded.push_front(3)?.unwrap();
+    let (b2, _) = b1.push_front(2)?.unwrap();
+    let (b3, _) = b2.push_front(1)?.unwrap();
+    std.core.assert(a3 == b3);
+    let nested_left = { maps= [left], values= queue };
+    let nested_right = { values= pushed, maps= [right] };
+    std.core.assert(nested_left == nested_right);
+    let entries: Map<i32, Map<string, i32>> = Map.new();
+    let nested_map = entries.insert(1, left);
+    std.core.assert(nested_map.get(1).unwrap() == right);
+    std.core.assert(left != right.insert("extra", 3));
+    return 0;
+}

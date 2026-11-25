@@ -241,6 +241,7 @@ pub enum TypeDiagnosticCode {
     IncompleteTypeFacts,
     InvalidReflectionConfiguration,
     CompilerResourceLimit,
+    UnavoidableAgentWait,
 }
 
 #[derive(
@@ -256,7 +257,6 @@ pub enum EffectDiagnosticCode {
     MissingRequirement,
     MissingSandboxActionArgument,
     MissingOrInvalidLimit,
-    MissingEffectLoopLimit,
     InvalidResume,
     ResumeOutsideHandler,
     ResumeUsedMoreThanOnce,
@@ -275,6 +275,7 @@ pub enum EffectDiagnosticCode {
     /// A trace obligation has a verified residual plan, but the selected
     /// target cannot enforce it. This is a blocking error.
     TraceSpecResidualUnsupported,
+    DuplicateDependencyHandler,
 }
 
 #[derive(
@@ -298,6 +299,8 @@ pub enum AnalysisDiagnosticCode {
     /// A residual scope terminated without completing its obligations. The
     /// cancellation or execution failure remains the primary terminal cause.
     TraceSpecResidualIncomplete,
+    /// A queued Agent request and its update-turn holder wait on each other.
+    AgentRequestDeadlock,
 }
 
 #[derive(

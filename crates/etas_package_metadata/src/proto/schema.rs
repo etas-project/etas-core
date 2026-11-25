@@ -116,6 +116,8 @@ pub struct ProtoExternalExport {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoPublicMetadataSection {
+    #[prost(message, repeated, tag = "28")]
+    pub constructor_contracts: Vec<ProtoConstructorContract>,
     #[prost(message, repeated, tag = "27")]
     pub scoped_callbacks: Vec<ProtoScopedCallbackContract>,
     #[prost(message, optional, tag = "25")]
@@ -298,6 +300,8 @@ pub struct ProtoScopedCallbackContract {
     pub target: Option<ProtoCallableContractTarget>,
     #[prost(uint32, repeated, tag = "2")]
     pub parameters: Vec<u32>,
+    #[prost(uint32, repeated, tag = "3")]
+    pub resource_boundaries: Vec<u32>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -360,6 +364,10 @@ pub struct ProtoSpecImpl {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoPublishedMethod {
+    #[prost(bool, tag = "10")]
+    pub internal: bool,
+    #[prost(message, repeated, tag = "11")]
+    pub parameter_defaults: Vec<ProtoParameterDefault>,
     #[prost(message, optional, tag = "1")]
     pub identity: Option<super::descriptors::ProtoMethodIdentity>,
     #[prost(message, optional, tag = "2")]
@@ -512,6 +520,8 @@ pub struct ProtoParameterDefault {
     pub slot: u32,
     #[prost(message, optional, tag = "2")]
     pub reference: Option<super::descriptors::ProtoParameterDefaultReference>,
+    #[prost(message, optional, tag = "3")]
+    pub callable_value: Option<ProtoCallableValueGraph>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -630,6 +640,8 @@ pub struct ProtoEffectMetadataSection {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoEffectSummary {
+    #[prost(message, optional, tag = "13")]
+    pub callable_body: Option<ProtoCallableValueGraph>,
     #[prost(message, optional, tag = "12")]
     pub definition: Option<ProtoDefinitionKey>,
     #[prost(message, optional, tag = "11")]
@@ -746,6 +758,8 @@ pub struct ProtoEffectFootprint {
     pub trace_requirements: Vec<ProtoMethodTraceRequirement>,
     #[prost(message, repeated, tag = "10")]
     pub trace_obligations: Vec<ProtoMethodTraceRequirement>,
+    #[prost(message, optional, tag = "11")]
+    pub required_authority: Option<ProtoEffectRow>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -770,6 +784,8 @@ pub struct ProtoActionTrace {
     pub actions: Vec<ProtoEffectRef>,
     #[prost(message, repeated, tag = "6")]
     pub parameter_calls: Vec<ProtoCallableRequestTarget>,
+    #[prost(bytes = "vec", optional, tag = "7")]
+    pub recursion_id: Option<Vec<u8>>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -862,6 +878,7 @@ pub enum ProtoActionTraceKind {
     UnknownOrder = 6,
     Widened = 7,
     DefaultHandler = 8,
+    Recursive = 9,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, prost::Enumeration)]
@@ -1036,4 +1053,52 @@ pub struct ProtoBinTarget {
     pub module: String,
     #[prost(string, tag = "3")]
     pub flow: String,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoConstructorContract {
+    #[prost(string, repeated, tag = "1")]
+    pub path: Vec<String>,
+    #[prost(message, repeated, tag = "2")]
+    pub generic_params: Vec<ProtoActionGenericParam>,
+    #[prost(bool, tag = "3")]
+    pub agent: bool,
+    #[prost(message, repeated, tag = "4")]
+    pub fields: Vec<ProtoConstructorField>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoConstructorField {
+    #[prost(string, tag = "1")]
+    pub name: String,
+    #[prost(message, optional, tag = "2")]
+    pub ty: Option<ProtoType>,
+    #[prost(message, optional, tag = "3")]
+    pub injection: Option<ProtoConstructorInjection>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoConstructorInjection {
+    #[prost(message, optional, tag = "1")]
+    pub action: Option<ProtoEffectRef>,
+    #[prost(message, repeated, tag = "2")]
+    pub generic_args: Vec<ProtoConstructorGenericArgument>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ProtoConstructorGenericArgument {
+    #[prost(oneof = "proto_constructor_generic_argument::Value", tags = "1, 2, 3")]
+    pub value: Option<proto_constructor_generic_argument::Value>,
+}
+
+pub mod proto_constructor_generic_argument {
+    #[derive(Clone, PartialEq, prost::Oneof)]
+    pub enum Value {
+        #[prost(message, tag = "1")]
+        Type(super::ProtoType),
+        #[prost(message, tag = "2")]
+        EffectRow(super::ProtoEffectRow),
+        #[prost(bool, tag = "3")]
+        Infer(bool),
+    }
 }

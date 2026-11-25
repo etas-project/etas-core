@@ -17,6 +17,7 @@ pub(crate) fn workspace_io_error(error: std::io::Error) -> HostError {
         _ => HostErrorCode::IoFailure,
     };
     HostError::new(code, "workspace capability operation failed")
+        .with_detail("io_kind", format!("{:?}", error.kind()))
         .with_detail("error", error.to_string())
 }
 

@@ -192,6 +192,29 @@ fn memory_payload(
 impl HostTraceRequest for SessionRequest {
     fn trace_payload(&self) -> HostTracePayload {
         let (action, operation) = match &self.operation {
+            SessionOperation::Lease(operation) => {
+                use crate::session::SessionLeaseOperation as Lease;
+                let session = HostValue::String(operation.session().id.clone());
+                let value = match operation {
+                    Lease::Acquire(_) => variant("Acquire", vec![session]),
+                    Lease::Handoff(lease) => variant(
+                        "Handoff",
+                        vec![
+                            session,
+                            HostValue::String(lease.generation().as_token().to_owned()),
+                        ],
+                    ),
+                    Lease::Release(lease) => variant(
+                        "Release",
+                        vec![
+                            session,
+                            HostValue::String(lease.generation().as_token().to_owned()),
+                        ],
+                    ),
+                    Lease::Revoke(_) => variant("Revoke", vec![session]),
+                };
+                (operation.qualified_action(), value)
+            }
             SessionOperation::Resolve { config } => (
                 "Session.resolve",
                 variant("Resolve", vec![config_value(config)]),
@@ -244,24 +267,37 @@ fn condition_value(condition: &WriteCondition) -> HostValue {
 }
 
 fn query_value(query: &MemoryQuery) -> HostValue {
-    record([
-        ("predicate", option(query.predicate.clone())),
-        (
-            "order_by",
-            HostValue::List(
-                query
-                    .order_by
-                    .iter()
-                    .map(|key| {
-                        record([
-                            ("field_path", strings(&key.field_path)),
-                            ("descending", HostValue::Bool(key.descending)),
-                        ])
-                    })
-                    .collect(),
+    match query {
+        MemoryQuery::Encoded {
+            language,
+            version,
+            payload,
+        } => record([
+            ("language", HostValue::String(language.clone())),
+            ("version", HostValue::UInt((*version).into())),
+            ("payload", HostValue::Bytes(payload.clone())),
+        ]),
+        MemoryQuery::Predicate {
+            predicate,
+            order_by,
+        } => record([
+            ("predicate", option(predicate.clone())),
+            (
+                "order_by",
+                HostValue::List(
+                    order_by
+                        .iter()
+                        .map(|key| {
+                            record([
+                                ("field_path", strings(&key.field_path)),
+                                ("descending", HostValue::Bool(key.descending)),
+                            ])
+                        })
+                        .collect(),
+                ),
             ),
-        ),
-    ])
+        ]),
+    }
 }
 
 fn config_value(config: &SessionConfig) -> HostValue {

@@ -203,6 +203,11 @@ pub(super) fn references(
                 }
             }
             TraceInfo::Repeat(inner) => visit(DescriptorNode::Trace(*inner)),
+            TraceInfo::Recursive { body, .. } => {
+                if let Some(body) = body {
+                    visit(DescriptorNode::Trace(*body));
+                }
+            }
             TraceInfo::UnknownOrder(actions) | TraceInfo::Widened { actions, .. } => {
                 visit(DescriptorNode::Row(*actions));
                 if let TraceInfo::Widened {

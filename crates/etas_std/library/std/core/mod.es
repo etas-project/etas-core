@@ -17,7 +17,7 @@ impl usize {
     public flow width() -> usize ![] {
         var remaining = usize.maximum();
         var width: usize = 0;
-        while remaining != 0 limit Iterations(128) {
+        while remaining != 0 {
             width = width + 1;
             remaining = remaining / 2;
         }

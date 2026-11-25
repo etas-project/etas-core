@@ -21,7 +21,9 @@ fn generic_binders_survive_binary_descriptor_roundtrip() {
         CodeFingerprint::from_bytes([9; 32]),
     )
     .unwrap();
-    let method = MethodId::new(implementation.clone(), "replace".into()).unwrap();
+    let method = MethodId::new(implementation.clone(), "replace".into())
+        .unwrap()
+        .with_overload(CodeFingerprint::from_bytes([12; 32]));
     let mut set = DefinitionDescriptorSet {
         graph: DescriptorGraphInput {
             types: (0..5)
@@ -181,6 +183,9 @@ fn parameter_nonreturn_survives_binary_trace_codec() {
             ValueProjectionStep::ListTail,
             ValueProjectionStep::MapKey,
             ValueProjectionStep::MapValue,
+            ValueProjectionStep::Repeat {
+                alternatives: vec![vec![ValueProjectionStep::ListTail]],
+            },
         ],
         handlers: Some(vec![]),
         callable: CallableId::declaration(key("visit", DefinitionKind::Flow)).unwrap(),

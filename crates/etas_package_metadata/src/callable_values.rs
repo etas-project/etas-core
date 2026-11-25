@@ -119,6 +119,9 @@ pub enum CallableValueSource {
     etas_core::RetainedSize,
 )]
 pub struct CallableValueGraph {
+    /// Checked inputs of symbolic applications. Paths refer to this finite table.
+    #[serde(default)]
+    pub call_inputs: Vec<CallableCallInputs>,
     #[serde(default)]
     pub parameter_projections: Vec<Vec<etas_code::descriptor::ValueProjectionStep>>,
     pub sources: Vec<CallableValueSource>,
@@ -126,6 +129,23 @@ pub struct CallableValueGraph {
     pub source_projections: Vec<CallableReturnedProjection>,
     pub values: Vec<CallableValueNode>,
     pub objects: Vec<ExistentialValueNode>,
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub struct CallableCallInputs {
+    pub scope: CallableValueScope,
+    pub arguments: Vec<CallableCallArgument>,
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub struct CallableCallArgument {
+    pub name: Option<String>,
+    pub sources: Option<Vec<CallableValueSource>>,
+    pub projections: Vec<CallableReturnedProjection>,
 }
 
 #[derive(
@@ -259,6 +279,18 @@ impl CallableValueGraph {
                 }
             }
         }
+        for inputs in &mut self.call_inputs {
+            for argument in &mut inputs.arguments {
+                for value in argument.sources.iter_mut().flatten() {
+                    source(value)?;
+                }
+                for projection in &mut argument.projections {
+                    for value in projection.sources.iter_mut().flatten() {
+                        source(value)?;
+                    }
+                }
+            }
+        }
         for object in &mut self.objects {
             for value in &mut object.payload_sources {
                 source(value)?;
@@ -287,6 +319,14 @@ impl CallableValueGraph {
         }
         for object in &self.objects {
             sources.extend(&object.payload_sources);
+        }
+        for inputs in &self.call_inputs {
+            for argument in &inputs.arguments {
+                sources.extend(argument.sources.iter().flatten());
+                for projection in &argument.projections {
+                    sources.extend(projection.sources.iter().flatten());
+                }
+            }
         }
         for source in sources {
             if let CallableValueSource::Parameter(parameter) = source {
@@ -317,18 +357,45 @@ impl CallableValueGraph {
         }
         use std::collections::BTreeSet;
         for path in &self.parameter_projections {
-            if path.is_empty() || path.len() > crate::MAX_METADATA_GRAPH_DEPTH {
-                return Err(invalid("callable parameter projection has invalid depth"));
+            if path.is_empty()
+                || !etas_code::descriptor::ValueProjectionStep::well_formed(
+                    path,
+                    crate::MAX_METADATA_GRAPH_DEPTH.saturating_sub(depth),
+                    crate::MAX_METADATA_GRAPH_NODES,
+                )
+            {
+                return Err(invalid(&format!(
+                    "callable parameter projection has an invalid path at graph depth {depth}: {path:?}"
+                )));
             }
-            for step in path {
-                if matches!(step, etas_code::descriptor::ValueProjectionStep::Field(name)
-                    | etas_code::descriptor::ValueProjectionStep::VariantPayload { variant: name, .. }
-                    if name.is_empty())
-                {
+        }
+        for path in &self.parameter_projections {
+            for id in etas_code::descriptor::ValueProjectionStep::call_inputs(path) {
+                if self.call_inputs.get(id as usize).is_none() {
                     return Err(invalid(
-                        "callable parameter projection has an empty field or variant",
+                        "callback application input reference is out of range",
                     ));
                 }
+            }
+        }
+        for inputs in &self.call_inputs {
+            let scopes = self.lexical_scopes(inputs.scope)?;
+            let mut named = BTreeSet::new();
+            for argument in &inputs.arguments {
+                if let Some(name) = &argument.name {
+                    if name.is_empty() || !named.insert(name) {
+                        return Err(invalid("callback input name is empty or duplicated"));
+                    }
+                }
+                if let Some(sources) = &argument.sources {
+                    if !sources.is_empty() {
+                        self.validate_sources(sources, root)?;
+                    }
+                    for source in sources {
+                        self.validate_source_scope(*source, &scopes)?;
+                    }
+                }
+                self.validate_return_projections(&argument.projections, root, &scopes)?;
             }
         }
         self.validate_sources(&self.sources, root)?;
@@ -403,6 +470,7 @@ impl CallableValueGraph {
                         "callable value has duplicate or empty trace parameter labels",
                     ));
                 }
+                self.validate_projection_scope(binding.parameter, &scopes)?;
                 self.parameter(binding.parameter, root)?;
             }
             // A node's callback evidence uses its checked binding interface,
@@ -471,13 +539,17 @@ impl CallableValueGraph {
         let mut previous_path = None;
         for projection in projections {
             if projection.path.is_empty()
-                    || projection.path.len() > crate::MAX_METADATA_GRAPH_DEPTH
-                    || previous_path.is_some_and(|path: &Vec<_>| path >= &projection.path)
-                    || projection.path.iter().any(|step| matches!(step,
-                        etas_code::descriptor::ValueProjectionStep::Field(name)
-                        | etas_code::descriptor::ValueProjectionStep::VariantPayload { variant: name, .. } if name.is_empty())) {
-                    return Err(invalid("returned-value projection paths must be checked, ordered and unique"));
-                }
+                || !etas_code::descriptor::ValueProjectionStep::well_formed(
+                    &projection.path,
+                    crate::MAX_METADATA_GRAPH_DEPTH,
+                    crate::MAX_METADATA_GRAPH_NODES,
+                )
+                || previous_path.is_some_and(|path: &Vec<_>| path >= &projection.path)
+            {
+                return Err(invalid(
+                    "returned-value projection paths must be checked, ordered and unique",
+                ));
+            }
             previous_path = Some(&projection.path);
             if let Some(sources) = &projection.sources {
                 if !sources.is_empty() {
@@ -498,15 +570,39 @@ impl CallableValueGraph {
     ) -> Result<(), crate::MetadataArtifactError> {
         let scope = match source {
             CallableValueSource::Existential(index) => self.object(index)?.parent_scope,
-            CallableValueSource::Parameter(parameter) => parameter.scope,
+            CallableValueSource::Parameter(parameter) => {
+                self.validate_projection_scope(parameter, scopes)?;
+                parameter.scope
+            }
             CallableValueSource::Value(index) | CallableValueSource::FrozenContract(index) => {
                 self.value(index)?.parent_scope
             }
         };
         if !scopes.contains(&scope) {
-            return Err(invalid(
-                "returned callable source escapes its lexical scope",
-            ));
+            return Err(invalid(&format!(
+                "returned callable source {source:?} requires {scope:?}, outside lexical scopes {scopes:?}"
+            )));
+        }
+        Ok(())
+    }
+
+    fn validate_projection_scope(
+        &self,
+        parameter: CallableValueParameter,
+        scopes: &std::collections::BTreeSet<CallableValueScope>,
+    ) -> Result<(), crate::MetadataArtifactError> {
+        for id in etas_code::descriptor::ValueProjectionStep::call_inputs(
+            self.projection_path(parameter)?,
+        ) {
+            let inputs = self
+                .call_inputs
+                .get(id as usize)
+                .ok_or_else(|| invalid("callback input reference is out of range"))?;
+            if !scopes.contains(&inputs.scope) {
+                return Err(invalid(
+                    "callback application inputs escape their lexical scope",
+                ));
+            }
         }
         Ok(())
     }

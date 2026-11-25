@@ -9,6 +9,7 @@ public import std.effects.Console;
 public import std.effects.Error;
 public import std.effects.FileIO;
 public import std.effects.Human;
+public import std.effects.Inject;
 public import std.effects.Memory;
 public import std.effects.Network;
 public import std.effects.Secret;

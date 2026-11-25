@@ -43,7 +43,7 @@ pub(super) fn initialize(connection: &mut Connection) -> Result<(), HostError> {
         .optional()
         .map_err(sqlite_error)?;
     match format {
-        Some(1..=3) => {}
+        Some(1..=4) => {}
         Some(_) => {
             return Err(HostError::new(
                 HostErrorCode::SchemaMismatch,
@@ -108,13 +108,20 @@ pub(super) fn initialize(connection: &mut Connection) -> Result<(), HostError> {
         CREATE INDEX IF NOT EXISTS memory_receipt_expiry ON memory_receipts(expires);",
     )
     .map_err(sqlite_error)?;
-    if format != Some(3) {
+    if format.is_none_or(|format| format < 3) {
         // Old receipts remain reserved. Missing target evidence is rejected on
         // replay, never treated as permission to execute the old write again.
         tx.execute_batch(
             "ALTER TABLE memory_receipts ADD COLUMN key_json TEXT;
             ALTER TABLE memory_receipts ADD COLUMN schema_fingerprint TEXT;
             UPDATE etas_memory_schema SET format=3 WHERE id=1;",
+        )
+        .map_err(sqlite_error)?;
+    }
+    if format.is_none_or(|format| format < 4) {
+        tx.execute_batch(
+            "ALTER TABLE memory_stores ADD COLUMN schema_fingerprint TEXT;
+            UPDATE etas_memory_schema SET format=4 WHERE id=1;",
         )
         .map_err(sqlite_error)?;
     }
@@ -136,13 +143,16 @@ pub(super) fn state(
     let namespace = StoreGeneration::from_stored(namespace)?;
     connection
         .query_row(
-            "SELECT generation,revision FROM memory_stores WHERE region=?1 AND path=?2",
+            "SELECT generation,revision,schema_fingerprint FROM memory_stores WHERE region=?1 AND path=?2",
             params![store.region.stable_id, path],
-            |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?, row.get::<_, Option<String>>(2)?)),
         )
         .optional()
         .map_err(sqlite_error)?
-        .map(|(generation, revision)| {
+        .map(|(generation, revision, schema_fingerprint)| {
+            if schema_fingerprint != store.region.schema_fingerprint {
+                return Err(HostError::new(HostErrorCode::SchemaMismatch, "store codec/schema binding differs from persisted data"));
+            }
             if revision < 0 {
                 return Err(HostError::new(
                     HostErrorCode::SchemaMismatch,
@@ -168,11 +178,12 @@ pub(super) fn ensure_store(
     }
     connection
         .execute(
-            "INSERT INTO memory_stores VALUES (?1,?2,?3,0)",
+            "INSERT INTO memory_stores(region,path,generation,revision,schema_fingerprint) VALUES (?1,?2,?3,0,?4)",
             params![
                 store.region.stable_id,
                 path,
-                StoreGeneration::new()?.as_str()
+                StoreGeneration::new()?.as_str(),
+                store.region.schema_fingerprint,
             ],
         )
         .map_err(sqlite_error)?;

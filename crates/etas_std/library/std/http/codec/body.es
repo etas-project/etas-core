@@ -35,11 +35,11 @@ public flow decode_response_incremental(input: bytes, end_of_stream: bool)
         var output: Array<u8> = [];
         var maximum_index: u128 = 0;
         var bit: usize = 0;
-        while bit < usize.width() limit Iterations(128) {
+        while bit < usize.width() {
             maximum_index = maximum_index * 2 + 1;
             bit = bit + 1;
         }
-        while true limit Iterations(18446744073709551615) {
+        while true {
             let line_start = offset;
             let (line, next) = match reader.line(offset) {
                 Complete(line, next) => (line, next),
@@ -76,7 +76,7 @@ public flow decode_response_incremental(input: bytes, end_of_stream: bool)
             }
             offset = next;
             if size == 0 {
-                while true limit Iterations(18446744073709551615) {
+                while true {
                     let trailer_start = offset;
                     let (trailer, next) = match reader.line(offset) {
                         Complete(line, next) => (line, next),
@@ -122,7 +122,7 @@ public flow decode_response_incremental(input: bytes, end_of_stream: bool)
             if input.get(data_end) != Some(13) || input.get(data_end + 1) != Some(10) {
                 return Malformed(HttpDecodeFailure { kind= InvalidChunkTerminator, offset= data_end });
             }
-            while offset < data_end limit Iterations(18446744073709551615) {
+            while offset < data_end {
                 output = output.push(input.get(offset).unwrap());
                 offset = offset + 1;
             }

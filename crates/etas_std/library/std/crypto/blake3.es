@@ -62,7 +62,7 @@ impl Blake3Output {
             Word32 { raw= self.counter / 4294967296 },
             Word32 { raw= self.length }, Word32 { raw= flags },
         ]) };
-        for schedule in BLAKE3_SCHEDULE limit Iterations(7) {
+        for schedule in BLAKE3_SCHEDULE {
             state.mix(0, 4, 8, 12, self.block.get(schedule.get(0).unwrap()).unwrap(), self.block.get(schedule.get(1).unwrap()).unwrap());
             state.mix(1, 5, 9, 13, self.block.get(schedule.get(2).unwrap()).unwrap(), self.block.get(schedule.get(3).unwrap()).unwrap());
             state.mix(2, 6, 10, 14, self.block.get(schedule.get(4).unwrap()).unwrap(), self.block.get(schedule.get(5).unwrap()).unwrap());
@@ -74,7 +74,7 @@ impl Blake3Output {
         }
         var output: Array<Word32> = [];
         var index: usize = 0;
-        while index < 8 limit Iterations(8) {
+        while index < 8 {
             output = output.push(state.words.get(index).unwrap().xor(state.words.get(index + 8).unwrap()));
             index = index + 1;
         }
@@ -86,11 +86,11 @@ impl Blake3 {
     flow block(input: bytes, offset: usize, length: usize) -> Array<Word32> ![] {
         var words: Array<Word32> = [];
         var word: usize = 0;
-        while word < 16 limit Iterations(16) {
+        while word < 16 {
             var raw: u128 = 0;
             var byte: usize = 0;
             var place: u128 = 1;
-            while byte < 4 limit Iterations(4) {
+            while byte < 4 {
                 let at = word * 4 + byte;
                 if at < length { raw = raw + input.get(offset + at).unwrap().bits * place; }
                 place = place * 256;
@@ -106,7 +106,7 @@ impl Blake3 {
         var chaining = key;
         var consumed: usize = 0;
         var start: u128 = 1;
-        while length - consumed > 64 limit Iterations(15) {
+        while length - consumed > 64 {
             let output = Blake3Output {
                 chaining= chaining, block= Blake3.block(input, offset + consumed, 64),
                 counter= counter, length= 64, flags= flags + start,
@@ -129,10 +129,10 @@ impl Blake3 {
         var stack: List<Array<Word32>> = [];
         var offset: usize = 0;
         var counter: u128 = 0;
-        while input.length - offset > 1024 limit Iterations(18446744073709551615) {
+        while input.length - offset > 1024 {
             var chaining = Blake3.chunk(input, offset, 1024, counter, key, flags).compress(false);
             var chunks = counter + 1;
-            while chunks % 2 == 0 limit Iterations(64) {
+            while chunks % 2 == 0 {
                 match stack {
                     left :: tail => {
                         chaining = Blake3.parent(left, chaining, key, flags).compress(false);
@@ -147,11 +147,11 @@ impl Blake3 {
             counter = counter + 1;
         }
         var output = Blake3.chunk(input, offset, input.length - offset, counter, key, flags);
-        for left in stack limit Iterations(64) {
+        for left in stack {
             output = Blake3.parent(left, output.compress(false), key, flags);
         }
         var bytes_out: Array<u8> = [];
-        for word in output.compress(true) limit Iterations(8) {
+        for word in output.compress(true) {
             bytes_out = bytes_out.extend([
                 u8 { bits= word.raw % 256 }, u8 { bits= (word.raw / 256) % 256 },
                 u8 { bits= (word.raw / 65536) % 256 }, u8 { bits= word.raw / 16777216 },
@@ -169,7 +169,7 @@ impl Blake3 {
         let words = Blake3.block(context_key, 0, 32);
         var key: Array<Word32> = [];
         var index: usize = 0;
-        while index < 8 limit Iterations(8) {
+        while index < 8 {
             key = key.push(words.get(index).unwrap());
             index = index + 1;
         }

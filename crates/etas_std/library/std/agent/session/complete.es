@@ -59,17 +59,11 @@ public flow history_page(config: SessionConfig, cursor: Option<SessionCursor>, l
 }
 
 impl std.agent.session.Conversation {
-    public flow load(config: SessionConfig) -> Conversation ![] {
+    public flow load(config: SessionConfig) -> Conversation ![Error<std.memory.StorageError>] {
         let session = perform std.effects.Session.resolve(config);
         var selected = config;
         selected.id = session;
-        let page = handle {
-            perform std.effects.Session.read(selected, None, None)
-        } with {
-            Error<std.memory.StorageError>.raise(error) => {
-                std.core.abort(error.message);
-            }
-        };
+        let page = perform std.effects.Session.read(selected, None, None);
         let cursor = match page.cursor {
             None => None,
             Some(value) => Some(value.opaque),

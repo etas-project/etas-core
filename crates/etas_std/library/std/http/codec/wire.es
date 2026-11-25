@@ -21,7 +21,7 @@ impl WireView {
     flow to_bytes(self) -> bytes ![] {
         var output: Array<u8> = [];
         var index = self.begin;
-        while index < self.end limit Iterations(18446744073709551615) {
+        while index < self.end {
             output = output.push(self.input.get(index).unwrap());
             index = index + 1;
         }
@@ -34,7 +34,7 @@ impl WireView {
 
     flow invalid_utf8(self) -> Option<usize> ![] {
         var index: usize = 0;
-        while index < self.length() limit Iterations(18446744073709551615) {
+        while index < self.length() {
             let start = index;
             let lead = self.byte(index);
             let width: usize = if lead < 128 { 1 }
@@ -43,7 +43,7 @@ impl WireView {
                 else if lead >= 240 && lead <= 244 { 4 }
                 else { return Some(start); };
             var part: usize = 1;
-            while part < width limit Iterations(3) {
+            while part < width {
                 if part >= self.length() - start { return Some(start); }
                 let byte = self.byte(start + part);
                 if byte < 128 || byte > 191 { return Some(start); }
@@ -76,7 +76,7 @@ impl WireView {
         var first = true;
         var second = true;
         var index: usize = 0;
-        while index < length limit Iterations(9) {
+        while index < length {
             first = first && self.byte(index) == http10.get(index).unwrap();
             second = second && self.byte(index) == http11.get(index).unwrap();
             index = index + 1;
@@ -85,7 +85,7 @@ impl WireView {
             return Some(HttpDecodeFailure { kind= UnsupportedHttpVersion, offset= self.begin });
         }
         index = 9;
-        while index < self.length() && index < 12 limit Iterations(3) {
+        while index < self.length() && index < 12 {
             let byte = self.byte(index);
             if byte < 48 || byte > 57 || (index == 9 && byte == 48) {
                 return Some(HttpDecodeFailure { kind= InvalidStatusCode, offset= self.begin + index });
@@ -97,7 +97,7 @@ impl WireView {
             return Some(HttpDecodeFailure { kind= InvalidStatusLine, offset= self.begin + bad });
         }
         index = 13;
-        while index < self.length() limit Iterations(18446744073709551615) {
+        while index < self.length() {
             let byte = self.byte(index);
             if (byte < 32 || byte == 127) && byte != 9 {
                 return Some(HttpDecodeFailure { kind= InvalidStatusLine, offset= self.begin + index });
@@ -109,8 +109,7 @@ impl WireView {
 
     flow status(self) -> Result<(string, i32, string), HttpDecodeFailure> ![] {
         var first_space: usize = 0;
-        while first_space < self.length() && self.byte(first_space) != 32
-            limit Iterations(18446744073709551615) {
+        while first_space < self.length() && self.byte(first_space) != 32 {
             first_space = first_space + 1;
         }
         if first_space == self.length() {
@@ -129,7 +128,7 @@ impl WireView {
         }
         var status: i32 = 0;
         var index = start;
-        while index < start + 3 limit Iterations(3) {
+        while index < start + 3 {
             let byte = self.byte(index);
             if byte < 48 || byte > 57 {
                 return Err(HttpDecodeFailure { kind= InvalidStatusCode, offset= self.begin + start });
@@ -142,7 +141,7 @@ impl WireView {
         }
         let reason_start = if index < self.length() { index + 1 } else { index };
         index = reason_start;
-        while index < self.length() limit Iterations(18446744073709551615) {
+        while index < self.length() {
             let byte = self.byte(index);
             if (byte < 32 || byte == 127) && byte != 9 {
                 return Err(HttpDecodeFailure { kind= InvalidStatusLine, offset= self.begin + reason_start });
@@ -163,7 +162,7 @@ impl WireView {
     flow header_prefix(self) -> Option<usize> ![] {
         var value = false;
         var offset: usize = 0;
-        while offset < self.length() limit Iterations(18446744073709551615) {
+        while offset < self.length() {
             let byte = self.byte(offset);
             if !value && byte == 58 {
                 if offset == 0 { return Some(offset); }
@@ -179,24 +178,21 @@ impl WireView {
 
     flow header(self) -> Result<HttpHeader, HttpCodecFailureKind> ![] {
         var colon: usize = 0;
-        while colon < self.length() && self.byte(colon) != 58
-            limit Iterations(18446744073709551615) {
+        while colon < self.length() && self.byte(colon) != 58 {
             if !self.byte(colon).is_http_token() { return Err(InvalidHeader); }
             colon = colon + 1;
         }
         if colon == 0 || colon == self.length() { return Err(InvalidHeader); }
         var start = colon + 1;
         var end = self.length();
-        while start < end && (self.byte(start) == 32 || self.byte(start) == 9)
-            limit Iterations(18446744073709551615) {
+        while start < end && (self.byte(start) == 32 || self.byte(start) == 9) {
             start = start + 1;
         }
-        while end > start && (self.byte(end - 1) == 32 || self.byte(end - 1) == 9)
-            limit Iterations(18446744073709551615) {
+        while end > start && (self.byte(end - 1) == 32 || self.byte(end - 1) == 9) {
             end = end - 1;
         }
         var index = start;
-        while index < end limit Iterations(18446744073709551615) {
+        while index < end {
             let byte = self.byte(index);
             if (byte < 32 || byte == 127) && byte != 9 { return Err(InvalidHeader); }
             index = index + 1;
@@ -218,7 +214,7 @@ type WireReader = { private input: bytes, private end: usize };
 impl WireReader {
     flow line(self, start: usize) -> HttpDecodeStep<WireView> ![] {
         var offset = start;
-        while offset < self.end limit Iterations(18446744073709551615) {
+        while offset < self.end {
             let byte = self.input.get(offset).unwrap();
             if byte == 10 {
                 return Malformed(HttpDecodeFailure { kind= InvalidLineEnding, offset= offset });
@@ -237,7 +233,7 @@ impl WireReader {
 
     flow head_end(self) -> HttpDecodeStep<unit> ![] {
         var offset: usize = 0;
-        while offset < self.end limit Iterations(18446744073709551615) {
+        while offset < self.end {
             let byte = self.input.get(offset).unwrap();
             if byte == 10 {
                 return Malformed(HttpDecodeFailure { kind= InvalidLineEnding, offset= offset });

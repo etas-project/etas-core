@@ -21,6 +21,12 @@ impl crate::PublishedMethod {
             Part::Type(&mut self.self_type),
             Part::Graph(&mut self.callable),
         ];
+        parts.extend(
+            self.parameter_defaults
+                .iter_mut()
+                .filter_map(|default| default.callable_value.as_mut())
+                .map(Part::Graph),
+        );
         for requirement in self
             .requirements
             .trace_requirements
@@ -95,6 +101,7 @@ fn remap_parts(
                         &mut footprint.requested_actions,
                         &mut footprint.default_actions,
                         &mut footprint.handled_actions,
+                        &mut footprint.required_authority,
                     ]
                     .into_iter()
                     .map(Part::Row),
@@ -280,6 +287,11 @@ fn remap_parts(
                     work.extend(parameter_calls.iter_mut().map(Part::Target));
                 }
                 ActionTrace::ParameterCall { parameter } => work.push(Part::Target(parameter)),
+                ActionTrace::Recursive { body, .. } => {
+                    if let Some(body) = body {
+                        work.push(Part::Trace(body));
+                    }
+                }
                 ActionTrace::Empty => {}
             },
         }
@@ -295,4 +307,36 @@ enum Part<'a> {
     Row(&'a mut EffectRow),
     Effect(&'a mut crate::EffectRef),
     Trace(&'a mut ActionTrace),
+}
+
+impl crate::ConstructorContract {
+    pub fn remap_paths(
+        &mut self,
+        mut remap: impl FnMut(CallableValuePathKind, &[String]) -> Vec<String>,
+    ) {
+        self.path = remap(CallableValuePathKind::Type, &self.path);
+        let mut parts = Vec::new();
+        for param in &mut self.generic_params {
+            for bound in &mut param.bounds {
+                bound.spec = remap(CallableValuePathKind::Spec, &bound.spec);
+                parts.extend(bound.args.iter_mut().map(Part::Type));
+            }
+        }
+        for field in &mut self.fields {
+            parts.push(Part::Type(&mut field.ty));
+            if let Some(injection) = &mut field.injection {
+                parts.push(Part::Effect(&mut injection.action));
+                for arg in &mut injection.generic_args {
+                    match arg {
+                        crate::ConstructorGenericArgument::Type(ty) => parts.push(Part::Type(ty)),
+                        crate::ConstructorGenericArgument::EffectRow(row) => {
+                            parts.push(Part::Row(row))
+                        }
+                        crate::ConstructorGenericArgument::Infer => (),
+                    }
+                }
+            }
+        }
+        remap_parts(parts, &mut remap);
+    }
 }

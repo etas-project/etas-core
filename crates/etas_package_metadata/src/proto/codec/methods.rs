@@ -8,6 +8,12 @@ pub(super) fn to_proto(method: &PublishedMethod) -> ProtoPublishedMethod {
         MethodReceiver::Component => ("component", None),
     };
     ProtoPublishedMethod {
+        internal: method.internal,
+        parameter_defaults: method
+            .parameter_defaults
+            .iter()
+            .map(super::super::parameter_defaults::encode)
+            .collect(),
         identity: Some(super::super::descriptors::encode_method_identity(
             &method.identity,
         )),
@@ -52,6 +58,12 @@ pub(super) fn from_proto(
         _ => return Err(invalid_method("invalid published method receiver ABI")),
     };
     let method = PublishedMethod {
+        internal: method.internal,
+        parameter_defaults: method
+            .parameter_defaults
+            .into_iter()
+            .map(super::super::parameter_defaults::decode)
+            .collect::<Result<_, _>>()?,
         identity: super::super::descriptors::decode_method_identity(required_message(
             method.identity,
             "published method identity",

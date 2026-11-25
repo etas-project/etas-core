@@ -4,7 +4,7 @@ import std.security.trust.{Trusted, Public};
 
 
 public spec PromptEncode {
-    flow encode(self) -> PromptPart ![];
+    flow encode(self) -> PromptPart;
 }
 
 public type PromptPart = { text: string };
@@ -27,7 +27,7 @@ impl Prompt {
         return Prompt { parts= self.parts.push(PromptChannel.Assistant(content)) };
     }
 
-    public flow data<T ~ PromptEncode>(self, content: T) -> Prompt ![] {
+    public flow data<T ~ PromptEncode>(self, content: T) -> Prompt {
         let part = content::PromptEncode.encode();
         return Prompt { parts= self.parts.push(PromptChannel.Data(part)) };
     }
@@ -42,7 +42,7 @@ impl Prompt {
 }
 
 impl PromptPart {
-    public flow data<T ~ PromptEncode>(content: T) -> PromptPart ![] {
+    public flow data<T ~ PromptEncode>(content: T) -> PromptPart {
         let encoded = content::PromptEncode.encode();
         return PromptPart { text= encoded.text };
     }

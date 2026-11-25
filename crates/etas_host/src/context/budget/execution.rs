@@ -18,15 +18,15 @@ pub struct ExecutionBudgetSnapshot {
 }
 
 #[derive(Clone)]
-pub struct ExecutionBudgetState {
+struct BudgetLedgerState {
     inner: Arc<Mutex<BudgetLedger>>,
     clock: Arc<dyn MonotonicClock>,
 }
 
 #[derive(Clone)]
-pub struct ExecutionBudget {
+struct BudgetAccount {
     limits: Budget,
-    state: ExecutionBudgetState,
+    state: BudgetLedgerState,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -40,7 +40,7 @@ pub struct CostReservation {
     currency: String,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct BudgetLedger {
     deadline: Deadline,
     deadline_unix_millis: Option<u128>,
@@ -53,7 +53,7 @@ struct BudgetLedger {
     consumed_cost_micros: u128,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 enum Deadline {
     Unlimited,
     At(Instant),
@@ -73,95 +73,15 @@ impl MonotonicClock for SystemMonotonicClock {
     }
 }
 
-impl ExecutionBudget {
-    pub fn start(limits: Budget) -> Self {
-        Self::start_with_clock(limits, Arc::new(SystemMonotonicClock))
-    }
+mod accounts;
+pub use accounts::{ExecutionBudget, ExecutionBudgetState};
 
-    pub fn start_with_clock(limits: Budget, clock: Arc<dyn MonotonicClock>) -> Self {
-        let state = ExecutionBudgetState::start(&limits, clock);
-        Self { limits, state }
-    }
-
-    pub fn restore(limits: Budget, snapshot: ExecutionBudgetSnapshot) -> Result<Self, HostError> {
-        Self::restore_with_clock(limits, snapshot, Arc::new(SystemMonotonicClock))
-    }
-
-    pub fn restore_with_clock(
-        limits: Budget,
-        snapshot: ExecutionBudgetSnapshot,
-        clock: Arc<dyn MonotonicClock>,
-    ) -> Result<Self, HostError> {
-        let state = ExecutionBudgetState::restore(&limits, snapshot, clock)?;
-        Ok(Self { limits, state })
-    }
-
-    pub fn limits(&self) -> &Budget {
-        &self.limits
-    }
-
-    pub fn with_limits(&self, limits: Budget) -> Result<Self, HostError> {
-        Ok(Self {
-            limits: stricter_budget_limits(&self.limits, &limits)?,
-            state: self.state.clone(),
-        })
-    }
-
-    pub fn replace_limits(&mut self, limits: Budget) {
-        *self = Self::start(limits);
-    }
-
-    pub fn state(&self) -> ExecutionBudgetState {
-        self.state.clone()
-    }
-
-    pub fn rebind_state(&mut self, state: &ExecutionBudgetState) {
-        self.state = state.clone();
-    }
-
-    pub fn snapshot(&self) -> Result<ExecutionBudgetSnapshot, HostError> {
-        self.state.snapshot()
-    }
-
-    pub fn resume_under(&self, invocation: &Self) -> Result<Self, HostError> {
-        let checkpoint = self.snapshot()?;
-        let invocation_snapshot = invocation.snapshot()?;
-        let limits = stricter_budget_limits(self.limits(), invocation.limits())?;
-        let snapshot = ExecutionBudgetSnapshot {
-            deadline_unix_millis: minimum_limit(
-                checkpoint.deadline_unix_millis,
-                invocation_snapshot.deadline_unix_millis,
-            ),
-            reserved_tokens: checkpoint
-                .reserved_tokens
-                .checked_add(invocation_snapshot.reserved_tokens)
-                .ok_or_else(token_budget_exceeded)?,
-            consumed_tokens: checkpoint
-                .consumed_tokens
-                .checked_add(invocation_snapshot.consumed_tokens)
-                .ok_or_else(token_budget_exceeded)?,
-            reserved_cost_micros: checkpoint
-                .reserved_cost_micros
-                .checked_add(invocation_snapshot.reserved_cost_micros)
-                .ok_or_else(cost_budget_exceeded)?,
-            consumed_cost_micros: checkpoint
-                .consumed_cost_micros
-                .checked_add(invocation_snapshot.consumed_cost_micros)
-                .ok_or_else(cost_budget_exceeded)?,
-        };
-        Self::restore(limits, snapshot)
-    }
-
-    pub fn check_time(&self) -> Result<(), HostError> {
-        self.state.check_time()
-    }
-
-    pub fn deadline(&self) -> Result<Option<tokio::time::Instant>, HostError> {
-        self.state.deadline()
-    }
-
-    pub fn reserve_tokens(&self, amount: u64) -> Result<TokenReservation, HostError> {
-        let mut ledger = self.state.lock()?;
+impl BudgetAccount {
+    fn reserve_tokens(
+        &self,
+        ledger: &mut BudgetLedger,
+        amount: u64,
+    ) -> Result<TokenReservation, HostError> {
         let max = minimum_limit(
             ledger.max_tokens,
             self.limits.tokens.map(|tokens| tokens.max_tokens),
@@ -178,8 +98,7 @@ impl ExecutionBudget {
         Ok(TokenReservation { amount })
     }
 
-    pub fn remaining_tokens(&self) -> Result<Option<u64>, HostError> {
-        let ledger = self.state.lock()?;
+    fn remaining_tokens(&self, ledger: &mut BudgetLedger) -> Result<Option<u64>, HostError> {
         let max = minimum_limit(
             ledger.max_tokens,
             self.limits.tokens.map(|tokens| tokens.max_tokens),
@@ -191,8 +110,7 @@ impl ExecutionBudget {
         Ok(max.map(|max| max.saturating_sub(used)))
     }
 
-    pub fn remaining_cost(&self) -> Result<Option<CostBudget>, HostError> {
-        let ledger = self.state.lock()?;
+    fn remaining_cost(&self, ledger: &mut BudgetLedger) -> Result<Option<CostBudget>, HostError> {
         let local = self.limits.cost.as_ref();
         let max = minimum_limit(ledger.max_cost_micros, local.map(|cost| cost.max_micros));
         let Some(max) = max else {
@@ -225,12 +143,12 @@ impl ExecutionBudget {
         }))
     }
 
-    pub fn settle_tokens(
+    fn settle_tokens(
         &self,
+        ledger: &mut BudgetLedger,
         reservation: TokenReservation,
         consumed: u64,
     ) -> Result<(), HostError> {
-        let mut ledger = self.state.lock()?;
         if ledger.reserved_tokens < reservation.amount {
             return Err(corrupt_budget_state(
                 "token reservation exceeds the run-owned reserved token count",
@@ -255,8 +173,11 @@ impl ExecutionBudget {
         Ok(())
     }
 
-    pub fn release_tokens(&self, reservation: TokenReservation) -> Result<(), HostError> {
-        let mut ledger = self.state.lock()?;
+    fn release_tokens(
+        &self,
+        ledger: &mut BudgetLedger,
+        reservation: TokenReservation,
+    ) -> Result<(), HostError> {
         if ledger.reserved_tokens < reservation.amount {
             return Err(corrupt_budget_state(
                 "token reservation exceeds the run-owned reserved token count",
@@ -266,12 +187,12 @@ impl ExecutionBudget {
         Ok(())
     }
 
-    pub fn reserve_cost(
+    fn reserve_cost(
         &self,
+        ledger: &mut BudgetLedger,
         amount_micros: u128,
         currency: &str,
     ) -> Result<CostReservation, HostError> {
-        let mut ledger = self.state.lock()?;
         validate_currency(&ledger, &self.limits, currency)?;
         let local_max = self.limits.cost.as_ref().map(|cost| cost.max_micros);
         let max = minimum_limit(ledger.max_cost_micros, local_max);
@@ -290,12 +211,12 @@ impl ExecutionBudget {
         })
     }
 
-    pub fn settle_cost(
+    fn settle_cost(
         &self,
+        ledger: &mut BudgetLedger,
         reservation: CostReservation,
         consumed_micros: u128,
     ) -> Result<(), HostError> {
-        let mut ledger = self.state.lock()?;
         validate_currency(&ledger, &self.limits, &reservation.currency)?;
         if ledger.reserved_cost_micros < reservation.amount_micros {
             return Err(corrupt_budget_state(
@@ -319,8 +240,11 @@ impl ExecutionBudget {
         Ok(())
     }
 
-    pub fn release_cost(&self, reservation: CostReservation) -> Result<(), HostError> {
-        let mut ledger = self.state.lock()?;
+    fn release_cost(
+        &self,
+        ledger: &mut BudgetLedger,
+        reservation: CostReservation,
+    ) -> Result<(), HostError> {
         validate_currency(&ledger, &self.limits, &reservation.currency)?;
         if ledger.reserved_cost_micros < reservation.amount_micros {
             return Err(corrupt_budget_state(
@@ -331,13 +255,13 @@ impl ExecutionBudget {
         Ok(())
     }
 
-    pub fn settle_usage(
+    fn settle_usage(
         &self,
+        ledger: &mut BudgetLedger,
         token_reservation: TokenReservation,
         consumed_tokens: u64,
         cost: Option<(CostReservation, u128)>,
     ) -> Result<(), HostError> {
-        let mut ledger = self.state.lock()?;
         if ledger.reserved_tokens < token_reservation.amount {
             return Err(corrupt_budget_state(
                 "token reservation exceeds the run-owned reserved token count",
@@ -393,12 +317,12 @@ impl ExecutionBudget {
         Ok(())
     }
 
-    pub fn release_usage(
+    fn release_usage(
         &self,
+        ledger: &mut BudgetLedger,
         token_reservation: TokenReservation,
         cost_reservation: Option<CostReservation>,
     ) -> Result<(), HostError> {
-        let mut ledger = self.state.lock()?;
         if ledger.reserved_tokens < token_reservation.amount {
             return Err(corrupt_budget_state(
                 "token reservation exceeds the run-owned reserved token count",
@@ -457,31 +381,7 @@ fn stricter_budget_limits(checkpoint: &Budget, invocation: &Budget) -> Result<Bu
     })
 }
 
-impl Default for ExecutionBudget {
-    fn default() -> Self {
-        Self::start(Budget::default())
-    }
-}
-
-impl fmt::Debug for ExecutionBudget {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("ExecutionBudget")
-            .field("limits", &self.limits)
-            .field("snapshot", &self.snapshot().ok())
-            .finish()
-    }
-}
-
-impl PartialEq for ExecutionBudget {
-    fn eq(&self, other: &Self) -> bool {
-        self.limits == other.limits && self.snapshot().ok() == other.snapshot().ok()
-    }
-}
-
-impl Eq for ExecutionBudget {}
-
-impl ExecutionBudgetState {
+impl BudgetLedgerState {
     fn start(limits: &Budget, clock: Arc<dyn MonotonicClock>) -> Self {
         let (deadline, deadline_unix_millis) = deadline_from_limit(limits, clock.as_ref());
         Self {
@@ -684,6 +584,55 @@ fn corrupt_budget_state(message: impl Into<String>) -> HostError {
 mod tests {
     use super::*;
     use crate::{CostBudget, TimeBudget, TokenBudget};
+
+    #[test]
+    fn caller_and_owner_debit_existing_accounts_once_and_admit_atomically() {
+        let owner = ExecutionBudget::start(Budget {
+            tokens: Some(TokenBudget { max_tokens: 100 }),
+            cost: Some(CostBudget {
+                max_micros: 1000,
+                currency: "USD".into(),
+            }),
+            time: Some(TimeBudget { max_millis: 10_000 }),
+        });
+        let previous = owner.reserve_tokens(80).unwrap();
+        owner.settle_tokens(previous, 80).unwrap();
+        let caller = ExecutionBudget::start(Budget {
+            tokens: Some(TokenBudget { max_tokens: 10 }),
+            cost: Some(CostBudget {
+                max_micros: 100,
+                currency: "USD".into(),
+            }),
+            time: Some(TimeBudget { max_millis: 20_000 }),
+        });
+        let request = caller
+            .conjoin(&owner)
+            .unwrap()
+            .conjoin(&caller.clone())
+            .unwrap();
+        assert_eq!(request.remaining_tokens().unwrap(), Some(10));
+        assert_eq!(request.deadline().unwrap(), owner.deadline().unwrap());
+        let tokens = request.reserve_tokens(7).unwrap();
+        let cost = request.reserve_cost(70, "USD").unwrap();
+        request.settle_usage(tokens, 7, Some((cost, 60))).unwrap();
+        assert_eq!(owner.snapshot().unwrap().consumed_tokens, 87);
+        assert_eq!(caller.snapshot().unwrap().consumed_tokens, 7);
+        assert_eq!(owner.snapshot().unwrap().consumed_cost_micros, 60);
+        assert_eq!(caller.snapshot().unwrap().consumed_cost_micros, 60);
+        assert_eq!(request.remaining_tokens().unwrap(), Some(3));
+        assert_eq!(request.remaining_cost().unwrap().unwrap().max_micros, 40);
+        assert_eq!(
+            request.reserve_tokens(4).unwrap_err().code,
+            HostErrorCode::BudgetExceeded
+        );
+        assert_eq!(owner.snapshot().unwrap().reserved_tokens, 0);
+        assert_eq!(caller.snapshot().unwrap().reserved_tokens, 0);
+        let tokens = request.reserve_tokens(3).unwrap();
+        let cost = request.reserve_cost(40, "USD").unwrap();
+        request.release_usage(tokens, Some(cost)).unwrap();
+        assert_eq!(owner.snapshot().unwrap().reserved_tokens, 0);
+        assert_eq!(caller.snapshot().unwrap().reserved_cost_micros, 0);
+    }
 
     #[test]
     fn clones_share_token_reservations_and_consumption() {

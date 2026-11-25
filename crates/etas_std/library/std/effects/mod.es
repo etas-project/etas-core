@@ -52,13 +52,11 @@ public effect Command {
 @std.role("std.effects.Memory")
 public effect Memory {
     @default_handler
-    action<K, V> read<Place: std.memory.MemoryPlace>(store: std.memory.Store<K, V>, request: std.memory.ReadRequest<K>) -> std.memory.ReadResult<K, V> ![];
+    action<K, V> read<Place: std.memory.MemoryPlace>(store: std.memory.Store<K, V>, request: std.memory.ReadRequest<bytes>) -> std.memory.ReadResult<bytes, bytes> ![Error<std.memory.StorageError>];
     @default_handler
-    action<K, V> write<Place: std.memory.MemoryPlace>(store: std.memory.Store<K, V>, request: std.memory.WriteRequest<K, V>) -> unit ![];
+    action<K, V> write<Place: std.memory.MemoryPlace>(store: std.memory.Store<K, V>, operation: std.memory.StorageOperationRef, request: std.memory.WriteRequest<bytes, bytes>, wire: string) -> std.memory.WriteOutcome<std.memory.MemoryWriteReceipt<bytes>, std.memory.MemoryWriteRejection> ![Error<std.memory.StorageError>];
     @default_handler
-    action<K, V> commit<Place: std.memory.MemoryPlace>(store: std.memory.Store<K, V>, operation: std.memory.StorageOperationRef, request: std.memory.WriteRequest<K, V>, wire: string) -> std.memory.WriteOutcome<std.memory.MemoryWriteReceipt<K>, std.memory.MemoryWriteRejection> ![Error<std.memory.StorageError>];
-    @default_handler
-    action<K, V> reconcile<Place: std.memory.MemoryPlace>(store: std.memory.Store<K, V>, operation: std.memory.StorageOperationRef) -> std.memory.ReconcileResult<std.memory.MemoryWriteReceipt<K>, std.memory.MemoryWriteRejection> ![Error<std.memory.StorageError>];
+    action<K, V> reconcile<Place: std.memory.MemoryPlace>(store: std.memory.Store<K, V>, operation: std.memory.StorageOperationRef) -> std.memory.ReconcileResult<std.memory.MemoryWriteReceipt<bytes>, std.memory.MemoryWriteRejection> ![Error<std.memory.StorageError>];
 }
 
 @std.role("std.effects.Secret")
@@ -81,8 +79,19 @@ public effect Error<Failure> {
     action raise<E>(error: E) -> never;
 }
 
+/// Requests a value of the given type from the active Handler.
+public effect Inject<T> {
+    action get() -> T;
+}
+
 @std.role("std.effects.Fs")
 public effect Fs extends FileIO {
+    @default_handler
+    action open<R ~ Region>(path: WorkspacePath<R>, mode: std.fs.FileMode) -> std.fs.FileStream<R> ![Error<std.fs.IOError>];
+    @default_handler
+    action sync<R ~ Region>(file: std.fs.FileStream<R>) -> unit ![Error<std.fs.IOError>];
+    @default_handler
+    action canonicalize<R ~ Region>(path: WorkspacePath<R>) -> WorkspacePath<R> ![Error<std.fs.IOError>];
     @default_handler
     action read<R ~ Region>(path: WorkspacePath<R>, max_bytes: Option<usize>) -> Result<bytes, std.fs.ReadLimitError> ![Error<std.fs.IOError>];
     @default_handler
@@ -93,4 +102,12 @@ public effect Fs extends FileIO {
     action stat<R ~ Region>(path: WorkspacePath<R>) -> FsStat ![Error<std.fs.IOError>];
     @default_handler
     action atomic_replace<R ~ Region>(path: WorkspacePath<R>, contents: bytes) -> unit ![Error<std.fs.IOError>];
+    @default_handler
+    action create_dir<R ~ Region>(path: WorkspacePath<R>, recursive: bool) -> unit ![Error<std.fs.IOError>];
+    @default_handler
+    action rename<R ~ Region>(source: WorkspacePath<R>, destination: WorkspacePath<R>) -> unit ![Error<std.fs.IOError>];
+    @default_handler
+    action remove_file<R ~ Region>(path: WorkspacePath<R>) -> unit ![Error<std.fs.IOError>];
+    @default_handler
+    action remove_dir<R ~ Region>(path: WorkspacePath<R>) -> unit ![Error<std.fs.IOError>];
 }

@@ -119,7 +119,10 @@ pub(in crate::proto) fn validate_model(
                 | TraceInfo::Outcome(CallableOutcomeInfo::ParameterNonReturnTemplate(call)) => {
                     model_call_references(call)
                 }
-                TraceInfo::Outcome(_) | TraceInfo::Repeat(_) | TraceInfo::UnknownOrder(_) => 1,
+                TraceInfo::Recursive { .. }
+                | TraceInfo::Outcome(_)
+                | TraceInfo::Repeat(_)
+                | TraceInfo::UnknownOrder(_) => 1,
             },
             "descriptor trace references",
         )?;
@@ -231,7 +234,7 @@ pub(in crate::proto) fn validate_wire(
                     ) => wire_call_references(call),
                     _ => 1,
                 },
-                Some(K::Repeat(_) | K::UnknownOrder(_)) => 1,
+                Some(K::Recursive(_) | K::Repeat(_) | K::UnknownOrder(_)) => 1,
             },
             "descriptor trace references",
         )?;
@@ -241,16 +244,7 @@ pub(in crate::proto) fn validate_wire(
 
 fn model_call_references(call: &ParameterCallInfo) -> usize {
     1usize
-        .saturating_add(
-            call.projection
-                .iter()
-                .map(|step| match step {
-                    ValueProjectionStep::Field(name)
-                    | ValueProjectionStep::VariantPayload { variant: name, .. } => 1 + name.len(),
-                    _ => 1,
-                })
-                .sum::<usize>(),
-        )
+        .saturating_add(ValueProjectionStep::work(&call.projection))
         .saturating_add(call.arguments.as_ref().map_or(0, Vec::len))
         .saturating_add(call.handlers.as_ref().map_or(0, |handlers| {
             handlers.iter().fold(handlers.len(), |count, handler| {
@@ -266,12 +260,7 @@ fn model_call_references(call: &ParameterCallInfo) -> usize {
 
 fn wire_call_references(call: &p::ParameterCall) -> usize {
     1usize
-        .saturating_add(
-            call.projection
-                .iter()
-                .map(|step| 1 + step.name.len())
-                .sum::<usize>(),
-        )
+        .saturating_add(wire_projection_work(&call.projection))
         .saturating_add(
             call.arguments
                 .as_ref()
@@ -294,4 +283,14 @@ fn wire_call_references(call: &p::ParameterCall) -> usize {
                     None => count,
                 })
         }))
+}
+
+fn wire_projection_work(path: &[p::ValueProjectionStep]) -> usize {
+    let mut count = 0usize;
+    let mut pending = path.iter().collect::<Vec<_>>();
+    while let Some(step) = pending.pop() {
+        count = count.saturating_add(1 + step.name.len() + step.alternatives.len());
+        pending.extend(step.alternatives.iter().flat_map(|path| &path.steps));
+    }
+    count
 }

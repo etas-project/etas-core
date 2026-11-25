@@ -26,8 +26,12 @@ public effect Browser extends Network {
 // Standard clock action boundary.
 @std.role("std.effects.Clock")
 public effect Clock extends Time {
-    action now() -> std.runtime.time.Time;
-    action sleep(arg0: std.runtime.time.Duration) -> unit;
+    @default_handler
+    action now() -> std.runtime.time.Time ![Error<std.runtime.time.TimeError>];
+    @default_handler
+    action monotonic() -> std.runtime.time.Instant ![Error<std.runtime.time.TimeError>];
+    @default_handler
+    action sleep(duration: std.runtime.time.Duration) -> unit ![Error<std.runtime.time.TimeError>];
 }
 
 // Checking and compilation of immutable retained definitions.
@@ -56,11 +60,11 @@ public effect Stream {
     @default_handler
     action close<S ~ std.stream.ByteStream>(arg0: S) -> unit ![Error<std.stream.StreamError>];
     @default_handler
-    action flush<S ~ std.stream.ByteStream>(arg0: S) -> unit ![Error<std.stream.StreamError>];
+    action flush<S ~ std.stream.ByteStream>(stream: S, timeout: Option<std.stream.Timeout>) -> unit ![Error<std.stream.StreamError>];
     @default_handler
     action read<S ~ std.stream.ByteStream>(stream: S, max_bytes: usize, timeout: Option<std.stream.Timeout>) -> std.stream.StreamRead ![Error<std.stream.StreamError>];
     @default_handler
-    action write<S ~ std.stream.ByteStream>(stream: S, body: bytes) -> unit ![Error<std.stream.StreamError>];
+    action write<S ~ std.stream.ByteStream>(stream: S, body: bytes, timeout: Option<std.stream.Timeout>) -> unit ![Error<std.stream.StreamError>];
 }
 
 // TLS client session substrate action boundary.
@@ -73,6 +77,12 @@ public effect Tls extends Network {
 // Actual session store operations. Default handling retains the precise
 // Memory.read/write session place; this declaration grants no broad authority.
 public effect Session extends Memory {
+    @default_handler
+    action acquire(config: std.agent.session.SessionConfig) -> std.agent.session.SessionLease ![Error<std.memory.StorageError>];
+    @default_handler
+    action handoff(lease: std.agent.session.SessionLease) -> std.agent.session.SessionLease ![Error<std.memory.StorageError>];
+    @default_handler
+    action release(lease: std.agent.session.SessionLease) -> unit ![Error<std.memory.StorageError>];
     @default_handler
     action resolve(config: std.agent.session.SessionConfig) -> std.agent.session.SessionId ![];
     @default_handler

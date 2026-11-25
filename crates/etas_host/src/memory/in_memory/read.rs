@@ -29,6 +29,7 @@ impl InMemoryMemoryClient {
                 cursor: None,
             });
         };
+        state.validate_schema(store)?;
         let scope = scope_identity("volatile", &store.region.stable_id, &store.path);
         let fence = CursorFence {
             scope: &scope,
@@ -116,13 +117,23 @@ impl InMemoryMemoryClient {
         limit: Option<u32>,
         budget: &ExecutionBudget,
     ) -> Result<MemoryResult, HostError> {
-        if !query.order_by.is_empty() {
+        let MemoryQuery::Predicate {
+            predicate,
+            order_by,
+        } = query
+        else {
+            return Err(HostError::new(
+                HostErrorCode::Unsupported,
+                "memory query language/version is not registered for this store",
+            ));
+        };
+        if !order_by.is_empty() {
             return Err(HostError::new(
                 HostErrorCode::InvalidRequest,
                 "ordered memory query is unsupported",
             ));
         }
-        self.select(store, None, limit, query.predicate, None, budget)
+        self.select(store, None, limit, predicate, None, budget)
     }
     pub(super) fn vector_search(
         &self,

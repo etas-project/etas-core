@@ -4,6 +4,10 @@ import std.json.JsonValue;
 import std.agent.session.Conversation;
 import std.agent.schema.Schema;
 
+public spec Active;
+public spec Autonomous ~ Active {
+    flow main(var self) -> unit;
+}
 
 public type StepResult<C, O> = {
     turn: AssistantTurn,
