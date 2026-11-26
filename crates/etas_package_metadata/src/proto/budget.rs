@@ -20,12 +20,13 @@ pub(super) fn validate_proto_callable_values(
 pub(super) fn validate_parameter_binding(
     binding: &crate::ParameterBindingSummary,
     budget: &mut MetadataGraphBudget,
+    parameters: Option<&crate::MetadataTypeParameters>,
 ) -> Result<(), MetadataArtifactError> {
-    let mut validator = ModelGraphValidator::default();
-    validator.public_metadata(&crate::PublicMetadata {
-        effect_summaries: vec![binding.as_effect_summary()],
+    let mut validator = ModelGraphValidator {
+        parameter_bindings: parameters.cloned(),
         ..Default::default()
-    })?;
+    };
+    validator.effect_summary(&binding.as_effect_summary())?;
     budget.charge(validator.budget.used(), "omitted parameter behavior")
 }
 
@@ -34,10 +35,7 @@ pub(super) fn validate_proto_parameter_binding(
     budget: &mut MetadataGraphBudget,
 ) -> Result<(), MetadataArtifactError> {
     let mut validator = ProtoGraphValidator::default();
-    validator.public_metadata(&proto::ProtoPublicMetadataSection {
-        effect_summaries: vec![binding.clone()],
-        ..Default::default()
-    })?;
+    validator.effect_summary(binding)?;
     budget.charge(validator.budget.used(), "omitted parameter behavior")
 }
 pub(crate) use spec_invocations::validate as validate_callable_request_target;
@@ -150,6 +148,41 @@ pub(crate) fn validate_method_type_parameters(
 }
 
 impl ModelGraphValidator {
+    fn effect_summary(&mut self, summary: &EffectSummary) -> Result<(), MetadataArtifactError> {
+        self.residual_references(&summary.residual_checks)?;
+        if let Some(requests) = &summary.handler_requests {
+            self.request_template(requests)?;
+        }
+        for graph in summary
+            .callable_body
+            .iter()
+            .chain(&summary.returned_callables)
+        {
+            self.callable_values(graph)?;
+        }
+        if let Some(effects) = &summary.default_handler_effects {
+            if let Some(behavior) = &effects.behavior {
+                self.default_behavior(behavior, 0)?;
+            }
+            self.effect_row(&effects.direct_effects, 0)?;
+            self.effect_row(&effects.default_actions, 0)?;
+            for handler in &effects.handlers {
+                self.effect_ref(&handler.action, 0)?;
+                self.effect_row(&handler.produced, 0)?;
+            }
+        }
+        self.effect_row(&summary.public_effects, 0)?;
+        self.effect_row(&summary.requested_actions, 0)?;
+        self.effect_row(&summary.handled_requested_actions, 0)?;
+        for latent in &summary.latent_flows {
+            self.residual_references(&latent.residual_checks)?;
+            self.effect_row(&latent.declared_bound, 0)?;
+            self.effect_row(&latent.inferred_effects, 0)?;
+        }
+        self.action_trace(&summary.action_trace, 0)?;
+        Ok(())
+    }
+
     fn trace_spec_definition(
         &mut self,
         definition: &etas_code::DefinitionKey,
@@ -304,6 +337,7 @@ impl ModelGraphValidator {
                 &action.parameter_defaults,
                 action.params.len(),
                 &mut self.budget,
+                self.parameter_bindings.as_ref(),
             )?;
             self.budget
                 .charge(action.param_names.len(), "action parameter names")?;
@@ -426,37 +460,7 @@ impl ModelGraphValidator {
             }
         }
         for summary in &metadata.effect_summaries {
-            self.residual_references(&summary.residual_checks)?;
-            if let Some(requests) = &summary.handler_requests {
-                self.request_template(requests)?;
-            }
-            for graph in summary
-                .callable_body
-                .iter()
-                .chain(&summary.returned_callables)
-            {
-                self.callable_values(graph)?;
-            }
-            if let Some(effects) = &summary.default_handler_effects {
-                if let Some(behavior) = &effects.behavior {
-                    self.default_behavior(behavior, 0)?;
-                }
-                self.effect_row(&effects.direct_effects, 0)?;
-                self.effect_row(&effects.default_actions, 0)?;
-                for handler in &effects.handlers {
-                    self.effect_ref(&handler.action, 0)?;
-                    self.effect_row(&handler.produced, 0)?;
-                }
-            }
-            self.effect_row(&summary.public_effects, 0)?;
-            self.effect_row(&summary.requested_actions, 0)?;
-            self.effect_row(&summary.handled_requested_actions, 0)?;
-            for latent in &summary.latent_flows {
-                self.residual_references(&latent.residual_checks)?;
-                self.effect_row(&latent.declared_bound, 0)?;
-                self.effect_row(&latent.inferred_effects, 0)?;
-            }
-            self.action_trace(&summary.action_trace, 0)?;
+            self.effect_summary(summary)?;
         }
         for summary in &metadata.trace_spec_summaries {
             self.trace_spec_definition(&summary.definition)?;
@@ -507,6 +511,7 @@ impl ModelGraphValidator {
             &signature.parameter_defaults,
             signature.input.len(),
             &mut self.budget,
+            self.parameter_bindings.as_ref(),
         )?;
         for param in &signature.generic_params {
             self.generic_param(param)?;
@@ -572,6 +577,7 @@ impl ModelGraphValidator {
             &method.parameter_defaults,
             root.params.len(),
             &mut self.budget,
+            self.parameter_bindings.as_ref(),
         )?;
         self.ty(&method.self_type, 0)?;
         self.budget
@@ -755,6 +761,69 @@ struct ProtoGraphValidator {
 }
 
 impl ProtoGraphValidator {
+    fn effect_summary(
+        &mut self,
+        summary: &proto::ProtoEffectSummary,
+    ) -> Result<(), MetadataArtifactError> {
+        if let Some(references) = &summary.residual_checks {
+            self.residual_references(references)?;
+        }
+        if let Some(requests) = &summary.handler_requests {
+            self.request_template(requests)?;
+        }
+        for graph in summary
+            .callable_body
+            .iter()
+            .chain(&summary.returned_callables)
+        {
+            self.callable_values(graph)?;
+        }
+        if let Some(effects) = &summary.default_handler_effects {
+            if let Some(behavior) = &effects.behavior {
+                self.default_behavior(behavior, 0)?;
+            }
+            for row in [&effects.direct_effects, &effects.default_actions]
+                .into_iter()
+                .flatten()
+            {
+                self.effect_row(row, 0)?;
+            }
+            for handler in &effects.handlers {
+                if let Some(action) = &handler.action {
+                    self.effect_ref(action, 0)?;
+                }
+                if let Some(row) = &handler.produced {
+                    self.effect_row(row, 0)?;
+                }
+            }
+        }
+        for row in [
+            summary.public_effects.as_ref(),
+            summary.requested_actions.as_ref(),
+            summary.handled_requested_actions.as_ref(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            self.effect_row(row, 0)?;
+        }
+        for latent in &summary.latent_flows {
+            if let Some(references) = &latent.residual_checks {
+                self.residual_references(references)?;
+            }
+            if let Some(row) = latent.declared_bound.as_ref() {
+                self.effect_row(row, 0)?;
+            }
+            if let Some(row) = latent.inferred_effects.as_ref() {
+                self.effect_row(row, 0)?;
+            }
+        }
+        if let Some(trace) = summary.action_trace.as_ref() {
+            self.action_trace(trace, 0)?;
+        }
+        Ok(())
+    }
+
     fn trace_spec_definition(
         &mut self,
         definition: &proto::ProtoDefinitionKey,
@@ -1038,62 +1107,7 @@ impl ProtoGraphValidator {
             }
         }
         for summary in &metadata.effect_summaries {
-            if let Some(references) = &summary.residual_checks {
-                self.residual_references(references)?;
-            }
-            if let Some(requests) = &summary.handler_requests {
-                self.request_template(requests)?;
-            }
-            for graph in summary
-                .callable_body
-                .iter()
-                .chain(&summary.returned_callables)
-            {
-                self.callable_values(graph)?;
-            }
-            if let Some(effects) = &summary.default_handler_effects {
-                if let Some(behavior) = &effects.behavior {
-                    self.default_behavior(behavior, 0)?;
-                }
-                for row in [&effects.direct_effects, &effects.default_actions]
-                    .into_iter()
-                    .flatten()
-                {
-                    self.effect_row(row, 0)?;
-                }
-                for handler in &effects.handlers {
-                    if let Some(action) = &handler.action {
-                        self.effect_ref(action, 0)?;
-                    }
-                    if let Some(row) = &handler.produced {
-                        self.effect_row(row, 0)?;
-                    }
-                }
-            }
-            for row in [
-                summary.public_effects.as_ref(),
-                summary.requested_actions.as_ref(),
-                summary.handled_requested_actions.as_ref(),
-            ]
-            .into_iter()
-            .flatten()
-            {
-                self.effect_row(row, 0)?;
-            }
-            for latent in &summary.latent_flows {
-                if let Some(references) = &latent.residual_checks {
-                    self.residual_references(references)?;
-                }
-                if let Some(row) = latent.declared_bound.as_ref() {
-                    self.effect_row(row, 0)?;
-                }
-                if let Some(row) = latent.inferred_effects.as_ref() {
-                    self.effect_row(row, 0)?;
-                }
-            }
-            if let Some(trace) = summary.action_trace.as_ref() {
-                self.action_trace(trace, 0)?;
-            }
+            self.effect_summary(summary)?;
         }
         for summary in &metadata.trace_spec_summaries {
             if let Some(definition) = &summary.definition {

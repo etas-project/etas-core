@@ -57,6 +57,7 @@ pub(super) fn validate_model(
     values: &[ParameterDefault],
     arity: usize,
     budget: &mut MetadataGraphBudget,
+    parameters: Option<&crate::MetadataTypeParameters>,
 ) -> Result<(), MetadataArtifactError> {
     validate_slots(values.iter().map(|value| value.slot), arity)?;
     budget.charge(values.len(), "declaration default slots")?;
@@ -67,7 +68,7 @@ pub(super) fn validate_model(
             ));
         }
         if let Some(binding) = &value.binding {
-            super::budget::validate_parameter_binding(binding, budget)?;
+            super::budget::validate_parameter_binding(binding, budget, parameters)?;
         }
         value
             .reference
