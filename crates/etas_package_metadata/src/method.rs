@@ -18,8 +18,17 @@ impl PublishedMethod {
         for default in &self.parameter_defaults {
             if default.slot as usize >= root.params.len()
                 || previous.is_some_and(|old| old >= default.slot)
-                || default.reference.owner
-                    != etas_code::descriptor::ParameterDefaultOwner::Method(self.identity.clone())
+                || !match &default.reference.owner {
+                    etas_code::descriptor::ParameterDefaultOwner::Method(method) => {
+                        method == &self.identity
+                    }
+                    // An implementation identity covers the whole impl header;
+                    // its inherited binding keeps the defining spec identity.
+                    etas_code::descriptor::ParameterDefaultOwner::SpecMethod { name, .. } => {
+                        name == self.identity.name()
+                    }
+                    _ => false,
+                }
             {
                 return Err(invalid(
                     "method default has a different checked calling slot or owner",
