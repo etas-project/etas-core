@@ -88,6 +88,10 @@ impl ParameterDefaultOwner {
 )]
 #[serde(deny_unknown_fields)]
 pub struct ParameterDefaultInfo {
+    /// This binding requests a provider rather than evaluating a pure default.
+    /// The checked expression revision retains the provider identity and label.
+    #[serde(default)]
+    pub injected: bool,
     pub owner: ParameterDefaultOwner,
     pub parameter: u32,
     pub revision: CodeFingerprint,
@@ -96,10 +100,11 @@ pub struct ParameterDefaultInfo {
 impl ParameterDefaultInfo {
     pub fn fingerprint(&self) -> CodeFingerprint {
         let mut encoder =
-            crate::identity::canonical::CanonicalEncoder::new("etas.code.parameter-default.v1");
+            crate::identity::canonical::CanonicalEncoder::new("etas.code.parameter-default.v2");
         encoder.fingerprint(self.owner.fingerprint());
         encoder.number(u64::from(self.parameter));
         encoder.fingerprint(self.revision);
+        encoder.number(u64::from(self.injected));
         encoder.finish()
     }
 }

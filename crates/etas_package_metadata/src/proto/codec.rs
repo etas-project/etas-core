@@ -2,6 +2,14 @@ use crate::type_validation::{type_kind_to_wire, validate_type_shape};
 use prost::Message;
 pub(super) mod callable_values;
 mod default_behavior;
+pub(crate) fn parameter_binding_fingerprint(
+    binding: &crate::ParameterBindingSummary,
+) -> etas_code::CodeFingerprint {
+    etas_code::CodeFingerprint::of_bytes(
+        "etas.metadata.parameter-binding.v1",
+        &effect_summary_to_proto(&binding.as_effect_summary()).encode_to_vec(),
+    )
+}
 pub(crate) fn default_behavior_fingerprint(
     value: &crate::DefaultBehavior,
 ) -> etas_code::CodeFingerprint {
@@ -2010,7 +2018,7 @@ fn effect_metadata_from_proto(
     })
 }
 
-fn effect_summary_to_proto(summary: &EffectSummary) -> ProtoEffectSummary {
+pub(super) fn effect_summary_to_proto(summary: &EffectSummary) -> ProtoEffectSummary {
     ProtoEffectSummary {
         callable_body: summary
             .callable_body
@@ -2050,7 +2058,7 @@ fn effect_summary_to_proto(summary: &EffectSummary) -> ProtoEffectSummary {
     }
 }
 
-fn effect_summary_from_proto(
+pub(super) fn effect_summary_from_proto(
     summary: ProtoEffectSummary,
 ) -> Result<EffectSummary, MetadataArtifactError> {
     Ok(EffectSummary {

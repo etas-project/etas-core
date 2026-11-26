@@ -539,6 +539,10 @@ pub fn published_method_input_fingerprint(
     for default in &method.parameter_defaults {
         e.number(default.slot as usize);
         e.0.update(default.reference.fingerprint().as_bytes());
+        e.option(default.binding.is_some());
+        if let Some(binding) = &default.binding {
+            e.0.update(crate::proto::parameter_binding_fingerprint(binding).as_bytes());
+        }
         e.option(default.callable_value.is_some());
         if let Some(graph) = &default.callable_value {
             e.0.update(crate::proto::callable_value_graph_fingerprint(graph).as_bytes());

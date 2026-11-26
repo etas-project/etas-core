@@ -16,6 +16,30 @@ pub(super) fn validate_proto_callable_values(
     validator.callable_values(graph)?;
     budget.charge(validator.budget.used(), "default callable value")
 }
+
+pub(super) fn validate_parameter_binding(
+    binding: &crate::ParameterBindingSummary,
+    budget: &mut MetadataGraphBudget,
+) -> Result<(), MetadataArtifactError> {
+    let mut validator = ModelGraphValidator::default();
+    validator.public_metadata(&crate::PublicMetadata {
+        effect_summaries: vec![binding.as_effect_summary()],
+        ..Default::default()
+    })?;
+    budget.charge(validator.budget.used(), "omitted parameter behavior")
+}
+
+pub(super) fn validate_proto_parameter_binding(
+    binding: &proto::ProtoEffectSummary,
+    budget: &mut MetadataGraphBudget,
+) -> Result<(), MetadataArtifactError> {
+    let mut validator = ProtoGraphValidator::default();
+    validator.public_metadata(&proto::ProtoPublicMetadataSection {
+        effect_summaries: vec![binding.clone()],
+        ..Default::default()
+    })?;
+    budget.charge(validator.budget.used(), "omitted parameter behavior")
+}
 pub(crate) use spec_invocations::validate as validate_callable_request_target;
 
 pub const MAX_METADATA_GRAPH_DEPTH: usize = 64;

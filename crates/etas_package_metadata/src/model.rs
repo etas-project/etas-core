@@ -252,12 +252,45 @@ pub struct ActionSignature {
     Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
 )]
 pub struct ParameterDefault {
+    #[serde(default)]
+    pub binding: Option<ParameterBindingSummary>,
     pub slot: u32,
     pub reference: etas_code::descriptor::ParameterDefaultInfo,
     /// Checked callable payload of the default value in its declaration scope.
     /// None means no published payload evidence, never an empty callback.
     #[serde(default)]
     pub callable_value: Option<crate::CallableValueGraph>,
+}
+
+/// Conditional behavior of resolving one omitted parameter, separate from the
+/// full-argument callable body contract.
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
+)]
+pub struct ParameterBindingSummary {
+    pub behavior: crate::CallableValueBehavior,
+    pub public_effects: EffectRow,
+    pub requested_actions: EffectRow,
+    pub handled_requested_actions: EffectRow,
+    pub default_handler_effects: DefaultHandlerEffects,
+    pub action_trace: ActionTrace,
+    pub handler_requests: Option<RequestInstantiationTemplate>,
+}
+
+impl ParameterBindingSummary {
+    pub fn as_effect_summary(&self) -> EffectSummary {
+        EffectSummary {
+            item: vec!["parameter_binding".into()],
+            behavior: Some(self.behavior.clone()),
+            public_effects: self.public_effects.clone(),
+            requested_actions: self.requested_actions.clone(),
+            handled_requested_actions: self.handled_requested_actions.clone(),
+            default_handler_effects: Some(self.default_handler_effects.clone()),
+            action_trace: self.action_trace.clone(),
+            handler_requests: self.handler_requests.clone(),
+            ..EffectSummary::default()
+        }
+    }
 }
 
 #[derive(

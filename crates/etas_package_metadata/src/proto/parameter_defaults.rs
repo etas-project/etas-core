@@ -3,6 +3,10 @@ use crate::{MetadataArtifactError, ParameterDefault};
 
 pub(super) fn encode(value: &ParameterDefault) -> ProtoParameterDefault {
     ProtoParameterDefault {
+        binding: value
+            .binding
+            .as_ref()
+            .map(|binding| super::codec::effect_summary_to_proto(&binding.as_effect_summary())),
         slot: value.slot,
         reference: Some(descriptors::encode_parameter_default(&value.reference)),
         callable_value: value
@@ -16,6 +20,26 @@ pub(super) fn decode(
     value: ProtoParameterDefault,
 ) -> Result<ParameterDefault, MetadataArtifactError> {
     Ok(ParameterDefault {
+        binding: value
+            .binding
+            .map(super::codec::effect_summary_from_proto)
+            .transpose()?
+            .map(|summary| {
+                Ok(crate::ParameterBindingSummary {
+                    behavior: summary.behavior.ok_or_else(|| {
+                        invalid("injected binding is missing its checked behavior")
+                    })?,
+                    public_effects: summary.public_effects,
+                    requested_actions: summary.requested_actions,
+                    handled_requested_actions: summary.handled_requested_actions,
+                    default_handler_effects: summary.default_handler_effects.ok_or_else(|| {
+                        invalid("injected binding is missing its default-handler summary")
+                    })?,
+                    action_trace: summary.action_trace,
+                    handler_requests: summary.handler_requests,
+                })
+            })
+            .transpose()?,
         slot: value.slot,
         callable_value: value
             .callable_value
@@ -37,6 +61,14 @@ pub(super) fn validate_model(
     validate_slots(values.iter().map(|value| value.slot), arity)?;
     budget.charge(values.len(), "declaration default slots")?;
     for value in values {
+        if value.reference.injected != value.binding.is_some() {
+            return Err(invalid(
+                "injected parameters require their conditional binding summary",
+            ));
+        }
+        if let Some(binding) = &value.binding {
+            super::budget::validate_parameter_binding(binding, budget)?;
+        }
         value
             .reference
             .owner
@@ -64,6 +96,19 @@ pub(super) fn validate_wire(
     validate_slots(values.iter().map(|value| value.slot), arity)?;
     budget.charge(values.len(), "declaration default slots")?;
     for value in values {
+        if value
+            .reference
+            .as_ref()
+            .is_some_and(|reference| reference.injected)
+            != value.binding.is_some()
+        {
+            return Err(invalid(
+                "injected parameters require their conditional binding summary",
+            ));
+        }
+        if let Some(binding) = &value.binding {
+            super::budget::validate_proto_parameter_binding(binding, budget)?;
+        }
         descriptors::validate_parameter_default(
             value
                 .reference

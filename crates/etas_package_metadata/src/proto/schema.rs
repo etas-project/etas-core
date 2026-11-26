@@ -516,6 +516,8 @@ pub struct ProtoActionSignature {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoParameterDefault {
+    #[prost(message, optional, tag = "4")]
+    pub binding: Option<ProtoEffectSummary>,
     #[prost(uint32, tag = "1")]
     pub slot: u32,
     #[prost(message, optional, tag = "2")]

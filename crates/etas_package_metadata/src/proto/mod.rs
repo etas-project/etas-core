@@ -16,6 +16,7 @@ pub use budget::{MAX_METADATA_GRAPH_DEPTH, MAX_METADATA_GRAPH_NODES};
 pub(crate) use budget::validate_default_behavior;
 pub(crate) use codec::callable_value_graph_fingerprint;
 pub(crate) use codec::default_behavior_fingerprint;
+pub(crate) use codec::parameter_binding_fingerprint;
 pub use codec::{
     package_metadata_from_artifact, package_metadata_from_package_graph_payload,
     package_metadata_to_sections,

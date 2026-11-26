@@ -42,6 +42,7 @@ pub(super) fn encode(default: &ParameterDefaultInfo) -> schema::ParameterDefault
         ),
     };
     schema::ParameterDefault {
+        injected: default.injected,
         owner: Some(effects::encode_owner(&owner)),
         spec_method,
         parameter: default.parameter,
@@ -76,6 +77,7 @@ pub(super) fn decode(
         .try_into()
         .map_err(|_| invalid("invalid default parameter revision fingerprint"))?;
     Ok(ParameterDefaultInfo {
+        injected: default.injected,
         owner,
         parameter: default.parameter,
         revision: etas_code::CodeFingerprint::from_bytes(revision),

@@ -64,6 +64,7 @@ public enum ParameterDefaultOwner {
 }
 
 public type ParameterDefaultInfo = {
+    injected: bool,
     owner: ParameterDefaultOwner,
     parameter: usize,
     revision: string,

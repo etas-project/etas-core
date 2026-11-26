@@ -17,16 +17,13 @@ impl crate::PublishedMethod {
         &mut self,
         mut remap: impl FnMut(CallableValuePathKind, &[String]) -> Vec<String>,
     ) {
+        for default in &mut self.parameter_defaults {
+            default.remap_paths(&mut remap);
+        }
         let mut parts = vec![
             Part::Type(&mut self.self_type),
             Part::Graph(&mut self.callable),
         ];
-        parts.extend(
-            self.parameter_defaults
-                .iter_mut()
-                .filter_map(|default| default.callable_value.as_mut())
-                .map(Part::Graph),
-        );
         for requirement in self
             .requirements
             .trace_requirements
@@ -60,6 +57,51 @@ impl crate::PublishedMethod {
             }
         }
         remap_parts(parts, &mut remap);
+    }
+}
+
+impl crate::ParameterDefault {
+    pub fn remap_paths(
+        &mut self,
+        mut remap: impl FnMut(CallableValuePathKind, &[String]) -> Vec<String>,
+    ) {
+        if let Some(graph) = &mut self.callable_value {
+            graph.remap_paths(&mut remap);
+        }
+        if let Some(binding) = &mut self.binding {
+            let mut parts = vec![
+                Part::Row(&mut binding.public_effects),
+                Part::Row(&mut binding.requested_actions),
+                Part::Row(&mut binding.handled_requested_actions),
+                Part::Trace(&mut binding.action_trace),
+                Part::Row(&mut binding.default_handler_effects.direct_effects),
+                Part::Row(&mut binding.default_handler_effects.default_actions),
+            ];
+            if let Some(behavior) = &mut binding.default_handler_effects.behavior {
+                parts.push(Part::Behavior(behavior));
+            }
+            for handler in &mut binding.default_handler_effects.handlers {
+                parts.push(Part::Effect(&mut handler.action));
+                parts.push(Part::Row(&mut handler.produced));
+            }
+            if let Some(requests) = &mut binding.handler_requests {
+                for action in &mut requests.actions {
+                    parts.push(Part::Effect(&mut action.action));
+                    if let Some(signature) = &mut action.signature {
+                        parts.extend(signature.params.iter_mut().map(Part::Type));
+                        parts.push(Part::Type(&mut signature.output));
+                    }
+                    for binding in action.type_bindings.iter_mut().flatten() {
+                        parts.push(Part::Type(&mut binding.ty));
+                    }
+                }
+                for parameter in &mut requests.parameters {
+                    parts.push(Part::Target(&mut parameter.parameter));
+                    parts.extend(parameter.excluded.iter_mut().map(Part::Effect));
+                }
+            }
+            remap_parts(parts, &mut remap);
+        }
     }
 }
 

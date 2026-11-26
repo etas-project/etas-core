@@ -348,6 +348,8 @@ pub struct Parameter {
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct ParameterDefault {
+    #[prost(bool, tag = "5")]
+    pub injected: bool,
     #[prost(message, optional, tag = "1")]
     pub owner: Option<GenericOwner>,
     #[prost(string, optional, tag = "2")]
