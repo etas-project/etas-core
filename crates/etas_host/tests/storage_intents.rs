@@ -185,6 +185,7 @@ async fn legacy_receipt_missing_target_remains_reserved_and_cannot_be_reexecuted
             .execute_batch(
                 "ALTER TABLE memory_receipts DROP COLUMN key_json;
             ALTER TABLE memory_receipts DROP COLUMN schema_fingerprint;
+            ALTER TABLE memory_stores DROP COLUMN schema_fingerprint;
             UPDATE etas_memory_schema SET format=2;",
             )
             .unwrap();
@@ -208,7 +209,7 @@ async fn legacy_receipt_missing_target_remains_reserved_and_cannot_be_reexecuted
     let (format, revision, count): (i64,i64,i64) = connection.query_row(
         "SELECT (SELECT format FROM etas_memory_schema), revision, (SELECT count(*) FROM memory_receipts) FROM memory_stores",
         [], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))).unwrap();
-    assert_eq!((format, revision, count), (3, 1, 1));
+    assert_eq!((format, revision, count), (4, 1, 1));
 }
 
 #[test]

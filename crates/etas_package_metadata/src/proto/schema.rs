@@ -680,6 +680,8 @@ pub struct ProtoRequestInstantiationTemplate {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoActionRequestTemplate {
+    #[prost(string, optional, tag = "4")]
+    pub injection_name: Option<String>,
     #[prost(message, optional, tag = "1")]
     pub action: Option<ProtoEffectRef>,
     #[prost(message, optional, tag = "2")]
@@ -1071,6 +1073,8 @@ pub struct ProtoConstructorContract {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoConstructorField {
+    #[prost(bool, tag = "4")]
+    pub public: bool,
     #[prost(string, tag = "1")]
     pub name: String,
     #[prost(message, optional, tag = "2")]
@@ -1095,6 +1099,7 @@ pub struct ProtoConstructorGenericArgument {
 
 pub mod proto_constructor_generic_argument {
     #[derive(Clone, PartialEq, prost::Oneof)]
+    #[allow(clippy::large_enum_variant)] // Match the existing inline protobuf type arguments.
     pub enum Value {
         #[prost(message, tag = "1")]
         Type(super::ProtoType),

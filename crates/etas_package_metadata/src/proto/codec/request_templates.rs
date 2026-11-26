@@ -8,6 +8,7 @@ pub(super) fn request_template_to_proto(
             .actions
             .iter()
             .map(|instance| ProtoActionRequestTemplate {
+                injection_name: instance.injection_name.clone(),
                 action: Some(effect_ref_to_proto(&instance.action)),
                 signature: instance.signature.as_ref().map(|signature| {
                     ProtoActionRequestSignature {
@@ -48,6 +49,7 @@ pub(super) fn request_template_from_proto(
             .into_iter()
             .map(|instance| {
                 Ok(ActionRequestTemplate {
+                    injection_name: instance.injection_name,
                     action: effect_ref_from_proto(
                         instance
                             .action
@@ -140,6 +142,7 @@ mod tests {
         ] {
             let template = RequestInstantiationTemplate {
                 actions: vec![ActionRequestTemplate {
+                    injection_name: None,
                     action: action(),
                     type_bindings: bindings,
                     signature: Some(ActionRequestSignature {
@@ -181,6 +184,7 @@ mod tests {
         };
         let template = RequestInstantiationTemplate {
             actions: vec![ActionRequestTemplate {
+                injection_name: None,
                 action: action(),
                 type_bindings: Some(vec![binding.clone(), binding]),
                 signature: None,
@@ -190,6 +194,7 @@ mod tests {
         assert!(request_template_from_proto(request_template_to_proto(&template)).is_err());
         let wire = ProtoRequestInstantiationTemplate {
             actions: vec![ProtoActionRequestTemplate {
+                injection_name: None,
                 action: None,
                 type_bindings: None,
                 signature: None,
@@ -199,6 +204,7 @@ mod tests {
         assert!(request_template_from_proto(wire).is_err());
         let wire = ProtoRequestInstantiationTemplate {
             actions: vec![ProtoActionRequestTemplate {
+                injection_name: None,
                 action: Some(effect_ref_to_proto(&action())),
                 type_bindings: None,
                 signature: Some(ProtoActionRequestSignature {
@@ -239,6 +245,7 @@ mod tests {
                 item: vec!["requests".into(), "build".into()],
                 handler_requests: Some(RequestInstantiationTemplate {
                     actions: vec![ActionRequestTemplate {
+                        injection_name: None,
                         action: action(),
                         signature: None,
                         type_bindings: Some(vec![ActionTypeBinding {
@@ -268,6 +275,7 @@ mod tests {
             Some(RequestInstantiationTemplate {
                 actions: vec![
                     ActionRequestTemplate {
+                        injection_name: None,
                         action: action(),
                         type_bindings: None,
                         signature: None,

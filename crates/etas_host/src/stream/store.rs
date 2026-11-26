@@ -660,7 +660,9 @@ mod tests {
         let result =
             std::panic::catch_unwind(AssertUnwindSafe(|| tls_client_config(&Default::default())));
         assert!(result.is_ok(), "TLS client config construction panicked");
-        result.expect("panic checked above");
+        result
+            .expect("panic checked above")
+            .expect("valid TLS config");
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -885,7 +887,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn read_until_limit_accumulates_until_eof() {
-        let (mut stream, mut writer) = connected_stream().await;
+        let (stream, mut writer) = connected_stream().await;
         writer
             .write_all(b"hello ")
             .await
@@ -898,7 +900,7 @@ mod tests {
 
         let cancellation = CancellationToken::new();
         let payload = read_until_limit(
-            &mut stream,
+            &stream,
             32,
             &cancellation,
             OperationDeadlines::new(&ExecutionBudget::default(), Some(2_000)),
@@ -913,13 +915,13 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn read_until_limit_fails_when_body_exceeds_limit() {
-        let (mut stream, mut writer) = connected_stream().await;
+        let (stream, mut writer) = connected_stream().await;
         writer.write_all(b"abc").await.expect("write body");
         writer.shutdown().await.expect("finish body");
 
         let cancellation = CancellationToken::new();
         let error = read_until_limit(
-            &mut stream,
+            &stream,
             2,
             &cancellation,
             OperationDeadlines::new(&ExecutionBudget::default(), Some(2_000)),

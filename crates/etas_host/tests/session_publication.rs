@@ -671,7 +671,7 @@ async fn disabled_compaction_migration_preserves_published_context_and_receipt()
             row.get(0)
         })
         .unwrap();
-    assert_eq!(version, 9);
+    assert_eq!(version, 10);
 }
 
 #[tokio::test]

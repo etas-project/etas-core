@@ -14,6 +14,7 @@ pub(super) fn to_proto(contract: &ConstructorContract) -> ProtoConstructorContra
             .fields
             .iter()
             .map(|field| ProtoConstructorField {
+                public: field.public,
                 name: field.name.clone(),
                 ty: Some(type_to_proto(&field.ty)),
                 injection: field
@@ -62,6 +63,7 @@ pub(super) fn from_proto(
                     return Err(invalid("constructor field name is required"));
                 }
                 Ok(ConstructorField {
+                    public: field.public,
                     name: field.name,
                     ty: type_from_proto(
                         field
@@ -131,6 +133,7 @@ mod tests {
             agent: false,
             fields: vec![
                 ConstructorField {
+                    public: true,
                     name: "z_first".into(),
                     ty: parameter.clone(),
                     injection: Some(ConstructorInjection {
@@ -153,6 +156,7 @@ mod tests {
                     }),
                 },
                 ConstructorField {
+                    public: true,
                     name: "a_second".into(),
                     ty: parameter,
                     injection: None,

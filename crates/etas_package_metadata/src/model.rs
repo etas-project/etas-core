@@ -466,6 +466,7 @@ pub struct RequestInstantiationTemplate {
     Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
 )]
 pub struct ActionRequestTemplate {
+    pub injection_name: Option<String>,
     pub action: EffectRef,
     /// None means that the request is known, but its payload-generic ABI is not.
     pub type_bindings: Option<Vec<ActionTypeBinding>>,
@@ -1062,6 +1063,7 @@ pub struct ConstructorContract {
     Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
 )]
 pub struct ConstructorField {
+    pub public: bool,
     pub name: String,
     pub ty: Type,
     pub injection: Option<ConstructorInjection>,
@@ -1079,6 +1081,7 @@ pub struct ConstructorInjection {
 #[derive(
     Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, etas_core::RetainedSize,
 )]
+#[allow(clippy::large_enum_variant)] // Preserve the inline constructor metadata API.
 pub enum ConstructorGenericArgument {
     Type(Type),
     EffectRow(EffectRow),

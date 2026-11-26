@@ -81,7 +81,7 @@ public effect Error<Failure> {
 
 /// Requests a value of the given type from the active Handler.
 public effect Inject<T> {
-    action get() -> T;
+    action get(name: string) -> T;
 }
 
 @std.role("std.effects.Fs")
