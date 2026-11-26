@@ -463,28 +463,26 @@ impl<C> PassManager<C> {
     ) -> ArtifactSet {
         let analysis_invalidated = self.analyses.invalidate(preserved);
         let artifact_invalidated = match preserved {
-            PreservedArtifacts::All => ArtifactSet::new(),
-            PreservedArtifacts::None => self.artifacts.difference(produced),
-            PreservedArtifacts::Some(keys) => self.artifacts.difference(keys),
-        };
-
-        let mut retained = ArtifactSet::new();
-        match preserved {
-            PreservedArtifacts::All => retained.extend(&self.artifacts),
-            PreservedArtifacts::None => {}
+            PreservedArtifacts::All => {
+                self.artifacts.extend(produced);
+                return analysis_invalidated;
+            }
+            PreservedArtifacts::None => {
+                let removed = self.artifacts.difference(produced);
+                self.artifacts = ArtifactSet::new();
+                removed
+            }
             PreservedArtifacts::Some(keys) => {
-                for artifact in self
+                let removed = self.artifacts.difference(keys);
+                self.artifacts = self
                     .artifacts
                     .iter_refs()
-                    .filter(|artifact| keys.contains_ref(*artifact))
-                {
-                    retained.insert_ref(artifact);
-                }
+                    .filter(|item| keys.contains_ref(*item))
+                    .collect();
+                removed
             }
-        }
-        retained.extend(produced);
-        self.artifacts = retained;
-
+        };
+        self.artifacts.extend(produced);
         let mut invalidated = artifact_invalidated;
         invalidated.extend(&analysis_invalidated);
         invalidated
