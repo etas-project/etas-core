@@ -40,15 +40,30 @@ impl Blake3State {
         };
     }
 
+    // Split a 32-bit word at 2^distance and move the low bits to the high end.
+    flow xor_rotate(left: u128, right: u128, split: u128) -> u128 ![] {
+        let word = left ^ right;
+        return word / split + (word % split) * (4294967296 / split);
+    }
+
     flow mix(var self, a: usize, b: usize, c: usize, d: usize, x: Word32, y: Word32) -> unit ![] {
-        self.store(a, self.words.get(a).unwrap().add(self.words.get(b).unwrap()).add(x));
-        self.store(d, self.words.get(d).unwrap().xor(self.words.get(a).unwrap()).rotate_right(16));
-        self.store(c, self.words.get(c).unwrap().add(self.words.get(d).unwrap()));
-        self.store(b, self.words.get(b).unwrap().xor(self.words.get(c).unwrap()).rotate_right(12));
-        self.store(a, self.words.get(a).unwrap().add(self.words.get(b).unwrap()).add(y));
-        self.store(d, self.words.get(d).unwrap().xor(self.words.get(a).unwrap()).rotate_right(8));
-        self.store(c, self.words.get(c).unwrap().add(self.words.get(d).unwrap()));
-        self.store(b, self.words.get(b).unwrap().xor(self.words.get(c).unwrap()).rotate_right(7));
+        // Each column or diagonal selects four distinct lanes.
+        var va = self.words.get(a).unwrap().raw;
+        var vb = self.words.get(b).unwrap().raw;
+        var vc = self.words.get(c).unwrap().raw;
+        var vd = self.words.get(d).unwrap().raw;
+        va = (va + vb + x.raw) % 4294967296;
+        vd = Blake3State.xor_rotate(vd, va, 65536);
+        vc = (vc + vd) % 4294967296;
+        vb = Blake3State.xor_rotate(vb, vc, 4096);
+        va = (va + vb + y.raw) % 4294967296;
+        vd = Blake3State.xor_rotate(vd, va, 256);
+        vc = (vc + vd) % 4294967296;
+        vb = Blake3State.xor_rotate(vb, vc, 128);
+        self.store(a, Word32 { raw= va });
+        self.store(b, Word32 { raw= vb });
+        self.store(c, Word32 { raw= vc });
+        self.store(d, Word32 { raw= vd });
     }
 }
 

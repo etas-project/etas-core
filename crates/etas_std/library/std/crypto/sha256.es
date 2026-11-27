@@ -57,19 +57,7 @@ impl Word32 {
     }
 
     flow xor(self, other: Word32) -> Word32 ![] {
-        var left = self.raw;
-        var right = other.raw;
-        var place: u128 = 1;
-        var output: u128 = 0;
-        var bit: usize = 0;
-        while bit < 32 {
-            output = output + ((left % 2 + right % 2) % 2) * place;
-            left = left / 2;
-            right = right / 2;
-            place = place * 2;
-            bit = bit + 1;
-        }
-        return Word32 { raw= output };
+        return Word32 { raw= (self.raw ^ other.raw) % 4294967296 };
     }
 
     flow and(self, other: Word32) -> Word32 ![] {
