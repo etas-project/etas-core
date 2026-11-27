@@ -4,32 +4,58 @@ type MergeSorter<T> = { private compare: (T, T) -> i32 ![] };
 impl MergeSorter<T> {
     flow sorted(self, values: Array<T>) -> Array<T> ![] {
         if values.length < 2 { return values; }
-        let middle = values.length / 2;
-        var left_values: Array<T> = [];
-        var right_values: Array<T> = [];
-        var index: usize = 0;
-        while index < middle {
-            left_values = left_values.push(values.get(index).unwrap());
-            index = index + 1;
+        // Discover natural runs; reversing only strict descending runs preserves stability.
+        var source = values;
+        var runs: Array<usize> = [0];
+        var start: usize = 0;
+        while start < source.length {
+            var end = start + 1;
+            if end < source.length {
+                let descending = (self.compare)(source.get(start).unwrap(), source.get(end).unwrap()) > 0;
+                end = end + 1;
+                while end < source.length {
+                    let order = (self.compare)(source.get(end - 1).unwrap(), source.get(end).unwrap());
+                    if (descending && order <= 0) || (!descending && order > 0) { break; }
+                    end = end + 1;
+                }
+                if descending {
+                    var left = start; var right = end;
+                    while left + 1 < right {
+                        right = right - 1;
+                        let x = source.get(left).unwrap(); let y = source.get(right).unwrap();
+                        source = source.set(left, y)?.unwrap().set(right, x)?.unwrap();
+                        left = left + 1;
+                    }
+                }
+            }
+            runs = runs.push(end);
+            start = end;
         }
-        while index < values.length {
-            right_values = right_values.push(values.get(index).unwrap());
-            index = index + 1;
+        // Two full-size workspaces replace recursively allocated subarrays.
+        var target = source;
+        while runs.length > 2 {
+            var next_runs: Array<usize> = [0];
+            var run: usize = 0;
+            while run + 1 < runs.length {
+                let begin = runs.get(run).unwrap();
+                let middle = runs.get(run + 1).unwrap();
+                let end = if run + 2 < runs.length { runs.get(run + 2).unwrap() } else { middle };
+                var a = begin; var b = middle; var out = begin;
+                while a < middle && b < end {
+                    let x = source.get(a).unwrap(); let y = source.get(b).unwrap();
+                    if (self.compare)(x, y) <= 0 { target = target.set(out, x)?.unwrap(); a = a + 1; }
+                    else { target = target.set(out, y)?.unwrap(); b = b + 1; }
+                    out = out + 1;
+                }
+                while a < middle { target = target.set(out, source.get(a).unwrap())?.unwrap(); a = a + 1; out = out + 1; }
+                while b < end { target = target.set(out, source.get(b).unwrap())?.unwrap(); b = b + 1; out = out + 1; }
+                next_runs = next_runs.push(end);
+                run = run + 2;
+            }
+            let previous = source; source = target; target = previous;
+            runs = next_runs;
         }
-        let left = self.sorted(left_values);
-        let right = self.sorted(right_values);
-        var output: Array<T> = [];
-        var a: usize = 0;
-        var b: usize = 0;
-        while a < left.length && b < right.length {
-            let x = left.get(a).unwrap();
-            let y = right.get(b).unwrap();
-            if (self.compare)(x, y) <= 0 { output = output.push(x); a = a + 1; }
-            else { output = output.push(y); b = b + 1; }
-        }
-        while a < left.length { output = output.push(left.get(a).unwrap()); a = a + 1; }
-        while b < right.length { output = output.push(right.get(b).unwrap()); b = b + 1; }
-        return output;
+        return source;
     }
 }
 public flow sort<T ~ Order>(values: Array<T>) -> Array<T> ![] {

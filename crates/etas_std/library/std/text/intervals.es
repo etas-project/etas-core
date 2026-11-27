@@ -29,11 +29,11 @@ impl Range<I> {
     }
 }
 
-type TextSpan = { private source: string, private start: usize, private end: usize };
+type TextSpan = { private input: bytes, private start: usize, private end: usize };
 
 impl TextSpan {
     flow materialize(self) -> string ![] {
-        let view = self.source.utf8[self.start, self.end)?.unwrap();
+        let view = self.input[self.start, self.end)?.unwrap();
         return match std.codec.text.utf8_decode(view, std.codec.text.Strict) {
             Ok(text) => text,
             Err(_) => std.core.abort("text span UTF-8 invariant"),
@@ -47,10 +47,11 @@ public flow byte_slice<I ~ Index>(text: string, range: Range<I>) -> string ![Err
         Err(error) => perform Error.raise<TextError>(error),
     };
     if end > text.length { perform Error.raise<TextError>(InvalidRange); }
-    if !is_char_boundary(text, start) || !is_char_boundary(text, end) {
+    let input = text.utf8;
+    if !BytePattern.boundary(input, start) || !BytePattern.boundary(input, end) {
         perform Error.raise<TextError>(NotCharBoundary);
     }
-    return TextSpan { source= text, start= start, end= end }.materialize();
+    return TextSpan { input= input, start= start, end= end }.materialize();
 }
 
 public flow char_slice<I ~ Index>(text: string, range: Range<I>) -> string ![Error<TextError>] {
@@ -60,11 +61,14 @@ public flow char_slice<I ~ Index>(text: string, range: Range<I>) -> string ![Err
     };
     if end == 0 { return ""; }
     var ordinal: usize = 0;
-    var output = "";
-    for scalar in chars(text) {
-        if ordinal >= start && ordinal < end { output = output + from_char(scalar); }
+    let input = text.utf8;
+    var begin: usize = 0;
+    var offset: usize = 0;
+    for scalar in (ScalarCursor { input= input, offset= 0 }.iter()) {
+        if ordinal == start { begin = offset; }
+        offset = offset + scalar_width(scalar);
         ordinal = ordinal + 1;
-        if ordinal == end { return output; }
+        if ordinal == end { return TextSpan { input= input, start= if start == end { offset } else { begin }, end= offset }.materialize(); }
     }
     perform Error.raise<TextError>(InvalidRange);
 }
@@ -90,14 +94,15 @@ public flow replace_range<I ~ Index>(text: string, range: Range<I>, replacement:
         Err(error) => perform Error.raise<TextError>(error),
     };
     if end > text.length { perform Error.raise<TextError>(InvalidRange); }
-    if !is_char_boundary(text, start) || !is_char_boundary(text, end) {
+    let input = text.utf8;
+    if !BytePattern.boundary(input, start) || !BytePattern.boundary(input, end) {
         perform Error.raise<TextError>(NotCharBoundary);
     }
     let remaining = text.length - (end - start);
     if replacement.length > usize.maximum() - remaining {
         perform Error.raise<TextError>(LengthOverflow);
     }
-    let before = TextSpan { source= text, start= 0, end= start }.materialize();
-    let after = TextSpan { source= text, start= end, end= text.length }.materialize();
+    let before = TextSpan { input= input, start= 0, end= start }.materialize();
+    let after = TextSpan { input= input, start= end, end= text.length }.materialize();
     return before + replacement + after;
 }

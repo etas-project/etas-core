@@ -4,8 +4,9 @@ public flow group_by<T, K ~ Hash, effect E>(items: Iter<T>, key: (T) -> K ![E]) 
     var groups: Map<K, Array<T>> = Map.new();
     for value in items {
         let name = key(value);
-        let group = match groups.get(name) { None => [], Some(group) => group };
-        groups = groups.insert(name, group.push(value));
+        groups = groups.update(name, (old: Option<Array<T>>) => Some(match old {
+            None => [value], Some(group) => group.push(value),
+        }));
     }
     return groups;
 }
@@ -13,24 +14,21 @@ public flow count_by<T, K ~ Hash, effect E>(items: Iter<T>, key: (T) -> K ![E]) 
     var counts: Map<K, usize> = Map.new();
     for value in items {
         let name = key(value);
-        let count = counts.get(name).unwrap_or(0);
-        counts = counts.insert(name, count + 1);
+        counts = counts.update(name, (old: Option<usize>) => Some(old.unwrap_or(0) + 1));
     }
     return counts;
 }
 public flow frequencies<T ~ Hash>(items: Iter<T>) -> Map<T, usize> ![] {
     var counts: Map<T, usize> = Map.new();
     for value in items {
-        let count = counts.get(value).unwrap_or(0);
-        counts = counts.insert(value, count + 1);
+        counts = counts.update(value, (old: Option<usize>) => Some(old.unwrap_or(0) + 1));
     }
     return counts;
 }
 public flow merge_counts<K ~ Hash>(left: Map<K, usize>, right: Map<K, usize>) -> Map<K, usize> ![] {
     var output = left;
     for (key, count) in right {
-        let previous = output.get(key).unwrap_or(0);
-        output = output.insert(key, previous + count);
+        output = output.update(key, (old: Option<usize>) => Some(old.unwrap_or(0) + count));
     }
     return output;
 }
@@ -105,7 +103,9 @@ public flow unique<T ~ Hash>(values: Array<T>) -> Array<T> ![] {
     var output: Array<T> = [];
     var seen: Set<T> = Set.new();
     for value in values {
-        if !seen.contains(value) { seen = seen.insert(value); output = output.push(value); }
+        let next = seen.insert(value);
+        if next.len() != seen.len() { output = output.push(value); }
+        seen = next;
     }
     return output;
 }
@@ -114,7 +114,9 @@ public flow unique_by_key<T, K ~ Hash>(values: Array<T>, key: (T) -> K ![]) -> A
     var seen: Set<K> = Set.new();
     for value in values {
         let current = key(value);
-        if !seen.contains(current) { seen = seen.insert(current); output = output.push(value); }
+        let next = seen.insert(current);
+        if next.len() != seen.len() { output = output.push(value); }
+        seen = next;
     }
     return output;
 }

@@ -1,59 +1,47 @@
 module std.text;
 
-import std.text.{chars, from_char};
-
-
 public flow char_count(value: string) -> usize ![] {
     var count: usize = 0;
-    for scalar in chars(value) {
-        count = count + 1;
-    }
+    for scalar in chars(value) { count = count + 1; }
     return count;
 }
-
-public flow is_empty(value: string) -> bool ![] {
-    return len(value) == 0;
-}
+public flow is_empty(value: string) -> bool ![] { return value.length == 0; }
 
 public flow trim_start(value: string) -> string ![] {
-    var output = "";
-    var started = false;
-    for scalar in chars(value) {
-        if started || !scalar.is_whitespace() {
-            output = output + from_char(scalar);
-            started = true;
-        }
+    let input = value.utf8;
+    var start: usize = 0;
+    for scalar in (ScalarCursor { input= input, offset= 0 }.iter()) {
+        if !scalar.is_whitespace() { break; }
+        start = start + scalar_width(scalar);
     }
-    return output;
+    if start == 0 { return value; }
+    return TextSpan { input= input, start= start, end= input.length }.materialize();
 }
-
 public flow trim_end(value: string) -> string ![] {
-    var output = "";
-    var pending = "";
-    for scalar in chars(value) {
-        if scalar.is_whitespace() {
-            pending = pending + from_char(scalar);
-        } else {
-            output = output + pending + from_char(scalar);
-            pending = "";
-        }
+    let input = value.utf8;
+    var offset: usize = 0;
+    var end: usize = 0;
+    for scalar in (ScalarCursor { input= input, offset= 0 }.iter()) {
+        offset = offset + scalar_width(scalar);
+        if !scalar.is_whitespace() { end = offset; }
     }
-    return output;
+    if end == input.length { return value; }
+    return TextSpan { input= input, start= 0, end= end }.materialize();
 }
-
-// Whitespace policy and Unicode property lookup both run as Etas code.
 public flow trim(value: string) -> string ![] {
-    var output = "";
-    var pending = "";
-    var started = false;
-    for scalar in chars(value) {
-        if scalar.is_whitespace() {
-            if started { pending = pending + from_char(scalar); }
-        } else {
-            output = output + pending + from_char(scalar);
-            pending = "";
-            started = true;
+    let input = value.utf8;
+    var offset: usize = 0;
+    var start: Option<usize> = None;
+    var end: usize = 0;
+    for scalar in (ScalarCursor { input= input, offset= 0 }.iter()) {
+        let next = offset + scalar_width(scalar);
+        if !scalar.is_whitespace() {
+            if start.is_none() { start = Some(offset); }
+            end = next;
         }
+        offset = next;
     }
-    return output;
+    let begin = match start { None => { return ""; }, Some(at) => at };
+    if begin == 0 && end == input.length { return value; }
+    return TextSpan { input= input, start= begin, end= end }.materialize();
 }

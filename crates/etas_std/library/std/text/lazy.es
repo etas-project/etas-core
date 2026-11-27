@@ -24,12 +24,12 @@ public flow char_indices(text: string) -> Iter<(usize, char)> ![] {
     } };
 }
 
-type LineCursor = { private source: string, private start: usize };
+type LineCursor = { private input: bytes, private start: usize };
 
 impl LineCursor {
     flow iter(self) -> Iter<string> ![] {
         return Iter { next= () => {
-            let input = self.source.utf8;
+            let input = self.input;
             var offset = self.start;
             while offset < input.length {
                 if input.get(offset) == Some(10) {
@@ -38,33 +38,20 @@ impl LineCursor {
                     } else {
                         offset
                     };
-                    let part = TextSpan { source= self.source, start= self.start, end= end }.materialize();
-                    return Some((part, LineCursor { source= self.source, start= offset + 1 }.iter()));
+                    let part = TextSpan { input= self.input, start= self.start, end= end }.materialize();
+                    return Some((part, LineCursor { input= self.input, start= offset + 1 }.iter()));
                 }
                 offset = offset + 1;
             }
             if self.start == input.length { return None; }
-            let part = TextSpan { source= self.source, start= self.start, end= input.length }.materialize();
+            let part = TextSpan { input= self.input, start= self.start, end= input.length }.materialize();
             return Some((part, Iter.empty()));
         } };
     }
 }
 
 public flow lines(text: string) -> Iter<string> ![] {
-    let input = text.utf8;
-    return Iter { next= () => {
-        var offset: usize = 0;
-        while offset < input.length {
-            if input.get(offset) == Some(10) {
-                let end = if offset > 0 && input.get(offset - 1) == Some(13) { offset - 1 } else { offset };
-                let part = TextSpan { source= text, start= 0, end= end }.materialize();
-                return Some((part, LineCursor { source= text, start= offset + 1 }.iter()));
-            }
-            offset = offset + 1;
-        }
-        if input.length == 0 { return None; }
-        return Some((text, Iter.empty()));
-    } };
+    return LineCursor { input= text.utf8, start= 0 }.iter();
 }
 
 type MatchCursor = { private matcher: BytePattern, private input: bytes, private start: usize };
@@ -118,17 +105,17 @@ impl EmptySegments {
     }
 }
 
-type SplitCursor = { private source: string, private matcher: BytePattern, private start: usize };
+type SplitCursor = { private input: bytes, private matcher: BytePattern, private start: usize };
 
 impl SplitCursor {
     flow iter(self) -> Iter<string> ![] {
-        return Iter { next= () => match self.matcher.find(self.source.utf8, self.start) {
+        return Iter { next= () => match self.matcher.find(self.input, self.start) {
             Some((start, end)) => {
-                let part = TextSpan { source= self.source, start= self.start, end= start }.materialize();
-                Some((part, SplitCursor { source= self.source, matcher= self.matcher, start= end }.iter()))
+                let part = TextSpan { input= self.input, start= self.start, end= start }.materialize();
+                Some((part, SplitCursor { input= self.input, matcher= self.matcher, start= end }.iter()))
             },
             None => {
-                let part = TextSpan { source= self.source, start= self.start, end= self.source.length }.materialize();
+                let part = TextSpan { input= self.input, start= self.start, end= self.input.length }.materialize();
                 Some((part, Iter.empty()))
             },
         } };
@@ -140,17 +127,10 @@ public flow split_iter(text: string, separator: string) -> Iter<string> ![] {
         let remaining = chars(text);
         return Iter { next= () => Some(("", EmptySegments { remaining= remaining }.iter())) };
     }
-    let matcher = BytePattern.new(separator);
-    return Iter { next= () => match matcher.find(text.utf8, 0) {
-        Some((start, end)) => {
-            let part = TextSpan { source= text, start= 0, end= start }.materialize();
-            Some((part, SplitCursor { source= text, matcher= matcher, start= end }.iter()))
-        },
-        None => Some((text, Iter.empty())),
-    } };
+    return SplitCursor { input= text.utf8, matcher= BytePattern.new(separator), start= 0 }.iter();
 }
 
-type WhitespaceCursor = { private source: string, private remaining: Iter<char>, private offset: usize };
+type WhitespaceCursor = { private input: bytes, private remaining: Iter<char>, private offset: usize };
 
 impl WhitespaceCursor {
     flow iter(self) -> Iter<string> ![] {
@@ -162,7 +142,7 @@ impl WhitespaceCursor {
                 match (remaining.next)() {
                     None => {
                         return match start {
-                            Some(begin) => Some((TextSpan { source= self.source, start= begin, end= offset }.materialize(), Iter.empty())),
+                            Some(begin) => Some((TextSpan { input= self.input, start= begin, end= offset }.materialize(), Iter.empty())),
                             None => None,
                         };
                     },
@@ -171,8 +151,8 @@ impl WhitespaceCursor {
                         if scalar.is_whitespace() {
                             match start {
                                 Some(begin) => {
-                                    let part = TextSpan { source= self.source, start= begin, end= offset }.materialize();
-                                    return Some((part, WhitespaceCursor { source= self.source, remaining= tail, offset= next }.iter()));
+                                    let part = TextSpan { input= self.input, start= begin, end= offset }.materialize();
+                                    return Some((part, WhitespaceCursor { input= self.input, remaining= tail, offset= next }.iter()));
                                 },
                                 None => {},
                             };
@@ -190,37 +170,7 @@ impl WhitespaceCursor {
 }
 
 public flow split_whitespace(text: string) -> Iter<string> ![] {
-    let input = chars(text);
-    return Iter { next= () => {
-        var remaining = input;
-        var offset: usize = 0;
-        var start: Option<usize> = None;
-        while true {
-            match (remaining.next)() {
-                None => {
-                    return match start {
-                        Some(begin) => Some((TextSpan { source= text, start= begin, end= offset }.materialize(), Iter.empty())),
-                        None => None,
-                    };
-                },
-                Some((scalar, tail)) => {
-                    let next = offset + scalar_width(scalar);
-                    if scalar.is_whitespace() {
-                        match start {
-                            Some(begin) => {
-                                let part = TextSpan { source= text, start= begin, end= offset }.materialize();
-                                return Some((part, WhitespaceCursor { source= text, remaining= tail, offset= next }.iter()));
-                            },
-                            None => {},
-                        };
-                    } else if start.is_none() {
-                        start = Some(offset);
-                    }
-                    offset = next;
-                    remaining = tail;
-                },
-            };
-        }
-        return std.core.abort("whitespace iterator limit exceeded");
-    } };
+    let input = text.utf8;
+    let remaining = ScalarCursor { input= input, offset= 0 }.iter();
+    return WhitespaceCursor { input= input, remaining= remaining, offset= 0 }.iter();
 }

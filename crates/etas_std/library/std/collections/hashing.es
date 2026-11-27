@@ -9,27 +9,12 @@ public spec Hash ~ Eq {
 public type Hasher = { private state: u64 };
 impl Hasher {
     public flow new(seed: u64 = 0) -> Hasher ![] {
-        var left: u128 = 14695981039346656037;
-        var right = seed.bits;
-        var mixed: u128 = 0;
-        var place: u128 = 1;
-        var bit: usize = 0;
-        while bit < 64 {
-            mixed = mixed + ((left % 2 + right % 2) % 2) * place;
-            left = left / 2; right = right / 2; place = place * 2; bit = bit + 1;
-        }
-        return Hasher { state= u64 { bits= mixed } };
+        return Hasher { state= u64 { bits= 14695981039346656037 ^ seed.bits } };
     }
     public flow write(self, data: bytes) -> Hasher ![] {
         var state = self.state.bits;
         for byte in data {
-            var a = state % 256; var b = byte.bits;
-            var low: u128 = 0; var place: u128 = 1; var bit: usize = 0;
-            while bit < 8 {
-                low = low + ((a % 2 + b % 2) % 2) * place;
-                a = a / 2; b = b / 2; place = place * 2; bit = bit + 1;
-            }
-            state = ((state - state % 256 + low) * 1099511628211) % 18446744073709551616;
+            state = ((state ^ byte.bits) * 1099511628211) % 18446744073709551616;
         }
         return Hasher { state= u64 { bits= state } };
     }

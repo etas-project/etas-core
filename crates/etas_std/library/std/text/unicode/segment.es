@@ -176,20 +176,32 @@ impl ClusterCursor {
     }
 }
 
+type GraphemeInput = { private input: bytes };
+impl GraphemeInput {
+    flow slice(self, start: usize, end: usize) -> string ![] {
+        return match std.codec.text.utf8_decode(self.input[start, end)?.unwrap(), std.codec.text.Strict) {
+            Ok(text) => text,
+            Err(_) => std.core.abort("grapheme UTF-8 invariant"),
+        };
+    }
+}
+
 public flow grapheme_indices(value: string) -> Iter<(usize, string)> ![] {
     let cursor = ClusterCursor { remaining= std.text.chars(value), offset= 0, start= 0, context= GraphemeContext.new() };
+    let input = GraphemeInput { input= value.utf8 };
     return cursor.ranges().map((range: (usize, usize)) => {
         let (start, end) = range;
-        let part = std.text.get_byte_slice(value, [start, end)).unwrap();
+        let part = input.slice(start, end);
         return (start, part);
     });
 }
 
 public flow graphemes(value: string) -> Iter<string> ![] {
     let cursor = ClusterCursor { remaining= std.text.chars(value), offset= 0, start= 0, context= GraphemeContext.new() };
+    let input = GraphemeInput { input= value.utf8 };
     return cursor.ranges().map((range: (usize, usize)) => {
         let (start, end) = range;
-        return std.text.get_byte_slice(value, [start, end)).unwrap();
+        return input.slice(start, end);
     });
 }
 
@@ -204,15 +216,14 @@ public flow grapheme_count(value: string) -> usize ![] {
 
 public flow reverse_graphemes(value: string) -> string ![] {
     let cursor = ClusterCursor { remaining= std.text.chars(value), offset= 0, start= 0, context= GraphemeContext.new() };
+    let input = GraphemeInput { input= value.utf8 };
     var parts: List<string> = [];
     for (start, end) in cursor.ranges() {
-        parts = std.text.get_byte_slice(value, [start, end)).unwrap() :: parts;
+        parts = input.slice(start, end) :: parts;
     }
-    var output = "";
-    for part in parts {
-        output = output + part;
-    }
-    return output;
+    var output = std.text.TextBuilder.new();
+    for part in parts { output.append(part); }
+    return output.build();
 }
 
 public flow grapheme_slice<I ~ std.core.Index>(value: string, range: Range<I>) -> string ![Error<std.text.TextError>] {
@@ -237,13 +248,12 @@ public flow grapheme_slice<I ~ std.core.Index>(value: string, range: Range<I>) -
     if end == 0 { return ""; }
     let cursor = ClusterCursor { remaining= std.text.chars(value), offset= 0, start= 0, context= GraphemeContext.new() };
     var ordinal: usize = 0;
-    var output = "";
-    for (begin, finish) in cursor.ranges() {
-        if ordinal >= start {
-            output = output + std.text.get_byte_slice(value, [begin, finish)).unwrap();
-        }
+    let input = GraphemeInput { input= value.utf8 };
+    var selected: usize = 0;
+    for (begin, finish_offset) in cursor.ranges() {
+        if ordinal == start { selected = begin; }
         ordinal = ordinal + 1;
-        if ordinal == end { return output; }
+        if ordinal == end { return input.slice(if start == end { finish_offset } else { selected }, finish_offset); }
     }
     perform Error.raise<std.text.TextError>(std.text.InvalidRange);
 }

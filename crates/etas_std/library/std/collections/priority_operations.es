@@ -71,13 +71,37 @@ impl PriorityQueue<T, P> {
         return (remaining, entry);
     }
     public flow push_pop(self, value: T, priority: P) -> (PriorityQueue<T, P>, T) ![] {
-        let inserted = self.push(value, priority);
-        let (remaining, value) = inserted.pop();
-        return (remaining, value.unwrap());
+        if self.size == 0 { return (self, value); }
+        let top = self.slots.get(self.heap.get(0).unwrap()).unwrap().unwrap();
+        if (self.compare)(priority, top.priority) > 0 { return (self, value); }
+        let (updated, removed) = self.replace_top(value, priority);
+        return (updated, removed.unwrap());
     }
     public flow replace_top(self, value: T, priority: P) -> (PriorityQueue<T, P>, Option<T>) ![] {
-        let (remaining, previous) = self.pop();
-        return (remaining.push(value, priority), previous);
+        if self.size == 0 { return (self.push(value, priority), None); }
+        let old_slot = self.heap.get(0).unwrap();
+        let previous = self.slots.get(old_slot).unwrap().unwrap();
+        let slot = self.slots.length;
+        let entry = PriorityEntry { value= value, priority= priority, order= slot };
+        let slots = self.slots.set(old_slot, None)?.unwrap().push(Some(entry));
+        var heap = self.heap;
+        var parent: usize = 0;
+        while parent < self.size / 2 {
+            let left = parent * 2 + 1;
+            let right = left + 1;
+            var child = left;
+            if right < self.size && slots.get(heap.get(right).unwrap()).unwrap().unwrap().before(slots.get(heap.get(left).unwrap()).unwrap().unwrap(), self.compare) {
+                child = right;
+            }
+            let child_slot = heap.get(child).unwrap();
+            if !slots.get(child_slot).unwrap().unwrap().before(entry, self.compare) { break; }
+            heap = heap.set(parent, child_slot)?.unwrap();
+            parent = child;
+        }
+        heap = heap.set(parent, slot)?.unwrap();
+        let updated = PriorityQueue { slots= slots, heap= heap, size= self.size, compare= self.compare };
+        if slots.length - self.size > self.size + 8 { return (updated.compacted(), Some(previous.value)); }
+        return (updated, Some(previous.value));
     }
     public flow to_sorted_array(self) -> Array<T> ![] {
         var queue = self;

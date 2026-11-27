@@ -4,10 +4,49 @@ type CombiningEntry = { scalar: u32, class: usize };
 type Decomposition = { scalar: u32, compatibility: bool, parts: Array<u32> };
 type Composition = { key: u128, scalar: u32 };
 type NormalizationData = {};
+enum NormalizationCheck { Yes, No, Maybe }
 
 let NORMALIZER = NormalizationData {};
 
 impl NormalizationData {
+    flow quick_property(self, scalar: u32, mask: u128) -> NormalizationCheck ![] {
+        var low: usize = 0; var high = QUICK_CHECK_RANGES.length;
+        while low < high {
+            let middle = low + (high - low) / 2;
+            let record = QUICK_CHECK_RANGES.get(middle).unwrap();
+            if scalar < record.start { high = middle; }
+            else if scalar > record.end { low = middle + 1; }
+            else {
+                if (record.no / mask) % 2 != 0 { return NormalizationCheck.No; }
+                if (record.maybe / mask) % 2 != 0 { return NormalizationCheck.Maybe; }
+                return NormalizationCheck.Yes;
+            }
+        }
+        return NormalizationCheck.Yes;
+    }
+    flow quick_check(self, value: string, form: Normalization) -> NormalizationCheck ![] {
+        let mask: u128 = match form {
+            Normalization.NFC => 1, Normalization.NFD => 2,
+            Normalization.NFKC => 4, Normalization.NFKD => 8,
+        };
+        var previous_class: usize = 0;
+        var uncertain = false;
+        for scalar in std.text.chars(value) {
+            let code = scalar.to_u32();
+            // All ASCII scalars are starters and Quick_Check=Yes for every form.
+            if code < 128 { previous_class = 0; continue; }
+            let class = self.combining_class(code);
+            if class != 0 && previous_class > class { return NormalizationCheck.No; }
+            previous_class = class;
+            match self.quick_property(code, mask) {
+                NormalizationCheck.No => { return NormalizationCheck.No; },
+                NormalizationCheck.Maybe => { uncertain = true; },
+                NormalizationCheck.Yes => {},
+            };
+        }
+        return if uncertain { NormalizationCheck.Maybe } else { NormalizationCheck.Yes };
+    }
+
     flow combining_class(self, scalar: u32) -> usize ![] {
         var low: usize = 0;
         var high = COMBINING_CLASSES.length;
@@ -145,6 +184,7 @@ impl CanonicalOrder {
 }
 
 public flow normalize(value: string, form: Normalization) -> string ![] {
+    if NORMALIZER.quick_check(value, form) == NormalizationCheck.Yes { return value; }
     var order = CanonicalOrder.new();
     let compatibility = form.compatibility();
     for scalar in std.text.chars(value) {
@@ -186,6 +226,9 @@ public flow normalize(value: string, form: Normalization) -> string ![] {
 }
 
 public flow is_normalized(value: string, form: Normalization) -> bool ![] {
-    let normalized = normalize(value, form);
-    return normalized == value;
+    return match NORMALIZER.quick_check(value, form) {
+        NormalizationCheck.Yes => true,
+        NormalizationCheck.No => false,
+        NormalizationCheck.Maybe => normalize(value, form) == value,
+    };
 }

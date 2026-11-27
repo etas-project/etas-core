@@ -1,70 +1,58 @@
 module std.text;
 
-import std.text.{chars, char_count, from_char, character_array, matches_at, match_position};
-
-
 public flow splitn(text: string, separator: string, limit: usize) -> Array<string> ![] {
-    var output: Array<string> = [];
-    if limit == 0 { return output; }
+    if limit == 0 { return []; }
     if limit == 1 { return [text]; }
-    let width = char_count(separator);
+    let input = text.utf8;
+    var output: Array<string> = [];
     var remaining = limit - 1;
-    var segment = "";
-    if width == 0 {
+    var start: usize = 0;
+    if separator.length == 0 {
         output = output.push("");
         remaining = remaining - 1;
-        for scalar in chars(text) {
-            if remaining > 0 {
-                output = output.push(from_char(scalar));
-                remaining = remaining - 1;
-            } else { segment = segment + from_char(scalar); }
-        }
-        return output.push(segment);
-    }
-    let values = character_array(text);
-    let expected = character_array(separator);
-    let length = char_count(text);
-    var index: usize = 0;
-    while index < length {
-        if remaining > 0 && matches_at(values, expected, index) {
-            output = output.push(segment);
-            segment = "";
+        for scalar in (ScalarCursor { input= input, offset= 0 }.iter()) {
+            if remaining == 0 { break; }
+            let end = start + scalar_width(scalar);
+            output = output.push(TextSpan { input= input, start= start, end= end }.materialize());
+            start = end;
             remaining = remaining - 1;
-            index = index + width;
-        } else {
-            segment = segment + from_char(values.get(index).unwrap());
-            index = index + 1;
         }
+    } else {
+        let matcher = BytePattern.new(separator);
+        while remaining > 0 {
+            match matcher.find(input, start) {
+                None => { break; },
+                Some((begin, end)) => {
+                    output = output.push(TextSpan { input= input, start= start, end= begin }.materialize());
+                    start = end;
+                    remaining = remaining - 1;
+                },
+            };
+        }
+        if output.length == 0 { return [text]; }
     }
-    return output.push(segment);
+    return output.push(TextSpan { input= input, start= start, end= input.length }.materialize());
 }
-
 public flow split(text: string, separator: string) -> Array<string> ![] {
-    return splitn(text, separator, char_count(text) + 2);
+    return splitn(text, separator, text.length + 2);
 }
-
-flow partition(text: string, start: usize, width: usize) -> (string, string) ![] {
-    var left = "";
-    var right = "";
-    var index: usize = 0;
-    for scalar in chars(text) {
-        if index < start { left = left + from_char(scalar); }
-        else if index >= start + width { right = right + from_char(scalar); }
-        index = index + 1;
-    }
-    return (left, right);
-}
-
 public flow split_once(text: string, separator: string) -> Option<(string, string)> ![] {
-    return match match_position(text, separator, false) {
-        Some((index, _)) => Some(partition(text, index, char_count(separator))),
+    let input = text.utf8;
+    return match BytePattern.new(separator).find(input, 0) {
+        Some((start, end)) => Some((
+            TextSpan { input= input, start= 0, end= start }.materialize(),
+            TextSpan { input= input, start= end, end= input.length }.materialize(),
+        )),
         None => None,
     };
 }
-
 public flow rsplit_once(text: string, separator: string) -> Option<(string, string)> ![] {
-    return match match_position(text, separator, true) {
-        Some((index, _)) => Some(partition(text, index, char_count(separator))),
+    let input = text.utf8;
+    return match BytePattern.new(separator).last(input) {
+        Some((start, end)) => Some((
+            TextSpan { input= input, start= 0, end= start }.materialize(),
+            TextSpan { input= input, start= end, end= input.length }.materialize(),
+        )),
         None => None,
     };
 }

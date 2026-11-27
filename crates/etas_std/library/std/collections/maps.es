@@ -79,9 +79,12 @@ impl Map<K ~ Hash, V> {
             },
             None => {},
         };
-        let grown = if indexed.length + 1 > indexed.buckets.length - indexed.buckets.length / 4 {
-            indexed.reindexed(indexed.buckets.length * 2)
-        } else { indexed };
+        return indexed.appended(key, value, hash);
+    }
+    flow appended(self, key: K, value: V, hash: u64) -> Map<K, V> ![] {
+        let grown = if self.length + 1 > self.buckets.length - self.buckets.length / 4 {
+            self.reindexed(self.buckets.length * 2)
+        } else { self };
         let bucket = usize { bits= hash.bits % grown.buckets.length.bits };
         let chain = grown.slots.length :: (grown.buckets.get(bucket).unwrap());
         let buckets = grown.buckets.set(bucket, chain)?.unwrap();
@@ -93,25 +96,26 @@ impl Map<K ~ Hash, V> {
         let hash = key.hash(indexed.base).finish();
         let slot = match indexed.locate(key, hash) { None => { return (indexed, None); }, Some(slot) => slot };
         let old = indexed.slots.get(slot).unwrap().unwrap();
-        let length = indexed.length - 1;
-        if length == 0 { return (Map { buckets= Array.repeat(8, []), slots= [], length= 0, base= indexed.base }, Some(old.value)); }
-        let bucket = usize { bits= hash.bits % indexed.buckets.length.bits };
+        return (indexed.without_slot(slot, hash), Some(old.value));
+    }
+    flow without_slot(self, slot: usize, hash: u64) -> Map<K, V> ![] {
+        let length = self.length - 1;
+        if length == 0 { return Map { buckets= Array.repeat(8, []), slots= [], length= 0, base= self.base }; }
+        let bucket = usize { bits= hash.bits % self.buckets.length.bits };
         var chain: List<usize> = [];
-        for candidate in indexed.buckets.get(bucket).unwrap() {
+        for candidate in self.buckets.get(bucket).unwrap() {
             if candidate != slot { chain = candidate :: chain; }
         }
         let updated = Map {
-            buckets= indexed.buckets.set(bucket, chain)?.unwrap(),
-            slots= indexed.slots.set(slot, None)?.unwrap(),
-            length= length, base= indexed.base,
+            buckets= self.buckets.set(bucket, chain)?.unwrap(),
+            slots= self.slots.set(slot, None)?.unwrap(),
+            length= length, base= self.base,
         };
         if length < updated.buckets.length / 4 && updated.buckets.length > 8 {
-            return (updated.reindexed(updated.buckets.length / 2), Some(old.value));
+            return updated.reindexed(updated.buckets.length / 2);
         }
-        if updated.slots.length - length > length + 8 {
-            return (updated.reindexed(updated.buckets.length), Some(old.value));
-        }
-        return (updated, Some(old.value));
+        if updated.slots.length - length > length + 8 { return updated.reindexed(updated.buckets.length); }
+        return updated;
     }
     public flow remove(self, key: K) -> Map<K, V> ![] {
         let (updated, _) = self.removed(key);
@@ -122,13 +126,39 @@ impl Map<K ~ Hash, V> {
         return (updated, old);
     }
     public flow update<effect E>(self, key: K, f: (Option<V>) -> Option<V> ![E]) -> Map<K, V> ![E] {
-        return match f(self.get(key)) { Some(value) => self.insert(key, value), None => self.remove(key) };
+        let indexed = if self.buckets.is_empty() { self.reindexed(8 + self.length * 2) } else { self };
+        let hash = key.hash(indexed.base).finish();
+        let slot = indexed.locate(key, hash);
+        let old = match slot {
+            Some(at) => Some(indexed.slots.get(at).unwrap().unwrap().value),
+            None => None,
+        };
+        return match f(old) {
+            Some(value) => match slot {
+                Some(at) => {
+                    let entry = indexed.slots.get(at).unwrap().unwrap();
+                    indexed { slots= indexed.slots.set(at, Some(entry { value= value }))?.unwrap() }
+                },
+                None => indexed.appended(key, value, hash),
+            },
+            None => match slot {
+                Some(at) => indexed.without_slot(at, hash),
+                None => indexed,
+            },
+        };
     }
     public flow merge<effect E>(self, other: Map<K, V>, resolve: (K, V, V) -> V ![E]) -> Map<K, V> ![E] {
-        var output = self;
+        var output = if self.buckets.is_empty() { self.reindexed(8 + self.length * 2) } else { self };
         for (key, right) in other {
-            let value = match output.get(key) { None => right, Some(left) => resolve(key, left, right) };
-            output = output.insert(key, value);
+            let hash = key.hash(output.base).finish();
+            match output.locate(key, hash) {
+                Some(slot) => {
+                    let old = output.slots.get(slot).unwrap().unwrap();
+                    let value = resolve(key, old.value, right);
+                    output = output { slots= output.slots.set(slot, Some(old { value= value }))?.unwrap() };
+                },
+                None => { output = output.appended(key, right, hash); },
+            };
         }
         return output;
     }
@@ -175,7 +205,12 @@ impl Set<T ~ Hash> {
     public flow len(self) -> usize ![] { return self.values.len(); }
     public flow is_empty(self) -> bool ![] { return self.values.is_empty(); }
     public flow contains(self, value: T) -> bool ![] { return self.values.contains_key(value); }
-    public flow insert(self, value: T) -> Set<T> ![] { return Set { values= self.values.insert(value, ()) }; }
+    public flow insert(self, value: T) -> Set<T> ![] {
+        let values = if self.values.buckets.is_empty() { self.values.reindexed(8 + self.values.length * 2) } else { self.values };
+        let hash = value.hash(values.base).finish();
+        if values.locate(value, hash).is_some() { return Set { values= values }; }
+        return Set { values= values.appended(value, (), hash) };
+    }
     public flow remove(self, value: T) -> Set<T> ![] { return Set { values= self.values.remove(value) }; }
     public flow union(self, other: Set<T>) -> Set<T> ![] {
         var values = self.values;

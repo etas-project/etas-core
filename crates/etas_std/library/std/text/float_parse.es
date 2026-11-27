@@ -10,19 +10,18 @@ type FloatLayout = {
     private maximum_exponent: i128,
     private minimum_decimal: i128,
     private maximum_decimal: i128,
-    private roundtrip_digits: usize,
 };
 
 let FLOAT32 = FloatLayout {
     fraction= 23, exponent_bits= 8, bias= 127,
     minimum_exponent= -126, maximum_exponent= 127,
-    minimum_decimal= -46, maximum_decimal= 38, roundtrip_digits= 9,
+    minimum_decimal= -46, maximum_decimal= 38,
 };
 
 let FLOAT64 = FloatLayout {
     fraction= 52, exponent_bits= 11, bias= 1023,
     minimum_exponent= -1022, maximum_exponent= 1023,
-    minimum_decimal= -324, maximum_decimal= 308, roundtrip_digits= 17,
+    minimum_decimal= -324, maximum_decimal= 308,
 };
 
 impl FloatLayout {
@@ -38,7 +37,8 @@ impl FloatLayout {
             negative = input.get(0) == Some(45);
             position = 1;
         }
-        var number = BigNat.new(0);
+        var number: u128 = 0;
+        var wide: Option<BigNat> = None;
         var digits: usize = 0;
         var fractional: usize = 0;
         var significant: usize = 0;
@@ -48,7 +48,15 @@ impl FloatLayout {
         while position < input.length {
             let byte = input.get(position).unwrap();
             if byte >= 48 && byte <= 57 {
-                number = number.multiply_small(10).add_small(byte.bits - 48);
+                let digit = byte.bits - 48;
+                match wide {
+                    Some(value) => { wide = Some(value.multiply_small(10).add_small(digit)); },
+                    None => {
+                        if number <= (18446744073709551615 - digit) / 10 {
+                            number = number * 10 + digit;
+                        } else { wide = Some(BigNat.new(number).multiply_small(10).add_small(digit)); }
+                    },
+                };
                 digits = digits + 1;
                 if decimal { fractional = fractional + 1; }
                 if byte != 48 { nonzero = true; }
@@ -99,10 +107,64 @@ impl FloatLayout {
         if decimal_exponent < self.minimum_decimal || decimal_exponent > self.maximum_decimal {
             return Err(NumericOverflow);
         }
-        return match self.from_decimal(number, power) {
+        let exact = match wide {
+            Some(value) => value,
+            None => {
+                match self.fast_decimal(number, power) {
+                    Some(bits) => { return Ok(sign + bits); },
+                    None => {},
+                };
+                BigNat.new(number)
+            },
+        };
+        return match self.from_decimal(exact, power) {
             Ok(bits) => Ok(sign + bits),
             Err(error) => Err(error),
         };
+    }
+
+    // Eisel-Lemire conversion adapted from Go 1.23 strconv/eisel_lemire.go.
+    // Copyright 2020 The Go Authors. See licenses/GO-BSD-3-Clause.txt.
+    // Ambiguous rounding, subnormals and overflow retain the exact BigNat path.
+    flow fast_decimal(self, number: u128, exponent: i128) -> Option<u128> ![] {
+        if number == 0 { return Some(0); }
+        if exponent < -348 || exponent > 347 { return None; }
+        var mantissa = number;
+        var leading: i128 = 0;
+        if mantissa < 4294967296 { mantissa = mantissa * 4294967296; leading = leading + 32; }
+        if mantissa < 281474976710656 { mantissa = mantissa * 65536; leading = leading + 16; }
+        if mantissa < 72057594037927936 { mantissa = mantissa * 256; leading = leading + 8; }
+        if mantissa < 1152921504606846976 { mantissa = mantissa * 16; leading = leading + 4; }
+        if mantissa < 4611686018427387904 { mantissa = mantissa * 4; leading = leading + 2; }
+        if mantissa < 9223372036854775808 { mantissa = mantissa * 2; leading = leading + 1; }
+        var binary_exponent = self.floor_ratio(217706 * exponent, 65536) + 64 + self.bias - leading;
+        let factor = DECIMAL_POWERS.get(usize { bits= (exponent + 348).bits }).unwrap();
+        let product = mantissa * factor.high;
+        var high = product / 18446744073709551616;
+        var low = product % 18446744073709551616;
+        let shift: usize = 61 - self.fraction;
+        let unit = FLOAT_POWERS.get(shift).unwrap();
+        if high % unit == unit - 1 && low + mantissa >= 18446744073709551616 {
+            let wider = mantissa * factor.low;
+            let middle = low + wider / 18446744073709551616;
+            high = high + middle / 18446744073709551616;
+            low = middle % 18446744073709551616;
+            if high % unit == unit - 1 && low == 18446744073709551615
+                && wider % 18446744073709551616 + mantissa >= 18446744073709551616 { return None; }
+        }
+        let msb = high / 9223372036854775808;
+        var rounded = high / FLOAT_POWERS.get(shift + usize { bits= msb }).unwrap();
+        binary_exponent = binary_exponent - i128 { bits= 1 - msb };
+        if low == 0 && high % unit == 0 && rounded % 4 == 1 { return None; }
+        rounded = (rounded + rounded % 2) / 2;
+        if rounded >= FLOAT_POWERS.get(self.fraction + 1).unwrap() {
+            rounded = rounded / 2;
+            binary_exponent = binary_exponent + 1;
+        }
+        let ceiling = i128 { bits= FLOAT_POWERS.get(self.exponent_bits).unwrap() - 1 };
+        if binary_exponent <= 0 || binary_exponent >= ceiling { return None; }
+        let implicit = FLOAT_POWERS.get(self.fraction).unwrap();
+        return Some(binary_exponent.bits * implicit + rounded % implicit);
     }
 
     flow from_decimal(self, significand: BigNat, exponent: i128) -> Result<u128, TextError> ![] {

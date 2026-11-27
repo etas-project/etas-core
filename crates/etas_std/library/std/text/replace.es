@@ -1,42 +1,40 @@
 module std.text;
 
-import std.text.{chars, char_count, from_char, character_array, matches_at};
-
-
 public flow replace_n(text: string, pattern: string, replacement: string, limit: usize) -> string ![] {
     if limit == 0 { return text; }
-    let width = char_count(pattern);
+    let input = text.utf8;
+    var output = TextBuilder.new();
     var remaining = limit;
-    var output = "";
-    if width == 0 {
-        output = replacement;
+    var start: usize = 0;
+    if pattern.length == 0 {
+        output.append(replacement);
         remaining = remaining - 1;
-        for scalar in chars(text) {
-            output = output + from_char(scalar);
-            if remaining > 0 {
-                output = output + replacement;
-                remaining = remaining - 1;
-            }
-        }
-        return output;
-    }
-    let values = character_array(text);
-    let expected = character_array(pattern);
-    let length = char_count(text);
-    var index: usize = 0;
-    while index < length {
-        if remaining > 0 && matches_at(values, expected, index) {
-            output = output + replacement;
+        for scalar in (ScalarCursor { input= input, offset= 0 }.iter()) {
+            if remaining == 0 { break; }
+            let end = start + scalar_width(scalar);
+            output.append(TextSpan { input= input, start= start, end= end }.materialize());
+            output.append(replacement);
+            start = end;
             remaining = remaining - 1;
-            index = index + width;
-        } else {
-            output = output + from_char(values.get(index).unwrap());
-            index = index + 1;
         }
+    } else {
+        let matcher = BytePattern.new(pattern);
+        while remaining > 0 {
+            match matcher.find(input, start) {
+                None => { break; },
+                Some((begin, end)) => {
+                    output.append(TextSpan { input= input, start= start, end= begin }.materialize());
+                    output.append(replacement);
+                    start = end;
+                    remaining = remaining - 1;
+                },
+            };
+        }
+        if remaining == limit { return text; }
     }
-    return output;
+    output.append(TextSpan { input= input, start= start, end= input.length }.materialize());
+    return output.build();
 }
-
 public flow replace(text: string, pattern: string, replacement: string) -> string ![] {
-    return replace_n(text, pattern, replacement, char_count(text) + 1);
+    return replace_n(text, pattern, replacement, text.length + 1);
 }
