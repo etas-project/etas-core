@@ -2,9 +2,9 @@
 """Exercise the maintained Etas algorithms through a compiled source SDK.
 
 Usage: validate_algorithms.py --binary PATH --sysroot PATH
-The sysroot must contain the freshly built std/manifest.json. Iterator-consuming
-fixtures are compiled alongside its retained source to preserve callable facts;
-float fixtures call the supplied SDK directly. No legacy registry is involved.
+The sysroot must contain the freshly built std/manifest.json. Every fixture is
+an independent consumer of the supplied SDK, including iterator consumers.
+No fixture source is compiled into std, and no legacy registry is involved.
 Float expectations come from Rust's standard library; Unicode expectations
 come from the repository's existing UCD 17 fixtures.
 """
@@ -13,7 +13,6 @@ import json
 from pathlib import Path
 import random
 import re
-import shutil
 import subprocess
 import tempfile
 
@@ -30,12 +29,6 @@ def array(values):
 def checked_lines(checks, first=1):
     lines = []
     for index, (label, expression) in enumerate(checks, first):
-        if ".collect()" in expression:
-            # Use the same direct consumer as the existing text API fixtures.
-            producer, rest = expression.split(".collect()", 1)
-            local = f"collected_{index}"
-            lines.extend([f"    var {local} = [];", f"    for entry in {producer} {{ {local} = {local}.push(entry); }}"])
-            expression = local + rest
         lines.append(f"    if !({expression}) {{ return {index}; }} // {label}")
     return lines
 
@@ -47,22 +40,6 @@ def run_suite(binary, sysroot, work, name, setup, checks):
         lines.extend(checked_lines(checks))
     lines.extend(["    return 0;", "}"])
     source.write_text("\n".join(lines) + "\n")
-    if name in ("text", "collections", "unicode"):
-        # Compile the fixture alongside std so iterator behaviour is checked with
-        # its source facts, rather than the currently incomplete exported facts.
-        package = work / f"{name}-source"
-        package.mkdir(exist_ok=True)
-        shutil.copy2(sysroot / "std/etas.toml", package / "etas.toml")
-        shutil.copytree(sysroot / "std/library", package / "library", dirs_exist_ok=True)
-        fixture = package / f"library/std/algorithm_validation/{name}.es"
-        fixture.parent.mkdir(parents=True, exist_ok=True)
-        fixture.write_text(source.read_text().replace("module app.main;", f"module std.algorithm_validation.{name};").replace("flow main(args: Array<string>) -> i32", "public flow run() -> i32"))
-        sysroot = work / f"{name}-sdk"
-        build = subprocess.run([str(binary), "std", "build", "--manifest-path", str(package / "etas.toml"), "--out-dir", str(sysroot / "std")], capture_output=True, text=True, timeout=240)
-        (work / f"{name}.sdk-build.log").write_text(build.stdout + build.stderr)
-        if build.returncode:
-            raise RuntimeError(f"{name} fixture SDK failed:\n{build.stdout[:5000]}\n{build.stderr[:5000]}")
-        source.write_text(f"module app.main;\nflow main(args: Array<string>) -> i32 {{ return std.algorithm_validation.{name}.run(); }}\n")
     command = [str(binary), "--no-config", "--std-provider", "artifact", "--sysroot", str(sysroot), "--format", "json", "run", str(source)]
     result = subprocess.run(command, capture_output=True, text=True, timeout=240)
     (work / f"{name}.stdout.json").write_text(result.stdout)
