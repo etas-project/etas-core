@@ -2,15 +2,18 @@
 """Exercise the maintained Etas algorithms through a compiled source SDK.
 
 Usage: validate_algorithms.py --binary PATH --sysroot PATH
-The sysroot must contain the freshly built std/manifest.json. No legacy
-registry is involved. Float expectations come from Rust's standard library;
-Unicode expectations come from the repository's existing UCD 17 fixtures.
+The sysroot must contain the freshly built std/manifest.json. Iterator-consuming
+fixtures are compiled alongside its retained source to preserve callable facts;
+float fixtures call the supplied SDK directly. No legacy registry is involved.
+Float expectations come from Rust's standard library; Unicode expectations
+come from the repository's existing UCD 17 fixtures.
 """
 import argparse
 import json
 from pathlib import Path
 import random
 import re
+import shutil
 import subprocess
 import tempfile
 
@@ -24,13 +27,42 @@ def array(values):
     return "[" + ", ".join(literal(value) if isinstance(value, str) else str(value) for value in values) + "]"
 
 
+def checked_lines(checks, first=1):
+    lines = []
+    for index, (label, expression) in enumerate(checks, first):
+        if ".collect()" in expression:
+            # Use the same direct consumer as the existing text API fixtures.
+            producer, rest = expression.split(".collect()", 1)
+            local = f"collected_{index}"
+            lines.extend([f"    var {local} = [];", f"    for entry in {producer} {{ {local} = {local}.push(entry); }}"])
+            expression = local + rest
+        lines.append(f"    if !({expression}) {{ return {index}; }} // {label}")
+    return lines
+
+
 def run_suite(binary, sysroot, work, name, setup, checks):
     source = work / f"{name}.es"
     lines = ["module app.main;", "flow main(args: Array<string>) -> i32 {", setup]
-    for index, (label, expression) in enumerate(checks, 1):
-        lines.append(f"    if !({expression}) {{ return {index}; }} // {label}")
+    if name != "unicode":
+        lines.extend(checked_lines(checks))
     lines.extend(["    return 0;", "}"])
     source.write_text("\n".join(lines) + "\n")
+    if name in ("text", "collections", "unicode"):
+        # Compile the fixture alongside std so iterator behaviour is checked with
+        # its source facts, rather than the currently incomplete exported facts.
+        package = work / f"{name}-source"
+        package.mkdir(exist_ok=True)
+        shutil.copy2(sysroot / "std/etas.toml", package / "etas.toml")
+        shutil.copytree(sysroot / "std/library", package / "library", dirs_exist_ok=True)
+        fixture = package / f"library/std/algorithm_validation/{name}.es"
+        fixture.parent.mkdir(parents=True, exist_ok=True)
+        fixture.write_text(source.read_text().replace("module app.main;", f"module std.algorithm_validation.{name};").replace("flow main(args: Array<string>) -> i32", "public flow run() -> i32"))
+        sysroot = work / f"{name}-sdk"
+        build = subprocess.run([str(binary), "std", "build", "--manifest-path", str(package / "etas.toml"), "--out-dir", str(sysroot / "std")], capture_output=True, text=True, timeout=240)
+        (work / f"{name}.sdk-build.log").write_text(build.stdout + build.stderr)
+        if build.returncode:
+            raise RuntimeError(f"{name} fixture SDK failed:\n{build.stdout[:5000]}\n{build.stderr[:5000]}")
+        source.write_text(f"module app.main;\nflow main(args: Array<string>) -> i32 {{ return std.algorithm_validation.{name}.run(); }}\n")
     command = [str(binary), "--no-config", "--std-provider", "artifact", "--sysroot", str(sysroot), "--format", "json", "run", str(source)]
     result = subprocess.run(command, capture_output=True, text=True, timeout=240)
     (work / f"{name}.stdout.json").write_text(result.stdout)
@@ -95,8 +127,8 @@ def collection_checks():
     let counts = std.collections.count_by(items.iter(), (value: i32) => value % 2);
     let frequencies = std.collections.frequencies(items.iter());
     let combined = std.collections.merge_counts(frequencies, Map.new().insert(2, 5).insert(4, 1));
-    let left = BitSet.from_indices(128, [3, 7, 65, 92, 126].iter());
-    let right = BitSet.from_indices(128, [7, 9, 65, 100].iter());
+    let left = std.collections.BitSet.from_indices(128, [3, 7, 65, 92, 126].iter());
+    let right = std.collections.BitSet.from_indices(128, [7, 9, 65, 100].iter());
     let queue: PriorityQueue<string, i32> = PriorityQueue.new().push("a", 3).push("b", 3).push("c", 1);
     let (pushed, first) = queue.push_pop("d", 2);
     let (replaced, second) = pushed.replace_top("e", 1);
@@ -210,7 +242,8 @@ def unicode_checks():
             elif token != "×": chunk += chr(int(token, 16))
         if chunk: clusters.append(chunk)
         rows.append(clusters)
-    for clusters in rows[:8] + rng.sample(rows[8:], 24):
+    grapheme_samples = rows[:8] + rng.sample(rows[8:], 24)
+    for clusters in grapheme_samples:
         source = "".join(clusters)
         checks.extend([
             ("Unicode 17 grapheme segmentation", f"std.text.unicode.graphemes({literal(source)}).collect() == {array(clusters)}"),
@@ -220,7 +253,35 @@ def unicode_checks():
         ("grapheme slice", 'std.text.unicode.grapheme_slice("Aé界tail", [1, 3)) == "é界"'),
         ("grapheme byte indices", 'std.text.unicode.grapheme_indices("Aé界").collect() == [(0, "A"), (1, "é"), (3, "界")]'),
     ])
-    return "", checks
+    body = ["    var check: i32 = 0;"]
+    records = ["(" + ", ".join(literal(value) for value in row) + ")" for row in samples]
+    body.append("    let normalization_cases: Array<(string, string, string, string, string)> = [" + ", ".join(records) + "];")
+    body.append("    for (input, nfc, nfd, nfkc, nfkd) in normalization_cases {")
+    offset = 1
+    for form, expected in [("NFC", "nfc"), ("NFD", "nfd"), ("NFKC", "nfkc"), ("NFKD", "nfkd")]:
+        expressions = [f"std.text.unicode.normalize(input, std.text.unicode.{form}) == {expected}", f"std.text.unicode.is_normalized(input, std.text.unicode.{form}) == (input == {expected})", f"std.text.unicode.is_normalized({expected}, std.text.unicode.{form})"]
+        for expression in expressions:
+            body.append(f"        if !({expression}) {{ return check + {offset}; }}")
+            offset += 1
+    body.extend(["        check = check + 12;", "    }"])
+    records = ["(" + literal("".join(clusters)) + ", " + array(clusters) + ")" for clusters in grapheme_samples]
+    body.append("    let grapheme_cases: Array<(string, Array<string>)> = [" + ", ".join(records) + "];")
+    body.extend([
+        "    for (input, expected) in grapheme_cases {",
+        "        var actual: Array<string> = [];",
+        "        for cluster in std.text.unicode.graphemes(input) { actual = actual.push(cluster); }",
+        "        if actual != expected { return check + 1; }",
+        '        var reversed = "";',
+        "        for cluster in expected.reverse() { reversed = reversed + cluster; }",
+        "        if std.text.unicode.reverse_graphemes(input) != reversed { return check + 2; }",
+        "        check = check + 2;",
+        "    }",
+        '    if std.text.unicode.grapheme_slice("Aé界tail", [1, 3)) != "é界" { return check + 1; }',
+        "    var indices: Array<(usize, string)> = [];",
+        '    for item in std.text.unicode.grapheme_indices("Aé界") { indices = indices.push(item); }',
+        '    if indices != [(0, "A"), (1, "é"), (3, "界")] { return check + 2; }',
+    ])
+    return "\n".join(body), checks
 
 
 def main():
@@ -228,18 +289,24 @@ def main():
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--sysroot", type=Path, required=True)
     parser.add_argument("--work-dir", type=Path)
+    parser.add_argument("--suite", choices=["text", "collections", "float32", "float64", "unicode"], action="append")
     args = parser.parse_args()
     work = args.work_dir or Path(tempfile.mkdtemp(prefix="etas-algorithms-"))
     work.mkdir(parents=True, exist_ok=True)
     print(f"Validation files: {work}", flush=True)
     total = 0
+    selected = args.suite or ["text", "collections", "float32", "float64", "unicode"]
     for name, factory in [("text", text_checks), ("collections", collection_checks)]:
+        if name not in selected: continue
         setup, checks = factory()
         total += run_suite(args.binary.resolve(), args.sysroot.resolve(), work, name, setup, checks)
-    for name, checks in float_checks(work).items():
-        total += run_suite(args.binary.resolve(), args.sysroot.resolve(), work, name, "", checks)
-    setup, checks = unicode_checks()
-    total += run_suite(args.binary.resolve(), args.sysroot.resolve(), work, "unicode", setup, checks)
+    if "float32" in selected or "float64" in selected:
+        for name, checks in float_checks(work).items():
+            if name in selected:
+                total += run_suite(args.binary.resolve(), args.sysroot.resolve(), work, name, "", checks)
+    if "unicode" in selected:
+        setup, checks = unicode_checks()
+        total += run_suite(args.binary.resolve(), args.sysroot.resolve(), work, "unicode", setup, checks)
     print(f"PASS all {total} source SDK checks", flush=True)
 
 
