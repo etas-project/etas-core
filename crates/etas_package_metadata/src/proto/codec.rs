@@ -1564,6 +1564,7 @@ fn callable_contract_target_from_proto(
 
 fn action_signature_to_proto(signature: &ActionSignature) -> ProtoActionSignature {
     ProtoActionSignature {
+        selects_by_owner: signature.selects_by_owner,
         default_handler_effects: signature
             .default_handler_effects
             .as_ref()
@@ -1602,6 +1603,7 @@ fn action_signature_from_proto(
     signature: ProtoActionSignature,
 ) -> Result<ActionSignature, MetadataArtifactError> {
     let signature = ActionSignature {
+        selects_by_owner: signature.selects_by_owner,
         default_handler_effects: signature
             .default_handler_effects
             .map(effect_row_from_proto)

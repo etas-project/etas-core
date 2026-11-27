@@ -1212,6 +1212,7 @@ mod tests {
                     ]),
                 }],
                 actions: vec![ActionSignature {
+                    selects_by_owner: false,
                     default_handler_effects: Some(EffectRow::default()),
                     param_names: vec!["method".into(), "host".into(), "request".into()],
                     parameter_defaults: Vec::new(),

@@ -488,6 +488,8 @@ pub struct ProtoCallableSignature {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ProtoActionSignature {
+    #[prost(bool, tag = "13")]
+    pub selects_by_owner: bool,
     #[prost(string, repeated, tag = "1")]
     pub path: Vec<String>,
     #[prost(message, repeated, tag = "2")]

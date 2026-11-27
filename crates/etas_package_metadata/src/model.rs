@@ -229,6 +229,7 @@ pub struct CallableSignature {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ActionSignature {
+    pub selects_by_owner: bool,
     pub path: Vec<String>,
     pub generic_params: Vec<ActionGenericParam>,
     pub param_names: Vec<String>,
