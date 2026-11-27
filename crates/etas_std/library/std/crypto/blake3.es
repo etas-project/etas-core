@@ -4,120 +4,110 @@ module std.crypto;
 // Compression, schedule, tree policy and byte encoding are all Etas code.
 public type Blake3 = {};
 
-let BLAKE3_IV: Array<Word32> = [
-    Word32 { raw= 1779033703 }, Word32 { raw= 3144134277 },
-    Word32 { raw= 1013904242 }, Word32 { raw= 2773480762 },
-    Word32 { raw= 1359893119 }, Word32 { raw= 2600822924 },
-    Word32 { raw= 528734635 }, Word32 { raw= 1541459225 },
+let BLAKE3_IV: Array<u128> = [
+    1779033703, 3144134277, 1013904242, 2773480762,
+    1359893119, 2600822924, 528734635, 1541459225,
 ];
 
-let BLAKE3_SCHEDULE: Array<Array<usize>> = [
-
-    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-    [2, 6, 3, 10, 7, 0, 4, 13, 1, 11, 12, 5, 9, 14, 15, 8],
-    [3, 4, 10, 12, 13, 2, 7, 14, 6, 5, 9, 0, 11, 15, 8, 1],
-    [10, 7, 12, 9, 14, 3, 13, 15, 4, 0, 11, 2, 5, 8, 1, 6],
-    [12, 13, 9, 11, 15, 10, 14, 8, 7, 2, 5, 3, 0, 1, 6, 4],
-    [9, 14, 11, 5, 8, 12, 15, 1, 13, 3, 0, 10, 2, 6, 4, 7],
-    [11, 15, 5, 0, 1, 9, 8, 6, 14, 10, 2, 12, 3, 4, 7, 13],
-];
-
-type Blake3State = { private words: Array<Word32> };
+alias Blake3Words = (
+    u128, u128, u128, u128, u128, u128, u128, u128,
+    u128, u128, u128, u128, u128, u128, u128, u128
+);
 
 type Blake3Output = {
-    private chaining: Array<Word32>,
-    private block: Array<Word32>,
+    private chaining: Array<u128>,
+    private block: Array<u128>,
     private counter: u128,
     private length: u128,
     private flags: u128,
 };
 
-impl Blake3State {
-    flow store(var self, index: usize, word: Word32) -> unit ![] {
-        self.words = match self.words.set(index, word)? {
-            Ok(words) => words,
-            Err(_) => std.core.abort("BLAKE3 state index invariant"),
-        };
-    }
-
-    // Split a 32-bit word at 2^distance and move the low bits to the high end.
-    flow xor_rotate(left: u128, right: u128, split: u128) -> u128 ![] {
-        let word = left ^ right;
-        return word / split + (word % split) * (4294967296 / split);
-    }
-
-    flow mix(var self, a: usize, b: usize, c: usize, d: usize, x: Word32, y: Word32) -> unit ![] {
-        // Each column or diagonal selects four distinct lanes.
-        var va = self.words.get(a).unwrap().raw;
-        var vb = self.words.get(b).unwrap().raw;
-        var vc = self.words.get(c).unwrap().raw;
-        var vd = self.words.get(d).unwrap().raw;
-        va = (va + vb + x.raw) % 4294967296;
-        vd = Blake3State.xor_rotate(vd, va, 65536);
-        vc = (vc + vd) % 4294967296;
-        vb = Blake3State.xor_rotate(vb, vc, 4096);
-        va = (va + vb + y.raw) % 4294967296;
-        vd = Blake3State.xor_rotate(vd, va, 256);
-        vc = (vc + vd) % 4294967296;
-        vb = Blake3State.xor_rotate(vb, vc, 128);
-        self.store(a, Word32 { raw= va });
-        self.store(b, Word32 { raw= vb });
-        self.store(c, Word32 { raw= vc });
-        self.store(d, Word32 { raw= vd });
-    }
-}
-
 impl Blake3Output {
-    flow compress(self, root: bool) -> Array<Word32> ![] {
+    flow mix(a: u128, b: u128, c: u128, d: u128, x: u128, y: u128) -> (u128, u128, u128, u128) ![] {
+        let a1 = (a + b + x) % 4294967296;
+        let t16 = d ^ a1;
+        let d1 = t16 / 65536 + (t16 % 65536) * 65536;
+        let c1 = (c + d1) % 4294967296;
+        let t12 = b ^ c1;
+        let b1 = t12 / 4096 + (t12 % 4096) * 1048576;
+        let a2 = (a1 + b1 + y) % 4294967296;
+        let t8 = d1 ^ a2;
+        let d2 = t8 / 256 + (t8 % 256) * 16777216;
+        let c2 = (c1 + d2) % 4294967296;
+        let t7 = b1 ^ c2;
+        let b2 = t7 / 128 + (t7 % 128) * 33554432;
+        return (a2, b2, c2, d2);
+    }
+
+    flow round(state: Blake3Words, message: Blake3Words) -> Blake3Words ![] {
+        let (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15) = state;
+        let (m0, m1, m2, m3, m4, m5, m6, m7, m8, m9, m10, m11, m12, m13, m14, m15) = message;
+        let (c0, c4, c8, c12) = Blake3Output.mix(v0, v4, v8, v12, m0, m1);
+        let (c1, c5, c9, c13) = Blake3Output.mix(v1, v5, v9, v13, m2, m3);
+        let (c2, c6, c10, c14) = Blake3Output.mix(v2, v6, v10, v14, m4, m5);
+        let (c3, c7, c11, c15) = Blake3Output.mix(v3, v7, v11, v15, m6, m7);
+        let (d0, d5, d10, d15) = Blake3Output.mix(c0, c5, c10, c15, m8, m9);
+        let (d1, d6, d11, d12) = Blake3Output.mix(c1, c6, c11, c12, m10, m11);
+        let (d2, d7, d8, d13) = Blake3Output.mix(c2, c7, c8, c13, m12, m13);
+        let (d3, d4, d9, d14) = Blake3Output.mix(c3, c4, c9, c14, m14, m15);
+        return (d0, d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14, d15);
+    }
+
+    flow permute(message: Blake3Words) -> Blake3Words ![] {
+        let (m0, m1, m2, m3, m4, m5, m6, m7, m8, m9, m10, m11, m12, m13, m14, m15) = message;
+        return (m2, m6, m3, m10, m7, m0, m4, m13, m1, m11, m12, m5, m9, m14, m15, m8);
+    }
+
+    flow compress(self, root: bool) -> Array<u128> ![] {
         let flags = self.flags + if root { 8 } else { 0 };
-        var state = Blake3State { words= self.chaining.extend([
-            BLAKE3_IV.get(0).unwrap(), BLAKE3_IV.get(1).unwrap(),
-            BLAKE3_IV.get(2).unwrap(), BLAKE3_IV.get(3).unwrap(),
-            Word32 { raw= self.counter % 4294967296 },
-            Word32 { raw= self.counter / 4294967296 },
-            Word32 { raw= self.length }, Word32 { raw= flags },
-        ]) };
-        for schedule in BLAKE3_SCHEDULE {
-            state.mix(0, 4, 8, 12, self.block.get(schedule.get(0).unwrap()).unwrap(), self.block.get(schedule.get(1).unwrap()).unwrap());
-            state.mix(1, 5, 9, 13, self.block.get(schedule.get(2).unwrap()).unwrap(), self.block.get(schedule.get(3).unwrap()).unwrap());
-            state.mix(2, 6, 10, 14, self.block.get(schedule.get(4).unwrap()).unwrap(), self.block.get(schedule.get(5).unwrap()).unwrap());
-            state.mix(3, 7, 11, 15, self.block.get(schedule.get(6).unwrap()).unwrap(), self.block.get(schedule.get(7).unwrap()).unwrap());
-            state.mix(0, 5, 10, 15, self.block.get(schedule.get(8).unwrap()).unwrap(), self.block.get(schedule.get(9).unwrap()).unwrap());
-            state.mix(1, 6, 11, 12, self.block.get(schedule.get(10).unwrap()).unwrap(), self.block.get(schedule.get(11).unwrap()).unwrap());
-            state.mix(2, 7, 8, 13, self.block.get(schedule.get(12).unwrap()).unwrap(), self.block.get(schedule.get(13).unwrap()).unwrap());
-            state.mix(3, 4, 9, 14, self.block.get(schedule.get(14).unwrap()).unwrap(), self.block.get(schedule.get(15).unwrap()).unwrap());
+        var state: Blake3Words = (
+            self.chaining.get(0).unwrap(), self.chaining.get(1).unwrap(), self.chaining.get(2).unwrap(), self.chaining.get(3).unwrap(),
+            self.chaining.get(4).unwrap(), self.chaining.get(5).unwrap(), self.chaining.get(6).unwrap(), self.chaining.get(7).unwrap(),
+            1779033703, 3144134277, 1013904242, 2773480762,
+            self.counter % 4294967296, self.counter / 4294967296, self.length, flags
+        );
+        var message: Blake3Words = (
+            self.block.get(0).unwrap(), self.block.get(1).unwrap(), self.block.get(2).unwrap(), self.block.get(3).unwrap(),
+            self.block.get(4).unwrap(), self.block.get(5).unwrap(), self.block.get(6).unwrap(), self.block.get(7).unwrap(),
+            self.block.get(8).unwrap(), self.block.get(9).unwrap(), self.block.get(10).unwrap(), self.block.get(11).unwrap(),
+            self.block.get(12).unwrap(), self.block.get(13).unwrap(), self.block.get(14).unwrap(), self.block.get(15).unwrap()
+        );
+        var remaining: usize = 7;
+        while remaining > 1 {
+            state = Blake3Output.round(state, message);
+            message = Blake3Output.permute(message);
+            remaining = remaining - 1;
         }
-        var output: Array<Word32> = [];
-        var index: usize = 0;
-        while index < 8 {
-            output = output.push(state.words.get(index).unwrap().xor(state.words.get(index + 8).unwrap()));
-            index = index + 1;
-        }
-        return output;
+        let (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15) = Blake3Output.round(state, message);
+        return [v0 ^ v8, v1 ^ v9, v2 ^ v10, v3 ^ v11, v4 ^ v12, v5 ^ v13, v6 ^ v14, v7 ^ v15];
     }
 }
 
 impl Blake3 {
-    flow block(input: bytes, offset: usize, length: usize) -> Array<Word32> ![] {
-        var words: Array<Word32> = [];
-        var word: usize = 0;
-        while word < 16 {
-            var raw: u128 = 0;
-            var byte: usize = 0;
-            var place: u128 = 1;
-            while byte < 4 {
-                let at = word * 4 + byte;
-                if at < length { raw = raw + input.get(offset + at).unwrap().bits * place; }
+    flow block(input: bytes, offset: usize, length: usize) -> Array<u128> ![] {
+        let block = match input[offset, offset + length)? {
+            Ok(data) => data,
+            Err(_) => std.core.abort("BLAKE3 block range invariant"),
+        };
+        var words: Array<u128> = [];
+        var word: u128 = 0;
+        var place: u128 = 1;
+        for byte in block {
+            word = word + byte.bits * place;
+            if place == 16777216 {
+                words = words.push(word);
+                word = 0;
+                place = 1;
+            } else {
                 place = place * 256;
-                byte = byte + 1;
             }
-            words = words.push(Word32 { raw= raw });
-            word = word + 1;
         }
+        if place != 1 { words = words.push(word); }
+        while words.length < 16 { words = words.push(0); }
         return words;
     }
 
-    flow chunk(input: bytes, offset: usize, length: usize, counter: u128, key: Array<Word32>, flags: u128) -> Blake3Output ![] {
+    flow chunk(input: bytes, offset: usize, length: usize, counter: u128, key: Array<u128>, flags: u128) -> Blake3Output ![] {
         var chaining = key;
         var consumed: usize = 0;
         var start: u128 = 1;
@@ -136,12 +126,12 @@ impl Blake3 {
         };
     }
 
-    flow parent(left: Array<Word32>, right: Array<Word32>, key: Array<Word32>, flags: u128) -> Blake3Output ![] {
+    flow parent(left: Array<u128>, right: Array<u128>, key: Array<u128>, flags: u128) -> Blake3Output ![] {
         return Blake3Output { chaining= key, block= left + right, counter= 0, length= 64, flags= flags + 4 };
     }
 
-    flow hash_internal(input: bytes, key: Array<Word32>, flags: u128) -> bytes ![] {
-        var stack: List<Array<Word32>> = [];
+    flow hash_internal(input: bytes, key: Array<u128>, flags: u128) -> bytes ![] {
+        var stack: List<Array<u128>> = [];
         var offset: usize = 0;
         var counter: u128 = 0;
         while input.length - offset > 1024 {
@@ -168,8 +158,8 @@ impl Blake3 {
         var bytes_out: Array<u8> = [];
         for word in output.compress(true) {
             bytes_out = bytes_out.extend([
-                u8 { bits= word.raw % 256 }, u8 { bits= (word.raw / 256) % 256 },
-                u8 { bits= (word.raw / 65536) % 256 }, u8 { bits= word.raw / 16777216 },
+                u8 { bits= word % 256 }, u8 { bits= (word / 256) % 256 },
+                u8 { bits= (word / 65536) % 256 }, u8 { bits= word / 16777216 },
             ]);
         }
         return bytes { data= bytes_out };
@@ -182,7 +172,7 @@ impl Blake3 {
     public flow derive_key(context: string, input: bytes) -> Digest ![] {
         let context_key = Blake3.hash_internal(context.utf8, BLAKE3_IV, 32);
         let words = Blake3.block(context_key, 0, 32);
-        var key: Array<Word32> = [];
+        var key: Array<u128> = [];
         var index: usize = 0;
         while index < 8 {
             key = key.push(words.get(index).unwrap());

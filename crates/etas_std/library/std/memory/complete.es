@@ -173,7 +173,7 @@ impl Store<K ~ StorageKey, V ~ StorageData> {
         schema.part(StorageValue.schema<V>());
         schema.part(value.format);
         schema.part(std.text.from_u128(value.version.bits));
-        return Store { description= self.description, key_format= Some(key), value_format= Some(value), encoded_schema= Some(schema.finish()) };
+        return Store { description= self.description, key_format= Some(key), value_format= Some(value), encoded_schema= Some(schema.finish_schema()) };
     }
 
     flow bound_description(self) -> StoreDescription ![] {

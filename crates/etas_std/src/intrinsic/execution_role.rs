@@ -39,10 +39,12 @@ pub enum StdExecutionRole {
     RestoreStorage,
     StorageSchema,
     ResourceScope,
+    CachedSchemaFingerprint,
+    RememberSchemaFingerprint,
 }
 
 impl StdExecutionRole {
-    pub const ALL: [Self; 27] = [
+    pub const ALL: [Self; 29] = [
         Self::Abort,
         Self::Checkpoint,
         Self::CaptureData,
@@ -70,6 +72,8 @@ impl StdExecutionRole {
         Self::RestoreStorage,
         Self::StorageSchema,
         Self::ResourceScope,
+        Self::CachedSchemaFingerprint,
+        Self::RememberSchemaFingerprint,
     ];
 
     pub fn role(self) -> &'static str {
@@ -80,6 +84,8 @@ impl StdExecutionRole {
             Self::CaptureStorage => "std.memory.StorageValue.capture",
             Self::RestoreStorage => "std.memory.StorageValue.restore",
             Self::StorageSchema => "std.memory.StorageValue.schema",
+            Self::CachedSchemaFingerprint => "std.memory.MutationFingerprint.cached_schema",
+            Self::RememberSchemaFingerprint => "std.memory.MutationFingerprint.remember_schema",
             Self::StorageContext => "std.memory.StorageContext.current",
             Self::StorageNonce => "std.memory.StorageContext.nonce",
             Self::StreamClock => "std.stream.StreamClock.now",
@@ -112,6 +118,8 @@ impl StdExecutionRole {
             Self::CaptureStorage => "std.memory.StorageValue.capture",
             Self::RestoreStorage => "std.memory.StorageValue.restore",
             Self::StorageSchema => "std.memory.StorageValue.schema",
+            Self::CachedSchemaFingerprint => "std.memory.MutationFingerprint.cached_schema",
+            Self::RememberSchemaFingerprint => "std.memory.MutationFingerprint.remember_schema",
             Self::StorageContext => "std.memory.StorageContext.current",
             Self::StorageNonce => "std.memory.StorageContext.nonce",
             Self::StreamClock => "std.stream.StreamClock.now",
@@ -145,6 +153,8 @@ impl StdExecutionRole {
             | Self::CaptureStorage
             | Self::RestoreStorage
             | Self::StorageSchema
+            | Self::CachedSchemaFingerprint
+            | Self::RememberSchemaFingerprint
             | Self::StorageContext
             | Self::StorageNonce
             | Self::StreamClock
@@ -186,6 +196,9 @@ impl StdExecutionRole {
             Self::CaptureStorage | Self::RestoreStorage | Self::StorageSchema => {
                 &["std.memory.StorageValue"]
             }
+            Self::CachedSchemaFingerprint | Self::RememberSchemaFingerprint => {
+                &["std.memory.MutationFingerprint"]
+            }
             Self::StorageContext | Self::StorageNonce => &["std.memory.StorageContext"],
             Self::StreamClock => &["std.stream.StreamClock"],
             Self::ReadScopeEnter => &["std.stream.ReadScope"],
@@ -213,6 +226,8 @@ impl StdExecutionRole {
                 | Self::CaptureStorage
                 | Self::RestoreStorage
                 | Self::StorageSchema
+                | Self::CachedSchemaFingerprint
+                | Self::RememberSchemaFingerprint
                 | Self::ReadScopeEnter
                 | Self::ScopeEnter
                 | Self::ResourceScope

@@ -261,7 +261,7 @@ dependencies = [
 
 [[package]]
 name = "etas_host"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "blake3",
  "cap-fs-ext",
@@ -309,7 +309,7 @@ dependencies = [
 
 [[package]]
 name = "etas_std"
-version = "0.8.2"
+version = "0.8.3"
 dependencies = [
  "blake3",
  "etas_code",

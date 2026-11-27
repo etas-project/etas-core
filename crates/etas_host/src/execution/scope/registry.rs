@@ -1,6 +1,9 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    sync::{Arc, Mutex, MutexGuard},
+    sync::{
+        Arc, Mutex, MutexGuard,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
@@ -54,6 +57,7 @@ struct Registry {
 
 #[derive(Debug)]
 struct Tree {
+    stop_requested: AtomicBool,
     registry: Mutex<Registry>,
     changed: watch::Sender<u64>,
 }
@@ -92,6 +96,7 @@ impl ExecutionScope {
         root.body_claimed = body_claimed;
         Self {
             tree: Arc::new(Tree {
+                stop_requested: AtomicBool::new(false),
                 registry: Mutex::new(Registry {
                     nodes: vec![root],
                     next_operation: 0,
@@ -142,6 +147,10 @@ impl ExecutionScope {
     }
     pub fn cancel_source(&self) -> CancelSource {
         CancelSource::new(self.clone())
+    }
+
+    pub(crate) fn stop_requested_in_tree(&self) -> bool {
+        self.tree.stop_requested.load(Ordering::Acquire)
     }
 
     pub fn signal(&self) -> Result<CancelSignal, HostError> {
@@ -362,6 +371,7 @@ impl ExecutionScope {
         }
         drop(registry);
         // Publish every descendant's cause before cancellation wakes any adapter.
+        self.tree.stop_requested.store(true, Ordering::Release);
         for token in notifications {
             token.cancel();
         }

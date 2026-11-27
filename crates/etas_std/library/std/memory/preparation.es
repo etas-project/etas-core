@@ -148,6 +148,23 @@ impl MutationFingerprint {
         self.part(text);
     }
 
+    @std.role("std.memory.MutationFingerprint.cached_schema")
+    flow cached_schema(input: bytes) -> Option<string> ![];
+
+    @std.role("std.memory.MutationFingerprint.remember_schema")
+    flow remember_schema(input: bytes, digest: string) -> unit ![];
+
+    flow finish_schema(self) -> string ![] {
+        return match MutationFingerprint.cached_schema(self.input) {
+            Some(digest) => digest,
+            None => {
+                let digest = self.finish();
+                MutationFingerprint.remember_schema(self.input, digest);
+                digest
+            },
+        };
+    }
+
     flow finish(self) -> string ![] {
         let digest = Blake3.hash(self.input);
         var output = "";

@@ -85,7 +85,7 @@ impl CancelSignal {
     }
 
     pub fn is_cancelled(&self) -> bool {
-        self.token.is_cancelled()
+        self.scope.stop_requested_in_tree() && self.token.is_cancelled()
     }
 
     pub fn check(&self) -> Result<(), HostError> {
