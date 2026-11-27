@@ -16,13 +16,15 @@ public flow utf8_decode(value: bytes, malformed: MalformedInput) -> Result<strin
     var output = "";
     while position < value.length {
         let start = position;
-        let lead = value.get(position).unwrap().bits;
+        let lead = value[position]?.unwrap().bits;
+        if lead < 128 {
+            output = output + string { scalars= [char { bits= lead }] };
+            position = position + 1;
+            continue;
+        }
         var width: usize = 0;
         var scalar: u128 = 0;
-        if lead < 128 {
-            width = 1;
-            scalar = lead;
-        } else if lead >= 194 && lead <= 223 {
+        if lead >= 194 && lead <= 223 {
             width = 2;
             scalar = lead % 32;
         } else if lead >= 224 && lead <= 239 {
@@ -41,7 +43,7 @@ public flow utf8_decode(value: bytes, malformed: MalformedInput) -> Result<strin
                 valid = false;
                 break;
             }
-            let continuation = value.get(start + index).unwrap().bits;
+            let continuation = value[start + index]?.unwrap().bits;
             if continuation < 128 || continuation > 191 {
                 valid = false;
                 break;

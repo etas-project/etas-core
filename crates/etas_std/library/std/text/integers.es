@@ -389,15 +389,12 @@ public flow parse_isize(text: string) -> Result<isize, TextError> ![] {
 }
 
 public flow from_u8(value: u8) -> string ![] {
-    if value == 0 { return "0"; }
-    var remaining = value;
-    var output = "";
-    while remaining != 0 {
-        let digit = remaining % 10;
-        output = DECIMAL_DIGITS.get(digit).unwrap() + output;
-        remaining = remaining / 10;
-    }
-    return output;
+    let bits = value.bits;
+    let ones = char { bits= 48 + bits % 10 };
+    if bits < 10 { return string { scalars= [ones] }; }
+    let tens = char { bits= 48 + bits / 10 % 10 };
+    if bits < 100 { return string { scalars= [tens, ones] }; }
+    return string { scalars= [char { bits= 48 + bits / 100 }, tens, ones] };
 }
 
 public flow parse_u8(text: string) -> Result<u8, TextError> ![] {

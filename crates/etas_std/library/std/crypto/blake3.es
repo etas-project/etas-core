@@ -61,16 +61,16 @@ impl Blake3Output {
     flow compress(self, root: bool) -> Array<u128> ![] {
         let flags = self.flags + if root { 8 } else { 0 };
         var state: Blake3Words = (
-            self.chaining.get(0).unwrap(), self.chaining.get(1).unwrap(), self.chaining.get(2).unwrap(), self.chaining.get(3).unwrap(),
-            self.chaining.get(4).unwrap(), self.chaining.get(5).unwrap(), self.chaining.get(6).unwrap(), self.chaining.get(7).unwrap(),
+            self.chaining[0]?.unwrap(), self.chaining[1]?.unwrap(), self.chaining[2]?.unwrap(), self.chaining[3]?.unwrap(),
+            self.chaining[4]?.unwrap(), self.chaining[5]?.unwrap(), self.chaining[6]?.unwrap(), self.chaining[7]?.unwrap(),
             1779033703, 3144134277, 1013904242, 2773480762,
             self.counter % 4294967296, self.counter / 4294967296, self.length, flags
         );
         var message: Blake3Words = (
-            self.block.get(0).unwrap(), self.block.get(1).unwrap(), self.block.get(2).unwrap(), self.block.get(3).unwrap(),
-            self.block.get(4).unwrap(), self.block.get(5).unwrap(), self.block.get(6).unwrap(), self.block.get(7).unwrap(),
-            self.block.get(8).unwrap(), self.block.get(9).unwrap(), self.block.get(10).unwrap(), self.block.get(11).unwrap(),
-            self.block.get(12).unwrap(), self.block.get(13).unwrap(), self.block.get(14).unwrap(), self.block.get(15).unwrap()
+            self.block[0]?.unwrap(), self.block[1]?.unwrap(), self.block[2]?.unwrap(), self.block[3]?.unwrap(),
+            self.block[4]?.unwrap(), self.block[5]?.unwrap(), self.block[6]?.unwrap(), self.block[7]?.unwrap(),
+            self.block[8]?.unwrap(), self.block[9]?.unwrap(), self.block[10]?.unwrap(), self.block[11]?.unwrap(),
+            self.block[12]?.unwrap(), self.block[13]?.unwrap(), self.block[14]?.unwrap(), self.block[15]?.unwrap()
         );
         var remaining: usize = 7;
         while remaining > 1 {
@@ -85,24 +85,23 @@ impl Blake3Output {
 
 impl Blake3 {
     flow block(input: bytes, offset: usize, length: usize) -> Array<u128> ![] {
-        let block = match input[offset, offset + length)? {
-            Ok(data) => data,
-            Err(_) => std.core.abort("BLAKE3 block range invariant"),
-        };
         var words: Array<u128> = [];
-        var word: u128 = 0;
-        var place: u128 = 1;
-        for byte in block {
-            word = word + byte.bits * place;
-            if place == 16777216 {
-                words = words.push(word);
-                word = 0;
-                place = 1;
-            } else {
-                place = place * 256;
-            }
+        var index = offset;
+        let end = offset + length;
+        while end - index >= 4 {
+            let word = input[index]?.unwrap().bits
+                + input[index + 1]?.unwrap().bits * 256
+                + input[index + 2]?.unwrap().bits * 65536
+                + input[index + 3]?.unwrap().bits * 16777216;
+            words = words.push(word);
+            index = index + 4;
         }
-        if place != 1 { words = words.push(word); }
+        if index < end {
+            var word = input[index]?.unwrap().bits;
+            if end - index > 1 { word = word + input[index + 1]?.unwrap().bits * 256; }
+            if end - index > 2 { word = word + input[index + 2]?.unwrap().bits * 65536; }
+            words = words.push(word);
+        }
         while words.length < 16 { words = words.push(0); }
         return words;
     }

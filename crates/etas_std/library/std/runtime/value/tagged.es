@@ -3,15 +3,14 @@ module std.runtime.value;
 import std.json.JsonValue;
 
 
-type TaggedWriter = { private parts: List<string>, private used: usize, private maximum: usize };
+type TaggedWriter = { private output: string, private maximum: usize };
 
 impl TaggedWriter {
     flow raw(var self, text: string) -> unit ![Error<DataError>] {
-        if text.length > self.maximum - self.used {
+        if text.length > self.maximum - self.output.length {
             perform Error.raise<DataError>(DataError { code= "budget_exceeded", message= "stored value exceeds codec limits" });
         }
-        self.parts = text :: self.parts;
-        self.used = self.used + text.length;
+        self.output = self.output + text;
     }
 
     flow quote(var self, value: string) -> unit ![Error<DataError>] {
@@ -84,9 +83,11 @@ impl TaggedWriter {
             },
             Data.Bytes(value) => {
                 self.scalar_header("bytes"); self.raw("[");
-                var separator = "";
-                for byte in value {
-                    self.raw(separator); self.raw(std.text.from_u8(byte)); separator = ",";
+                var index: usize = 0;
+                while index < value.length {
+                    let digits = std.text.from_u8(value[index]?.unwrap());
+                    self.raw(if index == 0 { digits } else { "," + digits });
+                    index = index + 1;
                 }
                 self.raw("]}");
             },
@@ -153,9 +154,5 @@ impl TaggedWriter {
         };
     }
 
-    flow finish(self) -> string ![] {
-        var output = "";
-        for part in self.parts.reverse() { output = output + part; }
-        return output;
-    }
+
 }

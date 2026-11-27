@@ -25,10 +25,27 @@ impl BytesBuilder {
         self = BytesBuilder { chunks= [], length= 0 };
     }
     public flow build(self) -> bytes ![] {
-        var output: Array<u8> = [];
-        for chunk in self.chunks.reverse() {
-            for value in chunk { output = output.push(value); }
+        // Fold pairs of adjacent chunks so each byte is copied at most once per level.
+        var chunks = self.chunks;
+        while true {
+            var pairs: List<bytes> = [];
+            match chunks {
+                [] => { return bytes { data= [] }; },
+                newest :: [] => { return newest; },
+                _ => {},
+            };
+            while true {
+                match chunks {
+                    newest :: older :: tail => {
+                        pairs = (older + newest) :: pairs;
+                        chunks = tail;
+                    },
+                    last :: [] => { pairs = last :: pairs; break; },
+                    [] => { break; },
+                };
+            }
+            chunks = pairs.reverse();
         }
-        return bytes { data= output };
+        return bytes { data= [] };
     }
 }

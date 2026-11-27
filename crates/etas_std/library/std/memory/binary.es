@@ -37,6 +37,8 @@ type StorageBinary = {
 type StorageMeasure = { private bytes_left: usize, private nodes_left: usize, private maximum_depth: usize };
 type StorageWriter = { private output: std.bytes.BytesBuilder, private key: bool };
 type StorageReader = {
+    private check_encoding: bool,
+    private key: bool,
     private input: bytes,
     private offset: usize,
     private nodes_left: usize,
@@ -96,6 +98,7 @@ impl StorageBinary {
             return Err(StorageBinary.failure("limit_exceeded", "storage input exceeds its byte budget"));
         }
         var reader = StorageReader {
+            key= key, check_encoding= false,
             input= input, offset= 0, nodes_left= self.maximum_nodes,
             maximum_depth= self.maximum_depth,
         };
@@ -106,19 +109,25 @@ impl StorageBinary {
                 return Err(StorageBinary.failure("schema_mismatch", "storage format, version or codec mode differs"));
             }
         }
-        let actual_schema = match reader.text() { Ok(value) => value, Err(error) => { return Err(error); }, };
-        if actual_schema != schema {
-            return Err(StorageBinary.failure("schema_mismatch", "storage type schema differs"));
+        let actual_schema = match reader.blob() { Ok(value) => value, Err(error) => { return Err(error); }, };
+        if actual_schema != schema.utf8 {
+            return match std.codec.text.utf8_decode(actual_schema, std.codec.text.MalformedInput.Strict) {
+                Ok(_) => Err(StorageBinary.failure("schema_mismatch", "storage type schema differs")),
+                Err(_) => Err(StorageBinary.failure("invalid_encoding", "storage text is not valid UTF-8")),
+            };
         }
         let value = match reader.value(1) { Ok(value) => value, Err(error) => { return Err(error); }, };
         if reader.offset != input.length {
             return Err(StorageBinary.failure("invalid_encoding", "storage value has trailing bytes"));
         }
-        // One canonical layout per representation. This also checks duplicate
-        // fields/map keys/set elements using recursively canonical key bytes.
-        let encoded = match self.encode(schema, value, key) { Ok(value) => value, Err(error) => { return Err(error); }, };
-        if StorageBinary.compare_bytes(encoded, input) != 0 {
-            return Err(StorageBinary.failure("invalid_encoding", "storage value is not in canonical layout"));
+        // Fixed-width scalars, valid UTF-8 and strictly ordered record fields
+        // already determine a unique encoding. Sets and maps also need the
+        // writer's canonical-key ordering and duplicate checks.
+        if reader.check_encoding {
+            let encoded = match self.encode(schema, value, key) { Ok(value) => value, Err(error) => { return Err(error); }, };
+            if encoded != input {
+                return Err(StorageBinary.failure("invalid_encoding", "storage value is not in canonical layout"));
+            }
         }
         return Ok(value);
     }
@@ -291,7 +300,7 @@ impl StorageWriter {
                 var previous: Option<bytes> = None;
                 for (encoded, _) in sorted {
                     match previous {
-                        Some(old) => { if StorageBinary.compare_bytes(old, encoded) == 0 { return Err(StorageBinary.failure("invalid_encoding", "duplicate storage set element")); } },
+                        Some(old) => { if old == encoded { return Err(StorageBinary.failure("invalid_encoding", "duplicate storage set element")); } },
                         None => {},
                     };
                     previous = Some(encoded);
@@ -317,7 +326,7 @@ impl StorageWriter {
                 var previous: Option<bytes> = None;
                 for (encoded, _, _) in sorted {
                     match previous {
-                        Some(old) => { if StorageBinary.compare_bytes(old, encoded) == 0 { return Err(StorageBinary.failure("invalid_encoding", "duplicate storage map key")); } },
+                        Some(old) => { if old == encoded { return Err(StorageBinary.failure("invalid_encoding", "duplicate storage map key")); } },
                         None => {},
                     };
                     previous = Some(encoded);
@@ -339,7 +348,7 @@ impl StorageWriter {
                 self.byte(80);
                 let sorted = std.collections.sort_by(fields, (a: (string, StorageValue), b: (string, StorageValue)) => {
                     let (left, _) = a; let (right, _) = b;
-                    return StorageBinary.compare_bytes(left.utf8, right.utf8);
+                    return if left < right { -1 } else if left > right { 1 } else { 0 };
                 });
                 self.integer(sorted.length.bits, 8);
                 var previous: Option<string> = None;
@@ -409,14 +418,9 @@ impl StorageReader {
         if length > self.input.length - self.offset {
             return Err(StorageBinary.failure("invalid_encoding", "truncated storage byte string"));
         }
-        var output: Array<u8> = [];
-        var index: usize = 0;
-        while index < length {
-            output = output.push(self.input.get(self.offset).unwrap());
-            self.offset = self.offset + 1;
-            index = index + 1;
-        }
-        return Ok(bytes { data= output });
+        let start = self.offset;
+        self.offset = start + length;
+        return Ok(self.input[start, self.offset)?.unwrap());
     }
 
     flow text(var self) -> Result<string, StorageError> ![] {
@@ -462,6 +466,10 @@ impl StorageReader {
                 None => { return Err(StorageBinary.failure("invalid_encoding", "invalid storage scalar width")); },
             };
             let bits = match self.integer(count) { Ok(value) => value, Err(error) => { return Err(error); }, };
+            if (self.key && (tag == 32 || tag == 33)) ||
+                (tag == 34 && (bits > 1114111 || (bits >= 55296 && bits <= 57343))) {
+                self.check_encoding = true;
+            }
             return Ok(StorageValue.Scalar(tag, width, bits));
         }
         if tag == 48 {
@@ -473,10 +481,12 @@ impl StorageReader {
             return Ok(StorageValue.Bytes(data));
         }
         if tag >= 64 && tag <= 71 {
+            if tag == 71 { self.check_encoding = true; }
             let values = match self.values(depth + 1) { Ok(value) => value, Err(error) => { return Err(error); }, };
             return Ok(StorageValue.Sequence(tag, values));
         }
         if tag == 72 {
+            self.check_encoding = true;
             let count = match self.count(self.nodes_left / 2) { Ok(value) => value, Err(error) => { return Err(error); }, };
             var entries: Array<(StorageValue, StorageValue)> = [];
             var index: usize = 0;
@@ -491,10 +501,13 @@ impl StorageReader {
         if tag == 80 {
             let count = match self.count(self.nodes_left) { Ok(value) => value, Err(error) => { return Err(error); }, };
             var fields: Array<(string, StorageValue)> = [];
+            var previous = "";
             var index: usize = 0;
             while index < count {
                 let name = match self.text() { Ok(value) => value, Err(error) => { return Err(error); }, };
                 let value = match self.value(depth + 1) { Ok(value) => value, Err(error) => { return Err(error); }, };
+                if index > 0 && name <= previous { self.check_encoding = true; }
+                previous = name;
                 fields = fields.push((name, value));
                 index = index + 1;
             }
@@ -515,6 +528,7 @@ impl StorageReader {
             let label = match self.byte() { Ok(value) => value, Err(error) => { return Err(error); }, };
             let provenance = match self.blob() { Ok(value) => value, Err(error) => { return Err(error); }, };
             let inner = match self.value(depth + 1) { Ok(value) => value, Err(error) => { return Err(error); }, };
+            if label > 3 { self.check_encoding = true; }
             return Ok(StorageValue.Trust(label, provenance, inner));
         }
         return Err(StorageBinary.failure("invalid_encoding", "unknown storage value tag"));

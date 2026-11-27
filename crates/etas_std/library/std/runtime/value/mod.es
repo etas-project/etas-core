@@ -33,9 +33,9 @@ impl Data {
         // Capture is identity on Data while applying the actual neutral-value
         // node/depth/byte budget to newly source-assembled protocol envelopes.
         let bounded = match Data.capture(self) { Ok(value) => value, Err(error) => { return Err(error); }, };
-        var writer = TaggedWriter { parts= [], used= 0, maximum= max_bytes };
+        var writer = TaggedWriter { output= "", maximum= max_bytes };
         return match writer.value(bounded)? {
-            Ok(_) => Ok(writer.finish()),
+            Ok(_) => Ok(writer.output),
             Err(error) => Err(error),
         };
     }
