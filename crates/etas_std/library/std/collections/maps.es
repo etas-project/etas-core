@@ -20,6 +20,18 @@ impl Map<K ~ Hash, V> {
     public flow len(self) -> usize ![] { return self.length; }
     public flow is_empty(self) -> bool ![] { return self.length == 0; }
     flow locate(self, key: K, hash: u64) -> Option<usize> ![] {
+        // Host maps arrive in insertion order, before Etas has run the key's Hash implementation.
+        if self.buckets.is_empty() {
+            var slot: usize = 0;
+            for candidate in self.slots {
+                match candidate {
+                    Some(entry) => { if entry.key == key { return Some(slot); } },
+                    None => {},
+                };
+                slot = slot + 1;
+            }
+            return None;
+        }
         let bucket = usize { bits= hash.bits % self.buckets.length.bits };
         for slot in self.buckets.get(bucket).unwrap() {
             let entry = self.slots.get(slot).unwrap().unwrap();
@@ -46,28 +58,30 @@ impl Map<K ~ Hash, V> {
                 None => {},
                 Some(entry) => {
                     let slot = slots.length;
-                    let bucket = usize { bits= entry.hash.bits % capacity.bits };
+                    let indexed = if self.buckets.is_empty() { entry { hash= entry.key.hash(self.base).finish() } } else { entry };
+                    let bucket = usize { bits= indexed.hash.bits % capacity.bits };
                     let chain = slot :: (buckets.get(bucket).unwrap());
                     buckets = buckets.set(bucket, chain)?.unwrap();
-                    slots = slots.push(Some(entry));
+                    slots = slots.push(Some(indexed));
                 },
             };
         }
         return Map { buckets= buckets, slots= slots, length= self.length, base= self.base };
     }
     public flow insert(self, key: K, value: V) -> Map<K, V> ![] {
-        let hash = key.hash(self.base).finish();
-        match self.locate(key, hash) {
+        let indexed = if self.buckets.is_empty() { self.reindexed(8 + self.length * 2) } else { self };
+        let hash = key.hash(indexed.base).finish();
+        match indexed.locate(key, hash) {
             Some(slot) => {
-                let old = self.slots.get(slot).unwrap().unwrap();
+                let old = indexed.slots.get(slot).unwrap().unwrap();
                 let entry = MapEntry { key= old.key, value= value, hash= old.hash };
-                return Map { buckets= self.buckets, slots= self.slots.set(slot, Some(entry))?.unwrap(), length= self.length, base= self.base };
+                return Map { buckets= indexed.buckets, slots= indexed.slots.set(slot, Some(entry))?.unwrap(), length= indexed.length, base= indexed.base };
             },
             None => {},
         };
-        let grown = if self.length + 1 > self.buckets.length - self.buckets.length / 4 {
-            self.reindexed(self.buckets.length * 2)
-        } else { self };
+        let grown = if indexed.length + 1 > indexed.buckets.length - indexed.buckets.length / 4 {
+            indexed.reindexed(indexed.buckets.length * 2)
+        } else { indexed };
         let bucket = usize { bits= hash.bits % grown.buckets.length.bits };
         let chain = grown.slots.length :: (grown.buckets.get(bucket).unwrap());
         let buckets = grown.buckets.set(bucket, chain)?.unwrap();
@@ -75,20 +89,21 @@ impl Map<K ~ Hash, V> {
         return Map { buckets= buckets, slots= slots, length= grown.length + 1, base= grown.base };
     }
     flow removed(self, key: K) -> (Map<K, V>, Option<V>) ![] {
-        let hash = key.hash(self.base).finish();
-        let slot = match self.locate(key, hash) { None => { return (self, None); }, Some(slot) => slot };
-        let old = self.slots.get(slot).unwrap().unwrap();
-        let length = self.length - 1;
-        if length == 0 { return (Map { buckets= Array.repeat(8, []), slots= [], length= 0, base= self.base }, Some(old.value)); }
-        let bucket = usize { bits= hash.bits % self.buckets.length.bits };
+        let indexed = if self.buckets.is_empty() { self.reindexed(8 + self.length * 2) } else { self };
+        let hash = key.hash(indexed.base).finish();
+        let slot = match indexed.locate(key, hash) { None => { return (indexed, None); }, Some(slot) => slot };
+        let old = indexed.slots.get(slot).unwrap().unwrap();
+        let length = indexed.length - 1;
+        if length == 0 { return (Map { buckets= Array.repeat(8, []), slots= [], length= 0, base= indexed.base }, Some(old.value)); }
+        let bucket = usize { bits= hash.bits % indexed.buckets.length.bits };
         var chain: List<usize> = [];
-        for candidate in self.buckets.get(bucket).unwrap() {
+        for candidate in indexed.buckets.get(bucket).unwrap() {
             if candidate != slot { chain = candidate :: chain; }
         }
         let updated = Map {
-            buckets= self.buckets.set(bucket, chain)?.unwrap(),
-            slots= self.slots.set(slot, None)?.unwrap(),
-            length= length, base= self.base,
+            buckets= indexed.buckets.set(bucket, chain)?.unwrap(),
+            slots= indexed.slots.set(slot, None)?.unwrap(),
+            length= length, base= indexed.base,
         };
         if length < updated.buckets.length / 4 && updated.buckets.length > 8 {
             return (updated.reindexed(updated.buckets.length / 2), Some(old.value));
