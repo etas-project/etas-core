@@ -1,24 +1,22 @@
 module std.collections;
 
-impl Array<T> {
+impl Array<T> ~ RandomAccess<T> {
     public flow len(self) -> usize ![] {
         return self.length;
     }
 
+    public flow get<I ~ Index>(self, index: I) -> Option<T> ![] {
+        let offset = match index.to_usize() { Some(value) => value, None => { return None; } };
+        return match self[offset]? {
+            Ok(value) => Some(value),
+            Err(_) => None,
+        };
+    }
+}
+
+impl Array<T> {
     public flow is_empty(self) -> bool ![] {
         return self.length == 0;
-    }
-
-    public flow get<I ~ Index>(self, index: I) -> Option<T> ![] {
-        return match index.to_usize() {
-            Some(offset) => {
-                return match self[offset]? {
-                    Ok(value) => Some(value),
-                    Err(_) => None,
-                };
-            },
-            None => None,
-        };
     }
 
     public flow at<I ~ Index>(self, index: I) -> T ![Error<std.runtime.error.IndexError>] {
@@ -143,13 +141,25 @@ impl List<T> {
     }
 }
 
-
-
-impl Slice<T> {
+impl Slice<T> ~ RandomAccess<T> {
     public flow len(self) -> usize ![] {
         return self.length;
     }
 
+    public flow get<I ~ Index>(self, index: I) -> Option<T> ![] {
+        return match index.to_usize() {
+            Some(offset) => {
+                if offset < self.length {
+                    return self.source.get(self.start + offset);
+                }
+                return None;
+            },
+            None => None,
+        };
+    }
+}
+
+impl Slice<T> {
     public flow is_empty(self) -> bool ![] {
         return self.length == 0;
     }
@@ -163,18 +173,6 @@ impl Slice<T> {
                     length= self.length,
                 },
             ),
-        };
-    }
-
-    public flow get<I ~ Index>(self, index: I) -> Option<T> ![] {
-        return match index.to_usize() {
-            Some(offset) => {
-                if offset < self.length {
-                    return self.source.get(self.start + offset);
-                }
-                return None;
-            },
-            None => None,
         };
     }
 
@@ -209,24 +207,23 @@ impl string {
     }
 }
 
-impl bytes {
+impl bytes ~ RandomAccess<u8> {
     public flow len(self) -> usize ![] {
         return self.length;
     }
 
-    public flow is_empty(self) -> bool ![] {
-        return self.length == 0;
-    }
-}
-
-
-
-impl bytes {
     public flow get<I ~ Index>(self, index: I) -> Option<u8> ![] {
-        return match self[index]? {
+        let offset = match index.to_usize() { Some(value) => value, None => { return None; } };
+        return match self[offset]? {
             Ok(value) => Some(value),
             Err(_) => None,
         };
+    }
+}
+
+impl bytes {
+    public flow is_empty(self) -> bool ![] {
+        return self.length == 0;
     }
 }
 

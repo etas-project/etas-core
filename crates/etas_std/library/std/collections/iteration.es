@@ -4,6 +4,11 @@ public spec Iterable<T> {
     flow iter(self) -> Iter<T> ![];
 }
 
+public spec RandomAccess<T> ~ Iterable<T> {
+    flow len(self) -> usize ![];
+    flow get<I ~ Index>(self, index: I) -> Option<T> ![];
+}
+
 impl Iter<T> {
     public flow empty() -> Iter<T> ![] {
         return Iter { next= () => None };
@@ -18,18 +23,18 @@ impl Iter<T> ~ Iterable<T> {
 
 impl Array<T> ~ Iterable<T> {
     public flow iter(self) -> Iter<T> ![] {
-        return Iter { next= () => match self.get(0) {
-            Some(value) => Some((value, self.iter_from(1))),
-            None => None,
+        return Iter { next= () => match self[0]? {
+            Ok(value) => Some((value, self.iter_from(1))),
+            Err(_) => None,
         } };
     }
 }
 
 impl Array<T> {
     flow iter_from(self, index: usize) -> Iter<T> ![] {
-        return Iter { next= () => match self.get(index) {
-            Some(value) => Some((value, self.iter_from(index + 1))),
-            None => None,
+        return Iter { next= () => match self[index]? {
+            Ok(value) => Some((value, self.iter_from(index + 1))),
+            Err(_) => None,
         } };
     }
 }

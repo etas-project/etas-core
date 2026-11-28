@@ -88,34 +88,47 @@ public flow stable_sort_by_key<T, K ~ Order>(values: Array<T>, key: (T) -> K ![]
     for (_, value) in sorter.sorted(keyed) { output = output.push(value); }
     return output;
 }
+type SortedMerge<T> = { private compare: (T, T) -> i32 ![] };
+
+impl SortedMerge<T> {
+    // Hold the unchosen head across calls. Only advance the input that supplied the last item.
+    flow cursor(self, left: Iter<T>, right: Iter<T>, a: Option<T>, b: Option<T>) -> Iter<T> ![] {
+        return Iter { next= () => {
+            let lhs = match a { Some(x) => Some((x, left)), None => (left.next)() };
+            let rhs = match b { Some(y) => Some((y, right)), None => (right.next)() };
+            return match (lhs, rhs) {
+                (None, tail) => tail,
+                (tail, None) => tail,
+                (Some((x, xs)), Some((y, ys))) => if (self.compare)(x, y) <= 0 {
+                    Some((x, self.cursor(xs, ys, None, Some(y))))
+                } else {
+                    Some((y, self.cursor(xs, ys, Some(x), None)))
+                },
+            };
+        } };
+    }
+}
+
+public flow merge<T ~ Order>(left: Iter<T>, right: Iter<T>) -> Iter<T> ![] {
+    let order = SortedMerge { compare= (a: T, b: T) => a.compare(b) };
+    return order.cursor(left, right, None, None);
+}
+
+public flow merge_by<T>(left: Iter<T>, right: Iter<T>, compare: (T, T) -> i32 ![]) -> Iter<T> ![] {
+    let order = SortedMerge { compare= compare };
+    return order.cursor(left, right, None, None);
+}
+
 public flow merge<T ~ Order>(left: Array<T>, right: Array<T>) -> Array<T> ![] {
-    var output: Array<T> = [];
-    var a: usize = 0;
-    var b: usize = 0;
-    while a < left.length && b < right.length {
-        let x = left.get(a).unwrap(); let y = right.get(b).unwrap();
-        if x.compare(y) <= 0 { output = output.push(x); a = a + 1; }
-        else { output = output.push(y); b = b + 1; }
-    }
-    while a < left.length { output = output.push(left.get(a).unwrap()); a = a + 1; }
-    while b < right.length { output = output.push(right.get(b).unwrap()); b = b + 1; }
-    return output;
+    return merge(left.iter(), right.iter()).collect();
 }
+
 public flow merge_by<T>(left: Array<T>, right: Array<T>, compare: (T, T) -> i32 ![]) -> Array<T> ![] {
-    var output: Array<T> = [];
-    var a: usize = 0;
-    var b: usize = 0;
-    while a < left.length && b < right.length {
-        let x = left.get(a).unwrap(); let y = right.get(b).unwrap();
-        if compare(x, y) <= 0 { output = output.push(x); a = a + 1; }
-        else { output = output.push(y); b = b + 1; }
-    }
-    while a < left.length { output = output.push(left.get(a).unwrap()); a = a + 1; }
-    while b < right.length { output = output.push(right.get(b).unwrap()); b = b + 1; }
-    return output;
+    return merge_by(left.iter(), right.iter(), compare).collect();
 }
-public flow binary_search<T ~ Order>(values: Array<T>, key: T) -> Result<usize, usize> ![] {
-    var lower: usize = 0; var upper = values.length;
+
+public flow binary_search<T ~ Order, S ~ RandomAccess<T>>(values: S, key: T) -> Result<usize, usize> ![] {
+    var lower: usize = 0; var upper = values.len();
     while lower < upper {
         let middle = lower + (upper - lower) / 2;
         let order = values.get(middle).unwrap().compare(key);
@@ -124,8 +137,8 @@ public flow binary_search<T ~ Order>(values: Array<T>, key: T) -> Result<usize, 
     }
     return Err(lower);
 }
-public flow binary_search_by<T>(values: Array<T>, compare_to_key: (T) -> i32 ![]) -> Result<usize, usize> ![] {
-    var lower: usize = 0; var upper = values.length;
+public flow binary_search_by<T, S ~ RandomAccess<T>>(values: S, compare_to_key: (T) -> i32 ![]) -> Result<usize, usize> ![] {
+    var lower: usize = 0; var upper = values.len();
     while lower < upper {
         let middle = lower + (upper - lower) / 2;
         let order = compare_to_key(values.get(middle).unwrap());
@@ -141,8 +154,8 @@ public flow partition<T, effect E>(values: Array<T>, predicate: (T) -> bool ![E]
     }
     return (yes, no);
 }
-public flow partition_point<T>(values: Array<T>, predicate: (T) -> bool ![]) -> usize ![] {
-    var lower: usize = 0; var upper = values.length;
+public flow partition_point<T, S ~ RandomAccess<T>>(values: S, predicate: (T) -> bool ![]) -> usize ![] {
+    var lower: usize = 0; var upper = values.len();
     while lower < upper {
         let middle = lower + (upper - lower) / 2;
         if predicate(values.get(middle).unwrap()) { lower = middle + 1; } else { upper = middle; }
@@ -166,8 +179,8 @@ public flow is_sorted_by<T>(items: Iter<T>, compare: (T, T) -> i32 ![]) -> bool 
     return true;
 }
 
-public flow lower_bound<T ~ Order>(values: Array<T>, key: T) -> usize ![] {
-    var lower: usize = 0; var upper = values.length;
+public flow lower_bound<T ~ Order, S ~ RandomAccess<T>>(values: S, key: T) -> usize ![] {
+    var lower: usize = 0; var upper = values.len();
     while lower < upper {
         let middle = lower + (upper - lower) / 2;
         let order = values.get(middle).unwrap().compare(key);
@@ -176,8 +189,8 @@ public flow lower_bound<T ~ Order>(values: Array<T>, key: T) -> usize ![] {
     return lower;
 }
 
-public flow upper_bound<T ~ Order>(values: Array<T>, key: T) -> usize ![] {
-    var lower: usize = 0; var upper = values.length;
+public flow upper_bound<T ~ Order, S ~ RandomAccess<T>>(values: S, key: T) -> usize ![] {
+    var lower: usize = 0; var upper = values.len();
     while lower < upper {
         let middle = lower + (upper - lower) / 2;
         let order = values.get(middle).unwrap().compare(key);
@@ -186,8 +199,8 @@ public flow upper_bound<T ~ Order>(values: Array<T>, key: T) -> usize ![] {
     return lower;
 }
 
-public flow lower_bound_by<T>(values: Array<T>, compare_to_key: (T) -> i32 ![]) -> usize ![] {
-    var lower: usize = 0; var upper = values.length;
+public flow lower_bound_by<T, S ~ RandomAccess<T>>(values: S, compare_to_key: (T) -> i32 ![]) -> usize ![] {
+    var lower: usize = 0; var upper = values.len();
     while lower < upper {
         let middle = lower + (upper - lower) / 2;
         let order = compare_to_key(values.get(middle).unwrap());
@@ -196,8 +209,8 @@ public flow lower_bound_by<T>(values: Array<T>, compare_to_key: (T) -> i32 ![]) 
     return lower;
 }
 
-public flow upper_bound_by<T>(values: Array<T>, compare_to_key: (T) -> i32 ![]) -> usize ![] {
-    var lower: usize = 0; var upper = values.length;
+public flow upper_bound_by<T, S ~ RandomAccess<T>>(values: S, compare_to_key: (T) -> i32 ![]) -> usize ![] {
+    var lower: usize = 0; var upper = values.len();
     while lower < upper {
         let middle = lower + (upper - lower) / 2;
         let order = compare_to_key(values.get(middle).unwrap());
