@@ -4,27 +4,33 @@ type JsonWriter = {};
 
 impl JsonWriter {
     flow quote(self, text: string) -> string ![] {
+        let input = text.utf8;
+        var start: usize = 0;
+        var offset: usize = 0;
         var output = "\"";
-        for scalar in std.text.chars(text) {
-            output = output + match scalar.bits {
-                34 => "\\\"",
-                92 => "\\\\",
-                8 => "\\b",
-                12 => "\\f",
-                10 => "\\n",
-                13 => "\\r",
-                9 => "\\t",
-                _ => {
-                    let code = scalar.to_u32();
-                    if code < 32 {
-                        let high = std.text.char_get("0123456789abcdef", code / 16).unwrap();
-                        let low = std.text.char_get("0123456789abcdef", code % 16).unwrap();
+        for byte in input {
+            if byte < 32 || byte == 34 || byte == 92 {
+                if start < offset {
+                    let part = input[start, offset)?.unwrap();
+                    output = output + std.codec.text.utf8_decode(part, std.codec.text.Strict).unwrap();
+                }
+                output = output + match byte.bits {
+                    34 => "\\\"", 92 => "\\\\", 8 => "\\b", 12 => "\\f",
+                    10 => "\\n", 13 => "\\r", 9 => "\\t",
+                    _ => {
+                        let high = std.text.char_get("0123456789abcdef", byte.bits / 16).unwrap();
+                        let low = std.text.char_get("0123456789abcdef", byte.bits % 16).unwrap();
                         "\\u00" + std.text.from_char(high) + std.text.from_char(low)
-                    } else {
-                        std.text.from_char(scalar)
-                    }
-                },
-            };
+                    },
+                };
+                start = offset + 1;
+            }
+            offset = offset + 1;
+        }
+        if start == 0 { return "\"" + text + "\""; }
+        if start < input.length {
+            let part = input[start, input.length)?.unwrap();
+            output = output + std.codec.text.utf8_decode(part, std.codec.text.Strict).unwrap();
         }
         return output + "\"";
     }

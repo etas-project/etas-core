@@ -41,10 +41,13 @@ pub enum StdExecutionRole {
     ResourceScope,
     CachedSchemaFingerprint,
     RememberSchemaFingerprint,
+    ArrayTruncate,
+    CachedMapIndex,
+    RememberMapIndex,
 }
 
 impl StdExecutionRole {
-    pub const ALL: [Self; 29] = [
+    pub const ALL: [Self; 32] = [
         Self::Abort,
         Self::Checkpoint,
         Self::CaptureData,
@@ -74,6 +77,9 @@ impl StdExecutionRole {
         Self::ResourceScope,
         Self::CachedSchemaFingerprint,
         Self::RememberSchemaFingerprint,
+        Self::ArrayTruncate,
+        Self::CachedMapIndex,
+        Self::RememberMapIndex,
     ];
 
     pub fn role(self) -> &'static str {
@@ -86,6 +92,9 @@ impl StdExecutionRole {
             Self::StorageSchema => "std.memory.StorageValue.schema",
             Self::CachedSchemaFingerprint => "std.memory.MutationFingerprint.cached_schema",
             Self::RememberSchemaFingerprint => "std.memory.MutationFingerprint.remember_schema",
+            Self::ArrayTruncate => "std.collections.ArrayStorage.truncate",
+            Self::CachedMapIndex => "std.collections.ArrayStorage.cached_map_index",
+            Self::RememberMapIndex => "std.collections.ArrayStorage.remember_map_index",
             Self::StorageContext => "std.memory.StorageContext.current",
             Self::StorageNonce => "std.memory.StorageContext.nonce",
             Self::StreamClock => "std.stream.StreamClock.now",
@@ -120,6 +129,9 @@ impl StdExecutionRole {
             Self::StorageSchema => "std.memory.StorageValue.schema",
             Self::CachedSchemaFingerprint => "std.memory.MutationFingerprint.cached_schema",
             Self::RememberSchemaFingerprint => "std.memory.MutationFingerprint.remember_schema",
+            Self::ArrayTruncate => "std.collections.ArrayStorage.truncate",
+            Self::CachedMapIndex => "std.collections.ArrayStorage.cached_map_index",
+            Self::RememberMapIndex => "std.collections.ArrayStorage.remember_map_index",
             Self::StorageContext => "std.memory.StorageContext.current",
             Self::StorageNonce => "std.memory.StorageContext.nonce",
             Self::StreamClock => "std.stream.StreamClock.now",
@@ -155,6 +167,9 @@ impl StdExecutionRole {
             | Self::StorageSchema
             | Self::CachedSchemaFingerprint
             | Self::RememberSchemaFingerprint
+            | Self::ArrayTruncate
+            | Self::CachedMapIndex
+            | Self::RememberMapIndex
             | Self::StorageContext
             | Self::StorageNonce
             | Self::StreamClock
@@ -196,6 +211,9 @@ impl StdExecutionRole {
             Self::CaptureStorage | Self::RestoreStorage | Self::StorageSchema => {
                 &["std.memory.StorageValue"]
             }
+            Self::ArrayTruncate | Self::CachedMapIndex | Self::RememberMapIndex => {
+                &["std.collections.ArrayStorage"]
+            }
             Self::CachedSchemaFingerprint | Self::RememberSchemaFingerprint => {
                 &["std.memory.MutationFingerprint"]
             }
@@ -228,6 +246,9 @@ impl StdExecutionRole {
                 | Self::StorageSchema
                 | Self::CachedSchemaFingerprint
                 | Self::RememberSchemaFingerprint
+                | Self::ArrayTruncate
+                | Self::CachedMapIndex
+                | Self::RememberMapIndex
                 | Self::ReadScopeEnter
                 | Self::ScopeEnter
                 | Self::ResourceScope

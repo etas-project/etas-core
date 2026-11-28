@@ -16,11 +16,7 @@ public enum JsonValue {
 }
 
 public flow parse(text: string) -> Result<JsonValue, JsonError> ![] {
-    var input: Array<char> = [];
-    for scalar in std.text.chars(text) {
-        input = input.push(scalar);
-    }
-    var reader = JsonReader { input= input, position= 0 };
+    var reader = JsonReader { input= text.utf8, offset= 0, position= 0 };
     return reader.document()?;
 }
 

@@ -38,29 +38,26 @@ impl FloatLayout {
             position = 1;
         }
         var number: u128 = 0;
-        var wide: Option<BigNat> = None;
+        // Binary64 rounding midpoints have at most 769 significant decimal digits
+        // (a 54-bit integer times at most 5^1075). Binary32 needs fewer.
+        let precision: usize = 800;
+        var sticky = false;
         var digits: usize = 0;
         var fractional: usize = 0;
         var significant: usize = 0;
-        var nonzero = false;
+        var last_nonzero: usize = 0;
         var decimal = false;
         var exponent = false;
         while position < input.length {
             let byte = input.get(position).unwrap();
             if byte >= 48 && byte <= 57 {
                 let digit = byte.bits - 48;
-                match wide {
-                    Some(value) => { wide = Some(value.multiply_small(10).add_small(digit)); },
-                    None => {
-                        if number <= (18446744073709551615 - digit) / 10 {
-                            number = number * 10 + digit;
-                        } else { wide = Some(BigNat.new(number).multiply_small(10).add_small(digit)); }
-                    },
-                };
+                if significant < 19 { number = number * 10 + digit; }
+                if significant >= precision && digit != 0 { sticky = true; }
                 digits = digits + 1;
                 if decimal { fractional = fractional + 1; }
-                if byte != 48 { nonzero = true; }
-                if nonzero { significant = significant + 1; }
+                if byte != 48 || significant != 0 { significant = significant + 1; }
+                if byte != 48 { last_nonzero = significant; }
                 position = position + 1;
             } else if byte == 46 && !decimal {
                 decimal = true;
@@ -99,28 +96,52 @@ impl FloatLayout {
             if exponent_digits == 0 { return Err(ParseFailure); }
         }
         let sign = if negative { self.sign_mask() } else { 0 };
-        if !nonzero { return Ok(sign); }
+        if significant == 0 { return Ok(sign); }
         let absolute_exponent = i128 { bits= magnitude };
         let explicit_exponent = if exponent_negative { 0 - absolute_exponent } else { absolute_exponent };
-        let power = explicit_exponent - i128 { bits= fractional.bits };
+        var power = explicit_exponent - i128 { bits= fractional.bits };
         let decimal_exponent = i128 { bits= significant.bits } - 1 + power;
         if decimal_exponent < self.minimum_decimal || decimal_exponent > self.maximum_decimal {
             return Err(NumericOverflow);
         }
-        let exact = match wide {
-            Some(value) => value,
-            None => {
-                match self.fast_decimal(number, power) {
-                    Some(bits) => { return Ok(sign + bits); },
-                    None => {},
-                };
-                BigNat.new(number)
-            },
-        };
-        return match self.from_decimal(exact, power) {
-            Ok(bits) => Ok(sign + bits),
-            Err(error) => Err(error),
-        };
+        if significant > 19 && last_nonzero < significant {
+            power = power + i128 { bits= (significant - last_nonzero).bits };
+            significant = last_nonzero;
+            var used: usize = 19;
+            while used > significant { number = number / 10; used = used - 1; }
+        }
+        if significant <= 19 {
+            match self.fast_decimal(number, power) {
+                Some(bits) => { return Ok(sign + bits); },
+                None => { return self.from_decimal(BigNat.new(number), power).map((bits: u128) => sign + bits); },
+            };
+        }
+        let retained = if significant < precision { significant } else { precision };
+        var exact = BigNat.new(0);
+        var count: usize = 0;
+        var chunk: u128 = 0;
+        var scale: u128 = 1;
+        for byte in input {
+            if byte < 48 || byte > 57 { continue; }
+            let digit = byte.bits - 48;
+            if count == 0 && digit == 0 { continue; }
+            chunk = chunk * 10 + digit;
+            scale = scale * 10;
+            count = count + 1;
+            if scale == 1000000000 || count == retained {
+                exact = exact.multiply_small(scale).add_small(chunk);
+                chunk = 0;
+                scale = 1;
+            }
+            if count == retained { break; }
+        }
+        var adjusted = power + i128 { bits= (significant - retained).bits };
+        if sticky {
+            // All nonzero discarded tails lie on the same side of every midpoint.
+            exact = exact.multiply_small(10).add_small(1);
+            adjusted = adjusted - 1;
+        }
+        return self.from_decimal(exact, adjusted).map((bits: u128) => sign + bits);
     }
 
     // Eisel-Lemire conversion adapted from Go 1.23 strconv/eisel_lemire.go.

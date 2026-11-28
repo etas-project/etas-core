@@ -19,13 +19,7 @@ impl WireView {
     }
 
     flow to_bytes(self) -> bytes ![] {
-        var output: Array<u8> = [];
-        var index = self.begin;
-        while index < self.end {
-            output = output.push(self.input.get(index).unwrap());
-            index = index + 1;
-        }
-        return bytes { data= output };
+        return self.input[self.begin, self.end)?.unwrap();
     }
 
     flow text(self) -> Result<string, std.codec.text.TextCodecError> ![] {
@@ -212,8 +206,13 @@ impl WireView {
 type WireReader = { private input: bytes, private end: usize };
 
 impl WireReader {
-    flow line(self, start: usize) -> HttpDecodeStep<WireView> ![] {
-        var offset = start;
+    flow resume_offset(self) -> usize ![] {
+        if self.end > 0 && self.input.get(self.end - 1) == Some(13) { return self.end - 1; }
+        return self.end;
+    }
+
+    flow line(self, start: usize, scanned: usize) -> HttpDecodeStep<WireView> ![] {
+        var offset = scanned;
         while offset < self.end {
             let byte = self.input.get(offset).unwrap();
             if byte == 10 {
@@ -231,8 +230,8 @@ impl WireReader {
         return NeedMore;
     }
 
-    flow head_end(self) -> HttpDecodeStep<unit> ![] {
-        var offset: usize = 0;
+    flow head_end(self, scanned: usize) -> HttpDecodeStep<unit> ![] {
+        var offset = scanned;
         while offset < self.end {
             let byte = self.input.get(offset).unwrap();
             if byte == 10 {

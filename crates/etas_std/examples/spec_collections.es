@@ -26,6 +26,10 @@ flow main(args: Array<string>) -> i32 ![] {
     std.core.assert(double.iter().sum() == 4.0);
     std.core.assert(std.collections.top_k(values.iter(), 3) == [5, 4, 3]);
     std.core.assert(median == 3);
+    let items: Array<i32> = [1, 2, 3];
+    let (prefix, last) = items.pop();
+    std.core.assert(items.length == 3 && prefix == [1, 2] && last == Some(3));
+    std.core.assert(items.iter().windows(2)?.unwrap().to_array() == [[1, 2], [2, 3]]);
     let rounds = std.agent.group.round_robin(
         [(state: (i32, () -> i32 ![])) => {
             let (value, callback) = state;

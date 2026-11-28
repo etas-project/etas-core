@@ -38,16 +38,10 @@ impl Array<T> {
     }
 
     public flow pop(self) -> (Array<T>, Option<T>) ![] {
-        var remaining: Array<T> = [];
-        var previous: Option<T> = None;
-        for value in self {
-            match previous {
-                Some(last) => { remaining = remaining + [last]; },
-                None => {},
-            };
-            previous = Some(value);
-        }
-        return (remaining, previous);
+        if self.length == 0 { return (self, None); }
+        let end = self.length - 1;
+        let last = self.get(end);
+        return (ArrayStorage.truncate(self, end), last);
     }
 
     public flow extend(self, appended: Array<T>) -> Array<T> ![] {
@@ -258,4 +252,17 @@ impl Array<T> {
         output[offset] = value;
         return output;
     }
+}
+
+// Operations on the backing of an immutable array snapshot.
+type ArrayStorage = {};
+impl ArrayStorage {
+    @std.role("std.collections.ArrayStorage.truncate")
+    flow truncate<T>(items: Array<T>, length: usize) -> Array<T> ![];
+
+    @std.role("std.collections.ArrayStorage.cached_map_index")
+    flow cached_map_index<T>(slots: Array<T>, seed: u64) -> Array<usize> ![];
+
+    @std.role("std.collections.ArrayStorage.remember_map_index")
+    flow remember_map_index<T>(slots: Array<T>, seed: u64, index: Array<usize>) -> unit ![];
 }

@@ -171,19 +171,31 @@ impl Iter<T> {
     }
     public flow windows(self, size: usize) -> Iter<Array<T>> ![Error<CollectionError>] {
         if size == 0 { perform Error.raise<CollectionError>(CollectionError.InvalidWindowSize(size)); }
-        return self.window_cursor(size);
-    }
-    flow window_cursor(self, size: usize) -> Iter<Array<T>> ![] {
         return Iter { next= () => {
-            var output: Array<T> = [];
             var cursor = self;
-            while output.length < size {
+            var window: Array<T> = [];
+            while window.length < size {
                 match (cursor.next)() {
                     None => { return None; },
-                    Some((value, tail)) => { output = output.push(value); cursor = tail; },
+                    Some((value, tail)) => { window = window.push(value); cursor = tail; },
                 };
             }
-            return Some((output, self.skip(1).window_cursor(size)));
+            return Some((window, cursor.following_windows(window)));
+        } };
+    }
+    flow following_windows(self, previous: Array<T>) -> Iter<Array<T>> ![] {
+        return Iter { next= () => match (self.next)() {
+            None => None,
+            Some((value, tail)) => {
+                var window: Array<T> = [];
+                var index: usize = 1;
+                while index < previous.length {
+                    window = window.push(previous.get(index).unwrap());
+                    index = index + 1;
+                }
+                window = window.push(value);
+                Some((window, tail.following_windows(window)))
+            },
         } };
     }
     public flow step_by(self, step: usize) -> Iter<T> ![Error<CollectionError>] {

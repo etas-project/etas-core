@@ -22,13 +22,14 @@ impl Map<K ~ Hash, V> {
     flow locate(self, key: K, hash: u64) -> Option<usize> ![] {
         // Host maps arrive in insertion order, before Etas has run the key's Hash implementation.
         if self.buckets.is_empty() {
-            var slot: usize = 0;
-            for candidate in self.slots {
-                match candidate {
-                    Some(entry) => { if entry.key == key { return Some(slot); } },
-                    None => {},
-                };
-                slot = slot + 1;
+            let count = self.slots.length;
+            if count == 0 { return None; }
+            let index = self.read_index();
+            var slot = index.get(usize { bits= hash.bits % count.bits }).unwrap();
+            while slot < count {
+                let entry = self.slots.get(slot).unwrap().unwrap();
+                if entry.key == key { return Some(slot); }
+                slot = index.get(count + slot).unwrap();
             }
             return None;
         }
@@ -38,6 +39,31 @@ impl Map<K ~ Hash, V> {
             if entry.hash == hash && entry.key == key { return Some(slot); }
         }
         return None;
+    }
+    // Import leaves insertion slots intact. Build bucket heads and next links
+    // once with K's checked Hash and the original seed, even on a read-only map.
+    flow read_index(self) -> Array<usize> ![] {
+        let seed = self.base.finish();
+        let cached = ArrayStorage.cached_map_index(self.slots, seed);
+        if cached.length != 0 { return cached; }
+        let count = self.slots.length;
+        var index = Array.repeat(count + count, count);
+        var slot: usize = 0;
+        for candidate in self.slots {
+            match candidate {
+                Some(entry) => {
+                    let hash = entry.key.hash(self.base).finish();
+                    let bucket = usize { bits= hash.bits % count.bits };
+                    let head = index.get(bucket).unwrap();
+                    index = index.set(count + slot, head)?.unwrap();
+                    index = index.set(bucket, slot)?.unwrap();
+                },
+                None => {},
+            };
+            slot = slot + 1;
+        }
+        ArrayStorage.remember_map_index(self.slots, seed, index);
+        return index;
     }
     public flow get(self, key: K) -> Option<V> ![] {
         let hash = key.hash(self.base).finish();

@@ -38,7 +38,7 @@ flow main(args: Array<string>) -> i32 ![Error<StorageError>] {
     let selected = view.scan().take(1).collect();
     std.core.assert(selected.length == 1);
     std.core.assert(selected.get(0).unwrap().reading.bits == 2143289345);
-    store.delete(key);
+    store.clear();
     std.core.assert(!view.contains(key));
     return 0;
 }

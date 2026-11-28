@@ -7,7 +7,7 @@ import std.http.codec.HttpDecodeStep.{Complete, Malformed, NeedMore};
 public flow decode_response_head_prefix(input: bytes, limit: usize) -> HttpDecodeStep<HttpWireResponseHead> ![] {
     let end = if input.length < limit { input.length } else { limit };
     let reader = WireReader { input= input, end= end };
-    let (line, next) = match reader.line(0) {
+    let (line, next) = match reader.line(0, 0) {
         Complete(line, next) => (line, next),
         Malformed(failure) => { return Malformed(failure); },
         NeedMore => {
@@ -33,7 +33,7 @@ public flow decode_response_head_prefix(input: bytes, limit: usize) -> HttpDecod
     var offset = next;
     var headers: List<HttpHeader> = [];
     while true {
-        match reader.line(offset) {
+        match reader.line(offset, offset) {
             Complete(line, next) => {
                 if line.length() == 0 {
                     return Complete(HttpWireResponseHead {
@@ -65,47 +65,62 @@ public flow decode_response_head_prefix(input: bytes, limit: usize) -> HttpDecod
 
 public flow decode_response_head_incremental(input: bytes, end_of_stream: bool)
     -> HttpDecodeStep<HttpWireResponseHead> ![] {
-    let reader = WireReader { input= input, end= input.length };
-    let head_end = match reader.head_end() {
-        Complete(_, end) => end,
-        Malformed(failure) => { return Malformed(failure); },
-        NeedMore => {
-            if end_of_stream {
-                return Malformed(HttpDecodeFailure { kind= UnexpectedEof, offset= input.length });
-            }
-            return NeedMore;
-        },
-    };
-    let bounded = WireReader { input= input, end= head_end };
-    let (line, next) = match bounded.line(0) {
-        Complete(line, next) => (line, next),
-        Malformed(failure) => { return Malformed(failure); },
-        NeedMore => std.core.abort("complete HTTP head lacks its status line"),
-    };
-    let (version, status, reason) = match line.status() {
-        Ok(value) => value,
-        Err(failure) => { return Malformed(failure); },
-    };
-    var headers: List<HttpHeader> = [];
-    var offset = next;
-    while true {
-        match bounded.line(offset) {
-            Complete(line, next) => {
-                if line.length() == 0 {
-                    return Complete(HttpWireResponseHead {
-                        version= version, status= status, reason= reason, headers= headers.reverse(),
-                    }, next);
-                }
-                let header = match line.header() {
-                    Ok(value) => value,
-                    Err(kind) => { return Malformed(HttpDecodeFailure { kind= kind, offset= offset }); },
-                };
-                headers = header :: headers;
-                offset = next;
-            },
+    var decoder = HttpResponseHeadDecoder.new();
+    return decoder.decode(input, end_of_stream);
+}
+
+public type HttpResponseHeadDecoder = { private scanned: usize };
+
+impl HttpResponseHeadDecoder {
+    public flow new() -> HttpResponseHeadDecoder ![] {
+        return HttpResponseHeadDecoder { scanned= 0 };
+    }
+
+    public flow decode(var self, input: bytes, end_of_stream: bool)
+        -> HttpDecodeStep<HttpWireResponseHead> ![] {
+        let reader = WireReader { input= input, end= input.length };
+        let head_end = match reader.head_end(self.scanned) {
+            Complete(_, end) => end,
             Malformed(failure) => { return Malformed(failure); },
-            NeedMore => std.core.abort("complete HTTP head lacks its terminator"),
+            NeedMore => {
+                self.scanned = reader.resume_offset();
+                if end_of_stream {
+                    return Malformed(HttpDecodeFailure { kind= UnexpectedEof, offset= input.length });
+                }
+                return NeedMore;
+            },
         };
+        let bounded = WireReader { input= input, end= head_end };
+        let (line, next) = match bounded.line(0, 0) {
+            Complete(line, next) => (line, next),
+            Malformed(failure) => { return Malformed(failure); },
+            NeedMore => std.core.abort("complete HTTP head lacks its status line"),
+        };
+        let (version, status, reason) = match line.status() {
+            Ok(value) => value,
+            Err(failure) => { return Malformed(failure); },
+        };
+        var headers: List<HttpHeader> = [];
+        var offset = next;
+        while true {
+            match bounded.line(offset, offset) {
+                Complete(line, next) => {
+                    if line.length() == 0 {
+                        return Complete(HttpWireResponseHead {
+                            version= version, status= status, reason= reason, headers= headers.reverse(),
+                        }, next);
+                    }
+                    let header = match line.header() {
+                        Ok(value) => value,
+                        Err(kind) => { return Malformed(HttpDecodeFailure { kind= kind, offset= offset }); },
+                    };
+                    headers = header :: headers;
+                    offset = next;
+                },
+                Malformed(failure) => { return Malformed(failure); },
+                NeedMore => std.core.abort("complete HTTP head lacks its terminator"),
+            };
+        }
     }
 }
 

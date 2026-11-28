@@ -4,148 +4,150 @@ import std.http.codec.HttpCodecError.{MalformedMessage};
 import std.http.codec.HttpCodecFailureKind.{ConflictingMessageFraming, ForbiddenResponseBody, InvalidChunkSize, InvalidChunkTerminator, InvalidTrailer, UnexpectedEof};
 import std.http.codec.HttpDecodeStep.{Complete, Malformed, NeedMore};
 
-public flow decode_response_incremental(input: bytes, end_of_stream: bool)
-    -> HttpDecodeStep<HttpWireResponse> ![] {
-    let (head, head_end) = match decode_response_head_incremental(input, end_of_stream) {
-        Complete(head, consumed) => (head, consumed),
-        NeedMore => { return NeedMore; },
-        Malformed(failure) => { return Malformed(failure); },
-    };
-    let (chunked, length) = match head.framing() {
-        Ok(value) => value,
-        Err(kind) => { return Malformed(HttpDecodeFailure { kind= kind, offset= head_end }); },
-    };
-    if chunked && length.is_some() {
-        return Malformed(HttpDecodeFailure { kind= ConflictingMessageFraming, offset= head_end });
-    }
-    let no_body = (head.status >= 100 && head.status < 200) || head.status == 204 || head.status == 304;
-    if no_body {
-        let forbidden_length = match length {
-            Some(value) => head.status != 304 && value != 0,
-            None => false,
+enum BodyPhase { Head, Fixed(usize), UntilEof, Size, Data(usize), Trailers }
+
+public type HttpResponseDecoder = {
+    private head_decoder: HttpResponseHeadDecoder,
+    private head: Option<HttpWireResponseHead>,
+    private phase: BodyPhase,
+    private start: usize,
+    private scanned: usize,
+    private chunk_line: ChunkLine,
+    private body: std.bytes.BytesBuilder,
+};
+
+impl HttpResponseDecoder {
+    public flow new() -> HttpResponseDecoder ![] {
+        return HttpResponseDecoder {
+            head_decoder= HttpResponseHeadDecoder.new(), head= None, phase= BodyPhase.Head,
+            start= 0, scanned= 0, chunk_line= ChunkLine.new(), body= std.bytes.BytesBuilder.new(),
         };
-        if chunked || forbidden_length {
-            return Malformed(HttpDecodeFailure { kind= ForbiddenResponseBody, offset= head_end });
-        }
-        return Complete(HttpWireResponse { head= head, body= bytes { data= [] } }, head_end);
     }
-    if chunked {
-        let reader = WireReader { input= input, end= input.length };
-        var offset = head_end;
-        var output: Array<u8> = [];
-        var maximum_index: u128 = 0;
-        var bit: usize = 0;
-        while bit < usize.width() {
-            maximum_index = maximum_index * 2 + 1;
-            bit = bit + 1;
+
+    flow begin_body(var self, head: HttpWireResponseHead, end: usize) -> Result<unit, HttpCodecFailureKind> ![] {
+        let (chunked, length) = match head.framing() {
+            Ok(value) => value,
+            Err(kind) => { return Err(kind); },
+        };
+        if chunked && length.is_some() { return Err(ConflictingMessageFraming); }
+        if (head.status >= 100 && head.status < 200) || head.status == 204 || head.status == 304 {
+            if chunked || (head.status != 304 && length.unwrap_or(0) != 0) { return Err(ForbiddenResponseBody); }
+            self.phase = BodyPhase.Fixed(0);
+        } else if chunked {
+            self.phase = BodyPhase.Size;
+        } else {
+            self.phase = match length { Some(value) => BodyPhase.Fixed(value), None => BodyPhase.UntilEof };
         }
+        self.head = Some(head);
+        self.start = end;
+        self.scanned = end;
+        return Ok(());
+    }
+
+    // Each retry supplies the same response prefix extended with newly received bytes.
+    public flow decode(var self, input: bytes, end_of_stream: bool) -> HttpDecodeStep<HttpWireResponse> ![] {
+        let reader = WireReader { input= input, end= input.length };
         while true {
-            let line_start = offset;
-            let (line, next) = match reader.line(offset) {
-                Complete(line, next) => (line, next),
-                Malformed(failure) => { return Malformed(failure); },
-                NeedMore => {
-                    // Even incomplete lines can already contain an invalid size
-                    // or extension. Preserve the prefix decoder's diagnosis.
-                    let partial = WireView { input= input, begin= offset, end= input.length }.partial();
-                    var parser = ChunkLine { input= partial, complete= false, offset= 0 };
-                    match parser.parse() {
-                        Malformed(failure) => {
-                            return Malformed(HttpDecodeFailure {
-                                kind= failure.kind, offset= line_start + failure.offset,
-                            });
+            match self.phase {
+                BodyPhase.Head => {
+                    var parser = self.head_decoder;
+                    let result = parser.decode(input, end_of_stream);
+                    self.head_decoder = parser;
+                    match result {
+                        NeedMore => { return NeedMore; },
+                        Malformed(failure) => { return Malformed(failure); },
+                        Complete(head, end) => match self.begin_body(head, end) {
+                            Ok(_) => {},
+                            Err(kind) => { return Malformed(HttpDecodeFailure { kind= kind, offset= end }); },
                         },
-                        _ => {},
                     };
-                    if end_of_stream {
-                        return Malformed(HttpDecodeFailure { kind= UnexpectedEof, offset= input.length });
-                    }
-                    return NeedMore;
                 },
-            };
-            var parser = ChunkLine { input= line, complete= true, offset= 0 };
-            let size = match parser.parse() {
-                Complete(value, _) => value,
-                Malformed(failure) => {
-                    return Malformed(HttpDecodeFailure { kind= failure.kind, offset= line_start + failure.offset });
+                BodyPhase.Fixed(count) => {
+                    if count > input.length - self.start { break; }
+                    let end = self.start + count;
+                    return Complete(HttpWireResponse { head= self.head.unwrap(), body= input[self.start, end)?.unwrap() }, end);
                 },
-                NeedMore => std.core.abort("complete chunk line has no decode result"),
-            };
-            if size.bits > maximum_index {
-                return Malformed(HttpDecodeFailure { kind= InvalidChunkSize, offset= line_start });
-            }
-            offset = next;
-            if size == 0 {
-                while true {
-                    let trailer_start = offset;
-                    let (trailer, next) = match reader.line(offset) {
-                        Complete(line, next) => (line, next),
+                BodyPhase.UntilEof => {
+                    if !end_of_stream { return NeedMore; }
+                    return Complete(HttpWireResponse { head= self.head.unwrap(), body= input[self.start, input.length)?.unwrap() }, input.length);
+                },
+                BodyPhase.Size => {
+                    let (line, next, complete) = match reader.line(self.start, self.scanned) {
+                        Complete(view, end) => (view, end, true),
                         Malformed(failure) => { return Malformed(failure); },
                         NeedMore => {
-                            if end_of_stream {
-                                return Malformed(HttpDecodeFailure { kind= UnexpectedEof, offset= input.length });
-                            }
-                            return NeedMore;
+                            self.scanned = reader.resume_offset();
+                            (WireView { input= input, begin= self.start, end= self.scanned }, self.scanned, false)
                         },
                     };
-                    offset = next;
-                    if trailer.length() == 0 {
-                        return Complete(HttpWireResponse { head= head, body= bytes { data= output } }, offset);
-                    }
-                    let header = match trailer.header() {
-                        Ok(header) => header,
-                        Err(_) => { return Malformed(HttpDecodeFailure { kind= InvalidTrailer, offset= trailer_start }); },
+                    var parser = self.chunk_line;
+                    let result = parser.parse(line, complete);
+                    self.chunk_line = parser;
+                    match result {
+                        Malformed(failure) => {
+                            return Malformed(HttpDecodeFailure { kind= failure.kind, offset= self.start + failure.offset });
+                        },
+                        NeedMore => { break; },
+                        Complete(size, _) => {
+                            let maximum = usize.maximum();
+                            if size.bits > maximum.bits {
+                                return Malformed(HttpDecodeFailure { kind= InvalidChunkSize, offset= self.start });
+                            }
+                            if size.bits > maximum.bits - next.bits {
+                                return Malformed(HttpDecodeFailure { kind= InvalidChunkSize, offset= next });
+                            }
+                            self.start = next;
+                            self.scanned = next;
+                            self.phase = if size == 0 { BodyPhase.Trailers } else { BodyPhase.Data(usize { bits= size.bits }) };
+                        },
                     };
-                    let name = std.text.ascii_lowercase(header.name);
-                    if name == "content-length" || name == "transfer-encoding" || name == "trailer" {
-                        return Malformed(HttpDecodeFailure { kind= InvalidTrailer, offset= trailer_start });
+                },
+                BodyPhase.Data(count) => {
+                    let end = self.start + count;
+                    if end > input.length || input.length - end < 2 { break; }
+                    if input.get(end) != Some(13) || input.get(end + 1) != Some(10) {
+                        return Malformed(HttpDecodeFailure { kind= InvalidChunkTerminator, offset= end });
                     }
-                }
-            }
-            let count = usize { bits= size.bits };
-            if count > input.length - offset {
-                if count.bits > maximum_index - offset.bits {
-                    return Malformed(HttpDecodeFailure { kind= InvalidChunkSize, offset= offset });
-                }
-                if end_of_stream {
-                    return Malformed(HttpDecodeFailure { kind= UnexpectedEof, offset= input.length });
-                }
-                return NeedMore;
-            }
-            let data_end = offset + count;
-            if input.length - data_end < 2 {
-                if end_of_stream {
-                    return Malformed(HttpDecodeFailure { kind= UnexpectedEof, offset= input.length });
-                }
-                return NeedMore;
-            }
-            if input.get(data_end) != Some(13) || input.get(data_end + 1) != Some(10) {
-                return Malformed(HttpDecodeFailure { kind= InvalidChunkTerminator, offset= data_end });
-            }
-            while offset < data_end {
-                output = output.push(input.get(offset).unwrap());
-                offset = offset + 1;
-            }
-            offset = data_end + 2;
+                    var body = self.body;
+                    body.append(input[self.start, end)?.unwrap());
+                    self.body = body;
+                    self.start = end + 2;
+                    self.scanned = self.start;
+                    self.chunk_line = ChunkLine.new();
+                    self.phase = BodyPhase.Size;
+                },
+                BodyPhase.Trailers => {
+                    match reader.line(self.start, self.scanned) {
+                        Malformed(failure) => { return Malformed(failure); },
+                        NeedMore => { self.scanned = reader.resume_offset(); break; },
+                        Complete(line, end) => {
+                            if line.length() == 0 {
+                                return Complete(HttpWireResponse { head= self.head.unwrap(), body= self.body.build() }, end);
+                            }
+                            let header = match line.header() {
+                                Ok(header) => header,
+                                Err(_) => { return Malformed(HttpDecodeFailure { kind= InvalidTrailer, offset= self.start }); },
+                            };
+                            let name = std.text.ascii_lowercase(header.name);
+                            if name == "content-length" || name == "transfer-encoding" || name == "trailer" {
+                                return Malformed(HttpDecodeFailure { kind= InvalidTrailer, offset= self.start });
+                            }
+                            self.start = end;
+                            self.scanned = end;
+                        },
+                    };
+                },
+            };
         }
+        if end_of_stream { return Malformed(HttpDecodeFailure { kind= UnexpectedEof, offset= input.length }); }
+        return NeedMore;
     }
-    match length {
-        Some(length) => {
-            if length > input.length - head_end {
-                if end_of_stream {
-                    return Malformed(HttpDecodeFailure { kind= UnexpectedEof, offset= input.length });
-                }
-                return NeedMore;
-            }
-            let end = head_end + length;
-            let body = WireView { input= input, begin= head_end, end= end }.to_bytes();
-            return Complete(HttpWireResponse { head= head, body= body }, end);
-        },
-        None => {},
-    };
-    if !end_of_stream { return NeedMore; }
-    let body = WireView { input= input, begin= head_end, end= input.length }.to_bytes();
-    return Complete(HttpWireResponse { head= head, body= body }, input.length);
+}
+
+public flow decode_response_incremental(input: bytes, end_of_stream: bool)
+    -> HttpDecodeStep<HttpWireResponse> ![] {
+    var decoder = HttpResponseDecoder.new();
+    return decoder.decode(input, end_of_stream);
 }
 
 public flow decode_response(input: bytes) -> Result<HttpWireResponse, HttpCodecError> ![] {

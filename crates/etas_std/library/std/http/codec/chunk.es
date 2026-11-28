@@ -3,114 +3,101 @@ module std.http.codec;
 import std.http.codec.HttpCodecFailureKind.{InvalidChunkExtension, InvalidChunkSize, LimitExceeded};
 import std.http.codec.HttpDecodeStep.{Complete, Malformed, NeedMore};
 
-type ChunkLine = { private input: WireView, private complete: bool, private offset: usize };
+enum ChunkGrammar { Digits, AfterSize, BeforeName, Name, AfterName, BeforeValue, TokenValue, Quoted, Escape, AfterValue }
+
+type ChunkLine = { private offset: usize, private size: u64, private state: ChunkGrammar };
 
 impl ChunkLine {
-    flow failure(self, kind: HttpCodecFailureKind, offset: usize, missing: bool) -> HttpDecodeStep<u64> ![] {
-        if missing && !self.complete { return NeedMore; }
-        return Malformed(HttpDecodeFailure { kind= kind, offset= offset });
+    flow new() -> ChunkLine ![] {
+        return ChunkLine { offset= 0, size= 0, state= ChunkGrammar.Digits };
     }
 
-    flow whitespace(var self) -> unit ![] {
-        while self.offset < self.input.length() {
-            let byte = self.input.byte(self.offset);
-            if byte != 32 && byte != 9 { return; }
-            self.offset = self.offset + 1;
-        }
-    }
-
-    flow token(var self) -> bool ![] {
-        let start = self.offset;
-        while self.offset < self.input.length() && self.input.byte(self.offset).is_http_token() {
-            self.offset = self.offset + 1;
-        }
-        return self.offset != start;
-    }
-
-    flow parse(var self) -> HttpDecodeStep<u64> ![] {
-        var size: u64 = 0;
-        while self.offset < self.input.length() {
-            let byte = self.input.byte(self.offset);
-            let digit: u64 = if byte >= 48 && byte <= 57 {
-                u64 { bits= byte.bits - 48 }
-            } else if byte >= 65 && byte <= 70 {
-                u64 { bits= byte.bits - 55 }
-            } else if byte >= 97 && byte <= 102 {
-                u64 { bits= byte.bits - 87 }
-            } else {
-                break;
-            };
-            if size > 1152921504606846975 {
-                return self.failure(InvalidChunkSize, self.offset, false);
-            }
-            size = size * 16 + digit;
-            self.offset = self.offset + 1;
-        }
-        if self.offset == 0 {
-            return self.failure(InvalidChunkSize, 0, self.input.length() == 0);
-        }
-        while self.offset < self.input.length() {
-            self.whitespace();
-            if self.offset == self.input.length() {
-                return self.failure(InvalidChunkExtension, self.offset, true);
-            }
-            if self.input.byte(self.offset) != 59 {
-                return self.failure(InvalidChunkExtension, self.offset, false);
-            }
-            self.offset = self.offset + 1;
-            self.whitespace();
-            if !self.token() {
-                return self.failure(InvalidChunkExtension, self.offset, self.offset == self.input.length());
-            }
-            let before_whitespace = self.offset;
-            self.whitespace();
-            if self.offset < self.input.length() && self.input.byte(self.offset) == 61 {
-                self.offset = self.offset + 1;
-                self.whitespace();
-                if self.offset < self.input.length() && self.input.byte(self.offset) == 34 {
-                    self.offset = self.offset + 1;
-                    while true {
-                        if self.offset == self.input.length() {
-                            return self.failure(InvalidChunkExtension, self.offset, true);
-                        }
-                        let byte = self.input.byte(self.offset);
-                        self.offset = self.offset + 1;
-                        if byte == 34 { break; }
-                        if byte == 92 {
-                            if self.offset == self.input.length() {
-                                return self.failure(InvalidChunkExtension, self.offset, true);
+    // The offset is relative to the size line, including for a fragmented extension.
+    flow parse(var self, line: WireView, complete: bool) -> HttpDecodeStep<u64> ![] {
+        while self.offset < line.length() {
+            let byte = line.byte(self.offset);
+            let space = byte == 32 || byte == 9;
+            match self.state {
+                ChunkGrammar.Digits => {
+                    let digit: u64 = if byte >= 48 && byte <= 57 { u64 { bits= byte.bits - 48 } }
+                        else if byte >= 65 && byte <= 70 { u64 { bits= byte.bits - 55 } }
+                        else if byte >= 97 && byte <= 102 { u64 { bits= byte.bits - 87 } }
+                        else {
+                            if self.offset == 0 {
+                                return Malformed(HttpDecodeFailure { kind= InvalidChunkSize, offset= 0 });
                             }
-                            let escaped = self.input.byte(self.offset);
-                            if escaped != 9 && (escaped < 32 || escaped == 127) {
-                                return self.failure(InvalidChunkExtension, self.offset, false);
-                            }
-                            self.offset = self.offset + 1;
-                        } else if byte != 9 && (byte < 32 || byte == 127) {
-                            return self.failure(InvalidChunkExtension, self.offset - 1, false);
-                        }
+                            self.state = ChunkGrammar.AfterSize;
+                            continue;
+                        };
+                    if self.size > 1152921504606846975 {
+                        return Malformed(HttpDecodeFailure { kind= InvalidChunkSize, offset= self.offset });
                     }
-                } else if !self.token() {
-                    return self.failure(InvalidChunkExtension, self.offset, self.offset == self.input.length());
-                }
-            } else {
-                self.offset = before_whitespace;
-            }
+                    self.size = self.size * 16 + digit;
+                },
+                ChunkGrammar.BeforeName => {
+                    if !space {
+                        if !byte.is_http_token() { break; }
+                        self.state = ChunkGrammar.Name;
+                    }
+                },
+                ChunkGrammar.Name => {
+                    if !byte.is_http_token() { self.state = ChunkGrammar.AfterName; continue; }
+                },
+                ChunkGrammar.AfterName => {
+                    if byte == 61 { self.state = ChunkGrammar.BeforeValue; }
+                    else if byte == 59 { self.state = ChunkGrammar.BeforeName; }
+                    else if !space { break; }
+                },
+                ChunkGrammar.BeforeValue => {
+                    if byte == 34 { self.state = ChunkGrammar.Quoted; }
+                    else if byte.is_http_token() { self.state = ChunkGrammar.TokenValue; }
+                    else if !space { break; }
+                },
+                ChunkGrammar.TokenValue => {
+                    if !byte.is_http_token() { self.state = ChunkGrammar.AfterSize; continue; }
+                },
+                ChunkGrammar.Quoted => {
+                    if byte == 34 { self.state = ChunkGrammar.AfterValue; }
+                    else if byte == 92 { self.state = ChunkGrammar.Escape; }
+                    else if byte != 9 && (byte < 32 || byte == 127) { break; }
+                },
+                ChunkGrammar.Escape => {
+                    if byte != 9 && (byte < 32 || byte == 127) { break; }
+                    self.state = ChunkGrammar.Quoted;
+                },
+                ChunkGrammar.AfterValue => { self.state = ChunkGrammar.AfterSize; continue; },
+                ChunkGrammar.AfterSize => {
+                    if byte == 59 { self.state = ChunkGrammar.BeforeName; }
+                    else if !space { break; }
+                },
+            };
+            self.offset = self.offset + 1;
         }
-        if self.complete { return Complete(size, 0); }
-        return NeedMore;
+        if self.offset < line.length() {
+            return Malformed(HttpDecodeFailure { kind= InvalidChunkExtension, offset= self.offset });
+        }
+        if !complete { return NeedMore; }
+        if self.offset == 0 { return Malformed(HttpDecodeFailure { kind= InvalidChunkSize, offset= 0 }); }
+        return match self.state {
+            ChunkGrammar.Digits => Complete(self.size, 0),
+            ChunkGrammar.Name => Complete(self.size, 0),
+            ChunkGrammar.TokenValue => Complete(self.size, 0),
+            ChunkGrammar.AfterValue => Complete(self.size, 0),
+            _ => Malformed(HttpDecodeFailure { kind= InvalidChunkExtension, offset= self.offset }),
+        };
     }
 }
 
 public flow decode_chunk_size_line_prefix(input: bytes, limit: usize) -> HttpDecodeStep<u64> ![] {
     let end = if input.length < limit { input.length } else { limit };
     let reader = WireReader { input= input, end= end };
-    let (line, consumed, complete) = match reader.line(0) {
+    let (line, consumed, complete) = match reader.line(0, 0) {
         Complete(line, consumed) => (line, consumed, true),
         Malformed(failure) => { return Malformed(failure); },
         NeedMore => (WireView { input= input, begin= 0, end= end }.partial(), 0, false),
     };
-    var parser = ChunkLine { input= line, complete= complete, offset= 0 };
-    return match parser.parse() {
+    var parser = ChunkLine.new();
+    return match parser.parse(line, complete) {
         Complete(size, _) => Complete(size, consumed),
         Malformed(failure) => Malformed(failure),
         NeedMore => {

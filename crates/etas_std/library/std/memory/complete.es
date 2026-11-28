@@ -295,10 +295,14 @@ impl Store<K ~ StorageKey, V ~ StorageData> {
             perform Error.raise<StorageError>(StorageError { code= "invalid_request", message= "memory page size must be positive and within the configured page bound", operation= None });
         }
         let store = self.codec_view();
+        return store.decode_page(store.raw_page(cursor, page_size));
+    }
+
+    flow raw_page(self, cursor: Option<MemoryCursor>, page_size: u32) -> MemoryPage<bytes, bytes> ![Error<StorageError>] {
         let request: ReadRequest<bytes> = ReadRequest.Page(cursor, Some(page_size));
-        let response: ReadResult<bytes, bytes> = perform std.effects.Memory.read(store, request);
+        let response: ReadResult<bytes, bytes> = perform std.effects.Memory.read(self, request);
         return match response {
-            ReadResult.Page(page) => store.decode_page(page),
+            ReadResult.Page(page) => page,
             _ => std.core.abort("scan result ABI invariant"),
         };
     }
@@ -310,10 +314,10 @@ impl Store<K ~ StorageKey, V ~ StorageData> {
         var count: usize = 0;
         var cursor: Option<MemoryCursor> = None;
         while true {
-            let page = store.page(cursor, u32 { bits= context.max_page_entries.bits });
+            let page = store.raw_page(cursor, u32 { bits= context.max_page_entries.bits });
             for entry in page.entries {
                 if count == context.max_scan_rows { perform Error.raise<StorageError>(StorageError { code= "limit_exceeded", message= "memory key scan exceeds its entry bound", operation= None }); }
-                keys = entry.key :: keys;
+                keys = store.decode_key(entry.key) :: keys;
                 count = count + 1;
             }
             cursor = page.cursor;
@@ -325,21 +329,21 @@ impl Store<K ~ StorageKey, V ~ StorageData> {
     public flow clear(self) -> unit ![Error<StorageError>] {
         let store = self.codec_view();
         let context = StorageContext.current();
-        var snapshot: List<MemoryEntry<K, V>> = [];
+        var snapshot: List<(K, MemoryVersion)> = [];
         var count: usize = 0;
         var cursor: Option<MemoryCursor> = None;
         while true {
-            let page = store.page(cursor, u32 { bits= context.max_page_entries.bits });
+            let page = store.raw_page(cursor, u32 { bits= context.max_page_entries.bits });
             for entry in page.entries {
                 if count == context.max_scan_rows { perform Error.raise<StorageError>(StorageError { code= "limit_exceeded", message= "memory clear snapshot exceeds its entry bound", operation= None }); }
-                snapshot = entry :: snapshot;
+                snapshot = (store.decode_key(entry.key), entry.version) :: snapshot;
                 count = count + 1;
             }
             cursor = page.cursor;
             if cursor.is_none() { break; }
         }
-        for entry in snapshot.reverse() {
-            let intent = store.prepare_delete(entry.key, WriteCondition.Match(entry.version));
+        for (key, version) in snapshot.reverse() {
+            let intent = store.prepare_delete(key, WriteCondition.Match(version));
             intent.commit_or_raise(false);
         }
     }
